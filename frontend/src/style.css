@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+@theme {
+  --color-app-window: var(--app-window-bg);
+  --color-app-shell: var(--app-shell-bg);
+  --color-app-nav: var(--app-nav-bg);
+  --color-app-sidebar: var(--app-sidebar-bg);
+  --color-app-sidebar-header: var(--app-sidebar-header-bg);
+  --color-app-content: var(--app-content-bg);
+  --color-app-panel: var(--app-panel-bg);
+  --color-app-elevated: var(--app-elevated-bg);
+  --color-app-control: var(--app-control-bg);
+  --color-app-control-hover: var(--app-control-hover-bg);
+  --color-app-border: var(--app-border-color);
+  --color-app-border-strong: var(--app-border-strong-color);
+  --color-app-text: var(--app-text-primary);
+  --color-app-text-secondary: var(--app-text-secondary);
+  --color-app-text-muted: var(--app-text-muted);
+  --color-primary: var(--ui-primary);
+
+  /* Accent / interaction tokens (R2/R3) */
+  --color-app-accent: var(--app-accent-color);
+  --color-app-accent-soft: var(--app-accent-soft);
+  --color-app-accent-softer: var(--app-accent-softer);
+  --color-app-accent-selected: var(--app-accent-selected);
+  --color-app-accent-strong: var(--app-accent-strong-bg);
+  --color-app-hover: var(--app-hover-bg);
+
+  /* Semantic status colors */
+  --color-app-success: var(--app-success-color);
+  --color-app-warning: var(--app-warning-color);
+  --color-app-error: var(--app-error-color);
+
+  /* WebSocket direction colors */
+  --color-app-ws-send: var(--app-ws-send-color);
+  --color-app-ws-send-tag: var(--app-ws-send-tag-color);
+  --color-app-ws-receive: var(--app-ws-receive-color);
+  --color-app-ws-receive-tag: var(--app-ws-receive-tag-color);
+
+  /* URL syntax highlight colors */
+  --color-app-url-host: var(--app-url-host-color);
+  --color-app-url-path: var(--app-url-path-color);
+  --color-app-url-query-punct: var(--app-url-query-punct-color);
+  --color-app-url-query-key: var(--app-url-query-key-color);
+  --color-app-url-query-value: var(--app-url-query-value-color);
+  --color-app-url-hash: var(--app-url-hash-color);
+
+  --font-sans: var(--app-font-family);
+  --font-mono: var(--code-font-family);
+}
+
+/* Prevent all scrolling at root level */
+html,
+body {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden !important;
+  margin: 0;
+  padding: 0;
+  background-color: var(--app-window-bg);
+}
+
+:root {
+  --app-window-bg: var(--ui-bg);
+  --app-shell-bg: var(--ui-bg);
+  --app-nav-bg: var(--ui-bg-elevated);
+  --app-sidebar-bg: var(--ui-bg);
+  --app-sidebar-header-bg: var(--ui-bg-elevated);
+  --app-content-bg: var(--ui-bg-muted);
+  --app-panel-bg: var(--ui-bg);
+  --app-elevated-bg: var(--ui-bg-elevated);
+  --app-control-bg: var(--ui-bg-elevated);
+  --app-control-hover-bg: var(--ui-bg-accented);
+  --app-border-color: var(--ui-border);
+  --app-border-strong-color: var(--ui-border-accented);
+  --app-text-primary: var(--ui-text);
+  --app-text-secondary: var(--ui-text-toned);
+  --app-text-muted: var(--ui-text-muted);
+  --app-success-color: var(--color-success-500);
+  --app-warning-color: var(--color-warning-500);
+  --app-error-color: var(--color-error-500);
+  --app-accent-color: var(--ui-primary);
+  --app-accent-pressed-color: var(--ui-primary);
+  --app-accent-soft: color-mix(in srgb, var(--ui-primary) 8%, transparent);
+  --app-accent-softer: color-mix(in srgb, var(--ui-primary) 6%, transparent);
+  --app-accent-selected: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg-accented));
+  --app-accent-strong-bg: color-mix(in srgb, var(--ui-primary) 14%, var(--ui-bg-elevated));
+  --app-hover-bg: var(--ui-bg-accented);
+  --app-panel-shadow: 0 14px 30px -26px
+    color-mix(in srgb, var(--ui-text-highlighted) 14%, transparent);
+  --app-content-glow-opacity: 0;
+  --app-primary-action-bg: var(--ui-primary);
+  --app-primary-action-hover-bg: color-mix(in srgb, var(--ui-primary) 88%, var(--ui-bg-elevated));
+  --app-primary-action-shadow: color-mix(in srgb, var(--ui-primary) 24%, transparent);
+  --app-action-accent-color: var(--app-accent-color);
+  --app-action-accent-soft: var(--app-accent-soft);
+  --app-action-accent-softer: var(--app-accent-softer);
+  --app-action-accent-selected: var(--app-accent-selected);
+  --app-action-accent-border: color-mix(in srgb, var(--app-accent-color) 28%, transparent);
+  --app-action-accent-outline: color-mix(in srgb, var(--app-accent-color) 42%, transparent);
+  --app-font-family:
+    'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI',
+    'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Source Han Sans SC',
+    sans-serif;
+  --code-font-family:
+    'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'SFMono-Regular',
+    'Menlo', 'Monaco', 'Courier New', monospace;
+
+  /* Z-index tokens */
+  --z-dropdown: 10;
+  --z-sticky: 20;
+
+  /* Shared shadow token */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  /* Splitter geometry */
+  --app-splitter-handle-thickness: 1px;
+  --app-splitter-handle-color: color-mix(in srgb, var(--app-border-strong-color) 88%, transparent);
+  --app-splitter-handle-hover-color: color-mix(
+    in srgb,
+    var(--app-accent-color) 72%,
+    var(--app-border-strong-color)
+  );
+
+  /* WebSocket direction colors */
+  --app-ws-send-color: #d97706;
+  --app-ws-send-tag-color: #b45309;
+  --app-ws-receive-color: #2563eb;
+  --app-ws-receive-tag-color: #1d4ed8;
+
+  /* URL syntax highlight colors (DetailPanel) */
+  --app-url-host-color: #16a34a;
+  --app-url-path-color: #21a2df;
+  --app-url-query-punct-color: #c33;
+  --app-url-query-key-color: #7c3aed;
+  --app-url-query-value-color: #f59e0b;
+  --app-url-hash-color: #ec4899;
+
+  /* Shared radius token */
+  --radius-sm: 6px;
+}
+
+.dark {
+  --app-panel-shadow: 0 16px 34px -28px rgba(0, 0, 0, 0.55);
+  --app-ws-send-color: #fbbf24;
+  --app-ws-send-tag-color: #f59e0b;
+  --app-ws-receive-color: #60a5fa;
+  --app-ws-receive-tag-color: #3b82f6;
+  --app-url-host-color: #4ade80;
+  --app-url-path-color: #38bdf8;
+  --app-url-query-punct-color: #f87171;
+  --app-url-query-key-color: #a78bfa;
+  --app-url-query-value-color: #fcd34d;
+  --app-url-hash-color: #f9a8d4;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--app-font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('assets/fonts/dm-sans-v17-latin-variable.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('assets/fonts/jetbrains-mono-v24-latin-variable.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background-color: var(--app-window-bg);
+}
+
+/* Modern Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 2px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Ensure no scrolling on root levels only */
+#app > * {
+  min-height: 0;
+}
