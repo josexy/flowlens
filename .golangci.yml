@@ -1,0 +1,28 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+  modules-download-mode: readonly
+  tests: true
+
+linters:
+  default: standard
+  # Keep the initial rollout green while the existing findings are handled
+  # separately instead of hiding them behind broad per-file exclusions.
+  disable:
+    - errcheck
+    # - unused
+  exclusions:
+    generated: strict
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: strict
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
