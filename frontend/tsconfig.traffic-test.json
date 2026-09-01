@@ -1,0 +1,38 @@
+{
+  "extends": "./tsconfig.node.json",
+  "include": [
+    "src/types/traffic-category.ts",
+    "src/utils/traffic-category.ts",
+    "src/utils/traffic-table-columns.ts",
+    "src/utils/traffic.ts",
+    "src/utils/traffic-patch.ts",
+    "src/utils/headers.ts",
+    "src/utils/cookies.ts",
+    "src/utils/format.ts",
+    "src/utils/httpRaw.ts",
+    "src/utils/urlHighlight.ts",
+    "src/utils/requestQuery.ts",
+    "src/composables/useRequestQuerySync.ts",
+    "src/components/common/monacoTextUpdate.ts",
+    "src/components/common/monacoFontMeasurements.ts",
+    "src/components/common/monacoLargeText.ts",
+    "src/components/common/monacoModelOptions.ts",
+    "src/components/common/monacoLightLanguages.ts",
+    "src/components/common/monacoFlowLensPythonApi.ts",
+    "src/types/request-editor.ts",
+    "tests/traffic.test.ts"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "paths": {
+      "@/*": ["./src/*"],
+      "#bindings/*": ["./bindings/*"]
+    },
+    "noEmit": false,
+    "outDir": "./node_modules/.tmp/traffic-test",
+    "rootDir": ".",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.traffic-test.tsbuildinfo"
+  }
+}
