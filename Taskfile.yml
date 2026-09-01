@@ -1,0 +1,76 @@
+version: "3"
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+vars:
+  APP_NAME: "flowlens"
+  BIN_DIR: "bin"
+  VITE_PORT: "{{.WAILS_VITE_PORT | default 9245}}"
+  PACKAGE_MANAGER: npm
+  BUILD_COMMIT:
+    sh: node scripts/build-commit.mjs
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: "{{OS}}:build"
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: "{{OS}}:package"
+
+  version:
+    summary: Synchronizes release version metadata
+    desc: |
+      Synchronizes project metadata before creating a release tag.
+
+      Examples:
+        task version VERSION=1.2.3
+        task version VERSION=1.2.3 CHECK=true
+    cmds:
+      - node scripts/release/set-version.mjs --version "{{.VERSION}}" {{if eq .CHECK "true"}}--check{{end}}
+    vars:
+      VERSION: '{{.VERSION | default ""}}'
+      CHECK: '{{.CHECK | default "false"}}'
+
+  lint:go:
+    summary: Checks Go code with golangci-lint
+    cmds:
+      - golangci-lint config verify
+      - golangci-lint run . ./backend/...
+
+  lint:go:fix:
+    summary: Applies safe Go lint and formatting fixes
+    cmds:
+      - golangci-lint run --fix . ./backend/...
+
+  modernize:
+    summary: Analyzes Go code for modernization opportunities
+    cmds:
+      - go fix -diff ./backend/...
+
+  modernize:fix:
+    summary: Applies Go modernization fixes
+    cmds:
+      - go fix ./backend/...
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: "{{OS}}:run"
+
+  server:
+    summary: Runs the application in server mode
+    cmds:
+      - task: common:run:server
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}

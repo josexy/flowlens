@@ -1,0 +1,11 @@
+# This unconfined profile grants only the user namespace permission needed by
+# WebKitGTK's bubblewrap sandbox on Ubuntu 24.04 and later.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile flowlens /usr/local/bin/flowlens flags=(unconfined) {
+  userns,
+
+  include if exists <local/usr.local.bin.flowlens>
+}

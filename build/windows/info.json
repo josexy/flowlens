@@ -1,0 +1,17 @@
+{
+  "fixed": {
+    "file_version": "1.0.0.0",
+    "product_version": "1.0.0.0"
+  },
+  "info": {
+    "0000": {
+      "ProductVersion": "1.0.0",
+      "CompanyName": "josexy",
+      "FileDescription": "FlowLens",
+      "LegalCopyright": "Copyright (c) 2026",
+      "ProductName": "FlowLens",
+      "Comments": "FlowLens",
+      "FileVersion": "1.0.0"
+    }
+  }
+}

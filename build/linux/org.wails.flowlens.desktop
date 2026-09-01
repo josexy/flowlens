@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FlowLens
+GenericName=MITM Proxy Tool
+Comment=Capture and inspect HTTP, HTTPS, SOCKS5, and WebSocket traffic
+Exec=flowlens
+Icon=org.wails.flowlens
+Terminal=false
+Categories=Development;WebDevelopment;Debugger;
+Keywords=proxy;mitm;http;https;debug;capture;
+StartupNotify=true
+StartupWMClass=FlowLens
