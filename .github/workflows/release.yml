@@ -1,0 +1,838 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version for manual runs, for example 1.2.3 or v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: flowlens
+  TASK_VERSION: v3.50.0
+  WAILS_VERSION: v3.0.0-beta.14
+
+jobs:
+  metadata:
+    name: Release Metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    steps:
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          RAW_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+
+          raw_version="${RAW_VERSION}"
+          if [ -z "$raw_version" ]; then
+            raw_version="${GITHUB_REF_NAME}"
+          fi
+
+          version="${raw_version#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must look like 1.2.3 or v1.2.3, got: ${raw_version}" >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v${version}" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify
+    runs-on: ubuntu-24.04
+    needs:
+      - metadata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify release version metadata
+        run: node scripts/release/set-version.mjs --version "${{ needs.metadata.outputs.version }}" --check
+
+      - name: Verify Wails CLI version
+        shell: bash
+        run: |
+          set -euo pipefail
+          module_version="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+          if [ "${module_version}" != "${WAILS_VERSION}" ]; then
+            echo "Wails CLI version ${WAILS_VERSION} does not match go.mod version ${module_version}." >&2
+            exit 1
+          fi
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install Wails CLI
+        run: |
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Go module metadata
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Create placeholder frontend dist
+        run: |
+          mkdir -p frontend/dist
+          printf '%s\n' '<!doctype html><title>ci</title>' > frontend/dist/index.html
+
+      - name: Run Go tests
+        run: go test . ./backend/...
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Audit production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  windows-x64:
+    name: Windows x64
+    runs-on: windows-latest
+    needs:
+      - metadata
+      - verify
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+      ASSET_VERSION: ${{ needs.metadata.outputs.tag_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Windows packaging tools
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          $nsisPath = "${env:ProgramFiles(x86)}\NSIS"
+          if (Test-Path $nsisPath) {
+            $nsisPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Task and Wails CLI
+        shell: pwsh
+        run: |
+          go install "github.com/go-task/task/v3/cmd/task@${env:TASK_VERSION}"
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${env:WAILS_VERSION}"
+          "$(go env GOPATH)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: wails3 task windows:build ARCH=amd64
+
+      - name: Detect Windows signing configuration
+        id: windows-signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_CONFIGURED: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
+          WINDOWS_PASSWORD_CONFIGURED: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        run: |
+          $certificateConfigured = $env:WINDOWS_CERTIFICATE_CONFIGURED -eq 'true'
+          $passwordConfigured = $env:WINDOWS_PASSWORD_CONFIGURED -eq 'true'
+          if ($certificateConfigured -ne $passwordConfigured) {
+            throw "Windows signing configuration is incomplete: configure both the certificate and its password, or neither."
+          }
+
+          $enabled = $certificateConfigured -and $passwordConfigured
+          "enabled=$($enabled.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Locate Windows SignTool
+        if: steps.windows-signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $kitsBin = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+          $candidates = @(
+            Get-ChildItem -Path (Join-Path $kitsBin "*\x64\signtool.exe") -File -ErrorAction SilentlyContinue |
+              Sort-Object { [version]$_.Directory.Parent.Name } -Descending
+          )
+          if ($candidates.Count -eq 0) {
+            throw "signtool.exe was not found in the Windows 10 SDK."
+          }
+          $signtoolDirectory = $candidates[0].Directory.FullName
+          $signtoolDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:PATH = "$signtoolDirectory;$env:PATH"
+          Get-Command signtool.exe -ErrorAction Stop | Out-Null
+
+      - name: Sign Windows executable
+        if: steps.windows-signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_SERVER: ${{ secrets.WINDOWS_TIMESTAMP_SERVER }}
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "windows-signing.pfx"
+          try {
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64) | Set-Content -LiteralPath $certPath -AsByteStream
+            $env:WAILS_WINDOWS_CERT_PASSWORD = $env:WINDOWS_CERTIFICATE_PASSWORD
+
+            $timestampArgs = @()
+            if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_SERVER)) {
+              $timestampArgs = @("--timestamp", $env:WINDOWS_TIMESTAMP_SERVER)
+            }
+
+            wails3 tool sign --input "bin\flowlens.exe" --certificate $certPath @timestampArgs
+          } finally {
+            Remove-Item Env:WAILS_WINDOWS_CERT_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $certPath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Build NSIS installer from existing executable
+        shell: pwsh
+        run: wails3 task windows:create:nsis:installer ARCH=amd64
+
+      - name: Sign Windows installer
+        if: steps.windows-signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_SERVER: ${{ secrets.WINDOWS_TIMESTAMP_SERVER }}
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "windows-signing.pfx"
+          try {
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64) | Set-Content -LiteralPath $certPath -AsByteStream
+            $env:WAILS_WINDOWS_CERT_PASSWORD = $env:WINDOWS_CERTIFICATE_PASSWORD
+
+            $timestampArgs = @()
+            if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_SERVER)) {
+              $timestampArgs = @("--timestamp", $env:WINDOWS_TIMESTAMP_SERVER)
+            }
+
+            wails3 tool sign --input "bin\flowlens-amd64-setup.exe" --certificate $certPath @timestampArgs
+          } finally {
+            Remove-Item Env:WAILS_WINDOWS_CERT_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $certPath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Prepare Windows release assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist", "dist\portable" | Out-Null
+
+          Copy-Item -LiteralPath "bin\flowlens-amd64-setup.exe" -Destination "dist\flowlens_${env:ASSET_VERSION}_windows_x64_setup.exe"
+          Copy-Item -LiteralPath "bin\flowlens.exe" -Destination "dist\portable\flowlens.exe"
+          Copy-Item -LiteralPath "LICENSE", "README.md" -Destination "dist\portable"
+          Compress-Archive -Path "dist\portable\*" -DestinationPath "dist\flowlens_${env:ASSET_VERSION}_windows_x64_portable.zip" -Force
+
+      - name: Verify Windows portable zip
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipPath = "dist\flowlens_${env:ASSET_VERSION}_windows_x64_portable.zip"
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $entries = $zip.Entries | ForEach-Object { $_.FullName }
+            foreach ($required in @("flowlens.exe", "LICENSE", "README.md")) {
+              if ($entries -notcontains $required) {
+                throw "Missing $required in $zipPath"
+              }
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-x64
+          path: |
+            dist/flowlens_${{ env.ASSET_VERSION }}_windows_x64_setup.exe
+            dist/flowlens_${{ env.ASSET_VERSION }}_windows_x64_portable.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  macos:
+    name: macOS arm64 and universal
+    runs-on: macos-15
+    needs:
+      - metadata
+      - verify
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+      ASSET_VERSION: ${{ needs.metadata.outputs.tag_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Task and Wails CLI
+        run: |
+          go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build macOS apps
+        run: |
+          set -euo pipefail
+
+          rm -rf bin dist/arm64-dmg dist/universal-dmg
+          mkdir -p bin dist/arm64-dmg dist/universal-dmg
+
+          wails3 task darwin:package ARCH=arm64
+          cp -R "bin/flowlens.app" "dist/arm64-dmg/FlowLens.app"
+          ln -s /Applications "dist/arm64-dmg/Applications"
+
+          rm -rf bin
+          mkdir -p bin
+          wails3 task darwin:package:universal
+          cp -R "bin/flowlens.app" "dist/universal-dmg/FlowLens.app"
+          ln -s /Applications "dist/universal-dmg/Applications"
+
+      - name: Detect macOS signing configuration
+        id: macos-signing
+        env:
+          MACOS_CERTIFICATE_CONFIGURED: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 != '' }}
+          MACOS_CERTIFICATE_PASSWORD_CONFIGURED: ${{ secrets.MACOS_CERTIFICATE_PASSWORD != '' }}
+          MACOS_SIGN_IDENTITY_CONFIGURED: ${{ secrets.MACOS_SIGN_IDENTITY != '' }}
+          MACOS_NOTARY_APPLE_ID_CONFIGURED: ${{ secrets.MACOS_NOTARY_APPLE_ID != '' }}
+          MACOS_NOTARY_TEAM_ID_CONFIGURED: ${{ secrets.MACOS_NOTARY_TEAM_ID != '' }}
+          MACOS_NOTARY_PASSWORD_CONFIGURED: ${{ secrets.MACOS_NOTARY_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+
+          certificate_enabled=false
+          signing_enabled=false
+          notarization_enabled=false
+
+          signing_secret_count=0
+          for secret_value in \
+            "${MACOS_CERTIFICATE_CONFIGURED}" \
+            "${MACOS_CERTIFICATE_PASSWORD_CONFIGURED}" \
+            "${MACOS_SIGN_IDENTITY_CONFIGURED}"; do
+            if [ "${secret_value}" = "true" ]; then
+              signing_secret_count=$((signing_secret_count + 1))
+            fi
+          done
+
+          if [ "${signing_secret_count}" -ne 0 ] && [ "${signing_secret_count}" -ne 3 ]; then
+            echo "macOS signing configuration is incomplete: configure the certificate, password, and identity together, or leave all three empty." >&2
+            exit 1
+          fi
+          if [ "${signing_secret_count}" -eq 3 ]; then
+            certificate_enabled=true
+            signing_enabled=true
+          fi
+
+          notarization_secret_count=0
+          for secret_value in \
+            "${MACOS_NOTARY_APPLE_ID_CONFIGURED}" \
+            "${MACOS_NOTARY_TEAM_ID_CONFIGURED}" \
+            "${MACOS_NOTARY_PASSWORD_CONFIGURED}"; do
+            if [ "${secret_value}" = "true" ]; then
+              notarization_secret_count=$((notarization_secret_count + 1))
+            fi
+          done
+
+          if [ "${notarization_secret_count}" -ne 0 ] && [ "${notarization_secret_count}" -ne 3 ]; then
+            echo "macOS notarization configuration is incomplete: configure the Apple ID, team ID, and app-specific password together, or leave all three empty." >&2
+            exit 1
+          fi
+          if [ "${notarization_secret_count}" -eq 3 ] && [ "${signing_enabled}" != "true" ]; then
+            echo "macOS notarization requires a complete macOS signing configuration." >&2
+            exit 1
+          fi
+          if [ "${notarization_secret_count}" -eq 3 ]; then
+            notarization_enabled=true
+          fi
+
+          echo "certificate_enabled=${certificate_enabled}" >> "$GITHUB_OUTPUT"
+          echo "signing_enabled=${signing_enabled}" >> "$GITHUB_OUTPUT"
+          echo "notarization_enabled=${notarization_enabled}" >> "$GITHUB_OUTPUT"
+
+      - name: Install macOS signing certificate
+        if: steps.macos-signing.outputs.certificate_enabled == 'true'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          certificate_path="${RUNNER_TEMP}/macos-signing.p12"
+          keychain_path="${RUNNER_TEMP}/app-signing.keychain-db"
+
+          printf '%s' "${MACOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "${certificate_path}"
+          security create-keychain -p "${MACOS_CERTIFICATE_PASSWORD}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${MACOS_CERTIFICATE_PASSWORD}" "${keychain_path}"
+          security import "${certificate_path}" -P "${MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -f pkcs12 -k "${keychain_path}"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${MACOS_CERTIFICATE_PASSWORD}" "${keychain_path}"
+          identities="$(security find-identity -v -p codesigning "${keychain_path}")"
+          if [[ "${identities}" != *"${MACOS_SIGN_IDENTITY}"* ]]; then
+            echo "Configured macOS signing identity was not imported into the temporary keychain." >&2
+            exit 1
+          fi
+
+      - name: Sign macOS apps
+        if: steps.macos-signing.outputs.signing_enabled == 'true'
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+
+          keychain_path="${RUNNER_TEMP}/app-signing.keychain-db"
+          for app_path in dist/arm64-dmg/FlowLens.app dist/universal-dmg/FlowLens.app; do
+            codesign --force --deep --options runtime --timestamp --keychain "${keychain_path}" --sign "${MACOS_SIGN_IDENTITY}" "${app_path}"
+            codesign --verify --deep --strict --verbose=2 "${app_path}"
+          done
+
+      - name: Clean up macOS signing certificate
+        if: always()
+        run: |
+          set -euo pipefail
+
+          certificate_path="${RUNNER_TEMP}/macos-signing.p12"
+          keychain_path="${RUNNER_TEMP}/app-signing.keychain-db"
+
+          if [ -e "${keychain_path}" ]; then
+            security lock-keychain "${keychain_path}" || true
+            security delete-keychain "${keychain_path}" || rm -f "${keychain_path}"
+          fi
+          rm -f "${certificate_path}"
+
+      - name: Package macOS DMGs
+        run: |
+          set -euo pipefail
+
+          create_dmg() {
+            local volname="$1"
+            local srcfolder="$2"
+            local output="$3"
+            local attempt
+
+            for attempt in 1 2 3; do
+              if hdiutil create -volname "${volname}" -srcfolder "${srcfolder}" -ov -format UDZO "${output}"; then
+                return 0
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                return 1
+              fi
+
+              echo "hdiutil create failed (attempt ${attempt}/3), retrying..." >&2
+              sleep $((attempt * 5))
+            done
+          }
+
+          rm -f \
+            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"
+          create_dmg "FlowLens" "dist/arm64-dmg" "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg"
+          create_dmg "FlowLens" "dist/universal-dmg" "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"
+
+      - name: Notarize macOS DMGs
+        if: steps.macos-signing.outputs.notarization_enabled == 'true'
+        env:
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          for dmg_path in \
+            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"; do
+            xcrun notarytool submit "${dmg_path}" \
+              --apple-id "${MACOS_NOTARY_APPLE_ID}" \
+              --team-id "${MACOS_NOTARY_TEAM_ID}" \
+              --password "${MACOS_NOTARY_PASSWORD}" \
+              --wait
+            xcrun stapler staple "${dmg_path}"
+          done
+
+      - name: Verify macOS DMGs
+        run: |
+          set -euo pipefail
+
+          detach_dmg() {
+            local mount_dir="$1"
+            local attempt
+
+            for attempt in 1 2 3; do
+              if hdiutil detach "${mount_dir}" -quiet; then
+                return 0
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                return 1
+              fi
+
+              echo "hdiutil detach failed (attempt ${attempt}/3), retrying..." >&2
+              sleep $((attempt * 2))
+            done
+          }
+
+          for dmg_path in \
+            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"; do
+            mount_dir="$(mktemp -d)"
+            hdiutil attach "${dmg_path}" -mountpoint "${mount_dir}" -nobrowse -quiet
+            test -d "${mount_dir}/FlowLens.app"
+            detach_dmg "${mount_dir}"
+            rmdir "${mount_dir}"
+            sleep 2
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 3
+
+  linux-x64:
+    name: Linux x64
+    runs-on: ubuntu-24.04
+    needs:
+      - metadata
+      - verify
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+      ASSET_VERSION: ${{ needs.metadata.outputs.tag_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux build and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            desktop-file-utils \
+            file \
+            libgtk-4-dev \
+            libwebkitgtk-6.0-dev \
+            pkg-config \
+            gnupg \
+            rpm \
+            wget
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Task and Wails CLI
+        run: |
+          go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build Linux packages
+        run: |
+          set -euo pipefail
+          wails3 task linux:build ARCH=amd64
+          wails3 task linux:create:appimage ARCH=amd64
+          wails3 task linux:create:deb ARCH=amd64
+          wails3 task linux:create:rpm ARCH=amd64
+
+      - name: Detect Linux signing configuration
+        id: linux-signing
+        env:
+          LINUX_PGP_KEY_CONFIGURED: ${{ secrets.LINUX_PGP_PRIVATE_KEY != '' }}
+          LINUX_PGP_PASSWORD_CONFIGURED: ${{ secrets.LINUX_PGP_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          key_configured=false
+          password_configured=false
+          enabled=false
+
+          if [ "${LINUX_PGP_KEY_CONFIGURED}" = "true" ]; then
+            key_configured=true
+          fi
+          if [ "${LINUX_PGP_PASSWORD_CONFIGURED}" = "true" ]; then
+            password_configured=true
+          fi
+          if [ "${key_configured}" != "${password_configured}" ]; then
+            echo "Linux signing configuration is incomplete: configure both the private key and its password, or neither." >&2
+            exit 1
+          fi
+          if [ "${key_configured}" = "true" ]; then
+            enabled=true
+          fi
+          echo "enabled=${enabled}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Linux detached signatures
+        if: steps.linux-signing.outputs.enabled == 'true'
+        env:
+          LINUX_PGP_PRIVATE_KEY: ${{ secrets.LINUX_PGP_PRIVATE_KEY }}
+          LINUX_PGP_PASSWORD: ${{ secrets.LINUX_PGP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="${RUNNER_TEMP}/linux-signing-key.asc"
+          passphrase_path="${RUNNER_TEMP}/linux-signing-passphrase"
+          gnupg_home="$(mktemp -d "${RUNNER_TEMP}/flowlens-gnupg.XXXXXX")"
+          trap 'rm -f -- "$key_path" "$passphrase_path"; rm -rf -- "$gnupg_home"; unset LINUX_PGP_PRIVATE_KEY LINUX_PGP_PASSWORD' EXIT
+          printf '%s' "${LINUX_PGP_PRIVATE_KEY}" > "${key_path}"
+          printf '%s' "${LINUX_PGP_PASSWORD}" > "${passphrase_path}"
+
+          gpg --homedir "${gnupg_home}" \
+            --batch --yes --pinentry-mode loopback \
+            --passphrase-file "${passphrase_path}" \
+            --import "${key_path}"
+          signing_fingerprint="$(
+            gpg --homedir "${gnupg_home}" --batch --with-colons --list-secret-keys |
+              awk -F: '$1 == "sec" { primary = 1; next } primary && $1 == "fpr" { print $10; exit }'
+          )"
+          if [ -z "${signing_fingerprint}" ]; then
+            echo "No primary secret-key fingerprint was found after importing the Linux signing key." >&2
+            exit 1
+          fi
+          gpg --homedir "${gnupg_home}" --batch --armor \
+            --export "${signing_fingerprint}" > "bin/linux-signing-public-key.asc"
+
+          for artifact in \
+            "bin/flowlens-x86_64.AppImage" \
+            "bin/flowlens.deb" \
+            "bin/flowlens.rpm"; do
+            gpg --homedir "${gnupg_home}" \
+              --batch --yes --pinentry-mode loopback \
+              --passphrase-file "${passphrase_path}" \
+              --local-user "${signing_fingerprint}" \
+              --armor --detach-sign \
+              --output "${artifact}.asc" \
+              "${artifact}"
+            gpg --homedir "${gnupg_home}" --batch --verify "${artifact}.asc" "${artifact}"
+          done
+
+      - name: Prepare Linux release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "bin/flowlens-x86_64.AppImage" "dist/flowlens_${ASSET_VERSION}_linux_x64.AppImage"
+          cp "bin/flowlens.deb" "dist/flowlens_${ASSET_VERSION}_linux_x64.deb"
+          cp "bin/flowlens.rpm" "dist/flowlens_${ASSET_VERSION}_linux_x64.rpm"
+          chmod +x "dist/flowlens_${ASSET_VERSION}_linux_x64.AppImage"
+          if [ -f "bin/linux-signing-public-key.asc" ]; then
+            cp "bin/linux-signing-public-key.asc" "dist/flowlens_${ASSET_VERSION}_linux_signing_public_key.asc"
+            cp "bin/flowlens-x86_64.AppImage.asc" "dist/flowlens_${ASSET_VERSION}_linux_x64.AppImage.asc"
+            cp "bin/flowlens.deb.asc" "dist/flowlens_${ASSET_VERSION}_linux_x64.deb.asc"
+            cp "bin/flowlens.rpm.asc" "dist/flowlens_${ASSET_VERSION}_linux_x64.rpm.asc"
+          fi
+
+      - name: Verify Linux packages
+        run: |
+          set -euo pipefail
+          appimage_path="dist/flowlens_${ASSET_VERSION}_linux_x64.AppImage"
+          deb_path="dist/flowlens_${ASSET_VERSION}_linux_x64.deb"
+          rpm_path="dist/flowlens_${ASSET_VERSION}_linux_x64.rpm"
+          expected_maintainer="joxrays <josephxrays@163.com>"
+
+          test -x "${appimage_path}"
+          file "${appimage_path}"
+
+          dpkg-deb --info "${deb_path}"
+          test "$(dpkg-deb -f "${deb_path}" Version)" = "${VERSION}-1"
+          test "$(dpkg-deb -f "${deb_path}" Architecture)" = "amd64"
+          test "$(dpkg-deb -f "${deb_path}" Maintainer)" = "${expected_maintainer}"
+
+          rpm -qip "${rpm_path}"
+          test "$(rpm -qp --queryformat '%{VERSION}-%{RELEASE}' "${rpm_path}")" = "${VERSION}-1"
+          test "$(rpm -qp --queryformat '%{ARCH}' "${rpm_path}")" = "x86_64"
+          test "$(rpm -qp --queryformat '%{PACKAGER}' "${rpm_path}")" = "${expected_maintainer}"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-x64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    needs:
+      - metadata
+      - windows-x64
+      - macos
+      - linux-x64
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release asset set and checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+
+          expected=(
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.rpm"
+          )
+
+          for file in "${expected[@]}"; do
+            test -f "${file}"
+          done
+
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' |
+            sort |
+            xargs sha256sum > SHA256SUMS.txt
+          ls -la
+
+      - name: Generate release notes body
+        run: |
+          set -euo pipefail
+
+          cat > "${RUNNER_TEMP}/release-body.md" <<'EOF'
+          ## About FlowLens
+
+          FlowLens is a desktop MITM traffic capture tool built with Wails v3, Go, Vue 3, TypeScript, Nuxt UI v4, and Tailwind CSS v4.
+
+          It focuses on local proxy debugging workflows: capture HTTP/HTTPS traffic, inspect request and response details, replay traffic, create new requests, save reusable requests into API collections, view WebSocket messages, manage runtime logs, and keep useful sessions in local history.
+
+          ## Highlights
+
+          - HTTP and HTTPS MITM proxy capture
+          - SOCKS5 proxy mode
+          - WebSocket traffic inspection and message sending
+          - Request replay and request editing workflows
+          - API Collection management
+          - Local traffic history
+          - MITM CA certificate generation and inspection
+          - Runtime log management
+          - Chinese and English UI
+          - Light, dark, and system theme modes
+
+          ## Download Guide
+
+          | Platform | Asset | Description |
+          | --- | --- | --- |
+          | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe` | NSIS installer for normal desktop installation. |
+          | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip` | Portable package. Unzip and run `flowlens.exe`. |
+          | macOS Apple Silicon | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg` | DMG for Apple Silicon Macs. |
+          | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg` | DMG for both Intel and Apple Silicon Macs. |
+          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package. |
+          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb` | Debian / Ubuntu package. |
+          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.rpm` | Fedora / RHEL / openSUSE package. |
+
+          ## Checksums
+
+          Use `SHA256SUMS.txt` to verify downloaded assets.
+
+          ## Signing Notice
+
+          Release artifacts are unsigned unless signing secrets are configured in GitHub Actions. Unsigned Windows or macOS packages may show operating system security prompts. When Linux signing is configured, detached `.asc` signatures and the matching public key are included with the release.
+
+          ## Changes
+
+          GitHub generated release notes are appended below.
+          EOF
+
+      - name: Publish release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ needs.metadata.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: FlowLens ${{ needs.metadata.outputs.tag_name }}
+          body_path: ${{ runner.temp }}/release-body.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release-assets/*

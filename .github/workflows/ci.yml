@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-test:
+    name: Backend Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cgo: "1"
+          # - os: windows-latest
+          #   cgo: "0"
+          # - os: macos-15
+          #   cgo: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Create placeholder frontend dist
+        shell: bash
+        run: |
+          mkdir -p frontend/dist
+          printf '%s\n' '<!doctype html><title>ci</title>' > frontend/dist/index.html
+
+      - name: Verify Go module metadata
+        if: runner.os == 'Linux'
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Run Go tests
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: go test . ./backend/...
+
+      - name: Run Go vet
+        if: runner.os == 'Linux'
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: go vet . ./backend/...
+
+      - name: Test Darwin no-cgo process attribution provider
+        if: runner.os == 'macOS'
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./backend/pkg/process_attribution
+
+  frontend-check:
+    name: Frontend Check (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Audit production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run frontend utility tests
+        working-directory: frontend
+        run: |
+          npm run test:process-icon-cache
+          npm run test:request-editor-state
+          npm run test:traffic-utils
+
+      - name: Check Tailwind diagnostics
+        working-directory: frontend
+        run: npm run lint:tailwind -- --all
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
