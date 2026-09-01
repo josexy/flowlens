@@ -1,0 +1,60 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host",
+    "build:dev": "run-p type-check \"build-only -- --mode development\" --",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "test:process-icon-cache": "tsc -p tsconfig.process-icon-cache-test.json && node node_modules/.tmp/process-icon-cache-test/tests/processIconCache.test.js",
+    "test:request-editor-state": "node --test tests/requestEditorState.test.mjs",
+    "test:traffic-utils": "tsc -p tsconfig.traffic-test.json && node node_modules/.tmp/traffic-test/tests/traffic.test.js",
+    "type-check": "vue-tsc --build",
+    "lint": "eslint . --cache",
+    "lint:tailwind": "node scripts/check-tailwind-diagnostics.mjs",
+    "lint:fix": "eslint . --fix --cache",
+    "format": "prettier --write --experimental-cli src/"
+  },
+  "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.6.0",
+    "@nuxt/ui": "^4.9.0",
+    "@tanstack/vue-virtual": "^3.13.31",
+    "@wailsio/runtime": "^3.0.0-beta.14",
+    "monaco-editor": "^0.56.0",
+    "pinia": "^3.0.4",
+    "uplot": "^1.6.32",
+    "vue": "^3.5.39",
+    "vue-draggable-plus": "^0.6.1",
+    "vue-i18n": "^11.4.6",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.116",
+    "@nuxt/icon": "^2.3.1",
+    "@tailwindcss/language-server": "^0.14.29",
+    "@tsconfig/node24": "^24.0.4",
+    "@types/node": "^26.1.0",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "@vue/tsconfig": "^0.9.1",
+    "eslint": "^10.6.0",
+    "eslint-plugin-vue": "~10.9.2",
+    "npm-run-all2": "^9.0.2",
+    "prettier": "^3.9.4",
+    "tailwindcss": "^4.3.2",
+    "typescript": "~6.0.3",
+    "vite": "^8.1.3",
+    "vite-plugin-monaco-editor-esm": "^2.0.2",
+    "vue-tsc": "^3.3.6"
+  },
+  "overrides": {
+    "esbuild": "0.28.2"
+  }
+}
