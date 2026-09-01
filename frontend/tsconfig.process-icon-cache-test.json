@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.node.json",
+  "include": [
+    "src/components/common/processIconCache.ts",
+    "tests/processIconCache.test.ts"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": "./node_modules/.tmp/process-icon-cache-test",
+    "rootDir": ".",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.process-icon-cache-test.tsbuildinfo"
+  }
+}
