@@ -4391,6 +4391,7 @@ func (s *ProxyService) finalizeCaptureRestartLocked() {
 
 func (s *ProxyService) finalizeCaptureRestartCaptureLocked() {
 	s.captureGeneration++
+	atomic.StoreUint64(&s.nextID, 0)
 	s.resetCurrentHistoryMetadata()
 	s.bodyCacheMu.Lock()
 	s.clearTrafficWithBodyCache(s.bodyCache)

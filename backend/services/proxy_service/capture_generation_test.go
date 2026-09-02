@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-func TestCaptureGenerationRejectsLateEntryAfterRestart(t *testing.T) {
-	service := newRawTCPTestService()
+func TestCaptureRestartResetsIDsAndRejectsLateEntry(t *testing.T) {
+	setTestConfigDir(t)
+	service := newTestProxyService(t, nil)
 
 	stale := service.newTrafficEntry(TrafficEntry{
 		Type: "https",
@@ -20,14 +21,19 @@ func TestCaptureGenerationRejectsLateEntryAfterRestart(t *testing.T) {
 		t.Fatal("initial traffic entry was rejected")
 	}
 
-	service.finalizeCaptureRestartLocked()
+	if err := service.RestartCapture(false); err != nil {
+		t.Fatalf("restart capture: %v", err)
+	}
 
 	fresh := service.newTrafficEntry(TrafficEntry{
 		Type: "https",
 		URL:  "https://new.example/",
 	})
-	if fresh.ID != 2 {
-		t.Fatalf("fresh entry ID = %d, want monotonic ID 2", fresh.ID)
+	if fresh.ID != 1 {
+		t.Fatalf("fresh entry ID = %d, want restarted ID 1", fresh.ID)
+	}
+	if !service.storeTrafficEntry(fresh) {
+		t.Fatal("fresh traffic entry was rejected")
 	}
 
 	emittedURLs := make([]string, 0, 1)
@@ -52,9 +58,6 @@ func TestCaptureGenerationRejectsLateEntryAfterRestart(t *testing.T) {
 		t.Fatal("stale response body recreated capture state for a reused ID")
 	}
 
-	if !service.storeTrafficEntry(fresh) {
-		t.Fatal("fresh traffic entry was rejected")
-	}
 	service.emitTraffic(fresh)
 
 	entries := service.GetTraffic()
