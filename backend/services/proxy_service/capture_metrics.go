@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josexy/mitmproxy-go"
+	"github.com/josexy/mitmproxy-go/v2"
 	http "github.com/josexy/xhttp"
 )
 

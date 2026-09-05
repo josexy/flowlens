@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/josexy/flowlens/backend/pkg/fs"
-	"github.com/josexy/mitmproxy-go"
+	"github.com/josexy/mitmproxy-go/v2"
 	http "github.com/josexy/xhttp"
 )
 

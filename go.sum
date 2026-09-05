@@ -28,8 +28,8 @@ github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 h1:njuLRcjAuMKr7
 github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1/go.mod h1:alcuEEnZsY1WQsagKhZDsoPCRoOijYqhZvPwLG0kzVs=
 github.com/josexy/logx v0.0.0-20260618062928-f91144c33007 h1:53fOxCpLT4ZcWODKnTcyTe3iy9SxqPieGqTswDk3TGI=
 github.com/josexy/logx v0.0.0-20260618062928-f91144c33007/go.mod h1:dZakDU2uhWtbYSWuMkekb3ZfJMTEVvYWc1SsP0SYaIM=
-github.com/josexy/mitmproxy-go v1.2.2-0.20260820072300-3b426f583c2d h1:3DKeEAfApnYy1zT7JEMiXmGR/s2vUTTb+FjTw1Bzurw=
-github.com/josexy/mitmproxy-go v1.2.2-0.20260820072300-3b426f583c2d/go.mod h1:95rsW5djHM4JYj1zoMBaG5zX0uJD44Sm+RJZub/pHCs=
+github.com/josexy/mitmproxy-go/v2 v2.0.0 h1:bR3Z/84Z21cnjdsKjukGPmiKeQqbOxr6u39vl0EfIW8=
+github.com/josexy/mitmproxy-go/v2 v2.0.0/go.mod h1:GDkwWTXTBt75c4IiLi/WmppPHXcJYTobxZiSLoXmctk=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891 h1:nPBBheHXDAwthl/Eatf8WXNzrqMnqIqFm5tU8uMT47o=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891/go.mod h1:e/m0+ie/tpugMyeeitiYrJTsa8gal1Xu7WNq6VMqqUQ=
 github.com/josexy/xhttp v0.0.0-20260820070917-25565553acea h1:lt2h4qFaeucAnVAPCuIEfPyxM1l3YjAdAIn/RZLp9pU=

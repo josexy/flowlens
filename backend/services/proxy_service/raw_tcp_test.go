@@ -16,8 +16,8 @@ import (
 	"github.com/josexy/flowlens/backend/pkg/orderedmap"
 	processattribution "github.com/josexy/flowlens/backend/pkg/process_attribution"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
-	"github.com/josexy/mitmproxy-go"
-	"github.com/josexy/mitmproxy-go/metadata"
+	"github.com/josexy/mitmproxy-go/v2"
+	"github.com/josexy/mitmproxy-go/v2/metadata"
 	http "github.com/josexy/xhttp"
 )
 
