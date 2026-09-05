@@ -41,12 +41,13 @@ defineExpose({
 
 <template>
   <div
-    class="relative h-(--request-url-height,28px) w-full min-w-0 cursor-text overflow-hidden rounded-[inherit] [border-width:var(--request-url-border-width,1px)] border-(--request-url-border-color,var(--app-border-color)) bg-(--request-url-bg,var(--app-panel-bg))"
+    class="relative flex h-(--request-url-height,28px) w-full min-w-0 cursor-text items-center overflow-hidden rounded-[inherit] [border-width:var(--request-url-border-width,1px)] border-(--request-url-border-color,var(--app-border-color)) bg-(--request-url-bg,var(--app-panel-bg))"
     :class="$slots.suffix ? '[--request-url-pr:var(--request-url-suffix-padding,44px)]' : '[--request-url-pr:var(--request-url-padding-x,5px)]'"
     @click="focusInput"
   >
+    <!-- Match the native input's font line box and flex centering to keep selection aligned. -->
     <div
-      class="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-(--request-url-line-height,20px)"
+      class="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-[normal]"
       aria-hidden="true"
     >
       <div
@@ -72,7 +73,7 @@ defineExpose({
     </div>
     <input
       ref="inputRef"
-      class="absolute inset-x-0 top-1/2 h-(--request-url-line-height,20px) w-full -translate-y-1/2 whitespace-pre border-none bg-transparent py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-(--request-url-line-height,20px) text-transparent caret-app-text outline-none placeholder:text-app-text-muted"
+      class="relative w-full min-w-0 whitespace-pre border-none bg-transparent py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-[normal] text-transparent caret-app-text outline-none placeholder:text-app-text-muted"
       type="text"
       :placeholder="props.placeholder"
       spellcheck="false"
