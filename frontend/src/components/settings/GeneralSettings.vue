@@ -56,61 +56,65 @@ const fontSelectVirtualize = { estimateSize: 32, overscan: 8 }
 <template>
   <div class="min-w-0">
     <SettingsSection :title="t('settings.section_appearance')">
-      <SettingsRow :label="t('settings.app_font_label')">
-        <USelectMenu
-          v-model="appFontFamilyModel"
-          :items="fontOptions"
-          value-key="value"
-          :search-input="fontSelectSearchInput"
-          :virtualize="fontSelectVirtualize"
-          :loading="isLoadingFonts"
-          class="w-[min(360px,100%)]"
-          @update:open="emit('font-select-open', $event)"
-        />
-        <template #aside>
+      <SettingsRow :label="t('settings.app_font_label')" wide align="start">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <USelectMenu
+            v-model="appFontFamilyModel"
+            :items="fontOptions"
+            value-key="value"
+            :search-input="fontSelectSearchInput"
+            :virtualize="fontSelectVirtualize"
+            :loading="isLoadingFonts"
+            :aria-label="t('settings.app_font_label')"
+            class="w-full max-w-80"
+            @update:open="emit('font-select-open', $event)"
+          />
           <span
-            class="block min-w-45 max-w-70 truncate text-sm text-muted"
+            class="block max-w-full truncate text-sm text-app-text-muted"
             :style="{ fontFamily: commonConfig.appFontFamily || 'var(--app-font-family)' }"
           >
             {{ t('settings.font_preview_text') }}
           </span>
-        </template>
+        </div>
       </SettingsRow>
-      <SettingsRow :label="t('settings.code_font_label')">
-        <USelectMenu
-          v-model="codeFontFamilyModel"
-          :items="fontOptions"
-          value-key="value"
-          :search-input="fontSelectSearchInput"
-          :virtualize="fontSelectVirtualize"
-          :loading="isLoadingFonts"
-          class="w-[min(360px,100%)]"
-          @update:open="emit('font-select-open', $event)"
-        />
-        <template #aside>
+      <SettingsRow :label="t('settings.code_font_label')" wide align="start">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <USelectMenu
+            v-model="codeFontFamilyModel"
+            :items="fontOptions"
+            value-key="value"
+            :search-input="fontSelectSearchInput"
+            :virtualize="fontSelectVirtualize"
+            :loading="isLoadingFonts"
+            :aria-label="t('settings.code_font_label')"
+            class="w-full max-w-80"
+            @update:open="emit('font-select-open', $event)"
+          />
           <span
-            class="block min-w-45 max-w-70 truncate font-(family-name:--code-font-family) text-sm text-muted"
+            class="block max-w-full truncate font-(family-name:--code-font-family) text-sm text-app-text-muted"
             :style="{ fontFamily: commonConfig.codeFontFamily || 'var(--code-font-family)' }"
           >
             {{ t('settings.code_font_preview_text') }}
           </span>
-        </template>
+        </div>
       </SettingsRow>
     </SettingsSection>
 
     <SettingsSection :title="t('settings.section_behavior')">
-      <SettingsRow :label="t('settings.window_frame_mode_label')">
+      <SettingsRow :label="t('settings.window_frame_mode_label')" wide>
         <USelect
           v-model="windowConfig.frameMode"
           :items="windowFrameModeOptions"
-          class="w-[min(360px,100%)]"
+          :aria-label="t('settings.window_frame_mode_label')"
+          class="w-full max-w-80"
         />
       </SettingsRow>
-      <SettingsRow :label="t('settings.main_window_close_behavior_label')">
+      <SettingsRow :label="t('settings.main_window_close_behavior_label')" wide>
         <USelect
           v-model="windowConfig.mainWindowCloseBehavior"
           :items="mainWindowCloseBehaviorOptions"
-          class="w-[min(360px,100%)]"
+          :aria-label="t('settings.main_window_close_behavior_label')"
+          class="w-full max-w-80"
         />
       </SettingsRow>
 

@@ -68,45 +68,46 @@ function handleRegenerateConfirm() {
 </script>
 
 <template>
-  <div class="flex min-w-0 flex-col gap-4.5">
-    <SettingsSection :title="t('settings.section_certificate')">
-      <SettingsRow :label="t('toolbar.ca_cert_path')">
+  <div class="flex min-w-0 flex-col gap-6 border-t border-app-border pt-6">
+    <CACertificateInfoPanel
+      :ca-info="caInfo"
+      :ca-has-existing-files="caHasExistingFiles"
+      :is-generating="isGenerating"
+      :cert-generated-success="certGeneratedSuccess"
+      @generate-ca="emit('generateCa', $event)"
+      @request-regenerate="regenerateModalVisible = true"
+    >
+      <SettingsRow :label="t('toolbar.ca_cert_path')" wide>
         <CertificateFileInput
           v-model="proxyConfig.caCertPath"
           :button-title="t('settings.select_ca_cert_file')"
           :dialog-title="t('settings.select_ca_cert_file')"
           :dialog-message="t('settings.select_ca_cert_file_message')"
           :filters="certificateFilters"
-          class="w-[min(520px,100%)]"
+          class="w-full"
         />
       </SettingsRow>
-      <SettingsRow :label="t('toolbar.ca_key_path')">
+      <SettingsRow :label="t('toolbar.ca_key_path')" wide>
         <CertificateFileInput
           v-model="proxyConfig.caKeyPath"
           :button-title="t('settings.select_ca_key_file')"
           :dialog-title="t('settings.select_ca_key_file')"
           :dialog-message="t('settings.select_ca_key_file_message')"
           :filters="keyFilters"
-          class="w-[min(520px,100%)]"
+          class="w-full"
         />
       </SettingsRow>
+    </CACertificateInfoPanel>
 
-      <CACertificateInfoPanel
-        :ca-info="caInfo"
-        :ca-has-existing-files="caHasExistingFiles"
-        :is-generating="isGenerating"
-        :cert-generated-success="certGeneratedSuccess"
-        @generate-ca="emit('generateCa', $event)"
-        @request-regenerate="regenerateModalVisible = true"
-      />
-    </SettingsSection>
-
-    <SettingsSection :title="t('settings.section_root_cas')" :separated="false">
-      <RootCAPathList v-model="rootCAPaths" />
-    </SettingsSection>
-
-    <SettingsSection :title="t('settings.section_client_certs')" :separated="false">
-      <ClientCertificateList v-model="clientCerts" />
+    <SettingsSection
+      :title="t('settings.section_upstream_tls')"
+      :separated="false"
+      class="border-t border-app-border pt-6"
+    >
+      <div class="divide-y divide-app-border">
+        <RootCAPathList v-model="rootCAPaths" />
+        <ClientCertificateList v-model="clientCerts" />
+      </div>
     </SettingsSection>
 
     <ConfirmCardModal

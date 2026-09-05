@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
-import SettingsSection from '@/components/settings/SettingsSection.vue'
 import { useI18n } from 'vue-i18n'
 import {
   UpstreamProxyMode,
@@ -85,22 +84,22 @@ function handleUpstreamProxyModeUpdate(value: unknown) {
 </script>
 
 <template>
-  <SettingsSection :title="t('settings.section_connection')">
-    <SettingsRow :label="t('toolbar.upstream_proxy')">
-      <div class="flex min-w-0 flex-col gap-2">
-        <USelect
-          :model-value="upstreamProxyMode"
-          :items="upstreamProxyModeOptions"
-          class="w-[min(360px,100%)]"
-          @update:model-value="handleUpstreamProxyModeUpdate"
-        />
-        <UInput
-          v-if="showCustomUpstreamProxy"
-          v-model="proxyConfig.upstreamProxy"
-          :placeholder="t('settings.upstream_proxy_custom_placeholder')"
-          class="w-[min(520px,100%)]"
-        />
-      </div>
-    </SettingsRow>
-  </SettingsSection>
+  <SettingsRow :label="t('toolbar.upstream_proxy')" wide>
+    <div class="flex min-w-0 flex-col gap-2">
+      <USelect
+        :model-value="upstreamProxyMode"
+        :items="upstreamProxyModeOptions"
+        :aria-label="t('toolbar.upstream_proxy')"
+        class="w-full max-w-80"
+        @update:model-value="handleUpstreamProxyModeUpdate"
+      />
+      <UInput
+        v-if="showCustomUpstreamProxy"
+        v-model="proxyConfig.upstreamProxy"
+        :placeholder="t('settings.upstream_proxy_custom_placeholder')"
+        :aria-label="t('settings.upstream_proxy_mode_custom')"
+        class="w-full"
+      />
+    </div>
+  </SettingsRow>
 </template>

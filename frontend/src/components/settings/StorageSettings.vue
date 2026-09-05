@@ -103,27 +103,34 @@ watch(
       <SettingsRow
         :label="t('settings.cache_threshold_label')"
         :hint="t('settings.cache_threshold_hint')"
-        hint-placement="aside"
+        hint-placement="control"
+        wide
       >
-        <UInputNumber
-          v-model="cacheConfig.bodyCacheThresholdBytes"
-          orientation="vertical"
-          :min="1"
-          :step="1"
-          class="w-[min(220px,100%)]"
-        />
+        <div class="flex min-w-0 items-center gap-2">
+          <UInputNumber
+            v-model="cacheConfig.bodyCacheThresholdBytes"
+            orientation="vertical"
+            :min="1"
+            :step="1"
+            :aria-label="t('settings.cache_threshold_accessible_label')"
+            class="w-full max-w-44"
+          />
+          <span class="shrink-0 text-sm text-app-text-muted">{{ t('settings.unit_bytes') }}</span>
+        </div>
       </SettingsRow>
       <SettingsRow
         :label="t('settings.ws_max_messages_label')"
         :hint="t('settings.ws_max_messages_hint')"
-        hint-placement="aside"
+        hint-placement="control"
+        wide
       >
         <UInputNumber
           v-model="cacheConfig.maxWsMessages"
           orientation="vertical"
           :min="1"
           :step="1"
-          class="w-[min(220px,100%)]"
+          :aria-label="t('settings.ws_max_messages_label')"
+          class="w-full max-w-44"
         />
       </SettingsRow>
     </SettingsSection>
@@ -132,7 +139,8 @@ watch(
       <SettingsRow
         :label="t('settings.history_retention_enabled_label')"
         :hint="t('settings.history_retention_enabled_hint')"
-        hint-placement="aside"
+        hint-placement="control"
+        wide
       >
         <USwitch
           v-model="historyRetentionConfig.enabled"
@@ -142,9 +150,10 @@ watch(
       <SettingsRow
         :label="t('settings.history_retention_period_label')"
         :hint="t('settings.history_retention_period_hint')"
-        hint-placement="aside"
+        hint-placement="control"
+        wide
       >
-        <UFieldGroup class="w-[min(320px,100%)]">
+        <UFieldGroup class="w-full max-w-80">
           <UInputNumber
             v-model="historyRetentionConfig.value"
             orientation="vertical"
@@ -166,8 +175,11 @@ watch(
       </SettingsRow>
     </SettingsSection>
 
+    <SettingsSection :title="t('settings.section_disk_usage')">
+      <SettingsInfoGrid :items="dataSizeItems" compact />
+    </SettingsSection>
+
     <SettingsSection :title="t('settings.section_danger')" danger>
-      <SettingsInfoGrid :items="dataSizeItems" compact class="mx-0 mt-0.5 mb-3" />
       <UAlert
         v-if="clearCacheSuccess"
         color="success"

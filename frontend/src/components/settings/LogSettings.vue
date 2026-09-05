@@ -109,47 +109,52 @@ async function handleConfirmClearLogs() {
 </script>
 
 <template>
-  <SettingsSection :title="t('settings.section_logs')">
-    <div v-if="loggingStore.status" class="min-w-0">
-      <SettingsRow :label="t('settings.log_enabled_label')">
+  <div class="min-w-0">
+    <p class="mb-4 text-sm leading-relaxed text-app-text-muted">
+      {{ t('settings.log_immediate_notice') }}
+    </p>
+    <SettingsSection v-if="loggingStore.status">
+      <SettingsRow :label="t('settings.log_enabled_label')" wide>
         <USwitch
           :model-value="enabledModel"
           :disabled="loggingStore.isUpdatingEnabled"
+          :aria-label="t('settings.log_enabled_label')"
           @update:model-value="handleEnabledUpdate"
         />
       </SettingsRow>
 
-      <SettingsRow :label="t('settings.log_level_label')">
+      <SettingsRow :label="t('settings.log_level_label')" wide>
         <USelect
           :model-value="levelModel"
           :items="levelOptions"
-          class="w-[min(220px,100%)]"
+          class="w-full max-w-44"
           :disabled="loggingStore.isUpdatingLevel"
+          :aria-label="t('settings.log_level_label')"
           @update:model-value="handleLevelUpdate"
         />
       </SettingsRow>
+    </SettingsSection>
 
-      <SettingsRow :label="t('settings.log_maintenance_label')" class="mt-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <UButton
-            color="neutral"
-            variant="outline"
-            icon="i-lucide-folder-open"
-            :loading="loggingStore.isOpeningDir"
-            :label="t('settings.log_open_dir')"
-            @click="handleOpenDir"
-          />
-          <UButton
-            color="neutral"
-            variant="outline"
-            icon="i-lucide-trash-2"
-            :loading="loggingStore.isClearingLogs"
-            :label="t('settings.log_clear_logs')"
-            @click="handleRequestClearLogs"
-          />
-        </div>
-      </SettingsRow>
-    </div>
+    <SettingsSection v-if="loggingStore.status" :title="t('settings.log_maintenance_label')">
+      <div class="flex flex-wrap items-center gap-2">
+        <UButton
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-folder-open"
+          :loading="loggingStore.isOpeningDir"
+          :label="t('settings.log_open_dir')"
+          @click="handleOpenDir"
+        />
+        <UButton
+          color="warning"
+          variant="outline"
+          icon="i-lucide-trash-2"
+          :loading="loggingStore.isClearingLogs"
+          :label="t('settings.log_clear_logs')"
+          @click="handleRequestClearLogs"
+        />
+      </div>
+    </SettingsSection>
     <ConfirmCardModal
       :show="clearLogsModalVisible"
       :title="t('settings.log_clear_logs')"
@@ -162,5 +167,5 @@ async function handleConfirmClearLogs() {
     >
       {{ t('settings.log_clear_logs_confirm') }}
     </ConfirmCardModal>
-  </SettingsSection>
+  </div>
 </template>

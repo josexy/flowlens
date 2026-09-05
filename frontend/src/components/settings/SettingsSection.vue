@@ -1,19 +1,22 @@
 <script setup lang="ts">
-defineProps<{
-  title?: string
-  danger?: boolean
-  separated?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    title?: string
+    danger?: boolean
+    separated?: boolean
+  }>(),
+  { separated: true },
+)
 </script>
 
 <template>
   <section
-    class="settings-section min-w-0 [&+&:not(.settings-section--plain)]:border-t [&+&:not(.settings-section--plain)]:border-app-border [&+&:not(.settings-section--plain)]:pt-4.5"
+    class="settings-section min-w-0 [&+&:not(.settings-section--plain)]:mt-6 [&+&:not(.settings-section--plain)]:border-t [&+&:not(.settings-section--plain)]:border-app-border [&+&:not(.settings-section--plain)]:pt-5"
     :class="{ 'settings-section--plain': separated === false }"
   >
     <div
       v-if="title || $slots.actions"
-      class="mb-2.5 flex items-start justify-between gap-4 max-[760px]:flex-col max-[760px]:items-stretch"
+      class="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
     >
       <div v-if="title" class="min-w-0">
         <div
@@ -23,10 +26,7 @@ defineProps<{
           {{ title }}
         </div>
       </div>
-      <div
-        v-if="$slots.actions"
-        class="flex shrink-0 flex-wrap items-center justify-end gap-2 max-[760px]:justify-start"
-      >
+      <div v-if="$slots.actions" class="flex shrink-0 flex-wrap items-center gap-2">
         <slot name="actions" />
       </div>
     </div>

@@ -205,7 +205,7 @@ const dataSizeItems = computed(() => [
       precision: 1,
       trimTrailingZeros: false,
     }),
-    tone: 'success' as const,
+    tone: 'neutral' as const,
   },
   {
     label: t('settings.disk_usage_history'),
@@ -213,7 +213,7 @@ const dataSizeItems = computed(() => [
       precision: 1,
       trimTrailingZeros: false,
     }),
-    tone: 'success' as const,
+    tone: 'neutral' as const,
   },
   {
     label: t('settings.disk_usage_total'),
@@ -221,7 +221,7 @@ const dataSizeItems = computed(() => [
       precision: 1,
       trimTrailingZeros: false,
     }),
-    tone: 'success' as const,
+    tone: 'neutral' as const,
   },
 ])
 
@@ -673,11 +673,10 @@ function handleConfirmQuit() {
 
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div
-        class="flex-1 overflow-y-auto px-7 py-5 max-[720px]:px-4.5 max-[720px]:py-4"
+        class="flex-1 overflow-y-auto px-7 pb-5 max-[720px]:px-4.5 max-[720px]:pb-4"
       >
-        <div class="mb-4.5 max-w-260 border-b border-app-border pb-3">
-          <div class="text-sm font-semibold leading-[1.4] text-app-text-muted">{{ t('menu.settings') }}</div>
-          <h2 class="mt-0.5 text-[18px] font-bold leading-[1.35] text-app-text">{{ activeTabTitle }}</h2>
+        <div class="mb-6 max-w-260 border-b border-app-border pb-4 pt-5 max-[720px]:pt-4">
+          <h2 class="text-[18px] font-bold leading-[1.35] text-app-text">{{ activeTabTitle }}</h2>
         </div>
 
         <div class="relative min-w-0 max-w-260" :aria-busy="activeTabLoading">
@@ -798,24 +797,33 @@ function handleConfirmQuit() {
       </Transition>
 
       <div
-        class="flex shrink-0 items-center justify-end gap-2.5 bg-app-sidebar-header px-8 py-2.5 [border-top:1px_solid_var(--app-border-color)]"
+        v-if="activeTab !== 'logs' || settingStore.isDirty || settingStore.isSaving"
+        class="shrink-0 border-t border-app-border bg-app-sidebar-header px-7 py-2.5 max-[720px]:px-4.5"
       >
-        <UButton
-          color="neutral"
-          variant="subtle"
-          icon="i-lucide-refresh-cw"
-          class="min-w-22"
-          :label="t('settings.reset')"
-          @click="handleReset"
-        />
-        <UButton
-          icon="i-lucide-save"
-          class="min-w-22"
-          :disabled="!settingStore.isDirty"
-          :loading="settingStore.isSaving"
-          :label="t('settings.save')"
-          @click="handleSave"
-        />
+        <div class="flex max-w-260 flex-col gap-2">
+          <p
+            v-if="activeTab === 'logs' && settingStore.isDirty"
+            class="text-sm leading-relaxed text-app-text-muted"
+          >{{ t('settings.other_unsaved_notice') }}</p>
+          <div class="flex items-center justify-end gap-2.5">
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-refresh-cw"
+              class="min-w-22 shrink-0"
+              :label="t('settings.reset')"
+              @click="handleReset"
+            />
+            <UButton
+              icon="i-lucide-save"
+              class="min-w-22 shrink-0"
+              :disabled="!settingStore.isDirty"
+              :loading="settingStore.isSaving"
+              :label="t('settings.save')"
+              @click="handleSave"
+            />
+          </div>
+        </div>
       </div>
     </div>
     <ConfirmCardModal

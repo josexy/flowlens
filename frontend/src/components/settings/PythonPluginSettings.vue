@@ -181,7 +181,7 @@ onMounted(() => {
 <template>
   <div class="min-w-0">
     <SettingsSection :title="t('settings.section_python_plugins')">
-      <SettingsRow :label="t('settings.python_plugins_enabled_label')">
+      <SettingsRow :label="t('settings.python_plugins_enabled_label')" wide>
         <div class="flex items-center gap-2.5">
           <USwitch
             :model-value="config.enabled"
@@ -194,50 +194,57 @@ onMounted(() => {
         </div>
       </SettingsRow>
 
-      <SettingsRow :label="t('settings.python_interpreter_label')">
-        <div class="flex w-[min(620px,100%)] min-w-0 flex-col gap-2">
-          <UFieldGroup class="w-full">
-            <UInput
-              v-model="config.interpreterPath"
-              class="min-w-0 flex-1"
-              :placeholder="t('settings.python_interpreter_placeholder')"
-            />
-            <UTooltip :text="t('settings.python_interpreter_browse')">
+      <SettingsRow :label="t('settings.python_interpreter_label')" wide align="start">
+        <div class="flex min-w-0 flex-col gap-2">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <UFieldGroup class="min-w-0 flex-1 basis-80">
+              <UInput
+                v-model="config.interpreterPath"
+                class="min-w-0 flex-1"
+                :placeholder="t('settings.python_interpreter_placeholder')"
+                :aria-label="t('settings.python_interpreter_label')"
+              />
+              <UTooltip :text="t('settings.python_interpreter_browse')">
+                <UButton
+                  icon="i-lucide-folder-open"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="discoveringInterpreters || testingInterpreter"
+                  :loading="selectingInterpreter"
+                  :aria-label="t('settings.python_interpreter_browse')"
+                  @click="selectInterpreter"
+                />
+              </UTooltip>
+            </UFieldGroup>
+            <div class="flex shrink-0 items-center gap-2">
               <UButton
-                icon="i-lucide-folder-open"
+                icon="i-lucide-scan-search"
                 color="neutral"
                 variant="outline"
-                :disabled="discoveringInterpreters || testingInterpreter"
-                :loading="selectingInterpreter"
-                :aria-label="t('settings.python_interpreter_browse')"
-                @click="selectInterpreter"
+                :label="t('settings.python_interpreter_detect')"
+                :disabled="selectingInterpreter || testingInterpreter"
+                :loading="discoveringInterpreters"
+                @click="detectInterpreters"
               />
-            </UTooltip>
-            <UButton
-              icon="i-lucide-scan-search"
-              color="neutral"
-              variant="outline"
-              :label="t('settings.python_interpreter_detect')"
-              :disabled="selectingInterpreter || testingInterpreter"
-              :loading="discoveringInterpreters"
-              @click="detectInterpreters"
-            />
-            <UButton
-              icon="i-lucide-flask-conical"
-              color="neutral"
-              variant="outline"
-              :label="t('settings.python_interpreter_test')"
-              :disabled="!config.interpreterPath.trim() || discoveringInterpreters"
-              :loading="testingInterpreter"
-              @click="testInterpreter"
-            />
-          </UFieldGroup>
+              <UButton
+                icon="i-lucide-flask-conical"
+                color="neutral"
+                variant="outline"
+                :label="t('settings.python_interpreter_test')"
+                :disabled="!config.interpreterPath.trim() || discoveringInterpreters"
+                :loading="testingInterpreter"
+                @click="testInterpreter"
+              />
+            </div>
+          </div>
           <UAlert
             v-if="testStatus?.ready"
             icon="i-lucide-circle-check"
             color="success"
             variant="subtle"
-            :description="t('settings.python_interpreter_test_success', { version: runtimeVersion })"
+            :description="
+              t('settings.python_interpreter_test_success', { version: runtimeVersion })
+            "
           />
           <UAlert
             v-else-if="testError"
@@ -249,15 +256,21 @@ onMounted(() => {
         </div>
       </SettingsRow>
 
-      <SettingsRow :label="t('settings.python_hook_timeout_label')">
-        <UInputNumber
-          v-model="config.hookTimeoutMs"
-          orientation="vertical"
-          :min="100"
-          :max="60000"
-          :step="100"
-          class="w-[min(220px,100%)]"
-        />
+      <SettingsRow :label="t('settings.python_hook_timeout_label')" wide>
+        <div class="flex min-w-0 items-center gap-2">
+          <UInputNumber
+            v-model="config.hookTimeoutMs"
+            orientation="vertical"
+            :min="100"
+            :max="60000"
+            :step="100"
+            :aria-label="t('settings.python_hook_timeout_accessible_label')"
+            class="w-full max-w-44"
+          />
+          <span class="shrink-0 text-sm text-app-text-muted">{{
+            t('settings.unit_milliseconds')
+          }}</span>
+        </div>
       </SettingsRow>
 
       <UAlert
@@ -269,7 +282,7 @@ onMounted(() => {
         :description="runtimeStatus.error"
         class="mt-3"
       />
-      <p v-else-if="runtimeVersion" class="mt-3 text-sm text-muted">
+      <p v-else-if="runtimeVersion && !testStatus?.ready" class="mt-3 text-sm text-muted">
         {{ t('settings.python_runtime_version', { version: runtimeVersion }) }}
       </p>
     </SettingsSection>
