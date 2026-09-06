@@ -108,6 +108,10 @@ export const useFilterStore = defineStore('filter', () => {
 
   const baseFilteredEntries = shallowRef<proxyservice.TrafficEntry[]>([])
   const filteredEntries = shallowRef<proxyservice.TrafficEntry[]>([])
+  let baseFilterKey = ''
+  let baseMatches = new WeakMap<proxyservice.TrafficEntry, boolean>()
+  let categoryFilterKey = ''
+  let categoryMatches = new WeakMap<proxyservice.TrafficEntry, boolean>()
 
   function reuseEntryListIfStable(
     current: proxyservice.TrafficEntry[],
@@ -128,8 +132,13 @@ export const useFilterStore = defineStore('filter', () => {
     const entries = trafficStore.entries
     const query = searchText.value
     const tab = activeFilterTab.value
+    const key = JSON.stringify([query, tab])
+    if (key !== baseFilterKey) {
+      baseFilterKey = key
+      baseMatches = new WeakMap()
+    }
 
-    return entries.filter((entry) => {
+    const matches = (entry: proxyservice.TrafficEntry) => {
       // Search filter - 最常变化的过滤器放前面
       if (!trafficMatchesSearch(entry, query)) {
         return false
@@ -163,18 +172,35 @@ export const useFilterStore = defineStore('filter', () => {
       }
 
       return true
+    }
+
+    return entries.filter((entry) => {
+      const cached = baseMatches.get(entry)
+      if (cached !== undefined) return cached
+      const result = matches(entry)
+      baseMatches.set(entry, result)
+      return result
     })
   }
 
   function computeFilteredEntries() {
     const hostSet = new Set(selectedHosts.value)
     const processKeySet = new Set(selectedProcessKeys.value)
+    const key = JSON.stringify([selectedHosts.value, selectedProcessKeys.value])
+    if (key !== categoryFilterKey) {
+      categoryFilterKey = key
+      categoryMatches = new WeakMap()
+    }
     if (hostSet.size === 0 && processKeySet.size === 0) {
       return baseFilteredEntries.value
     }
-    return baseFilteredEntries.value.filter((entry) =>
-      trafficMatchesCategoryFilters(entry, hostSet, processKeySet),
-    )
+    return baseFilteredEntries.value.filter((entry) => {
+      const cached = categoryMatches.get(entry)
+      if (cached !== undefined) return cached
+      const result = trafficMatchesCategoryFilters(entry, hostSet, processKeySet)
+      categoryMatches.set(entry, result)
+      return result
+    })
   }
 
   watch(

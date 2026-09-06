@@ -225,6 +225,7 @@
     "protocol": "协议",
     "columns": "显示列",
     "show_all_columns": "显示全部列",
+    "show_new_requests": "显示新请求（{count}）",
     "column_settings_save_failed": "保存列显示设置失败：{error}",
     "ws_msgs_truncated": "已达到消息数量上限，部分消息未被采集。"
   },

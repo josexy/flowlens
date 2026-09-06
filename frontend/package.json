@@ -15,6 +15,7 @@
     "test:process-icon-cache": "tsc -p tsconfig.process-icon-cache-test.json && node node_modules/.tmp/process-icon-cache-test/tests/processIconCache.test.js",
     "test:request-editor-state": "node --test tests/requestEditorState.test.mjs",
     "test:traffic-utils": "tsc -p tsconfig.traffic-test.json && node node_modules/.tmp/traffic-test/tests/traffic.test.js",
+    "test:traffic-table": "node --test tests/trafficTable.test.mjs",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --cache",
     "lint:tailwind": "node scripts/check-tailwind-diagnostics.mjs",

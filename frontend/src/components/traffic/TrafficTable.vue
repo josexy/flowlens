@@ -33,6 +33,15 @@ import {
   type TrafficTableColumn,
   type TrafficTableColumnKey,
 } from '@/utils/traffic-table-columns'
+import {
+  createTrafficTableSorter,
+  getTrafficEvictionScrollTop,
+  getTrafficLatestEdge,
+  getTrafficVirtualRange,
+  isTrafficAtLatestEdge,
+  TRAFFIC_ROW_HEIGHT as ROW_HEIGHT,
+  TRAFFIC_ROW_OVERSCAN as ROW_OVERSCAN,
+} from '@/utils/traffic-table-state'
 
 const { t } = useI18n()
 const trafficStore = inject(TRAFFIC_STORE_KEY)!
@@ -40,15 +49,17 @@ const filterStore = inject(FILTER_STORE_KEY)!
 const themeStore = useThemeStore()
 const settingStore = useSettingStore()
 const notify = useNotify()
-const ROW_HEIGHT = 32
-const ROW_OVERSCAN = 6
 const SCROLL_SAVE_DELAY = 160
 const SELECTION_DRAG_THRESHOLD = 4
 const SELECTION_EDGE_SIZE = 40
 const SELECTION_MAX_SCROLL_SPEED = 18
 
 let scrollSaveTimerId = 0
-let latestScrollTop = 0
+const initialScrollTop = trafficStore.scrollTop
+let latestScrollTop = initialScrollTop
+let initialScrollPending = initialScrollTop > 0
+let disposed = false
+let revealingLiveEntries = false
 
 const scrollRef = useTemplateRef<HTMLElement>('trafficScroll')
 const headerTrackRef = useTemplateRef<HTMLElement>('headerTrack')
@@ -311,82 +322,24 @@ const toggleSort = (key: TrafficTableColumnKey) => {
   }
 }
 
-// Computed property for sorted entries
-const sortedEntries = computed(() => {
-  const { key, order } = sortConfig.value
-
-  if (!key || !order) {
-    return filterStore.filteredEntries
-  }
-
-  const metricSortValues =
-    key === 'duration' || key === 'size'
-      ? new Map(
-          filterStore.filteredEntries.map((entry) => [
-            entry.id,
-            key === 'duration'
-              ? getTrafficTotalDurationMicros(entry)
-              : getTrafficTotalSizeBytes(entry),
-          ]),
-        )
-      : null
-
-  return [...filterStore.filteredEntries].sort((a, b) => {
-    let valA: string | number | null = ''
-    let valB: string | number | null = ''
-
-    // Handle special cases
-    if (key === 'destination') {
-      valA = a.metadata?.remoteDestinationAddr || ''
-      valB = b.metadata?.remoteDestinationAddr || ''
-    } else if (key === 'protocol') {
-      valA = getTrafficProtocol(a)
-      valB = getTrafficProtocol(b)
-    } else if (key === 'process') {
-      valA = a.metadata?.process?.displayName ?? ''
-      valB = b.metadata?.process?.displayName ?? ''
-    } else if (key === 'host') {
-      valA = getTrafficTarget(a)
-      valB = getTrafficTarget(b)
-    } else if (key === 'method') {
-      valA = getTrafficMethodLabel(a)
-      valB = getTrafficMethodLabel(b)
-    } else if (key === 'path') {
-      valA = getTrafficPathLabel(a)
-      valB = getTrafficPathLabel(b)
-    } else if (key === 'type') {
-      valA = getTrafficTypeLabel(a)
-      valB = getTrafficTypeLabel(b)
-    } else if (key === 'duration' || key === 'size') {
-      valA = metricSortValues?.get(a.id) ?? null
-      valB = metricSortValues?.get(b.id) ?? null
-    } else {
-      const valueA = a[key]
-      const valueB = b[key]
-      valA = typeof valueA === 'string' || typeof valueA === 'number' ? valueA : ''
-      valB = typeof valueB === 'string' || typeof valueB === 'number' ? valueB : ''
-    }
-
-    // Incomplete metrics stay at the end in both sort directions.
-    if (valA === null && valB === null) return a.id - b.id
-    if (valA === null) return 1
-    if (valB === null) return -1
-
-    // String comparison
-    if (typeof valA === 'string' && typeof valB === 'string') {
-      const comparison = valA.localeCompare(valB)
-      if (comparison !== 0) {
-        return order === 'asc' ? comparison : -comparison
-      }
-      return a.id - b.id
-    }
-
-    // Number comparison
-    if (valA < valB) return order === 'asc' ? -1 : 1
-    if (valA > valB) return order === 'asc' ? 1 : -1
-    return a.id - b.id
-  })
+const sortEntries = createTrafficTableSorter()
+const sortedEntries = computed(() => sortEntries(filterStore.filteredEntries, sortConfig.value))
+const rowCount = computed(() => sortedEntries.value.length)
+const pendingLiveEntryCount = computed(() =>
+  'pendingLiveEntryCount' in trafficStore ? trafficStore.pendingLiveEntryCount : 0,
+)
+const pendingLiveEntriesIcon = computed(() => {
+  const edge = getTrafficLatestEdge(sortConfig.value)
+  if (edge === 'start') return 'i-lucide-arrow-up-to-line'
+  if (edge === 'end') return 'i-lucide-arrow-down-to-line'
+  return 'i-lucide-refresh-cw'
 })
+
+function isAtLatestEdge(element: HTMLElement) {
+  return isTrafficAtLatestEdge(
+    sortConfig.value, element.scrollTop, element.scrollHeight, element.clientHeight,
+  )
+}
 
 function formatTrafficTotalDuration(entry: proxyservice.TrafficEntry) {
   return formatDurationMicros(0, getTrafficTotalDurationMicros(entry) ?? -1)
@@ -406,17 +359,18 @@ function getProcessDisplayName(process: proxyservice.ProcessInfo) {
 
 const rowVirtualizer = useVirtualizer<HTMLElement, HTMLElement>(
   computed(() => ({
-    count: sortedEntries.value.length,
+    count: rowCount.value,
     getScrollElement: () => scrollRef.value,
     estimateSize: () => ROW_HEIGHT,
-    measureElement: () => ROW_HEIGHT,
     overscan: ROW_OVERSCAN,
-    getItemKey: (index) => sortedEntries.value[index]?.id ?? index,
+    rangeExtractor: (range) => getTrafficVirtualRange(range, scrollRef.value?.clientHeight ?? 480),
+    // Fixed-size slots use the default index key. Request IDs belong to the
+    // keyed DOM rows, so payload/order changes do not rebuild all measurements.
+    initialOffset: initialScrollTop,
     initialRect: {
       width: 0,
       height: 480,
     },
-    useCachedMeasurements: true,
   })),
 )
 
@@ -434,46 +388,50 @@ const virtualRows = computed(() =>
 )
 
 const virtualContentHeight = computed(() => rowVirtualizer.value.getTotalSize())
+const virtualPaddingTop = computed(() => virtualRows.value[0]?.virtualRow.start ?? 0)
+// A filtered list that fits the viewport should not retain a forced scrolling
+// layer. Keep the scrolling hint for long lists, including horizontal-bar space.
+const needsScrollLayer = computed(() => {
+  const measuredHeight = rowVirtualizer.value.scrollRect?.height ?? 0
+  const viewportHeight = Math.min(measuredHeight, scrollRef.value?.clientHeight ?? measuredHeight)
+  return viewportHeight > 0 && virtualContentHeight.value > viewportHeight
+})
 
 function scrollToOffset(top: number) {
-  latestScrollTop = top
-  persistScrollTop(top)
-  rowVirtualizer.value.scrollToOffset(top)
-
   const el = scrollRef.value
   if (!el) return
+  const target = Math.max(0, Math.min(top, el.scrollHeight - el.clientHeight))
+  latestScrollTop = target
+  persistScrollTop(target)
+  rowVirtualizer.value.scrollToOffset(target)
+}
 
-  el.scrollTop = top
-  if (typeof el.scrollTo === 'function') {
-    el.scrollTo({ top })
+function restoreInitialScroll() {
+  if (!initialScrollPending || !scrollRef.value?.clientHeight || rowCount.value === 0) return
+  initialScrollPending = false
+  scrollToOffset(initialScrollTop)
+  if (!isAtLatestEdge(scrollRef.value)) {
+    pauseLiveEntryEviction()
   }
 }
 
-onMounted(() => {
-  latestScrollTop = trafficStore.scrollTop
-  if (trafficStore.scrollTop > 0) {
-    // Attempt to restore scroll position
-    const restoreScroll = () => {
-      scrollToOffset(trafficStore.scrollTop)
-    }
+function handleScrollIntent() {
+  initialScrollPending = false
+}
 
-    // Try immediately
-    restoreScroll()
-
-    // and after a tick to ensure layout
-    nextTick(restoreScroll)
-
-    // and after a small delay for virtual list to calculate sizes
-    setTimeout(restoreScroll, 50)
-  }
-})
+// Restore once when a visible layout exists, including panes initially hidden
+// with v-show. User input cancels restoration; no delayed timer can pull it back.
+onMounted(restoreInitialScroll)
+watch([rowCount, () => rowVirtualizer.value.scrollRect?.height], restoreInitialScroll, { flush: 'post' })
 
 onUnmounted(() => {
+  disposed = true
+  initialScrollPending = false
   clearTimeout(scrollSaveTimerId)
   cancelColumnDragUnlock()
   finishSelectionDrag(false, false)
   clearCompatibilityClickSuppression()
-  resumeLiveEntryEviction()
+  resumeLiveEntryEvictionIfIdle()
   persistScrollTop()
   trafficStore.selectedEntryCount = 0
 })
@@ -496,13 +454,21 @@ function handleScroll(e: Event) {
   }
   const nextScrollTop = target.scrollTop
   if (nextScrollTop !== latestScrollTop) {
+    initialScrollPending = false
     latestScrollTop = nextScrollTop
     schedulePersistScrollTop()
+    if (!revealingLiveEntries && !isAtLatestEdge(target)) {
+      pauseLiveEntryEviction()
+    }
   }
 }
 
 function handleTrafficMouseEnter() {
   isTrafficHovered = true
+  pauseLiveEntryEviction()
+}
+
+function pauseLiveEntryEviction() {
   if ('pauseLiveEntryEviction' in trafficStore) {
     trafficStore.pauseLiveEntryEviction()
   }
@@ -511,14 +477,46 @@ function handleTrafficMouseEnter() {
 function handleTrafficMouseLeave() {
   isTrafficHovered = false
   if (!selectionDrag) {
-    resumeLiveEntryEviction()
+    resumeLiveEntryEvictionIfIdle()
   }
 }
 
-function resumeLiveEntryEviction() {
+function resumeLiveEntryEvictionIfIdle() {
+  const element = scrollRef.value
+  if (
+    pendingLiveEntryCount.value > 0 ||
+    (element && !isAtLatestEdge(element))
+  ) return
   if ('resumeLiveEntryEviction' in trafficStore) {
     trafficStore.resumeLiveEntryEviction()
   }
+}
+
+async function showPendingLiveEntries() {
+  if (!('resumeLiveEntryEviction' in trafficStore) || revealingLiveEntries) return
+  handleScrollIntent()
+  finishSelectionDrag(false, false)
+  revealingLiveEntries = true
+  trafficStore.resumeLiveEntryEviction()
+  // The user explicitly leaves the old window. Locate the newest request that
+  // matches the current filters, even when the table is sorted descending.
+  const newestId = trafficStore.entries.reduce((id, entry) => Math.max(id, entry.id), 0)
+  await nextTick()
+  if (!disposed) {
+    let index = sortedEntries.value.findIndex((entry) => entry.id === newestId)
+    if (index === -1) {
+      let newestMatchingId = 0
+      sortedEntries.value.forEach((entry, entryIndex) => {
+        if (entry.id > newestMatchingId) {
+          newestMatchingId = entry.id
+          index = entryIndex
+        }
+      })
+    }
+    if (index >= 0) scrollToOffset(index * ROW_HEIGHT)
+    if (isTrafficHovered) pauseLiveEntryEviction()
+  }
+  revealingLiveEntries = false
 }
 
 function schedulePersistScrollTop() {
@@ -573,11 +571,7 @@ function isEntrySelected(entryId: number) {
 function getRowStyle(virtualRow: VirtualItem, row: proxyservice.TrafficEntry): CSSProperties {
   const color = getHighlightColor(row)
   const style: CSSProperties = {
-    position: 'absolute',
-    top: '0',
-    left: '0',
     height: `${virtualRow.size}px`,
-    transform: `translateY(${virtualRow.start}px)`,
   }
 
   if (!color || isEntrySelected(row.id)) {
@@ -587,8 +581,8 @@ function getRowStyle(virtualRow: VirtualItem, row: proxyservice.TrafficEntry): C
   const backgroundAlpha = themeStore.isDark ? '59' : '26'
   const outlineAlpha = themeStore.isDark ? '73' : '40'
   style.backgroundColor = `${color}${backgroundAlpha}`
-  style.borderLeft = `3px solid ${color}`
-  style.boxShadow = `inset 0 0 0 1px ${color}${outlineAlpha}`
+  // Paint the marker without changing cell widths when selection overrides it.
+  style.boxShadow = `inset 3px 0 0 ${color}, inset 0 0 0 1px ${color}${outlineAlpha}`
   return style
 }
 
@@ -815,7 +809,7 @@ function handleRowPointerDown(event: PointerEvent, row: proxyservice.TrafficEntr
   } catch {
     selectionDrag = null
     if (!isTrafficHovered) {
-      resumeLiveEntryEviction()
+      resumeLiveEntryEvictionIfIdle()
     }
   }
 }
@@ -874,7 +868,7 @@ function finishSelectionDrag(commitFocus: boolean, suppressClick: boolean) {
     suppressCompatibilityClick()
   }
   if (!isTrafficHovered) {
-    resumeLiveEntryEviction()
+    resumeLiveEntryEvictionIfIdle()
   }
 }
 
@@ -999,92 +993,50 @@ watch(
   { flush: 'post' },
 )
 
-// Anchor the viewport while the store evicts the oldest entries during live
-// capture. At the maxEntries cap each new request drops row 0 and shifts every
-// remaining row up by ROW_HEIGHT; without this the rows slide under a stationary
-// cursor and read as hover "jitter". Re-pin the row that was at the top of the
-// viewport so the visible rows stay put — but not when the user sits at the very
-// top (oldest is meant to churn off) or near the tail (following newest), nor on
-// sort/filter reorders (detected as a large anchor drift).
-const MAX_ANCHOR_DRIFT_ROWS = 64
-const ANCHOR_SHIFT_SAMPLE_OFFSETS = [-2, -1, 1, 2]
-
-function isSameEntryAt(
-  listA: proxyservice.TrafficEntry[],
-  indexA: number,
-  listB: proxyservice.TrafficEntry[],
-  indexB: number,
-) {
-  return listA[indexA]?.id === listB[indexB]?.id
-}
-
-function isContiguousAnchorShift(
-  oldList: proxyservice.TrafficEntry[],
-  newList: proxyservice.TrafficEntry[],
-  oldIndex: number,
-  newIndex: number,
-) {
-  let comparableSamples = 0
-  let matchingSamples = 0
-  for (const offset of ANCHOR_SHIFT_SAMPLE_OFFSETS) {
-    const oldSampleIndex = oldIndex + offset
-    const newSampleIndex = newIndex + offset
-    if (oldSampleIndex < 0 || newSampleIndex < 0) continue
-    if (oldSampleIndex >= oldList.length || newSampleIndex >= newList.length) continue
-    comparableSamples++
-    if (isSameEntryAt(oldList, oldSampleIndex, newList, newSampleIndex)) {
-      matchingSamples++
-    }
-  }
-  return comparableSamples > 0 && matchingSamples === comparableSamples
-}
+const viewOrderContext = computed(() =>
+  JSON.stringify([
+    dataContextKey.value,
+    sortConfig.value.key,
+    sortConfig.value.order,
+    filterStore.searchText,
+    filterStore.activeFilterTab,
+    filterStore.selectedHosts,
+    filterStore.selectedProcessKeys,
+  ]),
+)
 
 watch(
-  sortedEntries,
-  (newList, oldList) => {
-    if (!oldList || oldList.length === 0) return
-    if (trafficStore.pendingFocusEntryId || columnDragStartScrollTop !== null) return
-
+  [
+    sortedEntries,
+    viewOrderContext,
+    () => 'liveEntryEvictionVersion' in trafficStore ? trafficStore.liveEntryEvictionVersion : 0,
+  ],
+  async ([newList, context, eviction], [oldList, oldContext, oldEviction], onCleanup) => {
+    if (eviction <= oldEviction || context !== oldContext || sortConfig.value.key) return
+    if (
+      revealingLiveEntries || trafficStore.pendingFocusEntryId || columnDragStartScrollTop !== null
+    ) return
     const element = scrollRef.value
     if (!element) return
-
     const prevScrollTop = element.scrollTop
-    if (prevScrollTop <= 0) return
-
-    const maxScrollTop = element.scrollHeight - element.clientHeight
-    if (maxScrollTop <= 0 || prevScrollTop >= maxScrollTop - ROW_HEIGHT) return
-
-    const firstVisibleIndex = Math.floor(prevScrollTop / ROW_HEIGHT)
-    const anchor = oldList[firstVisibleIndex]
-    if (!anchor) return
-
-    const newIndex = newList.findIndex((entry) => entry.id === anchor.id)
-    if (newIndex === -1) return
-
-    const driftRows = newIndex - firstVisibleIndex
-    if (driftRows === 0) return
-    if (
-      Math.abs(driftRows) > MAX_ANCHOR_DRIFT_ROWS &&
-      !isContiguousAnchorShift(oldList, newList, firstVisibleIndex, newIndex)
-    ) {
-      return
-    }
-
-    const targetScrollTop = Math.min(
-      maxScrollTop,
-      Math.max(0, prevScrollTop + driftRows * ROW_HEIGHT),
+    const targetScrollTop = getTrafficEvictionScrollTop(
+      oldList, newList, prevScrollTop, element.clientHeight,
     )
-    if (targetScrollTop !== prevScrollTop) {
+    if (targetScrollTop === null || targetScrollTop === prevScrollTop) return
+    let cancelled = false
+    onCleanup(() => { cancelled = true })
+    await nextTick()
+    if (!cancelled && !disposed && !revealingLiveEntries && element.scrollTop === prevScrollTop) {
       scrollToOffset(targetScrollTop)
     }
   },
-  { flush: 'post' },
+  { flush: 'pre' },
 )
 </script>
 
 <template>
   <div
-    class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-app-panel"
+    class="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-app-panel"
     :style="trafficTableThemeVars"
   >
     <!-- pr-2.5 matches the ::-webkit-scrollbar width in style.css so the
@@ -1137,8 +1089,12 @@ watch(
     <TrafficContextMenu ref="contextMenuRef" class="flex min-h-0 flex-1 flex-col">
       <div
         ref="trafficScroll"
-        class="virtual-list min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-app-panel overscroll-contain scrollbar-gutter-stable will-change-scroll"
+        class="virtual-list min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-app-panel overscroll-contain scrollbar-gutter-stable [overflow-anchor:none]"
+        :class="{ 'will-change-scroll': needsScrollLayer }"
         @scroll="handleScroll"
+        @wheel.passive="handleScrollIntent"
+        @touchstart.passive="handleScrollIntent"
+        @pointerdown.capture="handleScrollIntent"
         @mouseenter="handleTrafficMouseEnter"
         @mouseleave="handleTrafficMouseLeave"
         @contextmenu="handleTableContextMenu"
@@ -1149,11 +1105,14 @@ watch(
       >
       <div
         class="relative min-h-full w-(--traffic-table-content-width) min-w-full"
-        :style="{ height: `${virtualContentHeight}px` }"
+        :style="{ height: `${virtualContentHeight}px`, paddingTop: `${virtualPaddingTop}px` }"
       >
+        <!-- Fixed-height virtual rows stay in normal flow. One leading spacer
+             locates the visible range without a transform on each hovered row. -->
+        <!-- Row hover backgrounds are disabled to avoid WebView2 repaint jitter. -->
         <div
           v-for="{ virtualRow, item } in virtualRows"
-          :key="String(virtualRow.key)"
+          :key="item.id"
           v-memo="[
             item,
             virtualRow.start,
@@ -1164,15 +1123,16 @@ watch(
             themeStore.isDark,
             columnsLayoutKey,
           ]"
-          class="traffic-row flex h-8 w-full min-w-full select-none items-center overflow-hidden transition-[background-color,box-shadow] duration-[0.12s] ease-[ease] contain-[layout_style] hover:bg-(--traffic-row-hover-bg,var(--app-hover-bg))"
+          class="traffic-row flex h-8 w-full min-w-full select-none items-center overflow-hidden transition-[background-color,box-shadow] duration-[0.12s] ease-[ease] contain-[layout_style]"
           :data-entry-id="item.id"
           :data-virtual-index="virtualRow.index"
           :class="{
             'selected-row bg-(--traffic-selected-bg)!': isEntrySelected(item.id),
             'focused-row shadow-[inset_3px_0_0_var(--app-accent-color),inset_0_0_0_1px_var(--traffic-selected-outline)]!':
               selectedEntryId === item.id,
+            'bg-app-panel': item.id % 2 === 0,
             'bg-[color-mix(in_srgb,var(--app-elevated-bg)_52%,var(--app-panel-bg))]':
-              virtualRow.index % 2 === 1,
+              item.id % 2 === 1,
           }"
           :style="getRowStyle(virtualRow, item)"
           @click="handleRowClick($event, item)"
@@ -1269,5 +1229,13 @@ watch(
       </div>
     </div>
     </TrafficContextMenu>
+    <UButton
+      v-if="pendingLiveEntryCount > 0"
+      class="absolute bottom-3 left-1/2 z-20 max-w-[calc(100%-2rem)] -translate-x-1/2 shadow-lg"
+      :icon="pendingLiveEntriesIcon"
+      size="sm"
+      :label="t('traffic.show_new_requests', { count: pendingLiveEntryCount })"
+      @click="showPendingLiveEntries"
+    />
   </div>
 </template>

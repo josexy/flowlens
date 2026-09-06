@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, triggerRef, watch } from 'vue'
+import { computed, ref, shallowReactive, shallowRef, triggerRef, watch } from 'vue'
 import type * as proxyservice from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
 import {
   GetTraffic,
@@ -92,7 +92,9 @@ export const useTrafficStore = defineStore('traffic', () => {
 
   const idMap = new Map<number, number>()
   const isLiveEntryEvictionPaused = shallowRef(false)
-  const pausedLiveEntries = new Map<number, proxyservice.TrafficEntry>()
+  const pausedLiveEntries = shallowReactive(new Map<number, proxyservice.TrafficEntry>())
+  const pendingLiveEntryCount = computed(() => pausedLiveEntries.size)
+  const liveEntryEvictionVersion = ref(0)
   let loadedBodyViewEntryId: number | null = null
   let bodyViewRequestToken = 0
   const terminalBodyRefreshQueue = new TerminalBodyRefreshQueue()
@@ -714,6 +716,13 @@ export const useTrafficStore = defineStore('traffic', () => {
       currentById.delete(entry.id)
       return current ? mergeInitialTrafficEntry(entry, current) : entry
     })
+    if (isLiveEntryEvictionPaused.value && entries.value.length > 0) {
+      // Recovery must not replace the window the user is reading. Refresh the
+      // retained entries and queue newer ones through the same bounded path.
+      applyTrafficEntryBatch(recoveredEntries)
+      reconcileSelectedEntry()
+      return
+    }
     const newestRecoveredId = recoveredEntries.reduce(
       (newest, entry) => Math.max(newest, entry.id),
       0,
@@ -911,6 +920,7 @@ export const useTrafficStore = defineStore('traffic', () => {
         evictedEntries.map((entry) => entry.id),
       )
       rebuildIdMap()
+      liveEntryEvictionVersion.value++
     }
 
     if (changed) {
@@ -941,7 +951,7 @@ export const useTrafficStore = defineStore('traffic', () => {
       return
     }
     const currentIndex = idMap.get(entry.id)
-    const current = currentIndex === undefined ? undefined : entries.value[currentIndex]
+    const current = currentIndex === undefined ? pausedLiveEntries.get(entry.id) : entries.value[currentIndex]
     if (
       current &&
       trafficEntryRevision(current) > 0 &&
@@ -971,6 +981,12 @@ export const useTrafficStore = defineStore('traffic', () => {
       }
       return
     }
+    const paused = pausedLiveEntries.get(patch.trafficId)
+    if (paused) {
+      const updated = applyTrafficEntryPatch(paused, patch)
+      if (updated !== paused) pausedLiveEntries.set(patch.trafficId, updated)
+      return
+    }
     const index = idMap.get(patch.trafficId)
     if (index === undefined) {
       return
@@ -989,6 +1005,8 @@ export const useTrafficStore = defineStore('traffic', () => {
     if (isEntryOutsideCurrentWindow(entry)) {
       return
     }
+    const current = pausedLiveEntries.get(entry.id)
+    if (current && trafficEntryRevision(current) > trafficEntryRevision(entry)) return
     if (!pausedLiveEntries.has(entry.id) && pausedLiveEntries.size >= TRAFFIC_ENTRY_CAP) {
       const oldestQueuedEntryId = pausedLiveEntries.keys().next().value
       if (oldestQueuedEntryId !== undefined) {
@@ -1007,11 +1025,10 @@ export const useTrafficStore = defineStore('traffic', () => {
 
   function resumeLiveEntryEviction() {
     isLiveEntryEvictionPaused.value = false
-    if (pausedLiveEntries.size === 0) return
-
     const queuedEntries = Array.from(pausedLiveEntries.values())
     pausedLiveEntries.clear()
     applyTrafficEntryBatch(queuedEntries)
+    flushPendingTrafficEntries()
   }
 
   async function deleteEntries(ids: number[]): Promise<void> {
@@ -1339,6 +1356,8 @@ export const useTrafficStore = defineStore('traffic', () => {
     setHighlight,
     focusEntryById,
     clearPendingFocusEntryId,
+    pendingLiveEntryCount,
+    liveEntryEvictionVersion,
     pauseLiveEntryEviction,
     resumeLiveEntryEviction,
     initialize,
