@@ -19,6 +19,16 @@ FlowLens helps developers capture local proxy traffic, trace requests back to de
 > [!IMPORTANT]
 > FlowLens is currently beta. Internal contracts and local development data may change without compatibility migration before a stable release.
 
+## Screenshots
+
+### Light Theme
+
+![FlowLens traffic inspector in light theme](assets/screenshots/flowlens-light.png)
+
+### Dark Theme
+
+![FlowLens traffic inspector in dark theme](assets/screenshots/flowlens-dark.png)
+
 ## Highlights
 
 - HTTP/HTTPS MITM capture and SOCKS5 proxy mode
