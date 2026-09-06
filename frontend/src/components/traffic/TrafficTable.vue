@@ -1109,7 +1109,9 @@ watch(
       >
         <!-- Fixed-height virtual rows stay in normal flow. One leading spacer
              locates the visible range without a transform on each hovered row. -->
-        <!-- Row hover backgrounds are disabled to avoid WebView2 repaint jitter. -->
+        <!-- Row hover backgrounds and the selection transition are both disabled
+             to avoid WebView2 repaint jitter. Row background/box-shadow changes
+             apply instantly on the next paint instead of animating. -->
         <div
           v-for="{ virtualRow, item } in virtualRows"
           :key="item.id"
@@ -1123,7 +1125,7 @@ watch(
             themeStore.isDark,
             columnsLayoutKey,
           ]"
-          class="traffic-row flex h-8 w-full min-w-full select-none items-center overflow-hidden transition-[background-color,box-shadow] duration-[0.12s] ease-[ease] contain-[layout_style]"
+          class="traffic-row flex h-8 w-full min-w-full select-none items-center overflow-hidden contain-[layout_style]"
           :data-entry-id="item.id"
           :data-virtual-index="virtualRow.index"
           :class="{
