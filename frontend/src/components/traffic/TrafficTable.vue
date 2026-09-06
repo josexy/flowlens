@@ -1117,6 +1117,7 @@ watch(
           :key="item.id"
           v-memo="[
             item,
+            virtualRow.index,
             virtualRow.start,
             virtualRow.size,
             isEntrySelected(item.id),
@@ -1132,9 +1133,9 @@ watch(
             'selected-row bg-(--traffic-selected-bg)!': isEntrySelected(item.id),
             'focused-row shadow-[inset_3px_0_0_var(--app-accent-color),inset_0_0_0_1px_var(--traffic-selected-outline)]!':
               selectedEntryId === item.id,
-            'bg-app-panel': item.id % 2 === 0,
+            'bg-app-panel': virtualRow.index % 2 === 1,
             'bg-[color-mix(in_srgb,var(--app-elevated-bg)_52%,var(--app-panel-bg))]':
-              item.id % 2 === 1,
+              virtualRow.index % 2 === 0,
           }"
           :style="getRowStyle(virtualRow, item)"
           @click="handleRowClick($event, item)"
