@@ -69,7 +69,7 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 		t.Fatalf("current request metrics = %+v", currentEntries[0].Request)
 	}
 	if got := currentEntries[0].Request.Metrics; got.StartedAtMicros != 1_786_540_561_341_480 ||
-		got.EndedAtMicros != 1_786_540_561_342_064 || got.HeaderSize != 107 || got.BodySize != 0 ||
+		got.EndedAtMicros != 1_786_540_561_342_064 || got.HeaderSize != 48 || got.BodySize != 0 ||
 		got.State != proxyservice.HTTPMessageStateCompleted {
 		t.Fatalf("current request metrics = %+v", got)
 	}
@@ -169,7 +169,7 @@ func writeHistoryFixture(
 		})
 		writeHistoryHeaderFields(t, &hbin, nil)
 		writeHistoryValue(t, &hbin, uint8(1))
-		for _, value := range []int64{1_786_540_561_341_480, 1_786_540_561_342_064, 107, 0} {
+		for _, value := range []int64{1_786_540_561_341_480, 1_786_540_561_342_064, 48, 0} {
 			writeHistoryValue(t, &hbin, value)
 		}
 		writeHistoryString(t, &hbin, string(proxyservice.HTTPMessageStateCompleted))

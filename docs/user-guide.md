@@ -63,14 +63,20 @@ The original proxy snapshot is kept in process memory and is restored during a n
 
 ## Timing, Sizes, and HAR Export
 
-FlowLens records request-write start/end and response first-byte/body-end events at the upstream transport boundary. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical header field-line sizes, and encoded Body sizes.
+FlowLens records request-attempt start, request-write end, and response first-byte/body-end events at the upstream transport boundary. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
 
 - Retries replace stale attempt data.
 - Failed, canceled, pending, or incomplete exchanges retain unknown values instead of synthetic completion data.
-- Detail views may add the logical HTTP/1 request or status line to displayed totals.
-- Persisted metrics and HAR `headersSize` remain field-line totals and do not represent TCP/TLS bytes, HPACK compression, or HTTP/2 frame sizes.
+- The backend computes `metrics.headerSize` once as the UTF-8 byte size of the complete head shown in the Raw panel: start line plus CRLF, displayed header field lines plus CRLF, and the final CRLF. Detail views, traffic totals, and HAR `headersSize` read this metric directly.
+- HTTP/2 uses synthesized lines such as `GET /path HTTP/2.0` and `HTTP/2.0 200`. Its pseudo-headers follow the Raw panel: `:authority` becomes `host`, `:scheme` is omitted, and method/path/status are consumed by the start line. These are logical text sizes, excluding TCP/TLS bytes, HPACK compression, and frame overhead.
 
 Capture, history, and traffic context menus can export all or selected entries as HAR 1.2. HTTP/HTTPS exchanges and WebSocket upgrade handshakes are exportable; Raw TCP tunnels and WebSocket frames are skipped.
+
+HAR timestamps retain microsecond precision; elapsed times use milliseconds with fractional digits. For complete, non-overlapping exchanges, `time` equals `timings.send + timings.wait + timings.receive`. The captured request-start event precedes connection acquisition and retains the first attempt's start across retries, so `send` includes preparation and retry overhead; `timings.comment` records this limitation. DNS, TCP and TLS phases are not separately measured. Unavailable or incomplete phases remain `-1`; overlapping upload/response phases cannot be expressed as a serial waterfall, so `wait` and `time` remain `-1`. The original request/response timestamps and terminal states remain available in extension fields.
+
+HAR `headersSize` follows this display-size convention for every protocol; HTTP/2 therefore has a logical size even though its compressed wire size is not captured. Missing metrics, truncated headers, or unavailable start-line data use `-1`. Normalized fallback fields can still have a known display size. HTTP/1 uses origin-form paths, with authority-form targets for CONNECT and `*` for OPTIONS. The historical layout remains HBIN v1 and stores the same metric directly; earlier development values are not converted.
+
+Completed URL-encoded and multipart request bodies up to 4 MiB and 1,000 parameters are exported as `postData.params`, preserving parameter order, duplicates, empty values, filenames and part content types. Binary multipart values use Base64 with a per-parameter `_encoding` extension. Structured forms omit `postData.text`, as required by HAR. Larger forms, incomplete or malformed bodies, and unsupported form representations retain the raw `postData.text`; binary raw bodies use `_encoding: "base64"`. Readers that ignore `_encoding` cannot reconstruct those binary values. Multipart boundaries are represented structurally rather than preserved as raw text.
 
 HAR output is streamed to a temporary file in the destination directory and atomically replaces the target after completion. Missing Body-cache payloads are counted without dropping otherwise exportable entries.
 

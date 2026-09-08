@@ -50,6 +50,8 @@ const (
 //     optional request/response metrics, and optional traffic error. Bodies are
 //     not stored in this section. Version 1 stores HTTP message metrics and
 //     certificate validity as Unix microsecond timestamps.
+//     HeaderSize stores the logical display head size, including the start
+//     line and final CRLF. Earlier development values are not converted.
 //     The current layout appends an optional process block to metadata after
 //     Certificate. For entries whose type is "tcp", the traffic error is
 //     followed by an optional raw TCP tunnel block:

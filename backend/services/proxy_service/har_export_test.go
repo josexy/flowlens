@@ -14,7 +14,7 @@ import (
 	"github.com/josexy/flowlens/backend/pkg/compresspool"
 )
 
-func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
+func TestWriteHARHTTP2TimingAndSizeGolden(t *testing.T) {
 	requestFields := []HTTPHeaderField{
 		{Name: ":method", Value: "GET"},
 		{Name: ":authority", Value: "ifconfig.co"},
@@ -35,13 +35,6 @@ func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
 		{Name: "cf-ray", Value: "a29e9b9b8f94339e-AMS"},
 		{Name: "alt-svc", Value: `h3=":443"; ma=86400`},
 	}
-	if got := logicalHARHeaderSize(requestFields); got != 107 {
-		t.Fatalf("request logical header size = %d, want 107", got)
-	}
-	if got := logicalHARHeaderSize(responseFields); got != 531 {
-		t.Fatalf("response logical header size = %d, want 531", got)
-	}
-
 	requestStart := int64(1786528561341480)
 	responseEnd := int64(1786528562077416)
 	connectionTime := time.UnixMilli(1786528560782)
@@ -61,7 +54,7 @@ func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
 			Metrics: &HTTPMessageMetrics{
 				StartedAtMicros: requestStart,
 				EndedAtMicros:   1786528561342064,
-				HeaderSize:      107,
+				HeaderSize:      79,
 				BodySize:        0,
 				State:           HTTPMessageStateCompleted,
 			},
@@ -72,7 +65,7 @@ func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
 			Metrics: &HTTPMessageMetrics{
 				StartedAtMicros: 1786528562069874,
 				EndedAtMicros:   responseEnd,
-				HeaderSize:      531,
+				HeaderSize:      533,
 				BodySize:        425,
 				State:           HTTPMessageStateCompleted,
 			},
@@ -108,7 +101,7 @@ func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
 	if bytes.Contains(output.Bytes(), []byte("\n  ")) {
 		t.Fatal("HAR output is unexpectedly indented")
 	}
-	for _, field := range []string{`"_id"`, `"_uid"`, `"_cid"`, `"_sid"`} {
+	for _, field := range []string{`"_id"`, `"_uid"`, `"_cid"`, `"_sid"`, `"_logicalHeadersSize"`} {
 		if bytes.Contains(output.Bytes(), []byte(field)) {
 			t.Fatalf("HAR output unexpectedly contains private ID field %s", field)
 		}
@@ -125,16 +118,16 @@ func TestWriteHARLogicalSizeProfileGolden(t *testing.T) {
 		t.Fatalf("entries = %d, want 1", len(document.Log.Entries))
 	}
 	got := document.Log.Entries[0]
-	if got.StartedDateTime != "2026-08-12T09:56:01.341Z" || got.Time != 736 {
-		t.Fatalf("entry timing = %q/%d, want 736ms", got.StartedDateTime, got.Time)
+	if got.StartedDateTime != "2026-08-12T09:56:01.341480Z" || got.Time != 735.936 {
+		t.Fatalf("entry timing = %q/%g, want 735.936ms", got.StartedDateTime, got.Time)
 	}
-	if got.Timings != (harTimings{Send: -1, Wait: -1, Receive: -1}) {
+	if got.Timings.Send != 0.584 || got.Timings.Wait != 727.810 || got.Timings.Receive != 7.542 {
 		t.Fatalf("timings = %#v", got.Timings)
 	}
-	if got.Request.HeadersSize != 107 || got.Request.BodySize != 0 || got.Request.StartTimestamp != requestStart {
+	if got.Request.HeadersSize != 79 || got.Request.BodySize != 0 || got.Request.StartTimestamp != requestStart {
 		t.Fatalf("request = %#v", got.Request)
 	}
-	if got.Response.HeadersSize != 531 || got.Response.BodySize != 425 || got.Response.Content.Size != 425 {
+	if got.Response.HeadersSize != 533 || got.Response.BodySize != 425 || got.Response.Content.Size != 425 {
 		t.Fatalf("response sizes = header %d, body %d, content %d", got.Response.HeadersSize, got.Response.BodySize, got.Response.Content.Size)
 	}
 	if got.Response.Content.Compression == nil || *got.Response.Content.Compression != 0 {
@@ -173,18 +166,20 @@ func TestWriteHARBinaryAndIncompleteFallbacks(t *testing.T) {
 		Request: &HTTPMessage{Proto: "HTTP/1.1", HeaderFields: requestFields, Metrics: &HTTPMessageMetrics{
 			StartedAtMicros: 1_000_000,
 			EndedAtMicros:   1_000_100,
-			HeaderSize:      logicalHARHeaderSize(requestFields),
-			BodySize:        2,
-			State:           HTTPMessageStateCompleted,
+
+			BodySize: 2,
+			State:    HTTPMessageStateCompleted,
 		}},
 		Response: &HTTPMessage{Proto: "HTTP/1.1", HeaderFields: responseFields, Metrics: &HTTPMessageMetrics{
 			StartedAtMicros: 1_001_000,
 			EndedAtMicros:   -1,
-			HeaderSize:      logicalHARHeaderSize(responseFields),
-			BodySize:        2,
-			State:           HTTPMessageStatePending,
+
+			BodySize: 2,
+			State:    HTTPMessageStatePending,
 		}},
 	}
+	entry.Request.Metrics.HeaderSize = logicalHTTPRequestHeaderSize(entry)
+	entry.Response.Metrics.HeaderSize = logicalHTTPResponseHeaderSize(entry)
 	missingEntry := &TrafficEntry{
 		Type:       "http",
 		Method:     "GET",

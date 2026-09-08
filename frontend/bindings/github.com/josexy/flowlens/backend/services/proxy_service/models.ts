@@ -39,6 +39,12 @@ export interface HTTPMessage {
 export interface HTTPMessageMetrics {
     "startedAtMicros": number;
     "endedAtMicros": number;
+
+    /**
+     * HeaderSize is the logical UTF-8 head size including the display start
+     * line and final empty line. HTTP/2 pseudo-headers follow the raw viewer's
+     * text representation. It does not measure HPACK or frame bytes.
+     */
     "headerSize": number;
     "bodySize": number;
     "state": HTTPMessageState;

@@ -303,7 +303,7 @@ type harCreator struct {
 
 type harEntry struct {
 	StartedDateTime string      `json:"startedDateTime"`
-	Time            int64       `json:"time"`
+	Time            float64     `json:"time"`
 	Request         harRequest  `json:"request"`
 	Response        harResponse `json:"response"`
 	Cache           struct{}    `json:"cache"`
@@ -362,9 +362,18 @@ type harContent struct {
 }
 
 type harPostData struct {
-	MimeType string `json:"mimeType"`
-	Text     string `json:"text"`
-	Encoding string `json:"_encoding,omitempty"`
+	MimeType string         `json:"mimeType"`
+	Text     string         `json:"text,omitempty"`
+	Encoding string         `json:"_encoding,omitempty"`
+	Params   []harPostParam `json:"params,omitempty"`
+}
+
+type harPostParam struct {
+	Name        string  `json:"name"`
+	Value       string  `json:"value"`
+	FileName    *string `json:"fileName,omitempty"`
+	ContentType string  `json:"contentType,omitempty"`
+	Encoding    string  `json:"_encoding,omitempty"`
 }
 
 type harNameValue struct {
@@ -383,9 +392,10 @@ type harCookie struct {
 }
 
 type harTimings struct {
-	Send    int64 `json:"send"`
-	Wait    int64 `json:"wait"`
-	Receive int64 `json:"receive"`
+	Send    float64 `json:"send"`
+	Wait    float64 `json:"wait"`
+	Receive float64 `json:"receive"`
+	Comment string  `json:"comment,omitempty"`
 }
 
 type harApp struct {
@@ -399,7 +409,7 @@ type harConnectionIDs struct {
 	local map[string]int
 }
 
-// WriteHAR writes compact HAR 1.2 JSON using FlowLens's logical size profile.
+// WriteHAR writes compact HAR 1.2 JSON with FlowLens metadata extensions.
 // It does not close w.
 func WriteHAR(w io.Writer, creatorVersion string, inputs []HARExportEntry) (HARWriteResult, error) {
 	if w == nil {
@@ -700,12 +710,7 @@ func writeHARRequestJSON(w io.Writer, request harRequest, body HARBody) error {
 		if err := writeHARJSONFieldName(w, &first, "postData"); err != nil {
 			return err
 		}
-		if err := writeHARBodyObject(
-			w,
-			firstHARHeaderValue(request.Headers, "Content-Type"),
-			body,
-			"_encoding",
-		); err != nil {
+		if err := writeHARPostData(w, request, body); err != nil {
 			return err
 		}
 	}
@@ -1010,14 +1015,14 @@ func makeHAREntry(input HARExportEntry, connections *harConnectionIDs) (harEntry
 	request := traffic.Request
 	response := traffic.Response
 	reqStart, _ := harMessageTimestamps(request)
-	_, rspEnd := harMessageTimestamps(response)
+	timings, totalTime := makeHARTimings(request, response)
 
 	entry := harEntry{
 		StartedDateTime: harStartedDateTime(traffic, reqStart),
-		Time:            harTotalTime(reqStart, rspEnd),
+		Time:            totalTime,
 		Request:         makeHARRequest(traffic, request, input.RequestBody),
 		Response:        makeHARResponse(traffic, response, input.ResponseBody),
-		Timings:         harTimings{Send: -1, Wait: -1, Receive: -1},
+		Timings:         timings,
 		Comment:         "",
 	}
 	if traffic.Error != nil {
@@ -1103,22 +1108,12 @@ func messageFields(message *HTTPMessage) []HTTPHeaderField {
 	return message.HeaderFields
 }
 
+// Reuse the captured logical display size for every protocol.
 func harHeaderSize(message *HTTPMessage) int64 {
-	if message == nil || message.HeadersTruncated {
+	if message == nil || message.HeadersTruncated || message.Metrics == nil {
 		return -1
 	}
-	if message.Metrics != nil {
-		return message.Metrics.HeaderSize
-	}
-	return logicalHARHeaderSize(message.HeaderFields)
-}
-
-func logicalHARHeaderSize(fields []HTTPHeaderField) int64 {
-	var size int64
-	for _, field := range fields {
-		size += int64(len(field.Name) + len(field.Value) + len(": ") + len("\r\n"))
-	}
-	return size
+	return message.Metrics.HeaderSize
 }
 
 func harBodySize(message *HTTPMessage, body HARBody) int64 {
@@ -1180,14 +1175,34 @@ func harStartedDateTime(traffic *TrafficEntry, requestStart int64) string {
 	if started.IsZero() {
 		started = time.Unix(0, 0)
 	}
-	return started.UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z")
+	return started.UTC().Format("2006-01-02T15:04:05.000000Z")
 }
 
-func harTotalTime(requestStart, responseEnd int64) int64 {
-	if requestStart < 0 || responseEnd < requestStart {
-		return -1
+func makeHARTimings(request, response *HTTPMessage) (harTimings, float64) {
+	timings := harTimings{Send: -1, Wait: -1, Receive: -1}
+	reqStart, reqEnd := harMessageTimestamps(request)
+	rspStart, rspEnd := harMessageTimestamps(response)
+	if harMessageCompleted(request) && reqStart >= 0 && reqEnd >= reqStart {
+		timings.Send = float64(reqEnd-reqStart) / 1000
+		// The upstream request-start event precedes connection acquisition, and
+		// the capture preserves the first attempt's start across retries. These
+		// costs cannot be separated using the timestamps retained in HBIN v1.
+		timings.Comment = "send includes connection acquisition and retry overhead; DNS, TCP and TLS are not separately captured."
+		if rspStart >= reqEnd {
+			timings.Wait = float64(rspStart-reqEnd) / 1000
+		}
 	}
-	return (responseEnd - requestStart + 500) / 1000
+	if harMessageCompleted(response) && rspStart >= 0 && rspEnd >= rspStart {
+		timings.Receive = float64(rspEnd-rspStart) / 1000
+	}
+	if timings.Send < 0 || timings.Wait < 0 || timings.Receive < 0 {
+		// An aborted phase is not a completed duration. Overlapping uploads and
+		// responses also cannot be represented by HAR's serial timing sum.
+		timings.Comment += " Incomplete, unavailable or overlapping phases retain -1; time is unknown until all serial phases complete."
+		timings.Comment = strings.TrimSpace(timings.Comment)
+		return timings, -1
+	}
+	return timings, float64(rspEnd-reqStart) / 1000
 }
 
 func harHTTPVersion(message, fallback *HTTPMessage) string {

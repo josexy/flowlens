@@ -862,13 +862,13 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 			requestBodySize = req.ContentLength
 		}
 		entry.Request.Metrics = completedHandshakeMetrics(
-			entry.Request,
+			logicalHTTPRequestHeaderSize(entry),
 			handshakeTiming.RequestStartedAt,
 			handshakeTiming.RequestEndedAt,
 			requestBodySize,
 		)
 		entry.Response.Metrics = completedHandshakeMetrics(
-			entry.Response,
+			logicalHTTPResponseHeaderSize(entry),
 			handshakeTiming.ResponseStartedAt,
 			handshakeTiming.ResponseEndedAt,
 			0,

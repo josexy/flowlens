@@ -12,8 +12,6 @@ import {
   formatDurationMicros,
   formatFileSize,
   formatUnixMicrosLocal,
-  getLogicalHTTPRequestStartLineSize,
-  getLogicalHTTPResponseStartLineSize,
   sumKnownByteSizes,
   summarizeHTTPMessageSize,
 } from '@/utils/format'
@@ -156,20 +154,11 @@ const sizeRows = computed<MetricRow[]>(() => {
     requestMetrics.value?.headerSize,
     requestMetrics.value?.bodySize,
     requestMessage.value?.headersTruncated,
-    getLogicalHTTPRequestStartLineSize(
-      props.selectedEntry.method,
-      props.selectedEntry.url,
-      requestMessage.value?.proto ?? '',
-    ),
   )
   const response = summarizeHTTPMessageSize(
     responseMetrics.value?.headerSize,
     responseMetrics.value?.bodySize,
     responseMessage.value?.headersTruncated,
-    getLogicalHTTPResponseStartLineSize(
-      props.selectedEntry.status,
-      responseMessage.value?.proto ?? '',
-    ),
   )
 
   return [

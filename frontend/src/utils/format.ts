@@ -115,14 +115,6 @@ function knownByteSize(value: number | undefined): number | null {
   return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
-function isHTTP1Protocol(protocol: string): boolean {
-  return /^HTTP\/1(?:\.\d+)?$/i.test(protocol.trim())
-}
-
-function utf8ByteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength
-}
-
 export function requestTargetFromURL(url: string): string | null {
   const trimmedURL = url.trim()
   if (trimmedURL === '*') return '*'
@@ -148,33 +140,6 @@ export function requestTargetFromURL(url: string): string | null {
   return withoutFragment.startsWith('/') ? withoutFragment : null
 }
 
-// The detail view includes a logical HTTP/1 start line, while HAR headersSize
-// remains the field-line total persisted by FlowLens.
-export const getLogicalHTTPRequestStartLineSize = (
-  method: string,
-  url: string,
-  protocol: string,
-): number => {
-  const normalizedProtocol = protocol.trim()
-  if (!isHTTP1Protocol(normalizedProtocol)) return 0
-
-  const normalizedMethod = method.trim()
-  if (normalizedMethod.toUpperCase() === 'CONNECT') return -1
-  const requestTarget = requestTargetFromURL(url)
-  if (!normalizedMethod || requestTarget === null) return -1
-
-  return utf8ByteLength(`${normalizedMethod} ${requestTarget} ${normalizedProtocol}\r\n`)
-}
-
-export const getLogicalHTTPResponseStartLineSize = (status: string, protocol: string): number => {
-  const normalizedProtocol = protocol.trim()
-  if (!isHTTP1Protocol(normalizedProtocol)) return 0
-
-  if (!status.trim()) return -1
-
-  return utf8ByteLength(`${normalizedProtocol} ${status}\r\n`)
-}
-
 export const sumKnownByteSizes = (...sizes: Array<number | null>): number | null => {
   let total = 0
   for (const size of sizes) {
@@ -189,12 +154,8 @@ export const summarizeHTTPMessageSize = (
   headerSize: number | undefined,
   bodySize: number | undefined,
   headersTruncated: boolean = false,
-  startLineSize: number | undefined = 0,
 ): HTTPMessageSizeSummary => {
-  const rawHeader = headersTruncated ? null : knownByteSize(headerSize)
-  const startLine = knownByteSize(startLineSize)
-  const header =
-    rawHeader === null || startLine === null ? null : knownByteSize(rawHeader + startLine + 2)
+  const header = headersTruncated ? null : knownByteSize(headerSize)
   const body = knownByteSize(bodySize)
   return {
     header,

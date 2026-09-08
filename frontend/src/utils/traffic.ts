@@ -1,6 +1,4 @@
 import {
-  getLogicalHTTPRequestStartLineSize,
-  getLogicalHTTPResponseStartLineSize,
   sumKnownByteSizes,
   summarizeHTTPMessageSize,
 } from './format.js'
@@ -283,17 +281,11 @@ export function getTrafficTotalSizeBytes(entry: TrafficEntryLike): number | null
     entry.request?.metrics?.headerSize,
     entry.request?.metrics?.bodySize,
     entry.request?.headersTruncated,
-    getLogicalHTTPRequestStartLineSize(
-      entry.method ?? '',
-      entry.url ?? '',
-      entry.request?.proto ?? '',
-    ),
   )
   const response = summarizeHTTPMessageSize(
     entry.response?.metrics?.headerSize,
     entry.response?.metrics?.bodySize,
     entry.response?.headersTruncated,
-    getLogicalHTTPResponseStartLineSize(entry.status ?? '', entry.response?.proto ?? ''),
   )
   return sumKnownByteSizes(request.total, response.total)
 }

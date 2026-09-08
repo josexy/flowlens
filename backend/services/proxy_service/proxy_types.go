@@ -183,11 +183,14 @@ const (
 )
 
 type HTTPMessageMetrics struct {
-	StartedAtMicros int64            `json:"startedAtMicros"`
-	EndedAtMicros   int64            `json:"endedAtMicros"`
-	HeaderSize      int64            `json:"headerSize"`
-	BodySize        int64            `json:"bodySize"`
-	State           HTTPMessageState `json:"state"`
+	StartedAtMicros int64 `json:"startedAtMicros"`
+	EndedAtMicros   int64 `json:"endedAtMicros"`
+	// HeaderSize is the logical UTF-8 head size including the display start
+	// line and final empty line. HTTP/2 pseudo-headers follow the raw viewer's
+	// text representation. It does not measure HPACK or frame bytes.
+	HeaderSize int64            `json:"headerSize"`
+	BodySize   int64            `json:"bodySize"`
+	State      HTTPMessageState `json:"state"`
 }
 
 // TrafficEntryPatch is the strongly typed incremental event sent after the

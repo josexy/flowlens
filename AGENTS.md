@@ -49,7 +49,7 @@ FlowLens 是基于 MITM 的跨平台桌面抓包工具，使用 `Wails v3 + Go 1
 - HTTP 请求规范化集中在 `synthetic_request_headers.go`：URL 决定路由；伪 Header、`Host`、framing、生成的内容类型和 fallback UA 由后端维护。目标传输无法无损表达 HeaderOrder 时必须报错。
 - 合成传输与共享 TLS dialer 集中在 `synthetic_transport.go`。显式 HTTP/1.1 不应用 HTTP/2 指纹；重定向保持指纹语义；协议、代理和指纹配置通过 API Collection 完整往返。
 - `HTTPMessageMetrics` 只能来自传输边界事件，并保持微秒精度、重试隔离和 capture generation 隔离。失败、取消或不完整 Body 不得伪造完成值，未知数值使用 `-1`。
-- `HeaderSize` 是字段行逻辑大小，不含 start line、TCP/TLS、HPACK 或 frame 开销；`BodySize` 是传输层编码后的实体 Body 字节数。后端时间戳统一保存 Unix 微秒。
+- `HeaderSize` 是 Raw 面板完整文本头部的 UTF-8 逻辑大小，包含起始行、字段行和结束空行；HTTP/2 使用合成起始行及伪 Header 的显示转换，不含 TCP/TLS、HPACK 或 frame 开销。前端与 HAR 直接读取该指标；`BodySize` 是传输层编码后的实体 Body 字节数。后端时间戳统一保存 Unix 微秒。
 - 当前历史格式是 HBIN v1，不兼容更早开发态布局。未知版本应跳过且不得删除；模型变化需同步 codec、历史测试、bindings 和前端。
 - HAR 生成与流式原子写入统一复用 `proxy_service` 的 `HARFileWriter`。区分空 Body 与缓存 Body 缺失，保留其余可导出项并统计 skipped/missingBodies。HAR 不会自动脱敏凭据、Cookie、Body 或进程路径。
 - API Collection 写操作必须保持 SQLite 事务与托管请求体文件一致，覆盖失败回滚、孤儿清理和启动校验。
