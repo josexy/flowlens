@@ -1094,6 +1094,7 @@ func (s *ProxyService) fillEntryMetadataFromContext(ctx context.Context, entry *
 	entry.Metadata.LocalConnectionEstablishedAt = md.LocalConnectionEstablishedTs
 	entry.Metadata.RemoteConnectionEstablishedAt = md.RemoteConnectionEstablishedTs
 	entry.Metadata.RequestProcessedAt = md.RequestProcessedTs
+	entry.Metadata.ConnectionTimings = connectionTimingsFromContext(ctx)
 
 	if !md.SSLHandshakeCompletedTs.IsZero() {
 		entry.Metadata.SSLHandshakeCompletedAt = md.SSLHandshakeCompletedTs

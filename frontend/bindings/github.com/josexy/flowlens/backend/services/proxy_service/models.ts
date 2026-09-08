@@ -20,6 +20,20 @@ export interface HARWriteResult {
     "missingBodies": number;
 }
 
+/**
+ * HTTPConnectionTimings describes the upstream connection, which may be shared
+ * by multiple requests and established before their HTTP exchange starts.
+ * Timestamps are Unix microseconds; unavailable endpoints are -1.
+ */
+export interface HTTPConnectionTimings {
+    "dnsStartedAtMicros": number;
+    "dnsEndedAtMicros": number;
+    "connectStartedAtMicros": number;
+    "connectEndedAtMicros": number;
+    "tlsStartedAtMicros": number;
+    "tlsEndedAtMicros": number;
+}
+
 export interface HTTPHeaderField {
     "name": string;
     "value": string;
@@ -131,6 +145,7 @@ export interface Metadata {
     "tls"?: TLSState | null;
     "certificate"?: ServerCertificate | null;
     "process"?: ProcessInfo | null;
+    "connectionTimings"?: HTTPConnectionTimings | null;
 }
 
 export interface PkixName {

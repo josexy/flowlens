@@ -18,6 +18,7 @@ export interface TrafficResponseTrailersPatchPayload {
 export interface TrafficMetricsPatchPayload {
   request?: proxyservice.HTTPMessageMetrics | null
   response?: proxyservice.HTTPMessageMetrics | null
+  connection?: proxyservice.HTTPConnectionTimings | null
 }
 
 export interface TrafficEntryPatchPayload {
@@ -167,6 +168,12 @@ export function applyTrafficEntryPatch(
   }
 
   let metadata = entry.metadata
+  if (patch.metrics?.connection) {
+    metadata = {
+      ...(metadata ?? ({} as proxyservice.Metadata)),
+      connectionTimings: patch.metrics.connection,
+    }
+  }
   if (patch.process !== undefined && patch.process !== null) {
     metadata = {
       ...(metadata ?? ({} as proxyservice.Metadata)),

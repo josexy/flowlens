@@ -17,7 +17,7 @@ import (
 const (
 	hbinMagic                         = "PGHI"
 	hbinVersionOldestSupported uint16 = 1
-	hbinVersionCurrent         uint16 = 1
+	hbinVersionCurrent         uint16 = 2
 	hbinMaxHeaderFields               = 1 << 20
 )
 
@@ -57,6 +57,9 @@ const (
 //     followed by an optional raw TCP tunnel block:
 //   - u8 raw_tcp_present
 //   - when raw_tcp_present == 1: string source, string host_port, u8 tls
+//   - version 2 appends u8 connection_timings_present, followed by six i64
+//     Unix microsecond timestamps (DNS, connect, TLS start/end) when present.
+//     Version 1 remains readable and has no connection timing block.
 //   - entry body at body_offset:
 //   - u32 compressed_body_size
 //   - zstd stream of hbinWriteEntryBody fields:
@@ -144,7 +147,7 @@ func DecodeTrafficEntryWithVersion(r io.Reader, formatVersion uint16) (*TrafficE
 	if !isSupportedHistoryFormatVersion(formatVersion) {
 		return nil, fmt.Errorf("hbin: unsupported version %d", formatVersion)
 	}
-	return hbinReadEntryHeader(r)
+	return hbinReadEntryHeader(r, formatVersion)
 }
 
 func isSupportedHistoryFormatVersion(version uint16) bool {
@@ -315,7 +318,7 @@ func (w *hbinCountingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func hbinReadEntryHeader(r io.Reader) (*TrafficEntry, error) {
+func hbinReadEntryHeader(r io.Reader, formatVersion uint16) (*TrafficEntry, error) {
 	te := new(TrafficEntry)
 	if err := binary.Read(r, binary.BigEndian, &te.ID); err != nil {
 		return nil, err
@@ -362,6 +365,18 @@ func hbinReadEntryHeader(r io.Reader) (*TrafficEntry, error) {
 	if te.Type == "tcp" {
 		if te.RawTCP, err = hbinReadOptRawTCPTunnelInfo(r); err != nil {
 			return nil, err
+		}
+	}
+	if formatVersion >= 2 {
+		timings, err := hbinReadConnectionTimings(r)
+		if err != nil {
+			return nil, err
+		}
+		if timings != nil {
+			if te.Metadata == nil {
+				te.Metadata = &Metadata{}
+			}
+			te.Metadata.ConnectionTimings = timings
 		}
 	}
 	return te, nil
@@ -454,9 +469,43 @@ func hbinWriteEntryHeader(w io.Writer, te *TrafficEntry) error {
 		return err
 	}
 	if te.Type == "tcp" {
-		return hbinWriteOptRawTCPTunnelInfo(w, te.RawTCP)
+		if err := hbinWriteOptRawTCPTunnelInfo(w, te.RawTCP); err != nil {
+			return err
+		}
 	}
-	return nil
+	var timings *HTTPConnectionTimings
+	if te.Metadata != nil {
+		timings = te.Metadata.ConnectionTimings
+	}
+	return hbinWriteConnectionTimings(w, timings)
+}
+
+func hbinWriteConnectionTimings(w io.Writer, timings *HTTPConnectionTimings) error {
+	if timings == nil {
+		return binary.Write(w, binary.BigEndian, uint8(0))
+	}
+	if err := binary.Write(w, binary.BigEndian, uint8(1)); err != nil {
+		return err
+	}
+	return binary.Write(w, binary.BigEndian, timings)
+}
+
+func hbinReadConnectionTimings(r io.Reader) (*HTTPConnectionTimings, error) {
+	var present uint8
+	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
+		return nil, err
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	if present != 1 {
+		return nil, fmt.Errorf("hbin: invalid connection timings marker %d", present)
+	}
+	timings := new(HTTPConnectionTimings)
+	if err := binary.Read(r, binary.BigEndian, timings); err != nil {
+		return nil, err
+	}
+	return timings, nil
 }
 
 func hbinWriteOptRawTCPTunnelInfo(w io.Writer, info *RawTCPTunnelInfo) error {

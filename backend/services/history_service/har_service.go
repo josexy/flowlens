@@ -51,6 +51,27 @@ func (s *HistoryService) ExportHAR(request HARExportRequest) (proxyservice.HARWr
 	}
 	defer writer.Abort()
 
+	// Register the full source, including unselected entries, so a reused
+	// connection is not charged again when only a later request is exported.
+	// This pass reads headers only; bodies remain streamed one entry at a time.
+	if fileIndex.formatVersion >= 2 {
+		var scanErr error
+		fileIndex.entries.ForEachValue(func(index historyIndex) bool {
+			if _, scanErr = hbinFile.Seek(int64(index.headerIndex), io.SeekStart); scanErr != nil {
+				return false
+			}
+			var entry *proxyservice.TrafficEntry
+			entry, scanErr = proxyservice.DecodeTrafficEntryWithVersion(hbinFile, fileIndex.formatVersion)
+			if scanErr != nil {
+				return false
+			}
+			writer.ObserveConnectionTimings(entry)
+			return true
+		})
+		if scanErr != nil {
+			return proxyservice.HARWriteResult{}, scanErr
+		}
+	}
 	for _, index := range indices {
 		if _, err := hbinFile.Seek(int64(index.headerIndex), io.SeekStart); err != nil {
 			return proxyservice.HARWriteResult{}, err

@@ -16,7 +16,7 @@ import (
 
 func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
-	writeHistoryWithVersion(t, historyDir, "v2-future", 2)
+	writeHistoryWithVersion(t, historyDir, "v3-future", 3)
 	writeHistoryWithVersion(t, historyDir, "v1-current", 1)
 	writeHistoryWithVersion(t, historyDir, "v0-invalid", 0)
 	writeRawTCPHistory(t, historyDir, "v1-raw-tcp")
@@ -27,7 +27,7 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	}
 
 	service.mu.RLock()
-	futureIndex := service.indexMap["v2-future"]
+	futureIndex := service.indexMap["v3-future"]
 	currentIndex := service.indexMap["v1-current"]
 	invalidIndex := service.indexMap["v0-invalid"]
 	rawTCPIndex := service.indexMap["v1-raw-tcp"]
@@ -51,7 +51,7 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	if currentMetadata.FormatVersion != 1 {
 		t.Fatalf("metadata format version = %d, want 1", currentMetadata.FormatVersion)
 	}
-	for _, key := range []string{"v2-future", "v0-invalid"} {
+	for _, key := range []string{"v3-future", "v0-invalid"} {
 		if !fs.PathExists(filepath.Join(historyDir, fs.GetHBinFileName(key))) ||
 			!fs.PathExists(filepath.Join(historyDir, fs.GetHIdxFileName(key))) {
 			t.Fatalf("unsupported %s history files should remain on disk", key)
@@ -96,6 +96,32 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 func writeHistoryWithVersion(t *testing.T, directory, key string, version uint16) {
 	t.Helper()
 	writeHistoryFixture(t, directory, key, version, "https", nil)
+}
+
+func TestHistoryServiceLoadsV2ConnectionTimingsAndBody(t *testing.T) {
+	historyDir := setupHistoryTestStorage(t)
+	writeHistoryWithVersion(t, historyDir, "v2-timings", 2)
+	service := New(nil, nil)
+	if err := service.initializeHistoryIndexMap(); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := service.GetHistory("v2-timings")
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("history entries = %+v, error = %v", entries, err)
+	}
+	timings := entries[0].Metadata.ConnectionTimings
+	if timings == nil || timings.DNSStartedAtMicros != 1000001 || timings.DNSEndedAtMicros != 1000123 || timings.TLSEndedAtMicros != -1 {
+		t.Fatalf("connection timings = %+v", timings)
+	}
+	body, err := service.GetHistoryTrafficBodyView("v2-timings", 9001)
+	if err != nil || body.RequestBody != "" || body.ResponseBody != "" {
+		t.Fatalf("body = %+v, error = %v", body, err)
+	}
+	var har bytes.Buffer
+	_, err = proxyservice.WriteHAR(&har, "test", []proxyservice.HARExportEntry{{Entry: entries[0]}})
+	if err != nil || !bytes.Contains(har.Bytes(), []byte(`"dnsStartedAtMicros":1000001`)) {
+		t.Fatalf("history HAR lost connection timings: %v", err)
+	}
 }
 
 func writeRawTCPHistory(t *testing.T, directory, key string) {
@@ -189,6 +215,10 @@ func writeHistoryFixture(
 			}
 			writeHistoryValue(t, &hbin, tls)
 		}
+	}
+	if version == 2 {
+		writeHistoryValue(t, &hbin, uint8(1))
+		writeHistoryValue(t, &hbin, proxyservice.HTTPConnectionTimings{DNSStartedAtMicros: 1000001, DNSEndedAtMicros: 1000123, ConnectStartedAtMicros: 1000123, ConnectEndedAtMicros: 1000456, TLSStartedAtMicros: -1, TLSEndedAtMicros: -1})
 	}
 	bodyOffset := uint32(hbin.Len())
 	bodyPayload := make([]byte, 0, 15)

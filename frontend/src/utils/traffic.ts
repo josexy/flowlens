@@ -5,10 +5,9 @@ import {
 
 export const PROCESS_CATEGORY_UNAVAILABLE_KEY = 'process:unavailable'
 
-const HAR_EXPORTABLE_HBIN_VERSION = 1
-
 export function isHARExportableHistoryFormat(formatVersion: number | null | undefined): boolean {
-  return formatVersion === HAR_EXPORTABLE_HBIN_VERSION
+  // Match the history versions accepted by DecodeTrafficEntryWithVersion.
+  return formatVersion === 1 || formatVersion === 2
 }
 
 export interface TrafficProcessLike {

@@ -19,6 +19,7 @@ export {
 export type {
     HARExportRequest,
     HARWriteResult,
+    HTTPConnectionTimings,
     HTTPHeaderField,
     HTTPMessage,
     HTTPMessageMetrics,

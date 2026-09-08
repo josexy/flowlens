@@ -1097,6 +1097,30 @@ test('traffic patches update only selected fields and reject stale revisions', (
   assert.equal(stale, updated)
 })
 
+test('connection timing patches preserve process metadata and published snapshots', () => {
+  const entry = {
+    id: 42,
+    revision: 1,
+    metadata: { process: { status: ProcessStatus.ProcessStatusResolved, pid: 10 } },
+  } as TrafficEntry
+  const connection = {
+    dnsStartedAtMicros: 1000, dnsEndedAtMicros: 1123,
+    connectStartedAtMicros: 1123, connectEndedAtMicros: 1456,
+    tlsStartedAtMicros: -1, tlsEndedAtMicros: -1,
+  }
+  const updated = applyTrafficEntryPatch(entry, {
+    trafficId: 42, revision: 2, metrics: { connection },
+  })
+  assert.deepEqual(updated.metadata?.connectionTimings, connection)
+  assert.equal(updated.metadata?.process, entry.metadata?.process)
+  assert.equal(entry.metadata?.connectionTimings, undefined)
+  assert.equal(formatDurationMicros(connection.dnsStartedAtMicros, connection.dnsEndedAtMicros), '123 μs')
+  const stale = applyTrafficEntryPatch(updated, {
+    trafficId: 42, revision: 1, metrics: { connection: { ...connection, dnsEndedAtMicros: 0 } },
+  })
+  assert.equal(stale, updated)
+})
+
 test('terminal message transitions identify each newly finished side', () => {
   const pending = {
     id: 1,
@@ -1359,10 +1383,13 @@ test('local data cleared events reset only the state covered by their scope', ()
   ])
 })
 
-test('HAR export accepts the initial HBIN v1 history layout', () => {
+test('HAR export accepts readable HBIN v1 and v2 histories and rejects unknown formats', () => {
   assert.equal(isHARExportableHistoryFormat(1), true)
+  assert.equal(isHARExportableHistoryFormat(2), true)
   assert.equal(isHARExportableHistoryFormat(0), false)
-  assert.equal(isHARExportableHistoryFormat(2), false)
+  assert.equal(isHARExportableHistoryFormat(3), false)
+  assert.equal(isHARExportableHistoryFormat(1.5), false)
+  assert.equal(isHARExportableHistoryFormat(null), false)
   assert.equal(isHARExportableHistoryFormat(undefined), false)
 })
 

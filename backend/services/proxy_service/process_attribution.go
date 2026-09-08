@@ -660,6 +660,10 @@ func cloneTrafficMetadata(metadata *Metadata) *Metadata {
 		return nil
 	}
 	clone := *metadata
+	if metadata.ConnectionTimings != nil {
+		timings := *metadata.ConnectionTimings
+		clone.ConnectionTimings = &timings
+	}
 	if metadata.Process != nil {
 		process := *metadata.Process
 		clone.Process = &process

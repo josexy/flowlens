@@ -88,6 +88,7 @@ func (x *captureExchange) observeHTTPExchangeTiming(event mitmproxy.HTTPExchange
 func (x *captureExchange) requestStarted(started time.Time, attempt int) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	if x.entry.Request == nil {
 		x.entry.Request = &HTTPMessage{}
 	}
@@ -134,6 +135,7 @@ func (x *captureExchange) observeRetryRequestBodies(request *http.Request) {
 func (x *captureExchange) requestEnded(ended time.Time, complete bool, writeErr error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	if x.entry.Request == nil {
 		x.entry.Request = &HTTPMessage{}
 	}
@@ -170,6 +172,7 @@ func (x *captureExchange) responseStarted(started time.Time) {
 func (x *captureExchange) responseHeaders(response *http.Response) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	x.entry.StatusCode = response.StatusCode
 	x.entry.Status = response.Status
 	x.service.fillResponseHTTPMessage(response, x.entry)
@@ -245,6 +248,7 @@ func timestampAtOrAfter(value, lowerBound int64) int64 {
 func (x *captureExchange) fail(err error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	now := time.Now()
 	state := stateForCaptureError(x.ctx, err)
 	if x.entry.Request != nil {
@@ -362,13 +366,16 @@ func newTrafficPatch(entry *TrafficEntry) TrafficEntryPatch {
 
 func newTrafficMetricsSection(entry *TrafficEntry) *TrafficMetricsPatch {
 	metrics := &TrafficMetricsPatch{}
+	if entry.Metadata != nil {
+		metrics.Connection = entry.Metadata.ConnectionTimings
+	}
 	if entry.Request != nil && entry.Request.Metrics != nil {
 		metrics.Request = entry.Request.Metrics
 	}
 	if entry.Response != nil && entry.Response.Metrics != nil {
 		metrics.Response = entry.Response.Metrics
 	}
-	if metrics.Request == nil && metrics.Response == nil {
+	if metrics.Request == nil && metrics.Response == nil && metrics.Connection == nil {
 		return nil
 	}
 	return metrics

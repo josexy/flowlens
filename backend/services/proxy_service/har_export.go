@@ -302,25 +302,26 @@ type harCreator struct {
 }
 
 type harEntry struct {
-	StartedDateTime string      `json:"startedDateTime"`
-	Time            float64     `json:"time"`
-	Request         harRequest  `json:"request"`
-	Response        harResponse `json:"response"`
-	Cache           struct{}    `json:"cache"`
-	Timings         harTimings  `json:"timings"`
-	ServerIPAddress string      `json:"serverIPAddress,omitempty"`
-	Connection      string      `json:"connection,omitempty"`
-	Comment         string      `json:"comment"`
-	CTime           *int64      `json:"_ctime,omitempty"`
-	STime           *int64      `json:"_stime,omitempty"`
-	ServerAddress   string      `json:"_serverAddress,omitempty"`
-	ServerFamily    *int        `json:"_serverAddressFamily,omitempty"`
-	ServerPort      *int        `json:"_serverPort,omitempty"`
-	ClientAddress   string      `json:"_clientAddress,omitempty"`
-	ClientFamily    *int        `json:"_clientAddressFamily,omitempty"`
-	ClientPort      *int        `json:"_clientPort,omitempty"`
-	App             *harApp     `json:"_app,omitempty"`
-	Error           string      `json:"_error,omitempty"`
+	StartedDateTime   string                 `json:"startedDateTime"`
+	Time              float64                `json:"time"`
+	Request           harRequest             `json:"request"`
+	Response          harResponse            `json:"response"`
+	Cache             struct{}               `json:"cache"`
+	Timings           harTimings             `json:"timings"`
+	ServerIPAddress   string                 `json:"serverIPAddress,omitempty"`
+	Connection        string                 `json:"connection,omitempty"`
+	Comment           string                 `json:"comment"`
+	CTime             *int64                 `json:"_ctime,omitempty"`
+	STime             *int64                 `json:"_stime,omitempty"`
+	ServerAddress     string                 `json:"_serverAddress,omitempty"`
+	ServerFamily      *int                   `json:"_serverAddressFamily,omitempty"`
+	ServerPort        *int                   `json:"_serverPort,omitempty"`
+	ClientAddress     string                 `json:"_clientAddress,omitempty"`
+	ClientFamily      *int                   `json:"_clientAddressFamily,omitempty"`
+	ClientPort        *int                   `json:"_clientPort,omitempty"`
+	App               *harApp                `json:"_app,omitempty"`
+	Error             string                 `json:"_error,omitempty"`
+	ConnectionTimings *HTTPConnectionTimings `json:"_connectionTimings,omitempty"`
 }
 
 type harRequest struct {
@@ -392,10 +393,14 @@ type harCookie struct {
 }
 
 type harTimings struct {
-	Send    float64 `json:"send"`
-	Wait    float64 `json:"wait"`
-	Receive float64 `json:"receive"`
-	Comment string  `json:"comment,omitempty"`
+	Blocked *float64 `json:"blocked,omitempty"`
+	DNS     *float64 `json:"dns,omitempty"`
+	Connect *float64 `json:"connect,omitempty"`
+	SSL     *float64 `json:"ssl,omitempty"`
+	Send    float64  `json:"send"`
+	Wait    float64  `json:"wait"`
+	Receive float64  `json:"receive"`
+	Comment string   `json:"comment,omitempty"`
 }
 
 type harApp struct {
@@ -406,7 +411,8 @@ type harApp struct {
 }
 
 type harConnectionIDs struct {
-	local map[string]int
+	local        map[string]int
+	timingOwners map[harConnectionPhaseKey]harConnectionTimingOwner
 }
 
 // WriteHAR writes compact HAR 1.2 JSON with FlowLens metadata extensions.
@@ -425,6 +431,9 @@ func WriteHAR(w io.Writer, creatorVersion string, inputs []HARExportEntry) (HARW
 	}
 	result := HARWriteResult{}
 	connections := harConnectionIDs{local: make(map[string]int)}
+	for _, input := range inputs {
+		connections.observeConnectionTimings(input.Entry)
+	}
 	for _, input := range inputs {
 		if err := writeHARInput(output, input, &connections, &result); err != nil {
 			return HARWriteResult{}, fmt.Errorf("har: encode entry: %w", err)
@@ -450,6 +459,9 @@ func WriteHARFile(path string, creatorVersion string, inputs []HARExportEntry) (
 	defer func() {
 		_ = writer.Abort()
 	}()
+	for _, input := range inputs {
+		writer.ObserveConnectionTimings(input.Entry)
+	}
 	for _, input := range inputs {
 		if err := writer.WriteEntry(input); err != nil {
 			return HARWriteResult{}, err
@@ -501,6 +513,7 @@ func (w *HARFileWriter) WriteEntry(input HARExportEntry) error {
 		}
 		return errors.New("har: file writer is closed")
 	}
+	w.ObserveConnectionTimings(input.Entry)
 	if err := writeHARInput(w.output, input, &w.connections, &w.result); err != nil {
 		return w.fail(fmt.Errorf("har: write entry: %w", err))
 	}
@@ -675,6 +688,7 @@ func writeHAREntryJSON(w io.Writer, entry harEntry, requestBody, responseBody HA
 		{"_clientPort", entry.ClientPort, entry.ClientPort != nil},
 		{"_app", entry.App, entry.App != nil},
 		{"_error", entry.Error, entry.Error != ""},
+		{"_connectionTimings", entry.ConnectionTimings, entry.ConnectionTimings != nil},
 	} {
 		if field.present {
 			if err := writeHARJSONField(w, &first, field.name, field.value); err != nil {
@@ -1014,11 +1028,11 @@ func makeHAREntry(input HARExportEntry, connections *harConnectionIDs) (harEntry
 	traffic := input.Entry
 	request := traffic.Request
 	response := traffic.Response
-	reqStart, _ := harMessageTimestamps(request)
 	timings, totalTime := makeHARTimings(request, response)
+	harStart, totalTime := connections.applyConnectionTimings(&timings, traffic, totalTime)
 
 	entry := harEntry{
-		StartedDateTime: harStartedDateTime(traffic, reqStart),
+		StartedDateTime: harStartedDateTime(traffic, harStart),
 		Time:            totalTime,
 		Request:         makeHARRequest(traffic, request, input.RequestBody),
 		Response:        makeHARResponse(traffic, response, input.ResponseBody),
@@ -1030,6 +1044,9 @@ func makeHAREntry(input HARExportEntry, connections *harConnectionIDs) (harEntry
 	}
 	fillHARConnection(&entry, traffic.Metadata, connections)
 	fillHARApp(&entry, traffic.Metadata)
+	if traffic.Metadata != nil {
+		entry.ConnectionTimings = traffic.Metadata.ConnectionTimings
+	}
 
 	missing := 0
 	if harBodyExpected(request) && !input.RequestBody.Available {
@@ -1186,8 +1203,9 @@ func makeHARTimings(request, response *HTTPMessage) (harTimings, float64) {
 		timings.Send = float64(reqEnd-reqStart) / 1000
 		// The upstream request-start event precedes connection acquisition, and
 		// the capture preserves the first attempt's start across retries. These
-		// costs cannot be separated using the timestamps retained in HBIN v1.
-		timings.Comment = "send includes connection acquisition and retry overhead; DNS, TCP and TLS are not separately captured."
+		// costs remain here until applyConnectionTimings splits the captured
+		// connection phases out of this interval (absent in HBIN v1).
+		timings.Comment = "send includes connection acquisition and retry overhead not represented by separate phases."
 		if rspStart >= reqEnd {
 			timings.Wait = float64(rspStart-reqEnd) / 1000
 		}

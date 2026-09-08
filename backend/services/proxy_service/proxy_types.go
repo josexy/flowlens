@@ -66,17 +66,30 @@ type ProcessIconData struct {
 }
 
 type Metadata struct {
-	LocalSourceAddr               string             `json:"localSourceAddr,omitempty"`
-	LocalDestinationAddr          string             `json:"localDestinationAddr,omitempty"`
-	RemoteSourceAddr              string             `json:"remoteSourceAddr,omitempty"`
-	RemoteDestinationAddr         string             `json:"remoteDestinationAddr,omitempty"`
-	LocalConnectionEstablishedAt  time.Time          `json:"localConnectionEstablishedAt"`
-	RemoteConnectionEstablishedAt time.Time          `json:"remoteConnectionEstablishedAt"`
-	RequestProcessedAt            time.Time          `json:"requestProcessedAt"`
-	SSLHandshakeCompletedAt       time.Time          `json:"sslHandshakeCompletedAt"`
-	TLS                           *TLSState          `json:"tls,omitempty"`
-	Certificate                   *ServerCertificate `json:"certificate,omitempty"`
-	Process                       *ProcessInfo       `json:"process,omitempty"`
+	LocalSourceAddr               string                 `json:"localSourceAddr,omitempty"`
+	LocalDestinationAddr          string                 `json:"localDestinationAddr,omitempty"`
+	RemoteSourceAddr              string                 `json:"remoteSourceAddr,omitempty"`
+	RemoteDestinationAddr         string                 `json:"remoteDestinationAddr,omitempty"`
+	LocalConnectionEstablishedAt  time.Time              `json:"localConnectionEstablishedAt"`
+	RemoteConnectionEstablishedAt time.Time              `json:"remoteConnectionEstablishedAt"`
+	RequestProcessedAt            time.Time              `json:"requestProcessedAt"`
+	SSLHandshakeCompletedAt       time.Time              `json:"sslHandshakeCompletedAt"`
+	TLS                           *TLSState              `json:"tls,omitempty"`
+	Certificate                   *ServerCertificate     `json:"certificate,omitempty"`
+	Process                       *ProcessInfo           `json:"process,omitempty"`
+	ConnectionTimings             *HTTPConnectionTimings `json:"connectionTimings,omitempty"`
+}
+
+// HTTPConnectionTimings describes the upstream connection, which may be shared
+// by multiple requests and established before their HTTP exchange starts.
+// Timestamps are Unix microseconds; unavailable endpoints are -1.
+type HTTPConnectionTimings struct {
+	DNSStartedAtMicros     int64 `json:"dnsStartedAtMicros"`
+	DNSEndedAtMicros       int64 `json:"dnsEndedAtMicros"`
+	ConnectStartedAtMicros int64 `json:"connectStartedAtMicros"`
+	ConnectEndedAtMicros   int64 `json:"connectEndedAtMicros"`
+	TLSStartedAtMicros     int64 `json:"tlsStartedAtMicros"`
+	TLSEndedAtMicros       int64 `json:"tlsEndedAtMicros"`
 }
 
 type TLSState struct {
@@ -223,8 +236,9 @@ type TrafficResponseTrailersPatch struct {
 }
 
 type TrafficMetricsPatch struct {
-	Request  *HTTPMessageMetrics `json:"request,omitempty"`
-	Response *HTTPMessageMetrics `json:"response,omitempty"`
+	Request    *HTTPMessageMetrics    `json:"request,omitempty"`
+	Response   *HTTPMessageMetrics    `json:"response,omitempty"`
+	Connection *HTTPConnectionTimings `json:"connection,omitempty"`
 }
 
 type HTTPMessage struct {
