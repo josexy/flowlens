@@ -211,6 +211,8 @@ func TestTrafficIconUpdateSurvivesConnectionLookupRelease(t *testing.T) {
 	}
 	manager := newProxyAttributionTestManager(t, provider, store)
 	service := newProxyAttributionTestService(manager, store)
+	updates := make(chan TrafficEntryPatch, 4)
+	service.emitTrafficPatchHook = func(patch TrafficEntryPatch) { updates <- patch }
 	tuple := proxyAttributionTuple(43104)
 	connectionLookup := manager.Start(context.Background(), tuple)
 	connectionBinding := service.registerConnectionProcessLookup(tuple, connectionLookup)
@@ -225,17 +227,16 @@ func TestTrafficIconUpdateSurvivesConnectionLookupRelease(t *testing.T) {
 
 	connectionLookup.Release()
 	close(releaseIcon)
-	deadline := time.Now().Add(2 * time.Second)
-	for connectionLookup.Snapshot().IconKey == "" && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if connectionLookup.Snapshot().IconKey == "" {
-		t.Fatal("icon extraction did not complete")
+	// Lookup snapshots change before subscribers publish the traffic update.
+	// Wait for the retained traffic binding to apply and publish the icon.
+	iconUpdate := waitForTrafficProcessPatch(t, updates, ProcessStatusResolved, true)
+	if iconUpdate.TrafficID != entry.ID {
+		t.Fatalf("icon update ID = %d, want %d", iconUpdate.TrafficID, entry.ID)
 	}
 
 	stored, ok := service.trafficEntries.Get(entry.ID)
 	if !ok || stored.Metadata == nil || stored.Metadata.Process == nil ||
-		stored.Metadata.Process.IconKey == "" {
+		stored.Metadata.Process.IconKey != iconUpdate.Process.IconKey {
 		t.Fatalf("stored process lost late icon update after connection release: %+v", stored)
 	}
 }
