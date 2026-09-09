@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 import { nextTick, ref } from 'vue'
 // @ts-expect-error Monaco does not publish declarations for its internal Monarch compiler.
 import { compile as compileMonarchLanguage } from 'monaco-editor/editor/standalone/common/monarch/monarchCompile.js'
@@ -66,8 +67,6 @@ import {
   formatDurationMicros,
   formatFileSize,
   formatUnixMicrosLocal,
-  getLogicalHTTPRequestStartLineSize,
-  getLogicalHTTPResponseStartLineSize,
   sumKnownByteSizes,
   summarizeHTTPMessageSize,
 } from '../src/utils/format.js'
@@ -327,7 +326,7 @@ test('traffic table metrics use the overview duration and size semantics', () =>
   }
 
   assert.equal(getTrafficTotalDurationMicros(entry), 584)
-  assert.equal(getTrafficTotalSizeBytes(entry), 1067)
+  assert.equal(getTrafficTotalSizeBytes(entry), 1063)
 })
 
 test('traffic table metrics stay unknown until all required values are known', () => {
@@ -1098,6 +1097,30 @@ test('traffic patches update only selected fields and reject stale revisions', (
   assert.equal(stale, updated)
 })
 
+test('connection timing patches preserve process metadata and published snapshots', () => {
+  const entry = {
+    id: 42,
+    revision: 1,
+    metadata: { process: { status: ProcessStatus.ProcessStatusResolved, pid: 10 } },
+  } as TrafficEntry
+  const connection = {
+    dnsStartedAtMicros: 1000, dnsEndedAtMicros: 1123,
+    connectStartedAtMicros: 1123, connectEndedAtMicros: 1456,
+    tlsStartedAtMicros: -1, tlsEndedAtMicros: -1,
+  }
+  const updated = applyTrafficEntryPatch(entry, {
+    trafficId: 42, revision: 2, metrics: { connection },
+  })
+  assert.deepEqual(updated.metadata?.connectionTimings, connection)
+  assert.equal(updated.metadata?.process, entry.metadata?.process)
+  assert.equal(entry.metadata?.connectionTimings, undefined)
+  assert.equal(formatDurationMicros(connection.dnsStartedAtMicros, connection.dnsEndedAtMicros), '123 μs')
+  const stale = applyTrafficEntryPatch(updated, {
+    trafficId: 42, revision: 1, metrics: { connection: { ...connection, dnsEndedAtMicros: 0 } },
+  })
+  assert.equal(stale, updated)
+})
+
 test('terminal message transitions identify each newly finished side', () => {
   const pending = {
     id: 1,
@@ -1247,7 +1270,7 @@ test('traffic metric durations preserve microseconds below one millisecond', () 
 test('traffic metric byte sizes use compact binary units', () => {
   assert.equal(formatFileSize(0), '0 B')
   assert.equal(formatFileSize(109), '109 B')
-  assert.equal(formatFileSize(1067), '1.04 KB')
+  assert.equal(formatFileSize(1063), '1.04 KB')
   assert.equal(
     formatFileSize(1024, { precision: 2, trimTrailingZeros: false }),
     '1.00 KB',
@@ -1360,20 +1383,23 @@ test('local data cleared events reset only the state covered by their scope', ()
   ])
 })
 
-test('HAR export accepts the initial HBIN v1 history layout', () => {
+test('HAR export accepts readable HBIN v1 and v2 histories and rejects unknown formats', () => {
   assert.equal(isHARExportableHistoryFormat(1), true)
+  assert.equal(isHARExportableHistoryFormat(2), true)
   assert.equal(isHARExportableHistoryFormat(0), false)
-  assert.equal(isHARExportableHistoryFormat(2), false)
+  assert.equal(isHARExportableHistoryFormat(3), false)
+  assert.equal(isHARExportableHistoryFormat(1.5), false)
+  assert.equal(isHARExportableHistoryFormat(null), false)
   assert.equal(isHARExportableHistoryFormat(undefined), false)
 })
 
-test('traffic metric message sizes include the displayed header terminator', () => {
+test('traffic metric message sizes reuse the complete backend header size', () => {
   const request = summarizeHTTPMessageSize(107, 0)
   const response = summarizeHTTPMessageSize(531, 425)
 
-  assert.deepEqual(request, { header: 109, body: 0, total: 109 })
-  assert.deepEqual(response, { header: 533, body: 425, total: 958 })
-  assert.equal(sumKnownByteSizes(request.total, response.total), 1067)
+  assert.deepEqual(request, { header: 107, body: 0, total: 107 })
+  assert.deepEqual(response, { header: 531, body: 425, total: 956 })
+  assert.equal(sumKnownByteSizes(request.total, response.total), 1063)
   assert.deepEqual(summarizeHTTPMessageSize(107, 0, true), {
     header: null,
     body: 0,
@@ -1386,53 +1412,46 @@ test('traffic metric message sizes include the displayed header terminator', () 
   })
 })
 
-test('HTTP/1 traffic metric sizes include request and status lines', () => {
-  const requestLineSize = getLogicalHTTPRequestStartLineSize(
-    'GET',
-    'https://ifconfig.co/json',
-    'HTTP/1.1',
-  )
-  const responseLineSize = getLogicalHTTPResponseStartLineSize('200 OK', 'HTTP/1.1')
-  const request = summarizeHTTPMessageSize(57, 0, false, requestLineSize)
-  const response = summarizeHTTPMessageSize(541, 404, false, responseLineSize)
-
-  assert.equal(requestLineSize, 20)
-  assert.equal(responseLineSize, 17)
-  assert.deepEqual(request, { header: 79, body: 0, total: 79 })
-  assert.deepEqual(response, { header: 560, body: 404, total: 964 })
-  assert.equal(sumKnownByteSizes(request.total, response.total), 1043)
-
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize(
-      'GET',
-      'https://example.test/search?q=flowlens',
-      'HTTP/1.1',
-    ),
-    33,
-  )
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize('GET', 'https://example.test/a%2Fb?', 'HTTP/1.1'),
-    22,
-  )
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize('GET', 'https://example.test/a/../long', 'HTTP/1.1'),
-    25,
-  )
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize('GET', 'https://example.test/%2e%2e/a', 'HTTP/1.1'),
-    24,
-  )
-  assert.equal(getLogicalHTTPRequestStartLineSize('OPTIONS', '*', 'HTTP/1.1'), 20)
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize('CONNECT', 'https://example.test', 'HTTP/1.1'),
-    -1,
-  )
-  assert.equal(getLogicalHTTPResponseStartLineSize('200 ', 'HTTP/1.1'), 15)
-  assert.equal(
-    getLogicalHTTPRequestStartLineSize('GET', 'https://ifconfig.co/json', 'HTTP/2.0'),
-    0,
-  )
-  assert.equal(getLogicalHTTPResponseStartLineSize('200 OK', 'HTTP/2.0'), 0)
+test('backend logical header fixtures match the Raw panel and displayed totals', () => {
+  interface FixtureMessage {
+    proto: string
+    headerFields: Array<{ name: string; value: string }>
+  }
+  const fixtures = JSON.parse(
+    readFileSync('../backend/services/proxy_service/testdata/logical_header_sizes.json', 'utf8'),
+  ) as Array<{
+    name: string
+    entry: {
+      method: string
+      url: string
+      host: string
+      status: string
+      statusCode: number
+      request: FixtureMessage
+      response: FixtureMessage
+    }
+    requestHead: string
+    responseHead: string
+  }>
+  for (const { name, entry, requestHead, responseHead } of fixtures) {
+    assert.equal(formatRawHTTPRequest({
+      method: entry.method, url: entry.url, host: entry.host,
+      protocol: entry.request.proto, headerFields: entry.request.headerFields,
+    }), requestHead, name)
+    assert.equal(formatRawHTTPResponse({
+      status: entry.status, statusCode: entry.statusCode,
+      protocol: entry.response.proto, headerFields: entry.response.headerFields,
+    }), responseHead, name)
+    const requestSize = Buffer.byteLength(requestHead, 'utf8')
+    const responseSize = Buffer.byteLength(responseHead, 'utf8')
+    assert.equal(summarizeHTTPMessageSize(requestSize, 0).header, requestSize, name)
+    assert.equal(summarizeHTTPMessageSize(responseSize, 7).total, responseSize + 7, name)
+    assert.equal(getTrafficTotalSizeBytes({
+      type: 'http', ...entry,
+      request: { ...entry.request, metrics: { headerSize: requestSize, bodySize: 0 } },
+      response: { ...entry.response, metrics: { headerSize: responseSize, bodySize: 7 } },
+    }), requestSize + responseSize + 7, name)
+  }
 })
 
 test('request header field conversion preserves order, casing, and duplicates', () => {

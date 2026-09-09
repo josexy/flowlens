@@ -31,11 +31,7 @@ func newCaptureExchange(service *ProxyService, ctx context.Context, entry *Traff
 	}
 }
 
-func newPendingHTTPMessageMetrics(fields []HTTPHeaderField, truncated bool) *HTTPMessageMetrics {
-	headerSize := logicalHARHeaderSize(fields)
-	if truncated {
-		headerSize = -1
-	}
+func newPendingHTTPMessageMetrics(headerSize int64) *HTTPMessageMetrics {
 	return &HTTPMessageMetrics{
 		StartedAtMicros: -1,
 		EndedAtMicros:   -1,
@@ -47,18 +43,18 @@ func newPendingHTTPMessageMetrics(fields []HTTPHeaderField, truncated bool) *HTT
 
 func ensureHTTPMessageMetrics(message *HTTPMessage) *HTTPMessageMetrics {
 	if message.Metrics == nil {
-		message.Metrics = newPendingHTTPMessageMetrics(message.HeaderFields, message.HeadersTruncated)
+		message.Metrics = newPendingHTTPMessageMetrics(-1)
 	}
 	return message.Metrics
 }
 
 func completedHandshakeMetrics(
-	message *HTTPMessage,
+	headerSize int64,
 	startedAt time.Time,
 	endedAt time.Time,
 	bodySize int64,
 ) *HTTPMessageMetrics {
-	metrics := newPendingHTTPMessageMetrics(message.HeaderFields, message.HeadersTruncated)
+	metrics := newPendingHTTPMessageMetrics(headerSize)
 	if !startedAt.IsZero() {
 		metrics.StartedAtMicros = startedAt.UnixMicro()
 	}
@@ -92,10 +88,12 @@ func (x *captureExchange) observeHTTPExchangeTiming(event mitmproxy.HTTPExchange
 func (x *captureExchange) requestStarted(started time.Time, attempt int) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	if x.entry.Request == nil {
 		x.entry.Request = &HTTPMessage{}
 	}
 	metrics := ensureHTTPMessageMetrics(x.entry.Request)
+	metrics.HeaderSize = logicalHTTPRequestHeaderSize(x.entry)
 	if attempt <= 1 || metrics.StartedAtMicros < 0 {
 		metrics.StartedAtMicros = started.UnixMicro()
 		x.entry.StartedAt = started
@@ -137,6 +135,7 @@ func (x *captureExchange) observeRetryRequestBodies(request *http.Request) {
 func (x *captureExchange) requestEnded(ended time.Time, complete bool, writeErr error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	if x.entry.Request == nil {
 		x.entry.Request = &HTTPMessage{}
 	}
@@ -173,14 +172,12 @@ func (x *captureExchange) responseStarted(started time.Time) {
 func (x *captureExchange) responseHeaders(response *http.Response) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	x.entry.StatusCode = response.StatusCode
 	x.entry.Status = response.Status
 	x.service.fillResponseHTTPMessage(response, x.entry)
 	metrics := ensureHTTPMessageMetrics(x.entry.Response)
-	metrics.HeaderSize = logicalHARHeaderSize(x.entry.Response.HeaderFields)
-	if x.entry.Response.HeadersTruncated {
-		metrics.HeaderSize = -1
-	}
+	metrics.HeaderSize = logicalHTTPResponseHeaderSize(x.entry)
 	x.publishResponseHeadersLocked()
 }
 
@@ -251,6 +248,7 @@ func timestampAtOrAfter(value, lowerBound int64) int64 {
 func (x *captureExchange) fail(err error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	x.refreshConnectionTimingsLocked()
 	now := time.Now()
 	state := stateForCaptureError(x.ctx, err)
 	if x.entry.Request != nil {
@@ -368,13 +366,16 @@ func newTrafficPatch(entry *TrafficEntry) TrafficEntryPatch {
 
 func newTrafficMetricsSection(entry *TrafficEntry) *TrafficMetricsPatch {
 	metrics := &TrafficMetricsPatch{}
+	if entry.Metadata != nil {
+		metrics.Connection = entry.Metadata.ConnectionTimings
+	}
 	if entry.Request != nil && entry.Request.Metrics != nil {
 		metrics.Request = entry.Request.Metrics
 	}
 	if entry.Response != nil && entry.Response.Metrics != nil {
 		metrics.Response = entry.Response.Metrics
 	}
-	if metrics.Request == nil && metrics.Response == nil {
+	if metrics.Request == nil && metrics.Response == nil && metrics.Connection == nil {
 		return nil
 	}
 	return metrics

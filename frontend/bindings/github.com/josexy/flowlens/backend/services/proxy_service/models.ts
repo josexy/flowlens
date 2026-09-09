@@ -20,6 +20,20 @@ export interface HARWriteResult {
     "missingBodies": number;
 }
 
+/**
+ * HTTPConnectionTimings describes the upstream connection, which may be shared
+ * by multiple requests and established before their HTTP exchange starts.
+ * Timestamps are Unix microseconds; unavailable endpoints are -1.
+ */
+export interface HTTPConnectionTimings {
+    "dnsStartedAtMicros": number;
+    "dnsEndedAtMicros": number;
+    "connectStartedAtMicros": number;
+    "connectEndedAtMicros": number;
+    "tlsStartedAtMicros": number;
+    "tlsEndedAtMicros": number;
+}
+
 export interface HTTPHeaderField {
     "name": string;
     "value": string;
@@ -39,6 +53,12 @@ export interface HTTPMessage {
 export interface HTTPMessageMetrics {
     "startedAtMicros": number;
     "endedAtMicros": number;
+
+    /**
+     * HeaderSize is the logical UTF-8 head size including the display start
+     * line and final empty line. HTTP/2 pseudo-headers follow the raw viewer's
+     * text representation. It does not measure HPACK or frame bytes.
+     */
     "headerSize": number;
     "bodySize": number;
     "state": HTTPMessageState;
@@ -125,6 +145,7 @@ export interface Metadata {
     "tls"?: TLSState | null;
     "certificate"?: ServerCertificate | null;
     "process"?: ProcessInfo | null;
+    "connectionTimings"?: HTTPConnectionTimings | null;
 }
 
 export interface PkixName {

@@ -451,12 +451,12 @@ func TestDecodeTrafficRequestBodyReturnsRawBytes(t *testing.T) {
 	}
 }
 
-func TestHistoryMetadataUsesCurrentV1(t *testing.T) {
+func TestHistoryMetadataUsesCurrentV2(t *testing.T) {
 	want := HistoryMetadata{
-		Key:           "current-v1",
-		Alias:         "Current V1",
+		Key:           "current-v2",
+		Alias:         "Current V2",
 		CreatedAt:     1_785_000_000_000,
-		FormatVersion: 1,
+		FormatVersion: 2,
 	}
 	var encoded bytes.Buffer
 	if err := encodeHistoryMetadata(&encoded, want); err != nil {
@@ -465,8 +465,8 @@ func TestHistoryMetadataUsesCurrentV1(t *testing.T) {
 	if err := binary.Write(&encoded, binary.BigEndian, uint32(0)); err != nil {
 		t.Fatalf("write entry count: %v", err)
 	}
-	if got := binary.BigEndian.Uint16(encoded.Bytes()[len(hbinMagic):]); got != 1 {
-		t.Fatalf("encoded version = %d, want 1", got)
+	if got := binary.BigEndian.Uint16(encoded.Bytes()[len(hbinMagic):]); got != 2 {
+		t.Fatalf("encoded version = %d, want 2", got)
 	}
 	if got := binary.BigEndian.Uint32(encoded.Bytes()[len(hbinMagic)+2:]); got != uint32(len(want.Key)) {
 		t.Fatalf("encoded key length = %d, want %d", got, len(want.Key))
@@ -524,14 +524,14 @@ func TestCurrentProcessInfoRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDecodeHistoryRejectsUnknownV2(t *testing.T) {
+func TestDecodeHistoryRejectsUnknownV3(t *testing.T) {
 	var encoded bytes.Buffer
 	encoded.WriteString(hbinMagic)
-	if err := binary.Write(&encoded, binary.BigEndian, uint16(2)); err != nil {
+	if err := binary.Write(&encoded, binary.BigEndian, uint16(3)); err != nil {
 		t.Fatalf("write version: %v", err)
 	}
 	metadata, err := DecodeHistoryMetadata(bytes.NewReader(encoded.Bytes()))
-	if err == nil || !strings.Contains(err.Error(), "unsupported version 2") {
+	if err == nil || !strings.Contains(err.Error(), "unsupported version 3") {
 		t.Fatalf("DecodeHistoryMetadata error = %v", err)
 	}
 	if metadata != nil {
@@ -539,9 +539,9 @@ func TestDecodeHistoryRejectsUnknownV2(t *testing.T) {
 	}
 }
 
-func TestDecodeTrafficEntryRejectsUnknownV2(t *testing.T) {
-	entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(nil), 2)
-	if err == nil || !strings.Contains(err.Error(), "unsupported version 2") {
+func TestDecodeTrafficEntryRejectsUnknownV3(t *testing.T) {
+	entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(nil), 3)
+	if err == nil || !strings.Contains(err.Error(), "unsupported version 3") {
 		t.Fatalf("DecodeTrafficEntryWithVersion error = %v", err)
 	}
 	if entry != nil {

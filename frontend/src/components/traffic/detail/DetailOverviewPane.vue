@@ -12,8 +12,6 @@ import {
   formatDurationMicros,
   formatFileSize,
   formatUnixMicrosLocal,
-  getLogicalHTTPRequestStartLineSize,
-  getLogicalHTTPResponseStartLineSize,
   sumKnownByteSizes,
   summarizeHTTPMessageSize,
 } from '@/utils/format'
@@ -57,6 +55,7 @@ const requestMessage = computed(() => props.selectedEntry.request ?? null)
 const responseMessage = computed(() => props.selectedEntry.response ?? null)
 const requestMetrics = computed(() => requestMessage.value?.metrics ?? null)
 const responseMetrics = computed(() => responseMessage.value?.metrics ?? null)
+const connectionTimings = computed(() => props.selectedEntry.metadata?.connectionTimings)
 const hasTrafficMetrics = computed(() => !!requestMetrics.value || !!responseMetrics.value)
 const showLegacyMetricsUnavailable = computed(
   () => props.selectedEntry.type !== 'tcp' && !hasTrafficMetrics.value,
@@ -108,8 +107,33 @@ function toggleSizeInfo() {
 const timingRows = computed<MetricRow[]>(() => {
   const request = requestMetrics.value
   const response = responseMetrics.value
+  const connection = connectionTimings.value
 
   return [
+    {
+      key: 'connection-dns',
+      label: t('detail.upstream_dns'),
+      value: formatDurationMicros(
+        connection?.dnsStartedAtMicros ?? -1,
+        connection?.dnsEndedAtMicros ?? -1,
+      ),
+    },
+    {
+      key: 'connection-connect',
+      label: t('detail.upstream_connect'),
+      value: formatDurationMicros(
+        connection?.connectStartedAtMicros ?? -1,
+        connection?.connectEndedAtMicros ?? -1,
+      ),
+    },
+    {
+      key: 'connection-tls',
+      label: t('detail.upstream_tls'),
+      value: formatDurationMicros(
+        connection?.tlsStartedAtMicros ?? -1,
+        connection?.tlsEndedAtMicros ?? -1,
+      ),
+    },
     {
       key: 'request-start',
       label: t('detail.request_start'),
@@ -156,20 +180,11 @@ const sizeRows = computed<MetricRow[]>(() => {
     requestMetrics.value?.headerSize,
     requestMetrics.value?.bodySize,
     requestMessage.value?.headersTruncated,
-    getLogicalHTTPRequestStartLineSize(
-      props.selectedEntry.method,
-      props.selectedEntry.url,
-      requestMessage.value?.proto ?? '',
-    ),
   )
   const response = summarizeHTTPMessageSize(
     responseMetrics.value?.headerSize,
     responseMetrics.value?.bodySize,
     responseMessage.value?.headersTruncated,
-    getLogicalHTTPResponseStartLineSize(
-      props.selectedEntry.status,
-      responseMessage.value?.proto ?? '',
-    ),
   )
 
   return [

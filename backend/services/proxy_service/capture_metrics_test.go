@@ -117,7 +117,7 @@ func TestCaptureExchangePublishesCompletedResponseSnapshot(t *testing.T) {
 		Type:   "https",
 		Method: http.MethodGet,
 		URL:    "https://example.test/",
-		Request: &HTTPMessage{HeaderFields: []HTTPHeaderField{
+		Request: &HTTPMessage{Proto: "HTTP/2.0", HeaderFields: []HTTPHeaderField{
 			{Name: ":method", Value: "GET"},
 			{Name: ":path", Value: "/"},
 		}},
@@ -152,6 +152,12 @@ func TestCaptureExchangePublishesCompletedResponseSnapshot(t *testing.T) {
 	}
 	if stored.Response.Metrics.State != HTTPMessageStateCompleted || stored.Response.Metrics.BodySize != 7 {
 		t.Fatalf("response metrics = %+v", stored.Response.Metrics)
+	}
+	if got, want := stored.Request.Metrics.HeaderSize, int64(len("GET / HTTP/2.0\r\n\r\n")); got != want {
+		t.Fatalf("request header size = %d, want %d", got, want)
+	}
+	if got, want := stored.Response.Metrics.HeaderSize, int64(len("HTTP/2.0 200\r\nContent-Type: text/plain\r\n\r\n")); got != want {
+		t.Fatalf("response header size = %d, want %d", got, want)
 	}
 	if stored.Response.Metrics.StartedAtMicros < stored.Request.Metrics.EndedAtMicros ||
 		stored.Response.Metrics.EndedAtMicros < stored.Response.Metrics.StartedAtMicros {

@@ -862,13 +862,13 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 			requestBodySize = req.ContentLength
 		}
 		entry.Request.Metrics = completedHandshakeMetrics(
-			entry.Request,
+			logicalHTTPRequestHeaderSize(entry),
 			handshakeTiming.RequestStartedAt,
 			handshakeTiming.RequestEndedAt,
 			requestBodySize,
 		)
 		entry.Response.Metrics = completedHandshakeMetrics(
-			entry.Response,
+			logicalHTTPResponseHeaderSize(entry),
 			handshakeTiming.ResponseStartedAt,
 			handshakeTiming.ResponseEndedAt,
 			0,
@@ -1094,6 +1094,7 @@ func (s *ProxyService) fillEntryMetadataFromContext(ctx context.Context, entry *
 	entry.Metadata.LocalConnectionEstablishedAt = md.LocalConnectionEstablishedTs
 	entry.Metadata.RemoteConnectionEstablishedAt = md.RemoteConnectionEstablishedTs
 	entry.Metadata.RequestProcessedAt = md.RequestProcessedTs
+	entry.Metadata.ConnectionTimings = connectionTimingsFromContext(ctx)
 
 	if !md.SSLHandshakeCompletedTs.IsZero() {
 		entry.Metadata.SSLHandshakeCompletedAt = md.SSLHandshakeCompletedTs

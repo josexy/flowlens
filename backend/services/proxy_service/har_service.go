@@ -12,7 +12,7 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 	release := AcquireHARExport()
 	defer release()
 
-	entries, err := s.harExportSnapshots(request.TrafficIDs)
+	entries, sourceEntries, err := s.harExportSnapshots(request.TrafficIDs)
 	if err != nil {
 		return HARWriteResult{}, err
 	}
@@ -23,6 +23,9 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 	}
 	defer writer.Abort()
 
+	for _, entry := range sourceEntries {
+		writer.ObserveConnectionTimings(entry)
+	}
 	for _, entry := range entries {
 		input := s.currentHARExportEntry(entry)
 		if err := writer.WriteEntry(input); err != nil {
@@ -32,11 +35,16 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 	return writer.Close()
 }
 
-func (s *ProxyService) harExportSnapshots(ids []uint64) ([]*TrafficEntry, error) {
+func (s *ProxyService) harExportSnapshots(ids []uint64) ([]*TrafficEntry, []*TrafficEntry, error) {
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
+	source := s.trafficEntries.Values()
 	if len(ids) == 0 {
-		return s.trafficEntries.Values(), nil
+		return source, source, nil
+	}
+	byID := make(map[uint64]*TrafficEntry, len(source))
+	for _, entry := range source {
+		byID[entry.ID] = entry
 	}
 	entries := make([]*TrafficEntry, 0, len(ids))
 	seen := make(map[uint64]struct{}, len(ids))
@@ -45,13 +53,13 @@ func (s *ProxyService) harExportSnapshots(ids []uint64) ([]*TrafficEntry, error)
 			continue
 		}
 		seen[id] = struct{}{}
-		entry, ok := s.trafficEntries.Get(id)
+		entry, ok := byID[id]
 		if !ok {
-			return nil, fmt.Errorf("traffic entry not found: %d", id)
+			return nil, nil, fmt.Errorf("traffic entry not found: %d", id)
 		}
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	return entries, source, nil
 }
 
 func (s *ProxyService) currentHARExportEntry(entry *TrafficEntry) HARExportEntry {

@@ -1,16 +1,13 @@
 import {
-  getLogicalHTTPRequestStartLineSize,
-  getLogicalHTTPResponseStartLineSize,
   sumKnownByteSizes,
   summarizeHTTPMessageSize,
 } from './format.js'
 
 export const PROCESS_CATEGORY_UNAVAILABLE_KEY = 'process:unavailable'
 
-const HAR_EXPORTABLE_HBIN_VERSION = 1
-
 export function isHARExportableHistoryFormat(formatVersion: number | null | undefined): boolean {
-  return formatVersion === HAR_EXPORTABLE_HBIN_VERSION
+  // Match the history versions accepted by DecodeTrafficEntryWithVersion.
+  return formatVersion === 1 || formatVersion === 2
 }
 
 export interface TrafficProcessLike {
@@ -283,17 +280,11 @@ export function getTrafficTotalSizeBytes(entry: TrafficEntryLike): number | null
     entry.request?.metrics?.headerSize,
     entry.request?.metrics?.bodySize,
     entry.request?.headersTruncated,
-    getLogicalHTTPRequestStartLineSize(
-      entry.method ?? '',
-      entry.url ?? '',
-      entry.request?.proto ?? '',
-    ),
   )
   const response = summarizeHTTPMessageSize(
     entry.response?.metrics?.headerSize,
     entry.response?.metrics?.bodySize,
     entry.response?.headersTruncated,
-    getLogicalHTTPResponseStartLineSize(entry.status ?? '', entry.response?.proto ?? ''),
   )
   return sumKnownByteSizes(request.total, response.total)
 }
