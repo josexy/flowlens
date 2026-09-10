@@ -66,6 +66,8 @@ Each release includes `SHA256SUMS.txt`. Packages may be unsigned when platform s
 
 Python 3.11+ is optional and required only for Python request hooks. Platform packaging can additionally require NSIS, Xcode command-line tools/signing credentials, Docker, or native Linux packaging dependencies.
 
+On Windows, **Settings > Python > Detect** also finds Microsoft Store Python and existing runtimes listed by Python Install Manager. FlowLens does not install Python automatically. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python).
+
 ### Run the Desktop App
 
 ```shell

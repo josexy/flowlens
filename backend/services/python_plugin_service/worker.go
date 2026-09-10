@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -178,15 +177,8 @@ func validateInterpreterPath(value string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve Python interpreter path: %w", err)
 	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", fmt.Errorf("inspect Python interpreter: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", errors.New("Python interpreter path must reference a regular file")
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
-		return "", errors.New("Python interpreter path is not executable")
+	if err := validateInterpreterFile(resolved); err != nil {
+		return "", err
 	}
 	return resolved, nil
 }

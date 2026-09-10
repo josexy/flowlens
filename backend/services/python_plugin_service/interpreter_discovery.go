@@ -70,15 +70,14 @@ func enumerateInterpreterPathCandidates(ctx context.Context, configuredPath stri
 			return
 		}
 		path = strings.Trim(strings.TrimSpace(path), `"`)
-		if path == "" || shouldSkipInterpreterDiscoveryPath(path) {
+		if path == "" || (!current && shouldSkipInterpreterDiscoveryPath(path)) {
 			return
 		}
 		absolute, err := filepath.Abs(path)
 		if err != nil {
 			return
 		}
-		info, err := os.Stat(absolute)
-		if err != nil || !info.Mode().IsRegular() {
+		if _, err := validateInterpreterPath(absolute); err != nil {
 			return
 		}
 		key := interpreterPathKey(absolute)
@@ -146,7 +145,7 @@ func pathEnvironmentInterpreters() []string {
 		}
 		for _, name := range names {
 			candidate := filepath.Join(directory, name)
-			if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			if !shouldSkipInterpreterDiscoveryPath(candidate) && validateInterpreterFile(candidate) == nil {
 				paths = append(paths, candidate)
 			}
 		}
@@ -270,11 +269,23 @@ func runInterpreterDiscoveryCommand(ctx context.Context, timeout time.Duration, 
 	defer cancel()
 	command := exec.CommandContext(commandContext, path, args...)
 	configureWorkerCommand(command)
+	command.WaitDelay = 200 * time.Millisecond
 	stdout := newTailBuffer(maxInterpreterProbeOutput)
 	stderr := newTailBuffer(maxInterpreterProbeOutput)
 	command.Stdout = stdout
 	command.Stderr = stderr
-	err := command.Run()
+	if err := command.Start(); err != nil {
+		return stdout.String(), stderr.String(), err
+	}
+	tree := attachWorkerProcessTree(command)
+	defer func() {
+		if commandContext.Err() != nil {
+			terminateWorkerProcessTree(command, tree)
+		} else {
+			releaseWorkerProcessTree(tree)
+		}
+	}()
+	err := command.Wait()
 	if commandContext.Err() != nil {
 		err = commandContext.Err()
 	}

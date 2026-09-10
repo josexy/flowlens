@@ -51,6 +51,10 @@ python3.11 -m venv "$HOME/.venvs/flowlens-plugins"
 
 检测过程有数量和时间限制，不会扫描整个磁盘。虚拟环境不在当前环境或常见安装位置时，请手动选择。
 
+Windows 下还会检测当前用户已注册的 Microsoft Store Python 包，以及 Python Install Manager 列出的已安装运行时。Store Python 使用包专属执行别名，例如 `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`；FlowLens 支持通过该别名检测、测试和执行插件。建议使用检测得到的别名，避免保存 `C:\Program Files\WindowsApps` 下带安装版本号的路径，后者可能随商店更新而变化。无需修改 WindowsApps 目录权限。
+
+只有实际探测成功的 CPython 3.11+ 才会出现在结果中。全局商店安装快捷方式和 Python Install Manager 本身不会作为自动检测的解释器候选。检测和插件执行期间，FlowLens 会禁用管理器的自动运行时安装；如果只安装了管理器，请自行安装 Python 运行时后重新检测。
+
 如果运行时校验失败，FlowLens 不会保存启用状态。没有安装 Python 或该功能保持关闭时，FlowLens 仍能正常启动。
 
 ## 五分钟快速体验
@@ -607,7 +611,7 @@ def onResponse(context, response):
 /absolute/path/to/python -m pip install requests
 ```
 
-然后使用 [`docs/examples/python-plugins/third-party-package.py`](../examples/python-plugins/third-party-package.py)：
+然后在插件中导入依赖：
 
 ```python
 from flowlens import *
@@ -646,7 +650,7 @@ Hook 结果、匹配到的 revision、各阶段耗时、内容转换和脱敏后
 
 ## 故障排查
 
-- **无法启用 Python 插件：** 请选择 Python 3.11+ 常规可执行文件的绝对路径并点击 **测试**。使用虚拟环境时，应选择该环境中的解释器，而不是目录。
+- **无法启用 Python 插件：** 请选择 Python 3.11+ 可执行文件或 Windows Store Python 执行别名的绝对路径并点击 **测试**。使用虚拟环境时，应选择该环境中的解释器，而不是目录。如果 Store Python 已卸载或别名不可用，请重新安装或选择其他解释器，再次检测。
 - **校验提示导入失败：** 使用 `selected-python -m pip install ...` 安装依赖。导入插件包内文件时，使用 `from .helpers import value` 这类相对导入。
 - **插件没有执行：** 检查设置中的 Python 插件总开关、HTTP 请求编辑器标签页的全局插件开关、插件自身开关、校验标记，以及是否至少有一条已启用规则。规则使用原始完整 URL 进行匹配。
 - **参数没有生效：** 保存一个顶层 JSON 对象，然后在插件中通过 `context.params` 读取。参数只是配置，不会自动加入 HTTP 请求。

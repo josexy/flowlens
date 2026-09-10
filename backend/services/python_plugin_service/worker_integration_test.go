@@ -1856,7 +1856,15 @@ func TestWorkerImportsDependencyFromSelectedVirtualEnvironment(t *testing.T) {
 	}
 
 	pool, manager, plugin := newPythonWorkerHarnessWithInterpreter(t, venvPython, 1, nil)
-	source := documentedExampleSource(t, "third-party-package.py")
+	source := `import requests
+
+def onRequest(context, request):
+    request.headers.set("X-Requests-Version", requests.__version__)
+    return request
+
+def onResponse(context, response):
+    return response
+`
 	plugin = writeAndActivatePlugin(t, manager, plugin.ID, source)
 	result, err := pool.Invoke(context.Background(), InvokeRequest{
 		PluginID: plugin.ID, PluginName: plugin.Name, Revision: plugin.ActiveRevision,
@@ -1973,7 +1981,11 @@ func requirePython311(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("resolve Python path: %v", err)
 	}
-	output, err := exec.Command(path, "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, path, "-I", "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')")
+	configureWorkerCommand(command)
+	output, err := command.Output()
 	if err != nil {
 		t.Skipf("query Python version: %v", err)
 	}

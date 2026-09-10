@@ -17,6 +17,7 @@ const pythonRegistryRoot = `SOFTWARE\Python`
 
 func platformInterpreterPaths(ctx context.Context) []string {
 	paths := make([]string, 0, 16)
+	paths = append(paths, windowsStoreInterpreterPaths(ctx)...)
 	if launcher, err := exec.LookPath("py.exe"); err == nil && !shouldSkipInterpreterDiscoveryPath(launcher) {
 		paths = append(paths, launcher)
 		if output, _, err := runInterpreterDiscoveryCommand(ctx, 2*time.Second, launcher, "-0p"); err == nil {
@@ -64,7 +65,13 @@ func platformInterpreterPaths(ctx context.Context) []string {
 
 func shouldSkipInterpreterDiscoveryPath(path string) bool {
 	normalized := strings.ToLower(filepath.Clean(path))
-	return strings.Contains(normalized, `\microsoft\windowsapps\`)
+	if !strings.Contains(normalized, `\microsoft\windowsapps\`) {
+		return false
+	}
+	// Global aliases may belong to App Installer or Python Install Manager.
+	// Only probe package-specific Python aliases during automatic discovery.
+	family := windowsStorePythonAliasFamily(path)
+	return family == "" || !isWindowsPackageRegistered(family)
 }
 
 func parsePythonLauncherPaths(output string) []string {

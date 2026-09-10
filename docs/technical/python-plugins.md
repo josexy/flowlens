@@ -51,6 +51,10 @@ Then configure FlowLens:
 
 Detection is bounded and does not scan the entire disk. Select a virtual environment manually when it is outside the active environment or common installation locations.
 
+On Windows, detection also searches Microsoft Store Python packages registered for the current user and existing runtimes listed by Python Install Manager. Store Python uses a package-specific execution alias such as `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`; FlowLens accepts this alias for detection, testing, and plugin execution. Prefer the detected alias over a versioned installation path under `C:\Program Files\WindowsApps`, which may change after a Store update. No WindowsApps permission changes are needed.
+
+Only successfully probed CPython 3.11+ runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
+
 If runtime validation fails, FlowLens does not save the enabled state. FlowLens starts normally when Python is missing or the feature is disabled.
 
 ## Five-minute quick start
@@ -605,7 +609,7 @@ Install a dependency with the exact interpreter selected in Settings:
 /absolute/path/to/python -m pip install requests
 ```
 
-Then use [`docs/examples/python-plugins/third-party-package.py`](../examples/python-plugins/third-party-package.py):
+Then import the dependency in your plugin:
 
 ```python
 from flowlens import *
@@ -644,7 +648,7 @@ Hook outcomes, matched revisions, per-phase durations, transformations, and sani
 
 ## Troubleshooting
 
-- **Enabling Python plugins fails:** select an absolute path to a regular Python 3.11+ executable and run **Test**. For a venv, select that venv's interpreter, not its directory.
+- **Enabling Python plugins fails:** select an absolute path to a Python 3.11+ executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
 - **Validation reports an import error:** install the dependency with `selected-python -m pip install ...`. For files inside the plugin package, use a relative import such as `from .helpers import value`.
 - **The plugin does not run:** check the Python plugin master switch in Settings, the global-plugin switch in the HTTP Request Editor tab, the plugin switch, the validation marker, and at least one enabled rule. Matching uses the original full URL.
 - **Params have no effect:** save a top-level JSON object, then read it through `context.params` in the plugin. Params are configuration and are never added to the HTTP request automatically.

@@ -17,6 +17,8 @@ func attachWorkerProcessTree(_ *exec.Cmd) workerProcessTree {
 	return workerProcessTree{}
 }
 
+func releaseWorkerProcessTree(workerProcessTree) {}
+
 func terminateWorkerProcessTree(command *exec.Cmd, _ workerProcessTree) {
 	if command == nil || command.Process == nil {
 		return

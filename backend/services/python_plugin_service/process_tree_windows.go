@@ -16,6 +16,9 @@ type workerProcessTree struct {
 }
 
 func configureWorkerCommand(command *exec.Cmd) {
+	// Python Install Manager may install a runtime when invoked without one.
+	// Discovery and plugin execution must only use already installed runtimes.
+	command.Env = append(command.Environ(), "PYTHON_MANAGER_AUTOMATIC_INSTALL=false")
 	command.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
 		HideWindow:    true,
@@ -72,4 +75,10 @@ func terminateWorkerProcessTree(command *exec.Cmd, tree workerProcessTree) {
 	helper.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
 	_ = helper.Run()
 	_ = command.Process.Kill()
+}
+
+func releaseWorkerProcessTree(tree workerProcessTree) {
+	if tree.job != 0 {
+		_ = windows.CloseHandle(tree.job)
+	}
 }
