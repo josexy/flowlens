@@ -111,7 +111,7 @@ tasks:
   frontend:run:npm:
     dir: frontend
     cmds:
-      - npm run {{.SCRIPT}} -q
+      - npm run --silent {{.SCRIPT}}
     vars:
       SCRIPT: "{{.SCRIPT}}"
 

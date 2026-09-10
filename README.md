@@ -59,8 +59,8 @@ Each release includes `SHA256SUMS.txt`. Packages may be unsigned when platform s
 ### Requirements
 
 - Go 1.27 or newer
-- Node.js 20.19+ or 22.12+
-- npm
+- Node.js 24 LTS (24.21+; the version used by CI is pinned in `.node-version`)
+- npm (included with Node.js; no separate npm version requirement)
 - Wails v3 CLI (`wails3`)
 - Task CLI (`task`), recommended
 

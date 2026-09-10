@@ -109,7 +109,7 @@ FlowLens 是基于 MITM 的跨平台桌面抓包工具，使用 `Wails v3 + Go 1
 
 ## 6. 开发与验证命令
 
-环境要求：Go、Node.js 20.19+ 或 22.12+、npm、wails3；Task 和 Python 3.11+ 按功能选用。
+环境要求：Go、Node.js 24 LTS（24.21+，CI 版本见 `.node-version`）、npm、wails3；Task 和 Python 3.11+ 按功能选用。CI 使用指定 Node.js 版本自带的 npm，本地使用当前环境中的 npm，不单独限制 npm 版本。
 
 ```shell
 wails3 generate bindings -ts -i
@@ -153,7 +153,7 @@ npm run lint:tailwind
 npm run build
 ```
 
-按范围选择最小集合；组件结构、主题或生产打包相关改动执行 `npm run build`。Tailwind 全量诊断使用 `npm run lint:tailwind -- --all`，自动修复只使用显式的 `lint:fix` 或 `lint:tailwind -- --fix`。
+按范围选择最小集合；组件结构、主题或生产打包相关改动执行 `npm run build`。Tailwind 全量诊断使用 `npm run lint:tailwind -- --all`，自动修复只使用显式的 `lint:fix` 或 `lint:tailwind -- --fix`。Windows PowerShell 下转发脚本参数时使用 `npm.cmd`，例如 `npm.cmd run lint:tailwind -- --all`。
 
 ## 7. 文档、提交与完成标准
 

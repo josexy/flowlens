@@ -18,6 +18,8 @@ This directory contains the Vue 3 frontend for FlowLens. The full project overvi
 
 Install dependencies:
 
+Use Node.js 24 LTS (24.21+; see `../.node-version`) and npm. CI uses the npm bundled with the specified Node.js version; local development uses the npm available in your environment, without a separate npm version requirement.
+
 ```shell
 npm install
 ```
@@ -56,6 +58,8 @@ npm run lint:tailwind -- --all
 npm run lint:tailwind -- --fix
 npm run format
 ```
+
+On Windows PowerShell, use `npm.cmd` when forwarding script arguments, for example `npm.cmd run lint:tailwind -- --all`, so the arguments reach the script.
 
 ## Notes
 

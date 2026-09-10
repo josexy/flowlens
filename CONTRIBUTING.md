@@ -11,7 +11,7 @@ Thank you for helping improve FlowLens. This document covers the common contribu
 
 ## Development Setup
 
-You need Go 1.27+, Node.js 20.19+ or 22.12+, npm, the Wails v3 CLI, and preferably Task. Python 3.11+ is optional unless you are testing HTTP Request Editor Python plugins.
+You need Go 1.27+, Node.js 24 LTS (24.21+), npm, the Wails v3 CLI, and preferably Task. CI uses the Node.js version in `.node-version` and its bundled npm; local development uses the npm available in your environment, without a separate npm version requirement. Python 3.11+ is optional unless you are testing HTTP Request Editor Python plugins.
 
 ```shell
 cd frontend
