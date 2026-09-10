@@ -45,7 +45,10 @@ interface WorkerSelf {
 const workerSelf = self as unknown as WorkerSelf
 let activeChunkedRequestId = 0
 let activeChunkedIsBase64 = false
-let activeChunks: string[] = []
+let activeChunks: Uint8Array[] = []
+let activeByteLength = 0
+let pendingInput = ''
+let base64Ended = false
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -97,19 +100,61 @@ workerSelf.onmessage = (event: MessageEvent<HexdumpWorkerRequest>) => {
     activeChunkedRequestId = message.id
     activeChunkedIsBase64 = message.isBase64
     activeChunks = []
+    activeByteLength = 0
+    pendingInput = ''
+    base64Ended = false
     return
   }
 
   if (message.id !== activeChunkedRequestId) return
 
-  if (message.type === 'chunk') {
-    activeChunks.push(message.input)
-    return
-  }
+  try {
+    if (message.type === 'chunk') {
+      // Decode bounded messages as they arrive, retaining bytes rather than a
+      // second complete input string plus atob's full binary-string allocation.
+      const chunk = activeChunkedIsBase64
+        ? message.input.replace(/[\t\n\f\r ]/g, '')
+        : message.input
+      if (activeChunkedIsBase64 && base64Ended && chunk.length)
+        throw new Error('Invalid Base64 padding')
+      const input = pendingInput + chunk
+      let end = input.length
+      if (activeChunkedIsBase64) end -= end % 4
+      else if (end && input.charCodeAt(end - 1) >= 0xd800 && input.charCodeAt(end - 1) <= 0xdbff)
+        end--
+      pendingInput = input.slice(end)
+      if (end) {
+        const part = input.slice(0, end)
+        const bytes = decodeHexdumpBytes(part, activeChunkedIsBase64)
+        activeChunks.push(bytes)
+        activeByteLength += bytes.length
+        base64Ended = activeChunkedIsBase64 && part.includes('=')
+        if (base64Ended && pendingInput.length) throw new Error('Invalid Base64 padding')
+      }
+      return
+    }
 
-  const input = activeChunks.length === 1 ? (activeChunks[0] ?? '') : activeChunks.join('')
-  activeChunks = []
-  decodeAndPost(message.id, input, activeChunkedIsBase64)
+    if (pendingInput.length) {
+      const tail = decodeHexdumpBytes(pendingInput, activeChunkedIsBase64)
+      activeChunks.push(tail)
+      activeByteLength += tail.length
+    }
+    const buffer = new ArrayBuffer(activeByteLength)
+    const output = new Uint8Array(buffer)
+    let offset = 0
+    for (const chunk of activeChunks) {
+      output.set(chunk, offset)
+      offset += chunk.length
+    }
+    activeChunks = []
+    pendingInput = ''
+    workerSelf.postMessage({ id: message.id, ok: true, buffer }, [buffer])
+  } catch (error) {
+    activeChunks = []
+    pendingInput = ''
+    activeChunkedRequestId = -1
+    workerSelf.postMessage({ id: message.id, ok: false, error: getErrorMessage(error) })
+  }
 }
 
 export {}

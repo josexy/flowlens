@@ -31,29 +31,76 @@ export function estimateDecodedByteLength(input: string | Uint8Array, isBase64 =
   }
 
   if (!isBase64) {
-    return input.length
+    // Keep threshold checks bounded even for a growing multi-megabyte SSE body.
+    // Beyond this limit return a UTF-8 upper bound, not a UTF-16 byte count.
+    if (input.length > 64 * 1024) return input.length * 3
+    let size = 0
+    for (let i = 0; i < input.length; i++) {
+      const code = input.charCodeAt(i)
+      if (code < 0x80) size++
+      else if (code < 0x800) size += 2
+      else if (
+        code >= 0xd800 &&
+        code <= 0xdbff &&
+        input.charCodeAt(i + 1) >= 0xdc00 &&
+        input.charCodeAt(i + 1) <= 0xdfff
+      ) {
+        size += 4
+        i++
+      } else size += 3
+    }
+    return size
   }
 
   return estimateBase64DecodedByteLength(input)
 }
 
 function estimateBase64DecodedByteLength(input: string): number {
-  const start = input.lastIndexOf(',') + 1
-  let end = input.length
-  while (end > start && isAsciiWhitespace(input.charCodeAt(end - 1))) {
-    end--
-  }
-
+  // Backend input is canonical Base64 (not a data URL). Whitespace, if supplied,
+  // only overestimates the size; never scan the entire payload on the UI thread.
+  const end = input.length
   let padding = 0
-  if (end > start && input.charCodeAt(end - 1) === 0x3d) padding++
-  if (end > start + 1 && input.charCodeAt(end - 2) === 0x3d) padding++
-
-  const dataLength = end - start
-  return Math.max(0, Math.floor((dataLength * 3) / 4) - Math.min(padding, 2))
+  if (input.charCodeAt(end - 1) === 0x3d) padding++
+  if (input.charCodeAt(end - 2) === 0x3d) padding++
+  return Math.max(0, Math.floor((end * 3) / 4) - padding)
 }
 
-function isAsciiWhitespace(code: number) {
-  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d || code === 0x0c
+/** Active-view storage: append without copying the previously decoded body. */
+export class HexdumpBytes {
+  private chunks: { start: number; data: Uint8Array; used: number }[] = []
+  length = 0
+
+  append(data: Uint8Array) {
+    if (!data.length) return
+    const tail = this.chunks.at(-1)
+    const copied = tail ? Math.min(data.length, tail.data.length - tail.used) : 0
+    if (tail && copied) {
+      tail.data.set(data.subarray(0, copied), tail.used)
+      tail.used += copied
+      this.length += copied
+    }
+    if (copied === data.length) return
+    const rest = data.subarray(copied)
+    // Amortize tiny stream updates, with at most 64 KiB of unused capacity.
+    const storage = this.length > 0 && rest.length < 64 * 1024 ? new Uint8Array(64 * 1024) : rest
+    if (storage !== rest) storage.set(rest)
+    this.chunks.push({ start: this.length, data: storage, used: rest.length })
+    this.length += rest.length
+  }
+
+  get(index: number): number | undefined {
+    if (index < 0 || index >= this.length) return undefined
+    let low = 0
+    let high = this.chunks.length - 1
+    while (low <= high) {
+      const middle = (low + high) >>> 1
+      const chunk = this.chunks[middle]!
+      if (index < chunk.start) high = middle - 1
+      else if (index >= chunk.start + chunk.used) low = middle + 1
+      else return chunk.data[index - chunk.start]
+    }
+    return undefined
+  }
 }
 
 /**

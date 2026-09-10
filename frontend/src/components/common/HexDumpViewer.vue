@@ -1,30 +1,47 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
-import type { CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLoading from '@/components/common/AppLoading.vue'
+import HexDumpRow from '@/components/common/HexDumpRow.vue'
 import { appEmptyStateSize, appEmptyStateUi } from '@/components/common/emptyState'
-import { decodeHexdumpBytes, estimateDecodedByteLength, type HexByte } from '@/utils/hexdump'
+import { type HexByte, type HexdumpBytes } from '@/utils/hexdump'
+import { useHexdumpDecoder } from '@/composables/useHexdumpDecoder'
+import { getHexdumpPage, getHexdumpPosition, HEX_PADDING_TOP } from '@/utils/hexdumpViewport'
 
 const props = withDefaults(
   defineProps<{
     input: string | Uint8Array
     isBase64?: boolean
     active?: boolean
+    appendOnly?: boolean
     rowHeight?: number
     showInfoBar?: boolean
   }>(),
   {
     isBase64: false,
     active: true,
+    appendOnly: false,
     rowHeight: 22,
     showInfoBar: true,
   },
 )
 
-interface HexDumpRow {
+const byteOffset = defineModel<number>('byteOffset', { default: 0 })
+
+watch(
+  () => [props.input, props.isBase64] as const,
+  (next, previous) => {
+    // Standalone users (WebSocket message details) do not own a position model.
+    // Only an append within the same stream may inherit another input's offset.
+    if (props.appendOnly && !next[1] && !previous[1] && next[0].length > previous[0].length) return
+    byteOffset.value = 0
+  },
+)
+
+interface HexDumpLine {
   offset: number
   offsetHex: string
+  byteLength: number
   bytes: (HexByte | null)[]
 }
 
@@ -39,19 +56,11 @@ interface HexVirtualRow {
   start: number
 }
 
-type DecodeState = 'idle' | 'loading' | 'ready' | 'error'
-
-type HexdumpDecodeResponse =
-  | {
-      id: number
-      ok: true
-      buffer: ArrayBuffer
-    }
-  | {
-      id: number
-      ok: false
-      error: string
-    }
+interface HexRenderedRows {
+  revision: number
+  bytesPerRow: number
+  rows: { virtualRow: HexVirtualRow; line: HexDumpLine }[]
+}
 
 const WIDTH_FALLBACK = 720
 const VIEWER_HORIZONTAL_PADDING = 24
@@ -63,13 +72,8 @@ const HEX_BYTE_GAP = 2
 const CHAR_WIDTH_FALLBACK = 7.5
 const ROW_OVERSCAN = 10
 const MAX_BYTES_PER_ROW = 64
-const VIEWER_PADDING_TOP = 6
-const VIEWER_PADDING_BOTTOM = 10
-const WORKER_DECODE_THRESHOLD_BYTES = 256 * 1024
-const WORKER_CHUNKED_MESSAGE_THRESHOLD_CHARS = 1024 * 1024
-const WORKER_MESSAGE_CHUNK_CHARS = 128 * 1024
-
 const { t } = useI18n()
+const rootRef = useTemplateRef<HTMLElement>('hexRoot')
 const scrollRef = useTemplateRef<HTMLElement>('hexScroll')
 const measureRef = useTemplateRef<HTMLElement>('hexMeasure')
 const viewportHeight = shallowRef(500)
@@ -78,16 +82,38 @@ const scrollTop = shallowRef(0)
 const charWidth = shallowRef(CHAR_WIDTH_FALLBACK)
 const hoveredByteIdx = shallowRef(-1)
 const hasVerticalScrollbar = shallowRef(false)
-const bytes = shallowRef<Uint8Array>(new Uint8Array())
-const decodeState = shallowRef<DecodeState>('idle')
-const decodeError = shallowRef('')
-
+const isVisible = shallowRef(false)
+const isDocumentVisible = shallowRef(typeof document === 'undefined' || !document.hidden)
+const decoder = useHexdumpDecoder(
+  {
+    get input() {
+      return props.input
+    },
+    get isBase64() {
+      return props.isBase64
+    },
+    get appendOnly() {
+      return props.appendOnly
+    },
+    get active() {
+      return props.active && isVisible.value && isDocumentVisible.value
+    },
+  },
+  () =>
+    new Worker(new URL('../../workers/hexdumpDecoder.worker.ts', import.meta.url), {
+      type: 'module',
+    }),
+)
+const { bytes, state: decodeState, error: decodeError } = decoder
+const pageIndex = shallowRef(0)
 let resizeObserver: ResizeObserver | null = null
-let decodeWorker: Worker | null = null
-let decodeRequestId = 0
+let visibilityObserver: IntersectionObserver | null = null
+let restoringPosition = false
 
 const layout = computed<HexDumpLayout>(() => chooseLayout(containerWidth.value))
-const totalRows = computed(() => Math.ceil(bytes.value.length / layout.value.bytesPerRow))
+const page = computed(() =>
+  getHexdumpPage(bytes.value.length, layout.value.bytesPerRow, props.rowHeight, pageIndex.value),
+)
 const frameGutterWidth = computed(() =>
   hasVerticalScrollbar.value ? SCROLLBAR_GUTTER_WIDTH : NO_SCROLL_FRAME_GUTTER_WIDTH,
 )
@@ -96,7 +122,7 @@ const shellStyle = computed(() => ({
 }))
 
 const hoveredByte = computed((): HexByte | null => {
-  const value = bytes.value[hoveredByteIdx.value]
+  const value = bytes.value.get(hoveredByteIdx.value)
   if (value == null) return null
 
   return {
@@ -107,43 +133,69 @@ const hoveredByte = computed((): HexByte | null => {
   }
 })
 
-const visibleRowRange = computed(() => {
+const visibleRowRange = computed<{ startIndex: number; endIndex: number }>((previous) => {
   const startIndex = Math.max(
     0,
-    Math.floor(Math.max(0, scrollTop.value - VIEWER_PADDING_TOP) / props.rowHeight) - ROW_OVERSCAN,
+    Math.floor(Math.max(0, scrollTop.value - HEX_PADDING_TOP) / props.rowHeight) - ROW_OVERSCAN,
   )
   const endIndex = Math.min(
-    totalRows.value,
-    Math.ceil(Math.max(0, scrollTop.value + viewportHeight.value - VIEWER_PADDING_TOP) / props.rowHeight) +
-      ROW_OVERSCAN,
+    page.value.rowCount,
+    Math.ceil(
+      Math.max(0, scrollTop.value + viewportHeight.value - HEX_PADDING_TOP) / props.rowHeight,
+    ) + ROW_OVERSCAN,
   )
+  // Pixel scrolling within the same row window must not rebuild byte data.
+  if (previous?.startIndex === startIndex && previous.endIndex === endIndex) return previous
   return { startIndex, endIndex }
 })
 
-const virtualRows = computed(() => {
-  const rows: { virtualRow: HexVirtualRow; line: HexDumpRow }[] = []
+const renderedRows = computed<HexRenderedRows>((previous) => {
+  const rows: HexRenderedRows['rows'] = []
   const { startIndex, endIndex } = visibleRowRange.value
   const sourceBytes = bytes.value
   const bytesPerRow = layout.value.bytesPerRow
+  const revision = decoder.revision.value
+  const rowHeight = props.rowHeight
+  const startRow = page.value.startRow
+  const canReuse = previous?.revision === revision && previous.bytesPerRow === bytesPerRow
+  // Retain only the preceding viewport, never a growing cache of visited rows
+  // or a reference to the full byte store. A new decode invalidates all rows.
+  const cached = new Map(canReuse ? previous.rows.map((row) => [row.line.offset, row]) : [])
 
   for (let index = startIndex; index < endIndex; index++) {
+    const globalRow = startRow + index
+    const offset = globalRow * bytesPerRow
+    const start = HEX_PADDING_TOP + index * rowHeight
+    const oldRow = cached.get(offset)
+    const byteLength = Math.min(bytesPerRow, sourceBytes.length - offset)
+    // Appending may fill the last, previously padded row. Earlier rows keep
+    // their identity so their byte nodes do not need another render.
+    const line = oldRow?.line.byteLength === byteLength
+      ? oldRow.line
+      : buildRow(sourceBytes, globalRow, bytesPerRow)
+    if (oldRow?.line === line && oldRow.virtualRow.start === start && oldRow.virtualRow.size === rowHeight) {
+      rows.push(oldRow)
+      continue
+    }
     rows.push({
       virtualRow: {
-        index,
-        key: index * bytesPerRow,
-        size: props.rowHeight,
-        start: VIEWER_PADDING_TOP + index * props.rowHeight,
+        index: globalRow,
+        key: offset,
+        size: rowHeight,
+        start,
       },
-      line: buildRow(sourceBytes, index, bytesPerRow),
+      line,
     })
   }
 
-  return rows
+  if (canReuse && rows.length === previous.rows.length && rows.every((row, index) => row === previous.rows[index])) {
+    return previous
+  }
+  return { revision, bytesPerRow, rows }
 })
+const virtualRows = computed(() => renderedRows.value.rows)
 
-const virtualContentHeight = computed(
-  () => VIEWER_PADDING_TOP + totalRows.value * props.rowHeight + VIEWER_PADDING_BOTTOM,
-)
+const virtualContentHeight = computed(() => page.value.height)
 const isDecoding = computed(() => decodeState.value === 'loading')
 const hasDecodeError = computed(() => decodeState.value === 'error')
 
@@ -176,13 +228,13 @@ function chooseLayout(width: number): HexDumpLayout {
   return { bytesPerRow: 1 }
 }
 
-function buildRow(sourceBytes: Uint8Array, rowIndex: number, bytesPerRow: number): HexDumpRow {
+function buildRow(sourceBytes: HexdumpBytes, rowIndex: number, bytesPerRow: number): HexDumpLine {
   const offset = rowIndex * bytesPerRow
   const rowBytes: (HexByte | null)[] = []
 
   for (let index = 0; index < bytesPerRow; index++) {
     const globalIdx = offset + index
-    const value = sourceBytes[globalIdx]
+    const value = sourceBytes.get(globalIdx)
     rowBytes.push(
       value == null
         ? null
@@ -198,6 +250,7 @@ function buildRow(sourceBytes: Uint8Array, rowIndex: number, bytesPerRow: number
   return {
     offset,
     offsetHex: offset.toString(16).padStart(8, '0'),
+    byteLength: Math.min(bytesPerRow, sourceBytes.length - offset),
     bytes: rowBytes,
   }
 }
@@ -226,7 +279,7 @@ function updateViewportMetrics() {
 
   containerWidth.value = element.clientWidth || WIDTH_FALLBACK
   viewportHeight.value = element.clientHeight || 500
-  scrollTop.value = element.scrollTop || 0
+  if (!restoringPosition) scrollTop.value = element.scrollTop || 0
 
   nextTick(updateScrollbarPresence)
 }
@@ -247,6 +300,7 @@ function observeCurrentScrollElement() {
     updateViewportMetrics()
   })
   resizeObserver.observe(scrollRef.value)
+  if (measureRef.value) resizeObserver.observe(measureRef.value)
 }
 
 function handleHexMouseOver(event: MouseEvent) {
@@ -260,14 +314,13 @@ function handleHexMouseOver(event: MouseEvent) {
 }
 
 function handleHexScroll(event: Event) {
+  if (restoringPosition || decodeState.value !== 'ready') return
   scrollTop.value = (event.currentTarget as HTMLElement).scrollTop
-}
-
-function getRowStyle(virtualRow: HexVirtualRow): CSSProperties {
-  return {
-    height: `${virtualRow.size}px`,
-    transform: `translateY(${virtualRow.start}px)`,
-  }
+  hoveredByteIdx.value = -1
+  const row =
+    page.value.startRow +
+    Math.floor(Math.max(0, scrollTop.value - HEX_PADDING_TOP) / props.rowHeight)
+  byteOffset.value = row * layout.value.bytesPerRow
 }
 
 function scrollToOffset(top: number) {
@@ -283,217 +336,98 @@ function scrollToOffset(top: number) {
   scrollTop.value = nextScrollTop
 }
 
-function resetScroll() {
-  hoveredByteIdx.value = -1
-  nextTick(() => {
-    scrollToOffset(0)
-  })
-}
-
-function terminateDecodeWorker() {
-  decodeWorker?.terminate()
-  decodeWorker = null
-}
-
-function setDecodedBytes(nextBytes: Uint8Array) {
-  bytes.value = nextBytes
-  decodeError.value = ''
-  decodeState.value = 'ready'
-  resetScroll()
-}
-
-function setDecodeError(error: string) {
-  bytes.value = new Uint8Array()
-  decodeError.value = error
-  decodeState.value = 'error'
-  resetScroll()
-}
-
-function pauseDecode() {
-  terminateDecodeWorker()
-  hoveredByteIdx.value = -1
-  bytes.value = new Uint8Array()
-  decodeError.value = ''
-  decodeState.value = 'idle'
-}
-
-function decodeSynchronously(requestId: number) {
-  try {
-    const decoded = decodeHexdumpBytes(props.input, props.isBase64)
-    if (requestId === decodeRequestId) {
-      setDecodedBytes(decoded)
-    }
-  } catch (error) {
-    if (requestId === decodeRequestId) {
-      setDecodeError(error instanceof Error ? error.message : String(error))
-    }
-  }
-}
-
-function shouldDecodeWithWorker(input: string | Uint8Array, decodedByteLength: number) {
-  return (
-    typeof Worker !== 'undefined' &&
-    typeof input === 'string' &&
-    decodedByteLength >= WORKER_DECODE_THRESHOLD_BYTES
+async function restorePosition(offset = byteOffset.value) {
+  if (decodeState.value !== 'ready') return
+  restoringPosition = true
+  const position = getHexdumpPosition(
+    offset,
+    bytes.value.length,
+    layout.value.bytesPerRow,
+    props.rowHeight,
   )
+  pageIndex.value = position.page
+  await nextTick()
+  scrollToOffset(position.top)
+  restoringPosition = false
 }
 
-function waitForBrowserTurn() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, 0)
-    })
-  })
-}
-
-async function postChunkedDecodeRequest(worker: Worker, input: string, requestId: number) {
-  worker.postMessage({
-    id: requestId,
-    type: 'start',
-    isBase64: props.isBase64,
-  })
-
-  for (let start = 0; start < input.length; start += WORKER_MESSAGE_CHUNK_CHARS) {
-    if (requestId !== decodeRequestId || decodeWorker !== worker) return
-
-    worker.postMessage({
-      id: requestId,
-      type: 'chunk',
-      input: input.slice(start, start + WORKER_MESSAGE_CHUNK_CHARS),
-    })
-
-    await waitForBrowserTurn()
-  }
-
-  if (requestId !== decodeRequestId || decodeWorker !== worker) return
-
-  worker.postMessage({
-    id: requestId,
-    type: 'end',
-  })
-}
-
-function decodeWithWorker(input: string, requestId: number) {
-  decodeState.value = 'loading'
-  decodeError.value = ''
-  bytes.value = new Uint8Array()
-
-  try {
-    const worker = new Worker(new URL('../../workers/hexdumpDecoder.worker.ts', import.meta.url), {
-      type: 'module',
-    })
-    decodeWorker = worker
-
-    worker.onmessage = (event: MessageEvent<HexdumpDecodeResponse>) => {
-      if (requestId !== decodeRequestId) return
-
-      terminateDecodeWorker()
-      const message = event.data
-      if (message.ok) {
-        setDecodedBytes(new Uint8Array(message.buffer))
-        return
-      }
-      setDecodeError(message.error)
-    }
-
-    worker.onerror = (event) => {
-      event.preventDefault()
-      if (requestId !== decodeRequestId) return
-
-      terminateDecodeWorker()
-      setDecodeError(event.message)
-    }
-
-    if (input.length >= WORKER_CHUNKED_MESSAGE_THRESHOLD_CHARS) {
-      void postChunkedDecodeRequest(worker, input, requestId).catch((error: unknown) => {
-        if (requestId !== decodeRequestId) return
-
-        terminateDecodeWorker()
-        setDecodeError(error instanceof Error ? error.message : String(error))
-      })
-      return
-    }
-
-    worker.postMessage({
-      id: requestId,
-      type: 'full',
-      input,
-      isBase64: props.isBase64,
-    })
-  } catch {
-    terminateDecodeWorker()
-    decodeSynchronously(requestId)
-  }
-}
-
-function startDecode() {
-  const requestId = ++decodeRequestId
-  terminateDecodeWorker()
+function changePage(index: number) {
+  const nextPage = getHexdumpPage(
+    bytes.value.length,
+    layout.value.bytesPerRow,
+    props.rowHeight,
+    index,
+  )
+  const offset = nextPage.startRow * layout.value.bytesPerRow
+  byteOffset.value = offset
   hoveredByteIdx.value = -1
-
-  if (!props.active) {
-    pauseDecode()
-    return
-  }
-
-  const decodedByteLength = estimateDecodedByteLength(props.input, props.isBase64)
-  if (!props.input || decodedByteLength === 0) {
-    setDecodedBytes(new Uint8Array())
-    return
-  }
-
-  if (shouldDecodeWithWorker(props.input, decodedByteLength) && typeof props.input === 'string') {
-    decodeWithWorker(props.input, requestId)
-    return
-  }
-
-  decodeState.value = 'idle'
-  decodeSynchronously(requestId)
+  void restorePosition(offset)
 }
-
-watch(() => [props.input, props.isBase64, props.active] as const, startDecode, { immediate: true })
 
 watch(
-  () => decodeState.value,
-  (state) => {
-    if (state === 'ready') {
-      nextTick(observeCurrentScrollElement)
-    }
+  () => decoder.revision.value,
+  () => {
+    nextTick(() => {
+      observeCurrentScrollElement()
+      void restorePosition()
+    })
   },
 )
 
 watch(
-  () => [virtualContentHeight.value, viewportHeight.value, layout.value.bytesPerRow] as const,
+  () => [virtualContentHeight.value, viewportHeight.value] as const,
   () => {
     nextTick(updateScrollbarPresence)
   },
 )
 
 watch(
-  () => layout.value.bytesPerRow,
-  (nextBytesPerRow, previousBytesPerRow) => {
-    const currentScrollTop = scrollRef.value?.scrollTop ?? scrollTop.value
-    const firstVisibleByte = Math.floor(currentScrollTop / props.rowHeight) * previousBytesPerRow
-    const nextScrollTop = Math.floor(firstVisibleByte / nextBytesPerRow) * props.rowHeight
-    nextTick(() => {
-      scrollToOffset(nextScrollTop)
-    })
+  () => [layout.value.bytesPerRow, props.rowHeight] as const,
+  () => {
+    void restorePosition()
   },
 )
 
 onMounted(() => {
-  nextTick(observeCurrentScrollElement)
+  // Workspace and response panels use v-show. Their descendants remain mounted,
+  // so props.active alone does not tell us whether decoding is still useful.
+  const root = rootRef.value
+  if (root) {
+    isVisible.value = root.clientWidth > 0 && root.clientHeight > 0
+    if (typeof IntersectionObserver !== 'undefined') {
+      visibilityObserver = new IntersectionObserver(([entry]) => {
+        if (!entry) return
+        isVisible.value =
+          entry.isIntersecting &&
+          entry.boundingClientRect.width > 0 &&
+          entry.boundingClientRect.height > 0
+      })
+      visibilityObserver.observe(root)
+    }
+  }
+  if (typeof document !== 'undefined')
+    document.addEventListener('visibilitychange', updateDocumentVisibility)
+  nextTick(() => {
+    observeCurrentScrollElement()
+    void restorePosition()
+  })
 })
 
 onUnmounted(() => {
-  decodeRequestId++
-  terminateDecodeWorker()
   resizeObserver?.disconnect()
+  visibilityObserver?.disconnect()
+  if (typeof document !== 'undefined')
+    document.removeEventListener('visibilitychange', updateDocumentVisibility)
 })
+
+function updateDocumentVisibility() {
+  isDocumentVisible.value = !document.hidden
+}
 </script>
 
 <template>
   <div
+    ref="hexRoot"
     class="relative flex h-full min-h-0 flex-col before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:right-(--hex-frame-gutter) before:border before:border-app-border before:content-['']"
     :style="shellStyle"
   >
@@ -507,42 +441,83 @@ onUnmounted(() => {
 
     <div
       v-if="props.showInfoBar"
-      class="flex min-h-6.5 shrink-0 items-center gap-1.5 bg-app-elevated px-3 py-0.75 text-sm mr-(--hex-frame-gutter) [border-bottom:1px_solid_var(--app-border-color)]"
+      class="flex min-h-6.5 shrink-0 flex-wrap items-center gap-1.5 bg-app-elevated px-3 py-0.75 text-sm mr-(--hex-frame-gutter) [border-bottom:1px_solid_var(--app-border-color)]"
       style="font-family: var(--code-font-family)"
     >
       <template v-if="hoveredByte">
         <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">Offset</span>
+          <span class="text-app-text-muted">{{ t('detail.hex_offset') }}</span>
           <span class="font-semibold text-app-text"
             >0x{{ hoveredByte.globalIdx.toString(16).padStart(8, '0') }}</span
           >
         </span>
         <span class="text-app-text-muted">·</span>
         <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">Hex</span>
+          <span class="text-app-text-muted">{{ t('detail.hex_value') }}</span>
           <span class="font-semibold text-app-text">0x{{ hoveredByte.hex }}</span>
         </span>
         <span class="text-app-text-muted">·</span>
         <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">Dec</span>
+          <span class="text-app-text-muted">{{ t('detail.hex_decimal') }}</span>
           <span class="font-semibold text-app-text">{{ hoveredByte.value }}</span>
         </span>
         <template v-if="hoveredByte.value >= 0x20 && hoveredByte.value < 0x7f">
           <span class="text-app-text-muted">·</span>
           <span class="inline-flex items-center gap-1">
-            <span class="text-app-text-muted">Char</span>
+            <span class="text-app-text-muted">{{ t('detail.hex_character') }}</span>
             <span class="font-semibold text-app-text">{{ hoveredByte.ascii }}</span>
           </span>
         </template>
       </template>
-      <span v-else class="text-sm text-app-text-muted">Hover over a byte to inspect</span>
+      <span v-else class="text-sm text-app-text-muted">{{ t('detail.hex_hover_hint') }}</span>
     </div>
 
-    <AppLoading
-      v-if="isDecoding"
-      fill
-      :label="t('detail.hex_loading')"
-    />
+    <div
+      v-if="page.count > 1 && decodeState === 'ready'"
+      class="flex shrink-0 items-center justify-end gap-1 border-b border-app-border px-3 py-1 mr-(--hex-frame-gutter)"
+    >
+      <UButton
+        icon="i-lucide-chevrons-left"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :disabled="page.index === 0"
+        :aria-label="t('detail.hex_first_page')"
+        @click="changePage(0)"
+      />
+      <UButton
+        icon="i-lucide-chevron-left"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :disabled="page.index === 0"
+        :aria-label="t('detail.hex_previous_page')"
+        @click="changePage(page.index - 1)"
+      />
+      <span class="text-xs tabular-nums text-app-text-muted" role="status">{{
+        t('detail.hex_page', { current: page.index + 1, total: page.count })
+      }}</span>
+      <UButton
+        icon="i-lucide-chevron-right"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :disabled="page.index === page.count - 1"
+        :aria-label="t('detail.hex_next_page')"
+        @click="changePage(page.index + 1)"
+      />
+      <UButton
+        icon="i-lucide-chevrons-right"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :disabled="page.index === page.count - 1"
+        :aria-label="t('detail.hex_last_page')"
+        @click="changePage(page.count - 1)"
+      />
+    </div>
+
+    <AppLoading v-if="isDecoding" fill :label="t('detail.hex_loading')" />
 
     <UEmpty
       v-else-if="hasDecodeError"
@@ -562,47 +537,18 @@ onUnmounted(() => {
       @mouseover="handleHexMouseOver"
       @mouseleave="hoveredByteIdx = -1"
     >
-      <div class="relative min-w-0 text-sm" :style="{ ...viewerStyle, fontFamily: 'var(--code-font-family)' }">
-        <div
+      <div
+        class="relative min-w-0 text-sm"
+        :style="{ ...viewerStyle, fontFamily: 'var(--code-font-family)' }"
+      >
+        <HexDumpRow
           v-for="{ virtualRow, line } in virtualRows"
-          :key="String(virtualRow.key)"
-          class="absolute left-0 top-0 grid h-(--hex-row-height) w-full min-w-0 grid-cols-[82px_max-content_max-content] items-center gap-x-2.5 leading-(--hex-row-height)"
-          :style="getRowStyle(virtualRow)"
-        >
-          <span class="min-w-0 select-none whitespace-nowrap text-app-text-muted">{{ line.offsetHex }}:</span>
-          <span class="grid min-w-0 grid-cols-[repeat(var(--hex-bytes-per-row),2ch)] gap-0.5">
-            <span
-              v-for="(byte, index) in line.bytes"
-              :key="byte?.globalIdx ?? `${line.offset}-${index}`"
-              class="cursor-default whitespace-pre rounded-[3px] px-px text-center text-app-text transition-[background-color,color] duration-[0.08s]"
-              :class="[
-                byte !== null && hoveredByteIdx === byte.globalIdx
-                  ? 'bg-[color-mix(in_srgb,var(--app-accent-color)_18%,transparent)] text-app-accent'
-                  : '',
-                byte !== null && byte.value === 0 ? 'opacity-35' : '',
-                byte === null ? 'pointer-events-none opacity-0' : '',
-              ]"
-              :data-byte-idx="byte?.globalIdx"
-              >{{ byte?.hex ?? '  ' }}</span
-            >
-          </span>
-          <span class="grid min-w-0 grid-cols-[repeat(var(--hex-bytes-per-row),1ch)] whitespace-pre text-app-text">
-            <span
-              v-for="(byte, index) in line.bytes"
-              :key="`a-${byte?.globalIdx ?? `${line.offset}-${index}`}`"
-              class="cursor-default whitespace-pre rounded-[3px] text-center text-app-text transition-[background-color,color] duration-[0.08s]"
-              :class="[
-                byte !== null && hoveredByteIdx === byte.globalIdx
-                  ? 'bg-[color-mix(in_srgb,var(--app-accent-color)_18%,transparent)] text-app-accent'
-                  : '',
-                byte !== null && (byte.value < 0x20 || byte.value >= 0x7f) ? 'opacity-35' : '',
-                byte === null ? 'pointer-events-none opacity-0' : '',
-              ]"
-              :data-byte-idx="byte?.globalIdx"
-              >{{ byte?.ascii ?? ' ' }}</span
-            >
-          </span>
-        </div>
+          :key="virtualRow.key"
+          :line="line"
+          :top="virtualRow.start"
+          :row-height="virtualRow.size"
+          :hovered-byte-idx="hoveredByteIdx >= line.offset && hoveredByteIdx < line.offset + line.byteLength ? hoveredByteIdx : -1"
+        />
       </div>
     </div>
   </div>

@@ -1027,6 +1027,9 @@ function clearScriptConsole() {
   state.value.scriptConsoleEntries.splice(0, state.value.scriptConsoleEntries.length)
 }
 
+// A new response starts a new byte stream; body appends keep the same key.
+const responseBodyKey = computed(() => state.value.response ? Symbol('response-body') : undefined)
+
 const offRequestSendShortcut = registerShortcutHandler({
   commandId: 'requestEditor.send',
   when: () =>
@@ -1625,6 +1628,7 @@ onBeforeUnmount(() => {
                     >
                       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                         <BodyViewer
+                          :key="responseBodyKey"
                           class="py-2.5 pl-2.5"
                           :body="state.response?.body || ''"
                           :content-type="responseContentType"

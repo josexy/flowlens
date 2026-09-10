@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { copyText } from '@/utils/clipboard'
-import { computed, ref, shallowRef, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Dialogs } from '@wailsio/runtime'
 import type { ContextMenuItem, TabsItem } from '@nuxt/ui'
 import { SaveBodyToFile } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
-import AppLoading from '@/components/common/AppLoading.vue'
 import { appEmptyStateSize, appEmptyStateUi } from '@/components/common/emptyState'
 import HexDumpViewer from '@/components/common/HexDumpViewer.vue'
 import MonacoBodyEditor from '@/components/common/MonacoBodyEditor.vue'
@@ -17,6 +16,7 @@ import {
 import { useNotify } from '@/composables/useNotify'
 import { getErrorMessage, isDialogCancelError } from '@/utils/dialog'
 import { estimateDecodedByteLength } from '@/utils/hexdump'
+import { useHexdumpViewState } from '@/composables/useHexdumpViewState'
 import { formatFileSize } from '@/utils/format'
 
 const { t } = useI18n()
@@ -38,7 +38,6 @@ const IMAGE_SCALE_MAX = 5
 const IMAGE_SCALE_STEP = 0.1
 const IMAGE_SCROLLBAR_GUTTER_WIDTH = 14
 const IMAGE_NO_SCROLL_FRAME_GUTTER_WIDTH = 10
-const HEX_MANUAL_LOAD_THRESHOLD_BYTES = 1 * 1024 * 1024
 const FORMATTED_LARGE_BODY_THRESHOLD_BYTES = MONACO_LARGE_TEXT_THRESHOLD_CHARS
 
 // ── Content-type categorisation ──────────────────────────────────────────────
@@ -83,7 +82,7 @@ const monacoLanguage = computed(() => {
 const hasFormatted = computed(
   () =>
     ['json', 'xml', 'html', 'js', 'css', 'svg'].includes(bodyCategory.value) &&
-    estimateDecodedByteLength(props.body, props.bodyEncoding === 'base64') <
+    (props.bodyEncoding === 'base64' ? estimateDecodedByteLength(props.body, true) : props.body.length) <
       FORMATTED_LARGE_BODY_THRESHOLD_BYTES,
 )
 const hasImage = computed(() => bodyCategory.value === 'image' || bodyCategory.value === 'svg')
@@ -373,84 +372,25 @@ const wrappedChunkPageLabel = computed(() =>
     total: textEditorWrappedChunk.value.count,
   }),
 )
-const shouldRenderHexPanel = shallowRef(false)
-const hexViewerBody = shallowRef('')
-const hexViewerIsBase64 = shallowRef(false)
-const hexLoadRequested = shallowRef(false)
-const hexViewerPending = shallowRef(false)
-let hexActivationRequestId = 0
-let hexActivationTimer: ReturnType<typeof setTimeout> | null = null
-
-const hexEstimatedByteSize = computed(() =>
-  estimateDecodedByteLength(props.body, props.bodyEncoding === 'base64'),
-)
-const isLargeHexBody = computed(
-  () => hexEstimatedByteSize.value >= HEX_MANUAL_LOAD_THRESHOLD_BYTES,
-)
-const shouldGateHexViewer = computed(() => isLargeHexBody.value && !hexLoadRequested.value)
-const canRenderHexViewer = computed(
-  () =>
-    shouldRenderHexPanel.value &&
-    !shouldGateHexViewer.value &&
-    !hexViewerPending.value &&
-    hexViewerBody.value.length > 0,
-)
-const showHexLoadGate = computed(
-  () => activeTab.value === 'hex' && shouldRenderHexPanel.value && shouldGateHexViewer.value,
-)
-const showHexLoadingState = computed(
-  () => activeTab.value === 'hex' && shouldRenderHexPanel.value && hexViewerPending.value,
-)
-const hexLargeBodyDescription = computed(() =>
-  t('detail.hex_large_body_description', { size: formatFileSize(hexEstimatedByteSize.value) }),
-)
-
-function clearHexActivationTimer() {
-  if (hexActivationTimer === null) return
-
-  clearTimeout(hexActivationTimer)
-  hexActivationTimer = null
-}
-
-function updateHexViewerSource() {
-  shouldRenderHexPanel.value = true
-  clearHexActivationTimer()
-  hexViewerIsBase64.value = props.bodyEncoding === 'base64'
-
-  if (shouldGateHexViewer.value) {
-    hexActivationRequestId++
-    hexViewerPending.value = false
-    hexViewerBody.value = ''
-    return
-  }
-
-  const requestId = ++hexActivationRequestId
-  hexViewerPending.value = true
-  hexViewerBody.value = ''
-
-  hexActivationTimer = setTimeout(() => {
-    hexActivationTimer = null
-    if (requestId !== hexActivationRequestId || activeTab.value !== 'hex') return
-
-    hexViewerBody.value = props.body
-    hexViewerIsBase64.value = props.bodyEncoding === 'base64'
-    hexViewerPending.value = false
-  }, 0)
-}
-
-function resetHexViewerSource() {
-  hexActivationRequestId++
-  clearHexActivationTimer()
-  shouldRenderHexPanel.value = false
-  hexViewerBody.value = ''
-  hexViewerIsBase64.value = false
-  hexViewerPending.value = false
-}
-
-function loadLargeHexViewer() {
-  hexLoadRequested.value = true
-  updateHexViewerSource()
-}
+const {
+  byteOffset: hexByteOffset,
+  gated: showHexLoadGate,
+  canRender: canRenderHexViewer,
+  load: loadLargeHexViewer,
+} = useHexdumpViewState({
+  get body() {
+    return props.body
+  },
+  get bodyEncoding() {
+    return props.bodyEncoding
+  },
+  get contentType() {
+    return props.contentType
+  },
+  get active() {
+    return activeTab.value === 'hex'
+  },
+})
 
 function inferExtensionFromContentType(contentType?: string): string {
   const mediaType = ((contentType ?? '').toLowerCase().split(';')[0] ?? '').trim()
@@ -726,7 +666,6 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', handleWindowMouseMove)
   window.removeEventListener('mouseup', handleWindowMouseUp)
   imageResizeObserver?.disconnect()
-  resetHexViewerSource()
 })
 
 watch(activeTextTab, () => {
@@ -758,30 +697,10 @@ watch(textEditorBody, (nextValue, previousValue) => {
 watch(
   () => [props.body, props.bodyEncoding, props.contentType] as const,
   () => {
-    hexLoadRequested.value = false
-    if (activeTab.value === 'hex') {
-      updateHexViewerSource()
-    } else {
-      resetHexViewerSource()
-    }
     resetImagePreview()
     resetImageMetadata()
     nextTick(updateImageScrollbarPresence)
   },
-)
-
-watch(
-  () => activeTab.value,
-  (tab) => {
-    if (tab === 'hex') {
-      updateHexViewerSource()
-      return
-    }
-    hexActivationRequestId++
-    clearHexActivationTimer()
-    hexViewerPending.value = false
-  },
-  { immediate: true },
 )
 
 watch(
@@ -981,8 +900,7 @@ function tabLabel(tab: TabKey): string {
         </template>
 
         <div
-          v-if="shouldRenderHexPanel"
-          v-show="activeTab === 'hex'"
+          v-if="activeTab === 'hex'"
           class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
           role="tabpanel"
         >
@@ -991,7 +909,6 @@ function tabLabel(tab: TabKey): string {
               v-if="showHexLoadGate"
               icon="i-lucide-binary"
               :title="t('detail.hex_large_body_title')"
-              :description="hexLargeBodyDescription"
               :size="appEmptyStateSize"
               variant="naked"
               :ui="appEmptyStateUi"
@@ -1002,16 +919,12 @@ function tabLabel(tab: TabKey): string {
                 </UButton>
               </template>
             </UEmpty>
-            <AppLoading
-              v-else-if="showHexLoadingState"
-              fill
-              :label="t('detail.hex_loading')"
-            />
             <HexDumpViewer
               v-else-if="canRenderHexViewer"
-              :input="hexViewerBody"
-              :is-base64="hexViewerIsBase64"
-              :active="activeTab === 'hex'"
+              v-model:byte-offset="hexByteOffset"
+              :input="props.body"
+              :is-base64="props.bodyEncoding === 'base64'"
+              :append-only="isServerSentEvents && props.bodyEncoding !== 'base64'"
             />
           </div>
         </div>
