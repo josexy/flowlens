@@ -1,5 +1,4 @@
 import '@wailsio/runtime'
-import 'virtual:nuxt-icon-bundle/register'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ui from '@nuxt/ui/vue-plugin'

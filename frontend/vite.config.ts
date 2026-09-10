@@ -3,56 +3,8 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
-import { NuxtIconBundle } from '@nuxt/icon/vite'
 import wails from '@wailsio/runtime/plugins/vite'
 import monacoEditorEsmPlugin from 'vite-plugin-monaco-editor-esm'
-
-const frontendRoot = fileURLToPath(new URL('.', import.meta.url))
-
-const nuxtUiDefaultIcons = [
-  'lucide:arrow-down',
-  'lucide:arrow-left',
-  'lucide:arrow-right',
-  'lucide:arrow-up',
-  'lucide:circle-alert',
-  'lucide:check',
-  'lucide:chevrons-left',
-  'lucide:chevrons-right',
-  'lucide:chevron-down',
-  'lucide:chevron-left',
-  'lucide:chevron-right',
-  'lucide:chevron-up',
-  'lucide:x',
-  'lucide:copy',
-  'lucide:copy-check',
-  'lucide:moon',
-  'lucide:grip-vertical',
-  'lucide:ellipsis',
-  'lucide:circle-x',
-  'lucide:arrow-up-right',
-  'lucide:eye',
-  'lucide:eye-off',
-  'lucide:file',
-  'lucide:folder',
-  'lucide:folder-open',
-  'lucide:hash',
-  'lucide:info',
-  'lucide:sun',
-  'lucide:loader-circle',
-  'lucide:menu',
-  'lucide:minus',
-  'lucide:panel-left-close',
-  'lucide:panel-left-open',
-  'lucide:plus',
-  'lucide:rotate-ccw',
-  'lucide:search',
-  'lucide:square',
-  'lucide:circle-check',
-  'lucide:monitor',
-  'lucide:lightbulb',
-  'lucide:upload',
-  'lucide:triangle-alert',
-]
 
 const nuxtUiFormComponents = new Set([
   'Checkbox',
@@ -189,15 +141,15 @@ export default defineConfig(() => {
   return {
     plugins: [
       vue(),
-      NuxtIconBundle({
-        icons: nuxtUiDefaultIcons,
-        scan: {
-          globInclude: ['src/**/*.{vue,ts,tsx,js,jsx}'],
-        },
-        cwd: frontendRoot,
-      }),
       ui({
         colorMode: false,
+        icon: {
+          clientBundle: {
+            scan: {
+              globInclude: ['src/**/*.{vue,ts,tsx,js,jsx}'],
+            },
+          },
+        },
         ui: {
           colors: {
             primary: 'blue',
