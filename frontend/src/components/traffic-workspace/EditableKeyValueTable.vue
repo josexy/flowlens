@@ -220,13 +220,8 @@ onUnmounted(() => {
         <div
           v-for="(item, index) in modelValue"
           :key="`key-value-${index}`"
-          class="grid h-10 min-h-10 grid-cols-[46px_var(--request-key-value-key-column-width,minmax(0,1fr))_minmax(0,1fr)_46px] bg-app-panel [contain-intrinsic-size:40px] hover:bg-app-control"
-          :class="[
-            index === 0 ? '' : 'border-t border-t-app-border',
-            editingCell?.rowIndex === index
-              ? '[content-visibility:visible]'
-              : '[content-visibility:auto]',
-          ]"
+          class="grid h-10 min-h-10 grid-cols-[46px_var(--request-key-value-key-column-width,minmax(0,1fr))_minmax(0,1fr)_46px] bg-app-panel hover:bg-app-control"
+          :class="index === 0 ? '' : 'border-t border-t-app-border'"
         >
           <div
             class="relative flex h-10 min-h-10 min-w-0 items-center justify-center overflow-visible border-r border-app-border p-1.5"
