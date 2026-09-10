@@ -180,12 +180,13 @@ func TestCaptureExchangeUsesInitialEntryAndTypedPatches(t *testing.T) {
 	}
 
 	started := time.Now()
-	entry := svc.newTrafficEntry(TrafficEntry{
+	ctx := newRawTCPMetadataContext()
+	entry := svc.registerTrafficEntry(ctx, TrafficEntry{
 		Type:    "https",
 		Method:  http.MethodGet,
 		Request: &HTTPMessage{HeaderFields: []HTTPHeaderField{{Name: "Accept", Value: "*/*"}}},
 	})
-	exchange := newCaptureExchange(svc, context.Background(), entry)
+	exchange := newCaptureExchange(svc, ctx, entry)
 	startCaptureAttempt(exchange, started, 1, true)
 	emitHTTPExchangeTiming(exchange, mitmproxy.HTTPExchangeRequestEnded, started.Add(time.Microsecond), 1, true, nil)
 	emitHTTPExchangeTiming(exchange, mitmproxy.HTTPExchangeResponseStarted, started.Add(2*time.Microsecond), 1, false, nil)
@@ -201,10 +202,15 @@ func TestCaptureExchangeUsesInitialEntryAndTypedPatches(t *testing.T) {
 	if len(fullEntries) != 1 {
 		t.Fatalf("full traffic events = %d, want only the initial request snapshot", len(fullEntries))
 	}
-	if len(patches) != 2 {
-		t.Fatalf("traffic patches = %d, want response headers and terminal metrics", len(patches))
+	if len(patches) != 3 {
+		t.Fatalf("traffic patches = %d, want request start, response headers and terminal metrics", len(patches))
 	}
-	responsePatch := patches[0]
+	startPatch := patches[0]
+	if !fullEntries[0].StartedAt.IsZero() || startPatch.StartedAt == nil || !startPatch.StartedAt.Equal(started) ||
+		startPatch.Metrics == nil || startPatch.Metrics.Request.StartedAtMicros != started.UnixMicro() {
+		t.Fatalf("initial time was fabricated or actual start was not patched: initial=%+v patch=%+v", fullEntries[0], startPatch)
+	}
+	responsePatch := patches[1]
 	if responsePatch.TrafficID != entry.ID || responsePatch.ResponseHeaders == nil || responsePatch.Metrics == nil {
 		t.Fatalf("response-header patch = %+v", responsePatch)
 	}

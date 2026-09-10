@@ -695,6 +695,20 @@ func (s *ProxyService) newTrafficEntry(entry TrafficEntry) *TrafficEntry {
 	return &entry
 }
 
+// registerTrafficEntry assigns the live ID and enqueues its initial snapshot
+// under the same publication lock. No network or body I/O may run here: later
+// transport callbacks only update this already registered entry.
+func (s *ProxyService) registerTrafficEntry(ctx context.Context, entry TrafficEntry) *TrafficEntry {
+	s.trafficPublishMu.Lock()
+	defer s.trafficPublishMu.Unlock()
+	captured := s.newTrafficEntry(entry)
+	s.fillEntryMetadataFromContext(ctx, captured)
+	if s.storeTrafficEntry(captured) {
+		s.emitTraffic(captured)
+	}
+	return captured
+}
+
 func (s *ProxyService) isCurrentTrafficEntryLocked(entry *TrafficEntry) bool {
 	if entry == nil || entry.captureGeneration != s.captureGeneration {
 		return false
@@ -704,16 +718,17 @@ func (s *ProxyService) isCurrentTrafficEntryLocked(entry *TrafficEntry) bool {
 
 func (s *ProxyService) httpInterceptor(cfg *settingservice.ProxyConfig) mitmproxy.HTTPInterceptor {
 	return func(ctx context.Context, req *http.Request, invoker mitmproxy.HTTPDelegatedInvoker) (*http.Response, error) {
-		entry := s.newTrafficEntry(TrafficEntry{
+		entry := &TrafficEntry{
 			Type:   req.URL.Scheme,
 			Method: req.Method,
 			URL:    req.URL.String(),
 			Host:   req.Host,
 			Path:   req.URL.Path,
-		})
+		}
 
-		s.fillEntryMetadataFromContext(ctx, entry)
 		s.fillRequestHTTPMessage(req, entry)
+		entry.Request.Metrics = newPendingHTTPMessageMetrics(-1)
+		entry = s.registerTrafficEntry(ctx, *entry)
 		exchange := newCaptureExchange(s, ctx, entry)
 		requestBodyless := req.Body == nil || req.Body == http.NoBody
 		exchange.setRequestBodyless(requestBodyless)
@@ -795,7 +810,7 @@ func responseHasNoEntityBody(requestMethod string, response *http.Response) bool
 func (s *ProxyService) rawTCPInterceptor() mitmproxy.RawTCPInterceptor {
 	return func(ctx context.Context, event mitmproxy.RawTCPTunnelEvent) {
 		source := mapRawTCPTunnelSource(event.Source)
-		entry := s.newTrafficEntry(TrafficEntry{
+		entry := &TrafficEntry{
 			Type:      "tcp",
 			StartedAt: time.Now(),
 			URL:       "tcp://" + event.Hostport,
@@ -805,7 +820,7 @@ func (s *ProxyService) rawTCPInterceptor() mitmproxy.RawTCPInterceptor {
 				HostPort: event.Hostport,
 				TLS:      event.TLS,
 			},
-		})
+		}
 		if source == RawTCPTunnelSourceHTTPConnect {
 			entry.Method = http.MethodConnect
 			if event.Request != nil {
@@ -813,12 +828,7 @@ func (s *ProxyService) rawTCPInterceptor() mitmproxy.RawTCPInterceptor {
 			}
 		}
 
-		s.fillEntryMetadataFromContext(ctx, entry)
-		s.trafficPublishMu.Lock()
-		if s.storeTrafficEntry(entry) {
-			s.emitTraffic(entry)
-		}
-		s.trafficPublishMu.Unlock()
+		s.registerTrafficEntry(ctx, *entry)
 	}
 }
 
@@ -842,16 +852,15 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 		if hasHandshakeTiming && !handshakeTiming.RequestStartedAt.IsZero() {
 			startedAt = handshakeTiming.RequestStartedAt
 		}
-		entry := s.newTrafficEntry(TrafficEntry{
+		entry := &TrafficEntry{
 			Type:      req.URL.Scheme,
 			StartedAt: startedAt,
 			Method:    req.Method,
 			URL:       req.URL.String(),
 			Host:      req.Host,
 			Path:      req.URL.Path,
-		})
+		}
 
-		s.fillEntryMetadataFromContext(ctx, entry)
 		s.fillRequestHTTPMessage(req, entry)
 
 		entry.StatusCode = rsp.StatusCode
@@ -875,11 +884,7 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 		)
 
 		// send websocket basic info immediately
-		s.trafficPublishMu.Lock()
-		if s.storeTrafficEntry(entry) {
-			s.emitTraffic(entry)
-		}
-		s.trafficPublishMu.Unlock()
+		entry = s.registerTrafficEntry(ctx, *entry)
 
 		wsMsgs := s.newCaptureWebSocketMessages(entry)
 

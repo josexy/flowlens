@@ -24,6 +24,7 @@ export interface TrafficMetricsPatchPayload {
 export interface TrafficEntryPatchPayload {
   trafficId: number
   revision: number
+  startedAt?: string | null
   responseHeaders?: TrafficResponseHeadersPatchPayload | null
   responseTrailers?: TrafficResponseTrailersPatchPayload | null
   metrics?: TrafficMetricsPatchPayload | null
@@ -184,6 +185,7 @@ export function applyTrafficEntryPatch(
   return {
     ...entry,
     revision: patch.revision,
+    startedAt: patch.startedAt ?? entry.startedAt,
     statusCode: patch.responseHeaders?.statusCode ?? entry.statusCode,
     status: patch.responseHeaders?.status ?? entry.status,
     metadata,

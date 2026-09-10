@@ -213,6 +213,7 @@ type HTTPMessageMetrics struct {
 type TrafficEntryPatch struct {
 	TrafficID        uint64                        `json:"trafficId"`
 	Revision         uint64                        `json:"revision"`
+	StartedAt        *time.Time                    `json:"startedAt,omitempty"`
 	ResponseHeaders  *TrafficResponseHeadersPatch  `json:"responseHeaders,omitempty"`
 	ResponseTrailers *TrafficResponseTrailersPatch `json:"responseTrailers,omitempty"`
 	Metrics          *TrafficMetricsPatch          `json:"metrics,omitempty"`

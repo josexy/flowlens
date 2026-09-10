@@ -78,11 +78,13 @@ function entry(id, overrides = {}) {
   }
 }
 
-async function createStore(t, count = 5000) {
+async function createStore(t, initial = 5000) {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   setActivePinia(createPinia())
   const backend = {
-    snapshot: Array.from({ length: count }, (_, i) => entry(i + 1)),
+    snapshot: typeof initial === 'number'
+      ? Array.from({ length: initial }, (_, i) => entry(i + 1))
+      : initial,
     listeners: new Map(),
   }
   globalThis.__flowlensTrafficTableTest = backend
@@ -257,7 +259,7 @@ test('reading retains the displayed 5000 requests and bounds the new-request que
   assert.equal(store.liveEntryEvictionVersion, 1)
 })
 
-test('queued requests retain patches, reject stale replacements and drain in arrival order', async (t) => {
+test('queued requests retain patches, reject stale replacements and drain in ID order', async (t) => {
   const { store, backend } = await createStore(t)
   store.pauseLiveEntryEviction()
   store.addOrUpdateEntry(entry(5001))
@@ -287,6 +289,123 @@ test('queued requests retain patches, reject stale replacements and drain in arr
   assert.equal(store.entries.at(-2).statusCode, 201)
   assert.equal(store.entries.at(-2).revision, 4)
   assert.equal(store.pendingLiveEntryCount, 0)
+})
+
+test('live requests stay in ID order within and across event batches', async (t) => {
+  const { store, backend } = await createStore(t, [entry(108)])
+  const receive = backend.listeners.get('traffic:entry').onData
+  receive(entry(111, { statusCode: 200 }))
+  receive(entry(110, { statusCode: 500 }))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), [108, 110, 111])
+
+  await store.selectEntry(store.entries[1])
+  receive(entry(109))
+  receive(entry(112))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), [108, 109, 110, 111, 112])
+  assert.equal(store.selectedEntry.id, 110)
+
+  // Inserting an earlier ID must also refresh the indices used by later patches.
+  backend.listeners.get('traffic:patch').onData({
+    trafficId: 110,
+    revision: 2,
+    responseHeaders: { statusCode: 201, status: 'Created', proto: 'HTTP/1.1', headerFields: [] },
+  })
+  receive(entry(110, { statusCode: 500 }))
+  t.mock.timers.tick(100)
+  assert.equal(store.entries[2].statusCode, 201)
+  assert.equal(store.selectedEntry.statusCode, 201)
+  assert.equal(store.entries[3].statusCode, 200)
+  assert.deepEqual(store.entries.map(row => row.id), [108, 109, 110, 111, 112])
+
+  const sort = state.createTrafficTableSorter()
+  assert.deepEqual(sort(store.entries, { key: 'id', order: 'desc' }).map(row => row.id),
+    [112, 111, 110, 109, 108])
+  assert.deepEqual(sort(store.entries, { key: 'statusCode', order: 'asc' }).map(row => row.id),
+    [108, 109, 112, 111, 110])
+  assert.deepEqual(sort(store.entries, store.sortConfig).map(row => row.id),
+    [108, 109, 110, 111, 112])
+})
+
+test('initial snapshots and recovered snapshots use ID order', async (t) => {
+  const { store, backend } = await createStore(t, [entry(3), entry(1), entry(2)])
+  assert.deepEqual(store.entries.map(row => row.id), [1, 2, 3])
+  store.addOrUpdateEntry(entry(6))
+  store.addOrUpdateEntry(entry(5))
+  t.mock.timers.tick(100)
+  backend.snapshot = [entry(3), entry(1), entry(4), entry(2)]
+  backend.listeners.get('traffic:entry').onDropped(1)
+  for (let i = 0; i < 6; i++) await Promise.resolve()
+  assert.deepEqual(store.entries.map(row => row.id), [1, 2, 3, 4, 5, 6])
+})
+
+test('events buffered during snapshot loading merge into ID order', async (t) => {
+  const snapshot = Promise.resolve().then(() => {
+    const receive = globalThis.__flowlensTrafficTableTest.listeners.get('traffic:entry').onData
+    receive(entry(112))
+    receive(entry(109))
+    return [entry(111), entry(108), entry(110)]
+  })
+  const { store } = await createStore(t, snapshot)
+  assert.deepEqual(store.entries.map(row => row.id), [108, 109, 110, 111, 112])
+})
+
+test('oversized snapshots trim the lowest IDs before accepting new events', async (t) => {
+  const { store, backend } = await createStore(t,
+    Array.from({ length: 5001 }, (_, i) => entry(5001 - i)))
+  assert.deepEqual(store.entries.map(row => row.id), Array.from({ length: 5000 }, (_, i) => i + 2))
+  store.addOrUpdateEntry(entry(5002))
+  t.mock.timers.tick(100)
+  assert.equal(store.entries.at(-1).id, 5002)
+  assert.equal(store.entries[0].id, 3)
+
+  backend.listeners.get('traffic:reset').onData({})
+  store.addOrUpdateEntry(entry(2))
+  store.addOrUpdateEntry(entry(1))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), [1, 2])
+})
+
+test('late requests are ordered before eviction and cannot return after eviction', async (t) => {
+  const { store } = await createStore(t, Array.from({ length: 5000 }, (_, i) => entry(i + 2)))
+  store.addOrUpdateEntry(entry(1))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), Array.from({ length: 5000 }, (_, i) => i + 2))
+  store.addOrUpdateEntry(entry(1, { revision: 2 }))
+  store.addOrUpdateEntry(entry(5002))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), Array.from({ length: 5000 }, (_, i) => i + 3))
+})
+
+test('ordered pending batches retain the latest 5000 IDs', async (t) => {
+  const { store } = await createStore(t, 0)
+  for (let id = 1; id <= 5001; id++) store.addOrUpdateEntry(entry(id))
+  t.mock.timers.tick(100)
+  assert.deepEqual(store.entries.map(row => row.id), Array.from({ length: 5000 }, (_, i) => i + 2))
+})
+
+test('recovery merges missing IDs before queued live entries and preserves FIFO eviction', async (t) => {
+  const { store, backend } = await createStore(t)
+  store.pauseLiveEntryEviction()
+  // The first live event was dropped before a later batch reached the frontend.
+  for (let id = 5002; id <= 10000; id++) {
+    store.addOrUpdateEntry(entry(id))
+    if (id % 100 === 0) t.mock.timers.tick(100)
+  }
+  t.mock.timers.tick(100)
+  store.addOrUpdateEntry(entry(5002, { revision: 3, statusCode: 201 }))
+  t.mock.timers.tick(100)
+  backend.snapshot = Array.from({ length: 5000 }, (_, i) => entry(i + 5001))
+  backend.listeners.get('traffic:entry').onDropped(1)
+  for (let i = 0; i < 6; i++) await Promise.resolve()
+  assert.equal(store.entries[0].id, 1)
+  assert.equal(store.pendingLiveEntryCount, 5000)
+  store.addOrUpdateEntry(entry(10001))
+  t.mock.timers.tick(100)
+  store.resumeLiveEntryEviction()
+  assert.deepEqual(store.entries.map(row => row.id), Array.from({ length: 5000 }, (_, i) => i + 5002))
+  assert.equal(store.entries[0].statusCode, 201)
 })
 
 test('snapshot recovery and reset respect the held window and queue lifecycle', async (t) => {

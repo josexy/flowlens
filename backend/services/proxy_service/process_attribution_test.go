@@ -110,16 +110,13 @@ func TestTrafficEntryUsesAcceptedConnectionTupleWithoutContextValue(t *testing.T
 		DestinationAddr: netip.MustParseAddrPort("127.0.0.1:8080"),
 	})
 	ctx := metadata.AppendToContext(context.Background(), md)
-	entries := []*TrafficEntry{
-		{ID: 1, Type: "https", Metadata: &Metadata{}},
-		{ID: 2, Type: "https", Metadata: &Metadata{}},
-	}
-	for _, entry := range entries {
-		service.fillEntryMetadataFromContext(ctx, entry)
+	entries := make([]*TrafficEntry, 0, 2)
+	for range 2 {
+		entry := service.registerTrafficEntry(ctx, TrafficEntry{Type: "https"})
+		entries = append(entries, entry)
 		if entry.Metadata.Process == nil {
 			t.Fatalf("entry %d process lookup was not recovered from accepted connection metadata", entry.ID)
 		}
-		service.storeTrafficEntry(entry)
 	}
 
 	drainCtx, cancel := context.WithTimeout(context.Background(), time.Second)

@@ -1097,6 +1097,16 @@ test('traffic patches update only selected fields and reject stale revisions', (
   assert.equal(stale, updated)
 })
 
+test('request start patches replace the initial unknown time without losing precision', () => {
+  const entry = { id: 1, revision: 1, startedAt: '0001-01-01T00:00:00Z' } as TrafficEntry
+  const startedAt = '2026-09-10T08:00:00.123456Z'
+  const updated = applyTrafficEntryPatch(entry, { trafficId: 1, revision: 2, startedAt })
+  assert.equal(updated.startedAt, startedAt)
+  assert.equal(entry.startedAt, '0001-01-01T00:00:00Z')
+  assert.equal(applyTrafficEntryPatch(updated, { trafficId: 1, revision: 3 }).startedAt, startedAt)
+  assert.equal(applyTrafficEntryPatch(updated, { trafficId: 1, revision: 1, startedAt: entry.startedAt }), updated)
+})
+
 test('connection timing patches preserve process metadata and published snapshots', () => {
   const entry = {
     id: 42,

@@ -608,6 +608,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     const validEntries = (snapshot ?? []).filter(
       (entry): entry is proxyservice.TrafficEntry => entry !== null,
     )
+    validEntries.sort((left, right) => left.id - right.id)
     if (validEntries.length <= TRAFFIC_ENTRY_CAP) {
       return {
         entries: validEntries,
@@ -718,8 +719,16 @@ export const useTrafficStore = defineStore('traffic', () => {
     })
     if (isLiveEntryEvictionPaused.value && entries.value.length > 0) {
       // Recovery must not replace the window the user is reading. Refresh the
-      // retained entries and queue newer ones through the same bounded path.
-      applyTrafficEntryBatch(recoveredEntries)
+      // retained entries and merge missed IDs before the queued live entries.
+      // This infrequent merge restores FIFO order without scanning a full queue
+      // on every new live event.
+      const queuedById = new Map(pausedLiveEntries)
+      for (const entry of recoveredEntries) {
+        const queued = queuedById.get(entry.id)
+        queuedById.set(entry.id, queued ? mergeInitialTrafficEntry(entry, queued) : entry)
+      }
+      pausedLiveEntries.clear()
+      applyTrafficEntryBatch(Array.from(queuedById.values()).sort((left, right) => left.id - right.id))
       reconcileSelectedEntry()
       return
     }
@@ -821,6 +830,8 @@ export const useTrafficStore = defineStore('traffic', () => {
   ): proxyservice.TrafficEntry | null {
     let evictedEntry: proxyservice.TrafficEntry | null = null
     if (!target.has(entry.id) && target.size >= TRAFFIC_ENTRY_CAP) {
+      // The backend registers new entries in ID order. Patches replace existing
+      // keys without changing their position, so live eviction stays constant-time.
       const oldestEntryId = target.keys().next().value
       if (oldestEntryId !== undefined) {
         evictedEntry = target.get(oldestEntryId) ?? null
@@ -880,6 +891,7 @@ export const useTrafficStore = defineStore('traffic', () => {
 
     const list = entries.value
     let changed = false
+    let needsSort = false
 
     for (const entry of batch) {
       const index = idMap.get(entry.id)
@@ -908,20 +920,27 @@ export const useTrafficStore = defineStore('traffic', () => {
         continue
       }
 
+      const lastEntry = list[list.length - 1]
+      if (lastEntry && entry.id < lastEntry.id) needsSort = true
       idMap.set(entry.id, list.length)
       list.push(entry)
       changed = true
     }
 
+    // Snapshot recovery can fill gaps before already received live entries.
+    // Only that merge needs sorting; ordered live appends and patches do not.
+    if (needsSort) list.sort((left, right) => left.id - right.id)
+    let needsReindex = needsSort
     if (list.length > TRAFFIC_ENTRY_CAP) {
       const evictedEntries = list.splice(0, list.length - TRAFFIC_ENTRY_CAP)
       evictedThroughEntryId = advanceTrafficEvictionWatermark(
         evictedThroughEntryId,
         evictedEntries.map((entry) => entry.id),
       )
-      rebuildIdMap()
+      needsReindex = true
       liveEntryEvictionVersion.value++
     }
+    if (needsReindex) rebuildIdMap()
 
     if (changed) {
       triggerRef(entries)
@@ -1007,16 +1026,12 @@ export const useTrafficStore = defineStore('traffic', () => {
     }
     const current = pausedLiveEntries.get(entry.id)
     if (current && trafficEntryRevision(current) > trafficEntryRevision(entry)) return
-    if (!pausedLiveEntries.has(entry.id) && pausedLiveEntries.size >= TRAFFIC_ENTRY_CAP) {
-      const oldestQueuedEntryId = pausedLiveEntries.keys().next().value
-      if (oldestQueuedEntryId !== undefined) {
-        evictedThroughEntryId = advanceTrafficEvictionWatermark(evictedThroughEntryId, [
-          oldestQueuedEntryId,
-        ])
-        pausedLiveEntries.delete(oldestQueuedEntryId)
-      }
+    const evictedEntry = setBoundedTrafficEntry(pausedLiveEntries, entry)
+    if (evictedEntry) {
+      evictedThroughEntryId = advanceTrafficEvictionWatermark(evictedThroughEntryId, [
+        evictedEntry.id,
+      ])
     }
-    pausedLiveEntries.set(entry.id, entry)
   }
 
   function pauseLiveEntryEviction() {

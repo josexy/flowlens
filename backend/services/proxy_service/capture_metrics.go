@@ -25,9 +25,10 @@ type captureExchange struct {
 
 func newCaptureExchange(service *ProxyService, ctx context.Context, entry *TrafficEntry) *captureExchange {
 	return &captureExchange{
-		service: service,
-		entry:   entry,
-		ctx:     ctx,
+		service:   service,
+		entry:     entry,
+		ctx:       ctx,
+		published: entry.Revision > 0,
 	}
 }
 
@@ -201,7 +202,7 @@ func (x *captureExchange) responseEnded(ended time.Time, complete bool, response
 	} else {
 		metrics.State = HTTPMessageStateCompleted
 	}
-	x.publishMetricsLocked(true)
+	x.publishMetricsLocked(x.shouldEmitResponseMetricsLocked())
 }
 
 func (x *captureExchange) markBodylessResponseSize() {
@@ -212,7 +213,7 @@ func (x *captureExchange) markBodylessResponseSize() {
 	}
 	metrics := ensureHTTPMessageMetrics(x.entry.Response)
 	metrics.BodySize = 0
-	x.publishMetricsLocked(true)
+	x.publishMetricsLocked(x.shouldEmitResponseMetricsLocked())
 }
 
 func (x *captureExchange) requestBodyFinished(size int64, complete bool, readErr error) {
@@ -235,7 +236,7 @@ func (x *captureExchange) bodyFinished(isRequest bool, size int64, _ bool, _ err
 	}
 	metrics := ensureHTTPMessageMetrics(message)
 	metrics.BodySize = size
-	x.publishMetricsLocked(!isRequest)
+	x.publishMetricsLocked(!isRequest && x.shouldEmitResponseMetricsLocked())
 }
 
 func timestampAtOrAfter(value, lowerBound int64) int64 {
@@ -299,7 +300,7 @@ func (x *captureExchange) publishMetricsLocked(emit bool) {
 		x.published = true
 		return
 	}
-	if emit && x.shouldEmitResponseMetricsLocked() {
+	if emit {
 		x.service.emitTrafficPatch(stored, newTrafficMetricsPatch(stored))
 	}
 }
@@ -383,12 +384,16 @@ func newTrafficMetricsSection(entry *TrafficEntry) *TrafficMetricsPatch {
 
 func newTrafficMetricsPatch(entry *TrafficEntry) TrafficEntryPatch {
 	patch := newTrafficPatch(entry)
+	if !entry.StartedAt.IsZero() {
+		startedAt := entry.StartedAt
+		patch.StartedAt = &startedAt
+	}
 	patch.Metrics = newTrafficMetricsSection(entry)
 	return patch
 }
 
 func newTrafficResponseHeadersPatch(entry *TrafficEntry) TrafficEntryPatch {
-	patch := newTrafficPatch(entry)
+	patch := newTrafficMetricsPatch(entry)
 	if entry.Response != nil {
 		patch.ResponseHeaders = &TrafficResponseHeadersPatch{
 			StatusCode:             entry.StatusCode,
@@ -399,7 +404,6 @@ func newTrafficResponseHeadersPatch(entry *TrafficEntry) TrafficEntryPatch {
 			HeaderOrderUnavailable: entry.Response.HeaderOrderUnavailable,
 		}
 	}
-	patch.Metrics = newTrafficMetricsSection(entry)
 	return patch
 }
 
