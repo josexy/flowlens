@@ -916,6 +916,8 @@
     "section_behavior": "行为",
     "app_font_label": "界面字体",
     "code_font_label": "代码字体",
+    "pointer_cursor_label": "使用指针光标",
+    "pointer_cursor_hint": "悬停交互元素时切换为指针光标",
     "window_frame_mode_label": "窗口标题栏",
     "window_frame_mode_custom": "自定义标题栏",
     "window_frame_mode_system": "系统标题栏",

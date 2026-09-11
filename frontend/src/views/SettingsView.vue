@@ -542,7 +542,7 @@ watch(
   commonConfigRef,
   () => {
     if (isLoaded.value) {
-      settingStore.previewFonts()
+      settingStore.previewAppearance()
       markSettingsSectionDirty('common')
     }
   },

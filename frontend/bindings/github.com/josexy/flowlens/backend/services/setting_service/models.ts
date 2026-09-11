@@ -34,6 +34,7 @@ export interface CommonConfig {
     "logDisabled": boolean;
     "appFontFamily": string;
     "codeFontFamily": string;
+    "pointerCursor": boolean;
     "themeMode": string;
     "language": string;
 }

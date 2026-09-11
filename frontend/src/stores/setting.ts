@@ -90,7 +90,7 @@ function buildFontStack(fontFamily: string | undefined, fallback: string): strin
   return `'${safeValue}', ${fallback}`
 }
 
-function applyFontSettings(commonConfig: settingservice.CommonConfig | null | undefined) {
+function applyAppearanceSettings(commonConfig: settingservice.CommonConfig | null | undefined) {
   if (typeof document === 'undefined') return
   document.documentElement.style.setProperty(
     '--app-font-family',
@@ -100,6 +100,7 @@ function applyFontSettings(commonConfig: settingservice.CommonConfig | null | un
     '--code-font-family',
     buildFontStack(commonConfig?.codeFontFamily, DEFAULT_CODE_FONT_FAMILY),
   )
+  document.documentElement.toggleAttribute('data-pointer-cursor', commonConfig?.pointerCursor ?? false)
 }
 
 function isThemeMode(value: string | undefined): value is ThemeMode {
@@ -156,12 +157,14 @@ function ensureCommonConfig(settings: settingservice.Settings) {
       logDisabled: false,
       appFontFamily: '',
       codeFontFamily: '',
+      pointerCursor: false,
       themeMode: DEFAULT_THEME_MODE,
       language: DEFAULT_LANGUAGE,
     }
   }
   settings.commonConfig.logLevel ||= DEFAULT_LOG_LEVEL
   settings.commonConfig.logDisabled ??= false
+  settings.commonConfig.pointerCursor ??= false
   return settings.commonConfig
 }
 
@@ -297,6 +300,7 @@ function cloneCommonConfig(config: settingservice.CommonConfig): settingservice.
     logDisabled: config.logDisabled,
     appFontFamily: config.appFontFamily,
     codeFontFamily: config.codeFontFamily,
+    pointerCursor: config.pointerCursor,
     themeMode: config.themeMode,
     language: config.language,
   }
@@ -546,7 +550,7 @@ export const useSettingStore = defineStore('setting', () => {
       await GetShortcutRuntimeState().catch(() => emptyShortcutRuntimeState()),
     )
     lastPythonRuntimeStatus.value = await GetPythonRuntimeStatus().catch(() => null)
-    applyFontSettings(settings.value?.commonConfig)
+    applyAppearanceSettings(settings.value?.commonConfig)
     isDirty.value = false
     lastProxyApplyResult.value = null
     lastShortcutApplyResult.value = null
@@ -582,7 +586,7 @@ export const useSettingStore = defineStore('setting', () => {
     ensurePythonPluginConfig(nextSettings)
     ensureShortcutConfig(nextSettings)
     settings.value = nextSettings
-    applyFontSettings(nextSettings.commonConfig)
+    applyAppearanceSettings(nextSettings.commonConfig)
     isDirty.value = false
     lastProxyApplyResult.value = null
   }
@@ -786,7 +790,7 @@ export const useSettingStore = defineStore('setting', () => {
 
       const shouldApplyProxy = !options?.dirtySections || options.dirtySections.includes('proxy')
       lastProxyApplyResult.value = shouldApplyProxy ? await ApplyCurrentProxyConfig() : null
-      applyFontSettings(settings.value.commonConfig)
+      applyAppearanceSettings(settings.value.commonConfig)
       isDirty.value = !complete
       return { complete, persistedSettings }
     } catch (error) {
@@ -863,6 +867,7 @@ export const useSettingStore = defineStore('setting', () => {
         logDisabled: false,
         appFontFamily: '',
         codeFontFamily: '',
+        pointerCursor: false,
         themeMode: DEFAULT_THEME_MODE,
         language: DEFAULT_LANGUAGE,
       }
@@ -871,6 +876,7 @@ export const useSettingStore = defineStore('setting', () => {
     settings.value.commonConfig.logDisabled = false
     settings.value.commonConfig.appFontFamily = ''
     settings.value.commonConfig.codeFontFamily = ''
+    settings.value.commonConfig.pointerCursor = false
     const windowConfig = ensureWindowConfig(settings.value)
     windowConfig.frameMode = DEFAULT_WINDOW_FRAME_MODE
     windowConfig.mainWindowCloseBehavior = DEFAULT_MAIN_WINDOW_CLOSE_BEHAVIOR
@@ -911,13 +917,11 @@ export const useSettingStore = defineStore('setting', () => {
     isDirty.value = true
     lastProxyApplyResult.value = null
     lastShortcutApplyResult.value = null
-    // Note: applyFontSettings is NOT called here.
-    // The watch(commonConfigRef) in SettingsView.vue calls previewFonts(),
-    // which drives CSS variable updates reactively whenever commonConfig mutates.
+    // SettingsView previews appearance changes when commonConfig mutates.
   }
 
-  function previewFonts() {
-    applyFontSettings(settings.value?.commonConfig)
+  function previewAppearance() {
+    applyAppearanceSettings(settings.value?.commonConfig)
   }
 
   const themeMode = computed<ThemeMode>(() => {
@@ -1047,7 +1051,7 @@ export const useSettingStore = defineStore('setting', () => {
     showAllTrafficTableColumns,
     markDirty,
     resetToDefaults,
-    previewFonts,
+    previewAppearance,
     setThemeModePreference,
     setLanguagePreference,
     syncExternalPreferences,

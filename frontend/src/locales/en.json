@@ -916,6 +916,8 @@
     "section_behavior": "Behavior",
     "app_font_label": "App Font",
     "code_font_label": "Code Font",
+    "pointer_cursor_label": "Use pointer cursor",
+    "pointer_cursor_hint": "Switch to a pointer cursor when hovering over interactive elements",
     "window_frame_mode_label": "Window Title Bar",
     "window_frame_mode_custom": "Custom Title Bar",
     "window_frame_mode_system": "System Title Bar",

@@ -1,6 +1,13 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
 
+@layer base {
+  :root[data-pointer-cursor]
+    :is(button, [role='button']):not(:disabled, [aria-disabled='true'], [data-disabled]) {
+    cursor: pointer;
+  }
+}
+
 @theme {
   --color-app-window: var(--app-window-bg);
   --color-app-shell: var(--app-shell-bg);

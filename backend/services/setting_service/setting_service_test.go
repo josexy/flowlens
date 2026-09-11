@@ -132,11 +132,55 @@ func TestUpdateFillsCommonConfigDefaults(t *testing.T) {
 	if settings.CommonConfig.LogDisabled {
 		t.Fatal("expected logging to be enabled by default")
 	}
+	if settings.CommonConfig.PointerCursor {
+		t.Fatal("expected pointer cursor to be disabled by default")
+	}
 	if settings.HistoryRetentionConfig.Enabled {
 		t.Fatal("expected history retention cleanup to be disabled by default")
 	}
 	if settings.HistoryRetentionConfig.Value != defaultHistoryRetentionValue || settings.HistoryRetentionConfig.Unit != HistoryRetentionUnitDay {
 		t.Fatalf("unexpected history retention defaults: %+v", settings.HistoryRetentionConfig)
+	}
+}
+
+func TestPointerCursorPreferenceRoundTripsThroughOrdinarySettingsSave(t *testing.T) {
+	configureTestSettingsPath(t)
+	svc := newPersistentTestSettingService(t)
+	// Existing common settings have no cursor preference.
+	if _, err := svc.repository.db.Exec(`
+		INSERT INTO app_settings(section, payload_version, payload_json, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, settingsSectionCommon, settingsPayloadVersion, `{"themeMode":"dark","language":"en"}`, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("insert existing common settings: %v", err)
+	}
+	settings, err := svc.Get()
+	if err != nil {
+		t.Fatalf("Get existing settings: %v", err)
+	}
+	if settings.CommonConfig.PointerCursor {
+		t.Fatal("expected missing pointer cursor preference to remain disabled")
+	}
+
+	for _, enabled := range []bool{true, false} {
+		settings.CommonConfig.PointerCursor = enabled
+		if err := svc.UpdatePreservingShortcuts(settings); err != nil {
+			t.Fatalf("UpdatePreservingShortcuts: %v", err)
+		}
+		if err := svc.Save(); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+
+		svc = newPersistentTestSettingService(t)
+		settings, err = svc.Get()
+		if err != nil {
+			t.Fatalf("Get reloaded settings: %v", err)
+		}
+		if settings.CommonConfig.PointerCursor != enabled {
+			t.Fatalf("pointer cursor after reload = %v, want %v", settings.CommonConfig.PointerCursor, enabled)
+		}
+		if settings.CommonConfig.ThemeMode != "dark" || settings.CommonConfig.Language != "en" {
+			t.Fatalf("cursor preference update changed existing preferences: %+v", settings.CommonConfig)
+		}
 	}
 }
 

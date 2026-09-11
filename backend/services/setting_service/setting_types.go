@@ -61,6 +61,7 @@ type CommonConfig struct {
 	LogDisabled    bool   `json:"logDisabled"`
 	AppFontFamily  string `json:"appFontFamily"`
 	CodeFontFamily string `json:"codeFontFamily"`
+	PointerCursor  bool   `json:"pointerCursor"`
 	ThemeMode      string `json:"themeMode"`
 	Language       string `json:"language"`
 }

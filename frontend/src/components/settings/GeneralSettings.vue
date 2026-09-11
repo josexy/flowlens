@@ -98,6 +98,17 @@ const fontSelectVirtualize = { estimateSize: 32, overscan: 8 }
           </span>
         </div>
       </SettingsRow>
+      <SettingsRow
+        :label="t('settings.pointer_cursor_label')"
+        :hint="t('settings.pointer_cursor_hint')"
+        hint-placement="control"
+        wide
+      >
+        <USwitch
+          v-model="commonConfig.pointerCursor"
+          :aria-label="t('settings.pointer_cursor_label')"
+        />
+      </SettingsRow>
     </SettingsSection>
 
     <SettingsSection :title="t('settings.section_behavior')">
