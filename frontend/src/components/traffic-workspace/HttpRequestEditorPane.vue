@@ -58,6 +58,7 @@ import {
   type HeaderField,
 } from '@/utils/headers'
 import { countRequestCookieRows, hasHeader, responseCookiesRecord } from '@/utils/cookies'
+import { appendPythonLogBatch, filterPythonLogBatch } from '@/utils/pythonConsole'
 
 type SummaryTagType = 'default' | 'error' | 'primary' | 'info' | 'success' | 'warning'
 type ResponseMetaChip = { key: string; text: string; type: SummaryTagType }
@@ -100,6 +101,49 @@ let sendOperationGeneration = 0
 
 const PYTHON_PLUGIN_LOG_EVENT = 'python-plugins:log'
 const MAX_REQUEST_CONSOLE_ENTRIES = 1000
+const pendingPythonPluginLogs: PluginLogEntry[] = []
+let pythonPluginLogFlushHandle: number | null = null
+
+function flushPythonPluginLogs() {
+  pythonPluginLogFlushHandle = null
+  if (pendingPythonPluginLogs.length === 0) {
+    return
+  }
+  const batch = pendingPythonPluginLogs.splice(0, pendingPythonPluginLogs.length)
+  if (batch.length === 0 || !state.value.scriptExecutionId) {
+    return
+  }
+  const currentExecutionID = state.value.scriptExecutionId
+  const matching = filterPythonLogBatch(batch, currentExecutionID)
+  if (matching.length === 0) {
+    return
+  }
+  appendPythonLogBatch(state.value.scriptConsoleEntries, matching, MAX_REQUEST_CONSOLE_ENTRIES)
+}
+
+function schedulePythonPluginLogFlush() {
+  if (pythonPluginLogFlushHandle !== null) {
+    return
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    pythonPluginLogFlushHandle = requestAnimationFrame(flushPythonPluginLogs)
+    return
+  }
+  pythonPluginLogFlushHandle = window.setTimeout(flushPythonPluginLogs, 16)
+}
+
+function clearPendingPythonPluginLogs() {
+  pendingPythonPluginLogs.splice(0, pendingPythonPluginLogs.length)
+  if (pythonPluginLogFlushHandle === null) {
+    return
+  }
+  if (typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(pythonPluginLogFlushHandle)
+  } else {
+    window.clearTimeout(pythonPluginLogFlushHandle)
+  }
+  pythonPluginLogFlushHandle = null
+}
 
 if (typeof state.value.pluginsEnabled !== 'boolean') {
   state.value.pluginsEnabled = DEFAULT_HTTP_REQUEST_PLUGINS_ENABLED
@@ -122,11 +166,8 @@ const offPythonPluginLog = Events.On(PYTHON_PLUGIN_LOG_EVENT, (rawEvent) => {
   if (!entry || !entry.executionId || entry.executionId !== state.value.scriptExecutionId) {
     return
   }
-  state.value.scriptConsoleEntries.push(entry)
-  const overflow = state.value.scriptConsoleEntries.length - MAX_REQUEST_CONSOLE_ENTRIES
-  if (overflow > 0) {
-    state.value.scriptConsoleEntries.splice(0, overflow)
-  }
+  pendingPythonPluginLogs.push(entry)
+  schedulePythonPluginLogFlush()
 })
 
 const methodOptions = [
@@ -853,6 +894,7 @@ async function handleSend() {
     pythonPluginsEnabled.value &&
     (state.value.pluginsEnabled || state.value.inlineScriptEnabled)
   const pluginExecutionId = pluginExecutionRequested ? createPluginExecutionId() : ''
+  clearPendingPythonPluginLogs()
   state.value.scriptExecutionId = pluginExecutionId
   state.value.scriptConsoleEntries.splice(0, state.value.scriptConsoleEntries.length)
   if (pluginExecutionRequested) {
@@ -1024,6 +1066,7 @@ function handlePrimaryAction() {
 }
 
 function clearScriptConsole() {
+  clearPendingPythonPluginLogs()
   state.value.scriptConsoleEntries.splice(0, state.value.scriptConsoleEntries.length)
 }
 
@@ -1042,6 +1085,7 @@ const offRequestSendShortcut = registerShortcutHandler({
 
 onBeforeUnmount(() => {
   void pendingSendCall?.cancel()
+  clearPendingPythonPluginLogs()
   offRequestSendShortcut()
   offPythonPluginLog()
 })

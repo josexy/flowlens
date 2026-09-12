@@ -66,6 +66,7 @@ type PluginLogEntry struct {
 	RequestID   string `json:"requestId"`
 	ExecutionID string `json:"executionId"`
 	PluginID    string `json:"pluginId"`
+	PluginName  string `json:"pluginName"`
 	Level       string `json:"level"`
 	Stream      string `json:"stream"`
 	Message     string `json:"message"`
@@ -819,7 +820,8 @@ func runtimeStatusFromHello(config settingservice.PythonPluginConfig, hello Work
 func (s *PythonPluginService) handleWorkerLog(value WorkerLog) {
 	entry := PluginLogEntry{
 		EventID: s.eventID.Add(1), RequestID: value.RequestID, ExecutionID: value.ExecutionID,
-		PluginID: value.PluginID, Level: strings.ToLower(strings.TrimSpace(value.Level)),
+		PluginID: value.PluginID, PluginName: value.PluginName,
+		Level:  strings.ToLower(strings.TrimSpace(value.Level)),
 		Stream: value.Stream, Message: value.Message, Timestamp: value.Timestamp,
 	}
 	if entry.Timestamp <= 0 {

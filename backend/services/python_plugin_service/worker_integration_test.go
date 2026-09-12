@@ -437,6 +437,151 @@ func TestWorkerInvokesSDKCapturesLogsAndCarriesShared(t *testing.T) {
 	}
 }
 
+func TestWorkerPrintPreservesEmbeddedNewlinesAsSingleLog(t *testing.T) {
+	const source = `from flowlens import *
+
+def onRequest(context, request):
+    print("first\nsecond\nthird")
+    return request
+
+def onResponse(context, response):
+    return response
+`
+
+	var logs []WorkerLog
+	pool, manager, plugin := newPythonWorkerHarness(t, 1, func(entry WorkerLog) {
+		logs = append(logs, entry)
+	})
+	plugin = writeAndActivatePlugin(t, manager, plugin.ID, source)
+	result, err := pool.Invoke(context.Background(), InvokeRequest{
+		ExecutionID: "execution-multiline",
+		PluginID:    plugin.ID,
+		PluginName:  plugin.Name,
+		Revision:    plugin.ActiveRevision,
+		Path:        manager.revisionPath(plugin.ID, plugin.ActiveRevision),
+		Hook:        "onRequest",
+		Context:     integrationContext(map[string]any{}, map[string]any{}),
+		Value: map[string]any{
+			"method":  "GET",
+			"url":     "https://example.com/",
+			"headers": []map[string]string{},
+			"body":    map[string]any{"kind": "none", "value": nil},
+		},
+	})
+	if err != nil {
+		t.Fatalf("invoke multiline print: %v", err)
+	}
+	if result.Blocked {
+		t.Fatalf("multiline print request was blocked: %+v", result)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("multiline print emitted %d logs, want one: %#v", len(logs), logs)
+	}
+	if logs[0].Message != "first\nsecond\nthird" {
+		t.Fatalf("multiline print message = %q", logs[0].Message)
+	}
+}
+
+func TestWorkerDirectWritesPreserveEmbeddedNewlinesAsSingleLog(t *testing.T) {
+	const source = `from flowlens import *
+import sys
+
+def onRequest(context, request):
+    sys.stdout.write("stdout first\nstdout second\n")
+    sys.stderr.write("stderr first\nstderr second\n")
+    return request
+
+def onResponse(context, response):
+    return response
+`
+
+	var logs []WorkerLog
+	pool, manager, plugin := newPythonWorkerHarness(t, 1, func(entry WorkerLog) {
+		logs = append(logs, entry)
+	})
+	plugin = writeAndActivatePlugin(t, manager, plugin.ID, source)
+	_, err := pool.Invoke(context.Background(), InvokeRequest{
+		ExecutionID: "execution-direct-write",
+		PluginID:    plugin.ID,
+		PluginName:  plugin.Name,
+		Revision:    plugin.ActiveRevision,
+		Path:        manager.revisionPath(plugin.ID, plugin.ActiveRevision),
+		Hook:        "onRequest",
+		Context:     integrationContext(map[string]any{}, map[string]any{}),
+		Value: map[string]any{
+			"method":  "GET",
+			"url":     "https://example.com/",
+			"headers": []map[string]string{},
+			"body":    map[string]any{"kind": "none", "value": nil},
+		},
+	})
+	if err != nil {
+		t.Fatalf("invoke direct writes: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("direct writes emitted %d logs, want two: %#v", len(logs), logs)
+	}
+	if logs[0].Stream != "stdout" || logs[0].Message != "stdout first\nstdout second" {
+		t.Fatalf("stdout direct write = %+v", logs[0])
+	}
+	if logs[1].Stream != "stderr" || logs[1].Message != "stderr first\nstderr second" {
+		t.Fatalf("stderr direct write = %+v", logs[1])
+	}
+}
+
+func TestWorkerStandardLibraryLoggingPreservesEmbeddedNewlines(t *testing.T) {
+	const source = `from flowlens import *
+import logging
+import warnings
+
+def onRequest(context, request):
+    logging.warning("logging first\nlogging second")
+    warnings.warn("warning first\nwarning second")
+    return request
+
+def onResponse(context, response):
+    return response
+`
+
+	var logs []WorkerLog
+	pool, manager, plugin := newPythonWorkerHarness(t, 1, func(entry WorkerLog) {
+		logs = append(logs, entry)
+	})
+	plugin = writeAndActivatePlugin(t, manager, plugin.ID, source)
+	_, err := pool.Invoke(context.Background(), InvokeRequest{
+		ExecutionID: "execution-standard-library-logging",
+		PluginID:    plugin.ID,
+		PluginName:  plugin.Name,
+		Revision:    plugin.ActiveRevision,
+		Path:        manager.revisionPath(plugin.ID, plugin.ActiveRevision),
+		Hook:        "onRequest",
+		Context:     integrationContext(map[string]any{}, map[string]any{}),
+		Value: map[string]any{
+			"method":  "GET",
+			"url":     "https://example.com/",
+			"headers": []map[string]string{},
+			"body":    map[string]any{"kind": "none", "value": nil},
+		},
+	})
+	if err != nil {
+		t.Fatalf("invoke standard library logging: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("standard library logging emitted %d logs, want two: %#v", len(logs), logs)
+	}
+	for _, entry := range logs {
+		if entry.Stream != "stderr" || entry.Level != "error" {
+			t.Fatalf("standard library log metadata = %+v", entry)
+		}
+	}
+	if !strings.Contains(logs[0].Message, "logging first\nlogging second") {
+		t.Fatalf("logging message = %q", logs[0].Message)
+	}
+	if !strings.Contains(logs[1].Message, "warning first\nwarning second") {
+		t.Fatalf("warning message = %q", logs[1].Message)
+	}
+}
+
 func TestWorkerFirstPhaseSDKSurfaceAndSemanticRequestSnapshot(t *testing.T) {
 	pool, manager, plugin := newPythonWorkerHarness(t, 1, nil)
 	plugin = writeAndActivatePlugin(t, manager, plugin.ID, firstPhaseAPIPluginSource)

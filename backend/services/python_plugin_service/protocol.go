@@ -17,6 +17,7 @@ type workerMessage struct {
 	RequestID       string          `json:"requestId,omitempty"`
 	ExecutionID     string          `json:"executionId,omitempty"`
 	PluginID        string          `json:"pluginId,omitempty"`
+	PluginName      string          `json:"pluginName,omitempty"`
 	Level           string          `json:"level,omitempty"`
 	Stream          string          `json:"stream,omitempty"`
 	Message         string          `json:"message,omitempty"`

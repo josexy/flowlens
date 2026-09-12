@@ -21,7 +21,8 @@
     "lint": "eslint . --cache",
     "lint:tailwind": "node scripts/check-tailwind-diagnostics.mjs",
     "lint:fix": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "test:python-console": "node --experimental-strip-types tests/pythonConsole.test.ts"
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.6.0",

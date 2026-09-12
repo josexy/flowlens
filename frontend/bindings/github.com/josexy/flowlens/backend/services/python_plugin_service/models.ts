@@ -50,6 +50,7 @@ export interface PluginLogEntry {
     "requestId": string;
     "executionId": string;
     "pluginId": string;
+    "pluginName": string;
     "level": string;
     "stream": string;
     "message": string;

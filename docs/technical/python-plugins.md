@@ -151,7 +151,7 @@ This places the current-request script closest to the network boundary. Turning 
 
 ## Read script output in the Console
 
-The response-side **Console** tab streams `stdout`, `stderr`, and `context.log` entries while the current send is running. Entries are correlated by the send's execution ID, so output from other Request Editor tabs is excluded. The console renders the latest 1,000 entries for the tab's latest send in a read-only Monaco editor. Automatic wrapping starts enabled and can be toggled; the toolbar can also copy all output, save it to a local file, or clear the tab's current output. The console includes every global plugin and the current-request script in the same execution chain, identified by the global plugin ID or the **Current Request Script** label.
+The response-side **Console** tab streams `stdout`, `stderr`, and `context.log` entries while the current send is running. Entries are correlated by the send's execution ID, so output from other Request Editor tabs is excluded. The console renders the latest 1,000 entries for the tab's latest send in a virtualized log table with time, type, source, and Python output columns. Click a row to open its full text in a detail window, where wrapping, copying, and saving are available; the toolbar can also copy all output, save it to a local file, or clear the tab's current output. The console includes every global plugin and the current-request script in the same execution chain; global plugins use their plugin name, while the current-request script is shown as **Current script**. Each `print()` call becomes one log entry, and embedded newlines remain inside that entry.
 
 ## Package layout and manifest
 
@@ -642,7 +642,9 @@ FlowLens has no automatic dependency installer and v1 uses one configured interp
 
 ## Logging and diagnostics
 
-Use `context.log.debug()`, `info()`, `warning()`, or `error()`. `print()` is captured as `info` from `stdout`; writes to `stderr` are captured as `error`. Execution output is shown in the HTTP Request Editor **Console** tab for the current send. The plugin workbench intentionally has no separate log history: rules, params, files, and validation stay in the workbench, while runtime output stays with the request execution that produced it.
+Use `context.log.debug()`, `info()`, `warning()`, or `error()`. `print()`, `sys.stdout.write()`, and `sys.stderr.write()` preserve embedded newlines within each call instead of splitting them into separate entries. `print()` and stdout are captured as `info`; stderr is captured as `error`. Execution output is shown in the HTTP Request Editor **Console** tab for the current send. The plugin workbench intentionally has no separate log history: rules, params, files, and validation stay in the workbench, while runtime output stays with the request execution that produced it.
+
+Do not use `os.write(1, ...)`, `sys.__stdout__`, or let child processes inherit the Worker's stdout. These paths bypass the log wrapper and can write non-protocol bytes into the Worker channel, causing execution failure. `os.write(2, ...)`, `sys.__stderr__`, and child-process stderr inheritance also bypass the Console and remain only in the Worker's diagnostic stderr.
 
 Hook outcomes, matched revisions, per-phase durations, transformations, and sanitized diagnostics appear with the HTTP Request Editor result. Log messages are your plugin's responsibility and may contain sensitive data, so avoid printing credentials or request bodies.
 

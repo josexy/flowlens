@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import importlib.util
 import inspect
 import json
@@ -22,7 +23,9 @@ _protocol_stdin = sys.stdin.buffer
 _active_request_id = ""
 _active_execution_id = ""
 _active_plugin_id = ""
+_active_plugin_name = ""
 _module_cache = {}
+_original_print = builtins.print
 
 
 def _write_frame(message):
@@ -59,6 +62,7 @@ def _emit_log(level, message, stream="plugin"):
             "requestId": _active_request_id,
             "executionId": _active_execution_id,
             "pluginId": _active_plugin_id,
+            "pluginName": _active_plugin_name,
             "level": level,
             "stream": stream,
             "message": text,
@@ -71,22 +75,19 @@ class _LogWriter:
     def __init__(self, level, stream):
         self.level = level
         self.stream = stream
-        self.buffer = ""
 
     def write(self, value):
         if not isinstance(value, str):
             value = str(value)
-        self.buffer += value
-        while "\n" in self.buffer:
-            line, self.buffer = self.buffer.split("\n", 1)
-            if line:
-                _emit_log(self.level, line, self.stream)
+        text = value[:-1] if value.endswith("\n") else value
+        if text.endswith("\r"):
+            text = text[:-1]
+        if text:
+            _emit_log(self.level, text, self.stream)
         return len(value)
 
     def flush(self):
-        if self.buffer:
-            _emit_log(self.level, self.buffer, self.stream)
-            self.buffer = ""
+        return None
 
     def isatty(self):
         return False
@@ -97,6 +98,27 @@ _stderr_log = _LogWriter("error", "stderr")
 sys.stdout = _stdout_log
 sys.stderr = _stderr_log
 sys.dont_write_bytecode = True
+
+
+def _plugin_print(*objects, sep=" ", end="\n", file=None, flush=False):
+    """Keep one Python print call as one log entry, including embedded newlines."""
+    target = _stdout_log if file is None else file
+    if target is not _stdout_log and target is not _stderr_log:
+        return _original_print(*objects, sep=sep, end=end, file=file, flush=flush)
+
+    if sep is None:
+        sep = " "
+    if end is None:
+        end = "\n"
+    message = sep.join(str(value) for value in objects)
+    if end != "\n":
+        message += end
+    _emit_log(target.level, message, target.stream)
+    if flush:
+        target.flush()
+
+
+builtins.print = _plugin_print
 
 
 def _flush_logs():
@@ -236,7 +258,7 @@ def _handle_invoke(message, flowlens):
 
 
 def main():
-    global _active_request_id, _active_execution_id, _active_plugin_id
+    global _active_request_id, _active_execution_id, _active_plugin_id, _active_plugin_name
     if len(sys.argv) != 2:
         raise RuntimeError("expected SDK root argument")
     sdk_root = os.path.abspath(sys.argv[1])
@@ -262,6 +284,7 @@ def main():
         _active_request_id = request_id
         _active_execution_id = message.get("executionId", "")
         _active_plugin_id = message.get("pluginId", "")
+        _active_plugin_name = message.get("pluginName", "")
         try:
             message_type = message.get("type")
             if message_type == "validate":
@@ -278,6 +301,7 @@ def main():
             _active_request_id = ""
             _active_execution_id = ""
             _active_plugin_id = ""
+            _active_plugin_name = ""
 
 
 if __name__ == "__main__":

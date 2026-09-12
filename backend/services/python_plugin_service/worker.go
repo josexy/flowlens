@@ -37,6 +37,7 @@ type WorkerLog struct {
 	RequestID   string `json:"requestId"`
 	ExecutionID string `json:"executionId"`
 	PluginID    string `json:"pluginId"`
+	PluginName  string `json:"pluginName"`
 	Level       string `json:"level"`
 	Stream      string `json:"stream"`
 	Message     string `json:"message"`
@@ -521,7 +522,8 @@ func (w *pythonWorker) do(ctx context.Context, requestID string, request any) wo
 				if w.logSink != nil {
 					w.logSink(WorkerLog{
 						RequestID: message.RequestID, ExecutionID: message.ExecutionID,
-						PluginID: message.PluginID, Level: message.Level, Stream: message.Stream,
+						PluginID: message.PluginID, PluginName: message.PluginName,
+						Level: message.Level, Stream: message.Stream,
 						Message: message.Message, Timestamp: message.Timestamp,
 					})
 				}
