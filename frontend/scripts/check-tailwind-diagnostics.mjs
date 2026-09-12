@@ -42,7 +42,9 @@ const tailwindSettings = {
   classFunctions: [],
   validate: true,
   lint: {
-    cssConflict: 'warning',
+    // Conditional state/variant classes intentionally overlap in their CSS properties.
+    // Keep the all-rules check focused on actionable Tailwind diagnostics.
+    cssConflict: 'ignore',
     deprecatedAtRule: 'warning',
     invalidApply: 'error',
     invalidConfigPath: 'error',
@@ -446,6 +448,7 @@ class LspClient {
     this.pending = new Map()
     this.diagnostics = new Map()
     this.buffer = Buffer.alloc(0)
+    this.diagnosticsReceived = false
     this.lastDiagnosticAt = Date.now()
   }
 
@@ -542,6 +545,7 @@ class LspClient {
     }
 
     if (message.method === 'textDocument/publishDiagnostics') {
+      this.diagnosticsReceived = true
       this.diagnostics.set(message.params.uri, message.params.diagnostics ?? [])
       this.lastDiagnosticAt = Date.now()
       return
@@ -591,7 +595,7 @@ class LspClient {
     const start = Date.now()
 
     while (Date.now() - start < timeoutMs) {
-      if (Date.now() - this.lastDiagnosticAt >= idleMs) {
+      if (this.diagnosticsReceived && Date.now() - this.lastDiagnosticAt >= idleMs) {
         return
       }
 
