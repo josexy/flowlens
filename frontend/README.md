@@ -59,7 +59,7 @@ npm run lint:tailwind -- --fix
 npm run format
 ```
 
-On Windows PowerShell, use `npm.cmd` when forwarding script arguments, for example `npm.cmd run lint:tailwind -- --all`, so the arguments reach the script.
+On Windows PowerShell, use `npm` when forwarding script arguments, for example `npm run lint:tailwind -- --all`, so the arguments reach the script.
 
 ## Notes
 

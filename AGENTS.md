@@ -153,7 +153,7 @@ npm run lint:tailwind
 npm run build
 ```
 
-按范围选择最小集合；组件结构、主题或生产打包相关改动执行 `npm run build`。Tailwind 全量诊断使用 `npm run lint:tailwind -- --all`，自动修复只使用显式的 `lint:fix` 或 `lint:tailwind -- --fix`。Windows PowerShell 下转发脚本参数时使用 `npm.cmd`，例如 `npm.cmd run lint:tailwind -- --all`。
+按范围选择最小集合；组件结构、主题或生产打包相关改动执行 `npm run build`。Tailwind 全量诊断使用 `npm run lint:tailwind -- --all`，自动修复只使用显式的 `lint:fix` 或 `lint:tailwind -- --fix`。Windows PowerShell 下转发脚本参数时使用 `npm`，例如 `npm run lint:tailwind -- --all`。
 
 ## 7. 文档、提交与完成标准
 
