@@ -204,6 +204,8 @@ function ensureProxyConfig(settings: settingservice.Settings) {
       disableProxy: false,
       disableHttp2: false,
       skipVerifyTls: false,
+      antiCache: false,
+      antiComp: false,
       includeHosts: [],
       excludeHosts: [],
       rootCAPaths: [],
@@ -215,6 +217,8 @@ function ensureProxyConfig(settings: settingservice.Settings) {
   settings.proxyConfig.excludeHosts ??= []
   settings.proxyConfig.rootCAPaths ??= []
   settings.proxyConfig.clientCerts ??= []
+  settings.proxyConfig.antiCache ??= false
+  settings.proxyConfig.antiComp ??= false
   return settings.proxyConfig
 }
 
@@ -327,6 +331,8 @@ function cloneProxyConfig(config: settingservice.ProxyConfig): settingservice.Pr
     disableProxy: config.disableProxy,
     disableHttp2: config.disableHttp2,
     skipVerifyTls: config.skipVerifyTls,
+    antiCache: config.antiCache,
+    antiComp: config.antiComp,
     includeHosts: [...(config.includeHosts ?? [])],
     excludeHosts: [...(config.excludeHosts ?? [])],
     rootCAPaths: [...(config.rootCAPaths ?? [])],
@@ -891,6 +897,8 @@ export const useSettingStore = defineStore('setting', () => {
     cfg.disableProxy = false
     cfg.disableHttp2 = false
     cfg.skipVerifyTls = false
+    cfg.antiCache = false
+    cfg.antiComp = false
     cfg.includeHosts = []
     cfg.excludeHosts = []
     cfg.rootCAPaths = []

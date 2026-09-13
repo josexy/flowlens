@@ -100,6 +100,8 @@ export interface ProxyConfig {
     "disableProxy": boolean;
     "disableHttp2": boolean;
     "skipVerifyTls": boolean;
+    "antiCache": boolean;
+    "antiComp": boolean;
     "includeHosts": string[] | null;
     "excludeHosts": string[] | null;
     "rootCAPaths": string[] | null;

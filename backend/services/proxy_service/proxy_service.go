@@ -96,6 +96,8 @@ type ProxyService struct {
 	proxyServerCancel context.CancelFunc
 	proxyHandler      mitmproxy.DynamicMitmProxyHandler
 	startProxyConfig  *settingservice.ProxyConfig
+	antiCache         atomic.Bool
+	antiComp          atomic.Bool
 	settingService    *settingservice.SettingService
 
 	trafficEntries          *TrafficEntryWithStatics
@@ -425,6 +427,8 @@ func (s *ProxyService) Start() (ProxyStatus, error) {
 	s.proxyServerCancel = proxyServerCancel
 	s.proxyHandler = handler
 	s.startProxyConfig = cloneProxyConfig(cfg)
+	s.antiCache.Store(cfg.AntiCache)
+	s.antiComp.Store(cfg.AntiComp)
 	s.server = server
 	s.ln = ln
 	s.enableFlushing.Store(true)
@@ -435,12 +439,14 @@ func (s *ProxyService) Start() (ProxyStatus, error) {
 	s.runLifecycleOperationHook("start-published")
 
 	logger.G().Infof(
-		"Proxy started: mode=%s address=%s disableProxy=%t disableHTTP2=%t skipVerifyTLS=%t",
+		"Proxy started: mode=%s address=%s disableProxy=%t disableHTTP2=%t skipVerifyTLS=%t antiCache=%t antiComp=%t",
 		cfg.Mode,
 		listener.Addr().String(),
 		cfg.DisableProxy,
 		cfg.DisableHTTP2,
 		cfg.SkipVerifyTLS,
+		cfg.AntiCache,
+		cfg.AntiComp,
 	)
 	return status, nil
 }
@@ -591,12 +597,16 @@ func (s *ProxyService) ApplyCurrentProxyConfig() (ProxyConfigApplyResult, error)
 		logger.G().Errorf("Failed to apply runtime proxy config: %v", err)
 		return ProxyConfigApplyResult{}, err
 	}
+	s.antiCache.Store(cfg.AntiCache)
+	s.antiComp.Store(cfg.AntiComp)
 
 	logger.G().Infof(
-		"Applied runtime proxy config: disableProxy=%t disableHTTP2=%t skipVerifyTLS=%t includeHosts=%d excludeHosts=%d",
+		"Applied runtime proxy config: disableProxy=%t disableHTTP2=%t skipVerifyTLS=%t antiCache=%t antiComp=%t includeHosts=%d excludeHosts=%d",
 		cfg.DisableProxy,
 		cfg.DisableHTTP2,
 		cfg.SkipVerifyTLS,
+		cfg.AntiCache,
+		cfg.AntiComp,
 		len(cfg.IncludeHosts),
 		len(cfg.ExcludeHosts),
 	)
@@ -716,8 +726,10 @@ func (s *ProxyService) isCurrentTrafficEntryLocked(entry *TrafficEntry) bool {
 	return entry.lifecycle == nil || !entry.lifecycle.deleted.Load()
 }
 
-func (s *ProxyService) httpInterceptor(cfg *settingservice.ProxyConfig) mitmproxy.HTTPInterceptor {
+func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.HTTPInterceptor {
 	return func(ctx context.Context, req *http.Request, invoker mitmproxy.HTTPDelegatedInvoker) (*http.Response, error) {
+		prepared := s.prepareLiveRequest(req)
+		req = prepared.request
 		entry := &TrafficEntry{
 			Type:   req.URL.Scheme,
 			Method: req.Method,
@@ -727,6 +739,11 @@ func (s *ProxyService) httpInterceptor(cfg *settingservice.ProxyConfig) mitmprox
 		}
 
 		s.fillRequestHTTPMessage(req, entry)
+		if prepared.optionsApplied {
+			entry.Request.HeaderFields = prepared.headerFields
+			entry.Request.HeadersTruncated = prepared.headersTruncated
+			entry.Request.HeaderOrderUnavailable = prepared.orderUnavailable
+		}
 		entry.Request.Metrics = newPendingHTTPMessageMetrics(-1)
 		entry = s.registerTrafficEntry(ctx, *entry)
 		exchange := newCaptureExchange(s, ctx, entry)
@@ -1846,6 +1863,7 @@ func (s *ProxyService) ResendRequestWithTrafficEntry(ctx context.Context, cfg Re
 		int64(len(reqBodyBytes)),
 		hasRequestBody,
 	)
+	resendFields = transformLiveHeaderFields(resendFields, proxyConfig.AntiCache, proxyConfig.AntiComp)
 
 	s.mu.Lock()
 	running := s.running
@@ -2185,11 +2203,6 @@ func (s *ProxyService) SendHTTPRequest(
 	if err != nil {
 		return SendRequestResponse{}, err
 	}
-	if protocol == SendRequestProtocolAuto {
-		if err := validateSyntheticAutoHeaderOrder(headerFields); err != nil {
-			return SendRequestResponse{}, err
-		}
-	}
 	headerFields = reconcileSyntheticBodyFraming(
 		headerFields,
 		protocol,
@@ -2197,6 +2210,12 @@ func (s *ProxyService) SendHTTPRequest(
 		requestBody.reader != nil,
 	)
 	headerFields = applyFallbackUserAgentField(headerFields, protocol)
+	headerFields = transformLiveHeaderFields(headerFields, proxyConfig.AntiCache, proxyConfig.AntiComp)
+	if protocol == SendRequestProtocolAuto {
+		if err := validateSyntheticAutoHeaderOrder(headerFields); err != nil {
+			return SendRequestResponse{}, err
+		}
+	}
 
 	proxyURL, err := s.resolveSendRequestProxy(cfg, proxyConfig)
 	if err != nil {

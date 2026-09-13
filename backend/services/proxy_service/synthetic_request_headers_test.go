@@ -7,12 +7,14 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/mitmproxy-go/v2"
 	http "github.com/josexy/xhttp"
 	"github.com/josexy/xhttp/httptest"
 )
@@ -326,6 +328,131 @@ func TestSendHTTPRequestHTTP1WritesExactHeaderLines(t *testing.T) {
 	}
 	if !reflect.DeepEqual(response.HeaderFields, wantResponseFields) {
 		t.Fatalf("response fields:\n got %#v\nwant %#v", response.HeaderFields, wantResponseFields)
+	}
+}
+
+func TestTransformLiveHeaderFields(t *testing.T) {
+	fields := []HTTPHeaderField{
+		{Name: "Host", Value: "example.test"},
+		{Name: "If-None-Match", Value: "etag-a"},
+		{Name: "if-none-match", Value: "etag-b"},
+		{Name: "Accept-Encoding", Value: "gzip"},
+		{Name: "accept-encoding", Value: "br"},
+		{Name: "X-Empty", Value: ""},
+	}
+
+	got := transformLiveHeaderFields(fields, true, true)
+	want := []HTTPHeaderField{
+		{Name: "Host", Value: "example.test"},
+		{Name: "Accept-Encoding", Value: "identity"},
+		{Name: "X-Empty", Value: ""},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("transformed fields = %#v, want %#v", got, want)
+	}
+}
+
+func TestTransformLiveHeaderOrder(t *testing.T) {
+	order := []string{"Host", ":method", "If-None-Match", "Accept-Encoding", "X-Test"}
+	got := transformLiveHeaderOrder(order, true, true, http.Header{
+		"Accept-Encoding": {"identity"},
+	})
+	want := []string{"Host", ":method", "Accept-Encoding", "X-Test"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("transformed order = %#v, want %#v", got, want)
+	}
+
+	got = transformLiveHeaderOrder([]string{"Host"}, false, true, http.Header{
+		"Accept-Encoding": {"identity"},
+	})
+	want = []string{"Host", "Accept-Encoding"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("order with new accept-encoding = %#v, want %#v", got, want)
+	}
+}
+
+func TestLiveRequestOptionsModifyUpstreamAndCaptureHeaders(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	svc.antiCache.Store(true)
+	svc.antiComp.Store(true)
+
+	req, err := http.NewRequest(http.MethodGet, "http://capture.test/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header["If-None-Match"] = []string{"etag-a", "etag-b"}
+	req.Header["IF-MODIFIED-SINCE"] = []string{"yesterday"}
+	req.Header["Accept-Encoding"] = []string{"gzip", "br"}
+
+	var forwarded *http.Request
+	_, err = svc.httpInterceptor(nil)(newRawTCPMetadataContext(), req, mitmproxy.HTTPDelegatedInvokerFunc(func(next *http.Request) (*http.Response, error) {
+		forwarded = next
+		return &http.Response{StatusCode: http.StatusNoContent, Proto: "HTTP/1.1", Body: http.NoBody}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forwarded == nil {
+		t.Fatal("invoker did not receive a request")
+	}
+	if got := forwarded.Header.Values("If-None-Match"); len(got) != 0 {
+		t.Fatalf("If-None-Match forwarded = %#v", got)
+	}
+	if got := forwarded.Header.Values("If-Modified-Since"); len(got) != 0 {
+		t.Fatalf("If-Modified-Since forwarded = %#v", got)
+	}
+	if got := forwarded.Header.Values("Accept-Encoding"); !slices.Equal(got, []string{"identity"}) {
+		t.Fatalf("Accept-Encoding forwarded = %#v", got)
+	}
+
+	entries := svc.GetTraffic()
+	if len(entries) != 1 || entries[0].Request == nil {
+		t.Fatalf("captured entries = %#v", entries)
+	}
+	if got := entries[0].Request.HeaderFields; slices.ContainsFunc(got, func(field HTTPHeaderField) bool {
+		return strings.EqualFold(field.Name, "If-None-Match") || strings.EqualFold(field.Name, "If-Modified-Since")
+	}) {
+		t.Fatalf("capture retained cache validators = %#v", got)
+	}
+	if got := firstHeaderFieldValue(entries[0].Request.HeaderFields, "Accept-Encoding"); got != "identity" {
+		t.Fatalf("captured Accept-Encoding = %q", got)
+	}
+}
+
+func TestSendHTTPRequestAppliesAntiCacheAndAntiComp(t *testing.T) {
+	serverURL, wireCh := startRawHTTP1CaptureServer(t, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+	svc := newTestProxyService(t, &settingservice.ProxyConfig{AntiCache: true, AntiComp: true})
+	_, err := svc.SendHTTPRequest(
+		context.Background(),
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP1},
+		http.MethodGet,
+		serverURL,
+		[]HTTPHeaderField{
+			{Name: "If-None-Match", Value: "etag"},
+			{Name: "If-Modified-Since", Value: "yesterday"},
+			{Name: "Accept-Encoding", Value: "gzip"},
+			{Name: "accept-encoding", Value: "br"},
+		},
+		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := requestHeaderLines(<-wireCh)
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "if-none-match:") || strings.HasPrefix(lower, "if-modified-since:") {
+			t.Fatalf("cache validator was sent: %q", line)
+		}
+	}
+	var acceptEncoding []string
+	for _, line := range lines {
+		if strings.HasPrefix(strings.ToLower(line), "accept-encoding:") {
+			acceptEncoding = append(acceptEncoding, strings.TrimSpace(strings.TrimPrefix(line, "Accept-Encoding:")))
+		}
+	}
+	if !reflect.DeepEqual(acceptEncoding, []string{"identity"}) {
+		t.Fatalf("Accept-Encoding lines = %#v, want [identity]; lines=%#v", acceptEncoding, lines)
 	}
 }
 
@@ -695,6 +822,46 @@ func TestResendRequestPreservesExactHTTP1HeaderOccurrences(t *testing.T) {
 	}
 	if got := requestHeaderLines(<-wireCh); !reflect.DeepEqual(got, want) {
 		t.Fatalf("resent HTTP/1 fields:\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestResendRequestAppliesAntiCacheAndAntiComp(t *testing.T) {
+	serverURL, wireCh := startRawHTTP1CaptureServer(t, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+	svc := newTestProxyService(t, &settingservice.ProxyConfig{AntiCache: true, AntiComp: true})
+	entry := &TrafficEntry{
+		ID:     303,
+		Type:   "http",
+		Method: http.MethodGet,
+		URL:    serverURL,
+		Request: &HTTPMessage{HeaderFields: []HTTPHeaderField{
+			{Name: "If-None-Match", Value: "etag"},
+			{Name: "if-modified-since", Value: "yesterday"},
+			{Name: "Accept-Encoding", Value: "gzip"},
+			{Name: "accept-encoding", Value: "br"},
+		}},
+	}
+
+	result, err := svc.ResendRequestWithTrafficEntry(context.Background(), ResendConfig{Count: 1}, entry, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != (ResendResult{Success: 1}) {
+		t.Fatalf("result = %+v, want one success", result)
+	}
+
+	var acceptEncoding []string
+	for _, line := range requestHeaderLines(<-wireCh) {
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "if-none-match:") || strings.HasPrefix(lower, "if-modified-since:") {
+			t.Fatalf("cache validator was sent: %q", line)
+		}
+		if strings.HasPrefix(lower, "accept-encoding:") {
+			separator := strings.IndexByte(line, ':')
+			acceptEncoding = append(acceptEncoding, strings.TrimSpace(line[separator+1:]))
+		}
+	}
+	if !reflect.DeepEqual(acceptEncoding, []string{"identity"}) {
+		t.Fatalf("Accept-Encoding lines = %#v, want [identity]", acceptEncoding)
 	}
 }
 

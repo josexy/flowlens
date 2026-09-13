@@ -310,6 +310,9 @@ func TestUpdateSanitizesProxyAdvancedDefaults(t *testing.T) {
 	if cfg.CACertPath != defaultProxyCACertPath || cfg.CAKeyPath != defaultProxyCAKeyPath {
 		t.Fatalf("ca path defaults not sanitized: cert=%q key=%q", cfg.CACertPath, cfg.CAKeyPath)
 	}
+	if cfg.AntiCache || cfg.AntiComp {
+		t.Fatalf("anti-cache/compression defaults should be disabled: antiCache=%t antiComp=%t", cfg.AntiCache, cfg.AntiComp)
+	}
 	if cfg.UpstreamMode != UpstreamProxyModeSystem {
 		t.Fatalf("expected invalid upstream mode to fall back to system, got %q", cfg.UpstreamMode)
 	}

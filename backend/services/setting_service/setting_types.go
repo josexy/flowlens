@@ -77,6 +77,8 @@ type ProxyConfig struct {
 	DisableProxy  bool               `json:"disableProxy"`
 	DisableHTTP2  bool               `json:"disableHttp2"`
 	SkipVerifyTLS bool               `json:"skipVerifyTls"`
+	AntiCache     bool               `json:"antiCache"`
+	AntiComp      bool               `json:"antiComp"`
 	IncludeHosts  []string           `json:"includeHosts"`
 	ExcludeHosts  []string           `json:"excludeHosts"`
 	RootCAPaths   []string           `json:"rootCAPaths"`

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/josexy/mitmproxy-go/v2"
 	http "github.com/josexy/xhttp"
 )
 
@@ -150,6 +151,14 @@ func completeRequestHeaderFields(
 	req *http.Request,
 	blocks []http.HeaderBlock,
 ) (fields []HTTPHeaderField, truncated bool, orderUnavailable bool) {
+	fallback := requestHeaderFallbackFields(req)
+	return completeInitialHeaderFields(blocks, fallback)
+}
+
+func requestHeaderFallbackFields(req *http.Request) []HTTPHeaderField {
+	if req == nil {
+		return nil
+	}
 	fallback := make([]HTTPHeaderField, 0, len(req.Header)+6)
 	host := req.Host
 	if host == "" && req.URL != nil {
@@ -196,7 +205,7 @@ func completeRequestHeaderFields(
 			Value: value,
 		}})
 	}
-	return completeInitialHeaderFields(blocks, fallback)
+	return fallback
 }
 
 func completeResponseHeaderFields(
@@ -255,4 +264,128 @@ func completeResponseHeaderFields(
 
 func syntheticResponseHeaderBlocks(resp *http.Response) []http.HeaderBlock {
 	return http.ResponseHeaderBlocks(resp)
+}
+
+type preparedLiveRequest struct {
+	request          *http.Request
+	headerFields     []HTTPHeaderField
+	headersTruncated bool
+	orderUnavailable bool
+	optionsApplied   bool
+}
+
+func (s *ProxyService) prepareLiveRequest(req *http.Request) preparedLiveRequest {
+	prepared := preparedLiveRequest{request: req}
+	if req == nil {
+		return prepared
+	}
+	antiCache := s.antiCache.Load()
+	antiComp := s.antiComp.Load()
+	if !antiCache && !antiComp {
+		return prepared
+	}
+	prepared.optionsApplied = true
+
+	blocks := mitmproxy.RequestWireHeaderBlocks(req)
+	initialFields, truncated := initialHeaderFields(blocks)
+	prepared.headersTruncated = truncated
+
+	if antiCache {
+		deleteLiveHeader(req.Header, "If-None-Match")
+		deleteLiveHeader(req.Header, "If-Modified-Since")
+	}
+	if antiComp {
+		deleteLiveHeader(req.Header, "Accept-Encoding")
+		req.Header.Set("Accept-Encoding", "identity")
+	}
+
+	if len(initialFields) > 0 || (len(blocks) > 0 && initialFields != nil) {
+		prepared.headerFields = transformLiveHeaderFields(initialFields, antiCache, antiComp)
+		if truncated {
+			prepared.headerFields = mergeMissingHeaderFields(
+				prepared.headerFields,
+				requestHeaderFallbackFields(req),
+			)
+		}
+		prepared.orderUnavailable = false
+	} else {
+		prepared.headerFields, _, prepared.orderUnavailable = completeRequestHeaderFields(req, nil)
+	}
+
+	order := mitmproxy.RequestWireHeaderOrder(req)
+	if len(order.Headers) > 0 || len(order.Trailers) > 0 {
+		order.Headers = transformLiveHeaderOrder(order.Headers, antiCache, antiComp, req.Header)
+		if next, err := mitmproxy.WithRequestHeaderOrder(req, order); err == nil {
+			prepared.request = next
+		}
+	}
+	return prepared
+}
+
+func transformLiveHeaderFields(fields []HTTPHeaderField, antiCache, antiComp bool) []HTTPHeaderField {
+	result := make([]HTTPHeaderField, 0, len(fields)+1)
+	acceptEncodingAdded := false
+	for _, field := range fields {
+		name := strings.ToLower(field.Name)
+		if antiCache && (name == "if-none-match" || name == "if-modified-since") {
+			continue
+		}
+		if antiComp && name == "accept-encoding" {
+			if !acceptEncodingAdded {
+				result = append(result, HTTPHeaderField{Name: field.Name, Value: "identity"})
+				acceptEncodingAdded = true
+			}
+			continue
+		}
+		result = append(result, field)
+	}
+	if antiComp && !acceptEncodingAdded {
+		result = append(result, HTTPHeaderField{Name: "Accept-Encoding", Value: "identity"})
+	}
+	return result
+}
+
+func transformLiveHeaderOrder(
+	names []string,
+	antiCache bool,
+	antiComp bool,
+	headers http.Header,
+) []string {
+	result := make([]string, 0, len(names)+1)
+	acceptEncodingAdded := false
+	for _, name := range names {
+		lower := strings.ToLower(name)
+		if antiCache && (lower == "if-none-match" || lower == "if-modified-since") {
+			continue
+		}
+		if antiComp && lower == "accept-encoding" {
+			if !acceptEncodingAdded {
+				result = append(result, name)
+				acceptEncodingAdded = true
+			}
+			continue
+		}
+		result = append(result, name)
+	}
+	if antiComp && !acceptEncodingAdded && hasLiveHeader(headers, "Accept-Encoding") {
+		result = append(result, "Accept-Encoding")
+	}
+	return result
+}
+
+func deleteLiveHeader(headers http.Header, name string) {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			delete(headers, key)
+		}
+	}
+}
+
+func hasLiveHeader(headers http.Header, name string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }

@@ -126,6 +126,8 @@ const currentPort = computed(() => proxyConfig.value?.port ?? 8080)
 const disableProxy = computed(() => proxyConfig.value?.disableProxy ?? false)
 const disableHttp2 = computed(() => proxyConfig.value?.disableHttp2 ?? false)
 const skipVerifyTls = computed(() => proxyConfig.value?.skipVerifyTls ?? false)
+const antiCache = computed(() => proxyConfig.value?.antiCache ?? false)
+const antiComp = computed(() => proxyConfig.value?.antiComp ?? false)
 const hostFilterCount = computed(
   () =>
     (proxyConfig.value?.includeHosts?.length ?? 0) + (proxyConfig.value?.excludeHosts?.length ?? 0),
@@ -166,6 +168,8 @@ function ensureProxyConfig(settings: NonNullable<typeof settingStore.settings>):
       disableProxy: false,
       disableHttp2: false,
       skipVerifyTls: false,
+      antiCache: false,
+      antiComp: false,
       includeHosts: [],
       excludeHosts: [],
       rootCAPaths: [],
@@ -176,6 +180,8 @@ function ensureProxyConfig(settings: NonNullable<typeof settingStore.settings>):
   settings.proxyConfig.excludeHosts ??= []
   settings.proxyConfig.rootCAPaths ??= []
   settings.proxyConfig.clientCerts ??= []
+  settings.proxyConfig.antiCache ??= false
+  settings.proxyConfig.antiComp ??= false
   return settings.proxyConfig
 }
 
@@ -285,7 +291,10 @@ async function handlePortSave(port: number | null) {
   portModalOpen.value = false
 }
 
-async function toggleBooleanSetting(key: 'disableProxy' | 'disableHttp2' | 'skipVerifyTls') {
+async function toggleBooleanSetting(
+  key: 'disableProxy' | 'disableHttp2' | 'skipVerifyTls' | 'antiCache' | 'antiComp',
+) {
+  if (applying.value) return
   await updateProxyConfig((cfg) => {
     cfg[key] = !cfg[key]
   })
@@ -479,8 +488,7 @@ onBeforeUnmount(() => {
             variant="ghost"
             size="md"
             square
-            :loading="systemProxyApplying"
-			:disabled="systemProxyApplying || (!systemProxyModeSupported && !systemProxyActive)"
+			:disabled="!systemProxyModeSupported && !systemProxyActive"
             :aria-pressed="systemProxyActive"
             :aria-label="systemProxyTooltip"
             @click="toggleSystemProxy"
@@ -520,6 +528,42 @@ onBeforeUnmount(() => {
             @click="toggleBooleanSetting('disableHttp2')"
           >
             <ProxyToolbarIcon name="http2" :active="disableHttp2" />
+          </UButton>
+        </UTooltip>
+
+        <UTooltip
+          :text="antiCache ? t('toolbar.anti_cache_on') : t('toolbar.anti_cache_off')"
+          :content="{ side: 'bottom' }"
+        >
+          <UButton
+            class="p-1"
+            :color="antiCache ? 'primary' : 'neutral'"
+            variant="ghost"
+            size="md"
+            square
+            :aria-pressed="antiCache"
+            :aria-label="t('toolbar.anti_cache')"
+            @click="toggleBooleanSetting('antiCache')"
+          >
+            <ProxyToolbarIcon name="anti-cache" :active="antiCache" />
+          </UButton>
+        </UTooltip>
+
+        <UTooltip
+          :text="antiComp ? t('toolbar.anti_comp_on') : t('toolbar.anti_comp_off')"
+          :content="{ side: 'bottom' }"
+        >
+          <UButton
+            class="p-1"
+            :color="antiComp ? 'primary' : 'neutral'"
+            variant="ghost"
+            size="md"
+            square
+            :aria-pressed="antiComp"
+            :aria-label="t('toolbar.anti_comp')"
+            @click="toggleBooleanSetting('antiComp')"
+          >
+            <ProxyToolbarIcon name="anti-comp" :active="antiComp" />
           </UButton>
         </UTooltip>
 
