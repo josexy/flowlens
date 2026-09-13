@@ -36,8 +36,14 @@ test('python console batches isolate executions and retain the newest entries', 
     message: String(index),
     timestamp: index + 1,
   }))
-  assert.deepEqual(filterPythonLogBatch(entries, 'current').map((entry) => entry.eventId), [1, 3])
+  assert.deepEqual(
+    filterPythonLogBatch(entries, 'current').map((entry) => entry.eventId),
+    [1, 3],
+  )
   const target = entries.slice(0, 2)
   appendPythonLogBatch(target, entries.slice(2), 3)
-  assert.deepEqual(target.map((entry) => entry.eventId), [2, 3, 4])
+  assert.deepEqual(
+    target.map((entry) => entry.eventId),
+    [2, 3, 4],
+  )
 })

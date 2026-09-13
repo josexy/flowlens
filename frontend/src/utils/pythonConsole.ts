@@ -28,7 +28,10 @@ export function pythonLogTone(entry: Pick<PluginLogEntry, 'level' | 'stream'>): 
 }
 
 export function pythonLogPreview(message: string, maxLength = 240) {
-  const normalized = message.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim()
+  const normalized = message
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (normalized.length <= maxLength) {
     return normalized
   }
