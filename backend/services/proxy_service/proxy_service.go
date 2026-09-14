@@ -2354,9 +2354,10 @@ func (s *ProxyService) SendHTTPRequest(
 		}
 	}()
 
+	bodylessResponse := responseHasNoEntityBody(method, resp)
 	bodyReader := resp.Body
 	contentEncoding := resp.Header.Get("Content-Encoding")
-	if contentEncoding != "" {
+	if !bodylessResponse && contentEncoding != "" {
 		bodyReader, err = getDecodedReader(resp.Body, contentEncoding)
 		if err != nil {
 			dumpResponse, _ := httputil.DumpResponse(resp, false)
@@ -2392,7 +2393,7 @@ func (s *ProxyService) SendHTTPRequest(
 	)
 
 	responseContentType := resp.Header.Get("Content-Type")
-	if isServerSentEventsContentType(responseContentType) {
+	if !bodylessResponse && isServerSentEventsContentType(responseContentType) {
 		if pluginSession != nil {
 			originalHeaderFields := append([]HTTPHeaderField(nil), response.HeaderFields...)
 			pluginResult := pluginSession.RunResponse(requestCtx, HTTPRequestPluginResponse{

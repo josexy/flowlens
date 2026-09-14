@@ -159,6 +159,79 @@ func TestSendHTTPRequestNoneBodyOmitsContentType(t *testing.T) {
 	}
 }
 
+func TestSendHTTPRequestBodylessResponsesSkipContentDecodingAndStreaming(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		method          string
+		statusCode      int
+		contentEncoding string
+		contentType     string
+	}{
+		{
+			name:            "not modified brotli metadata",
+			method:          http.MethodGet,
+			statusCode:      http.StatusNotModified,
+			contentEncoding: "br",
+			contentType:     "image/svg+xml",
+		},
+		{
+			name:            "no content gzip metadata",
+			method:          http.MethodGet,
+			statusCode:      http.StatusNoContent,
+			contentEncoding: "gzip",
+			contentType:     "application/json",
+		},
+		{
+			name:        "head event stream metadata",
+			method:      http.MethodHead,
+			statusCode:  http.StatusOK,
+			contentType: "text/event-stream",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tt.contentType)
+				if tt.contentEncoding != "" {
+					w.Header().Set("Content-Encoding", tt.contentEncoding)
+				}
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			svc := newTestProxyService(t, &settingservice.ProxyConfig{})
+			response, err := svc.SendHTTPRequest(
+				context.Background(),
+				SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
+				tt.method,
+				server.URL,
+				nil,
+				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			)
+			if err != nil {
+				t.Fatalf("SendHTTPRequest returned error: %v", err)
+			}
+			if response.StatusCode != tt.statusCode {
+				t.Fatalf("status code = %d, want %d", response.StatusCode, tt.statusCode)
+			}
+			if response.Body != "" || response.BodyEncoding != "" {
+				t.Fatalf("body = %q with encoding %q, want empty", response.Body, response.BodyEncoding)
+			}
+			if response.Streaming || response.StreamSessionID != "" {
+				t.Fatalf("bodyless response started stream session %q", response.StreamSessionID)
+			}
+			if got := firstHeaderFieldValue(response.HeaderFields, "Content-Encoding"); got != tt.contentEncoding {
+				t.Fatalf("content encoding header = %q, want %q", got, tt.contentEncoding)
+			}
+		})
+	}
+}
+
 func TestSendHTTPRequestSSEReturnsAfterResponseHeaders(t *testing.T) {
 	handlerDone := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
