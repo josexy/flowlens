@@ -370,9 +370,6 @@ const responseHeaderWarning = computed(() => {
   if (state.value.response?.headersTruncated) {
     return t('workspace.http_request.header_fields_truncated')
   }
-  if (state.value.response && !state.value.response.headersHaveWireOrder) {
-    return t('workspace.http_request.header_order_unavailable')
-  }
   return ''
 })
 
@@ -381,9 +378,6 @@ const hasResponseCookies = computed(() => hasHeader(responseHeadersRecord.value,
 const responseTrailerWarning = computed(() => {
   if (state.value.response?.trailersTruncated) {
     return t('workspace.http_request.trailer_fields_truncated')
-  }
-  if (state.value.response && !state.value.response.trailersHaveWireOrder) {
-    return t('workspace.http_request.trailer_order_unavailable')
   }
   return ''
 })

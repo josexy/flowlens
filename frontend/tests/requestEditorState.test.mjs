@@ -41,6 +41,17 @@ function savedHTTPRequest(overrides = {}) {
   }
 }
 
+test('traffic editing rejects missing request bodies while keeping actual empty bodies', () => {
+  const args = {
+    source: 'history-edit',
+    entry: { id: 1, method: 'POST', url: 'https://example.test/', host: 'example.test', request: { headerFields: [] } },
+    bodyView: { reqBody: '', rspBody: '', reqBodyUnavailable: true },
+  }
+  assert.throws(() => requestEditorState.toHttpRequestEditorState(args), /request_body_unavailable/)
+  args.bodyView.reqBodyUnavailable = false
+  assert.equal(requestEditorState.toHttpRequestEditorState(args).requestBodyText, '')
+})
+
 test('HTTP Request Editor saves and restores the current-request script source disabled', () => {
   const state = requestEditorState.buildEmptyHttpRequestEditorState('new')
   const tab = {

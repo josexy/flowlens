@@ -16,7 +16,7 @@ FlowLens 是基于 MITM 的跨平台桌面抓包工具，使用 `Wails v3 + Go 1
 - `main.go`：只负责嵌入资源并启动 `backend/app`。
 - `backend/app`：Wails 装配、SQLite 初始化、窗口/托盘/单实例生命周期、事件桥接与安全退出。
 - `backend/services/proxy_service`：代理核心、请求编辑与合成传输、WebSocket、重发、计时/大小采集、HBIN/HAR 和前端实时事件。
-- `backend/services/history_service`：历史读取、删除、重发和导出入口；共享编码与 HAR 实现仍由 `proxy_service` 提供。
+- `backend/services/history_service`：历史读取、删除、重发和 HAR 导入/导出入口；共享编码与 HAR 实现仍由 `proxy_service` 提供。
 - `backend/services/python_plugin_service`：插件注册、revision、规则、Worker、帧协议、SDK、请求 hook 和实时日志。
 - `backend/services/api_collection_service`：API Collection SQLite 仓储、树操作、事务和托管请求体文件。
 - `backend/pkg/process_attribution`：跨平台进程查询、异步 Manager、身份/图标缓存；`proxy_service` 只负责接入和生命周期。
@@ -48,7 +48,7 @@ FlowLens 是基于 MITM 的跨平台桌面抓包工具，使用 `Wails v3 + Go 1
 - Header/Trailer 对外模型保持 `[]HTTPHeaderField`。原始 HeaderBlock 可用时保留行顺序、重复项、大小写、空值和截断状态；不可用时才降级为规范化字段并标记线序不可用，不得退回 map。
 - HTTP 请求规范化集中在 `synthetic_request_headers.go`：URL 决定路由；伪 Header、`Host`、framing、生成的内容类型和 fallback UA 由后端维护。目标传输无法无损表达 HeaderOrder 时必须报错。
 - 合成传输与共享 TLS dialer 集中在 `synthetic_transport.go`。显式 HTTP/1.1 不应用 HTTP/2 指纹；重定向保持指纹语义；协议、代理和指纹配置通过 API Collection 完整往返。
-- `HTTPMessageMetrics` 只能来自传输边界事件，并保持微秒精度、重试隔离和 capture generation 隔离。失败、取消或不完整 Body 不得伪造完成值，未知数值使用 `-1`。
+- 实时抓包的 `HTTPMessageMetrics` 只能来自传输边界事件，并保持微秒精度、重试隔离和 capture generation 隔离。HAR 导入可将文件内有效统计映射到现有字段。失败、取消或不完整 Body 不得伪造完成值，未知数值使用 `-1`。
 - `HeaderSize` 是 Raw 面板完整文本头部的 UTF-8 逻辑大小，包含起始行、字段行和结束空行；HTTP/2 使用合成起始行及伪 Header 的显示转换，不含 TCP/TLS、HPACK 或 frame 开销。前端与 HAR 直接读取该指标；`BodySize` 是传输层编码后的实体 Body 字节数。后端时间戳统一保存 Unix 微秒。
 - 当前写入格式是 HBIN v2（新增上游连接计时），继续读取 v1，不兼容更早开发态布局。未知版本应跳过且不得删除；模型变化需同步 codec、历史测试、bindings 和前端。
 - HAR 生成与流式原子写入统一复用 `proxy_service` 的 `HARFileWriter`。区分空 Body 与缓存 Body 缺失，保留其余可导出项并统计 skipped/missingBodies。HAR 不会自动脱敏凭据、Cookie、Body 或进程路径。

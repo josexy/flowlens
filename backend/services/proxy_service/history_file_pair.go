@@ -63,7 +63,16 @@ func (s *ProxyService) writeAndCommitHistoryFilePair(
 	targets historyFilePairPaths,
 	write func(dataFile, indexFile *os.File) error,
 ) error {
-	if err := recoverHistoryFilePair(targets, s.historyRename); err != nil {
+	return writeAndCommitHistoryFilePair(targets, write, s.historyRename, s.historyFlushCheckpoint)
+}
+
+func writeAndCommitHistoryFilePair(
+	targets historyFilePairPaths,
+	write func(dataFile, indexFile *os.File) error,
+	rename func(string, string) error,
+	checkpoint func(string) error,
+) error {
+	if err := recoverHistoryFilePair(targets, rename); err != nil {
 		return fmt.Errorf("recover previous history transaction: %w", err)
 	}
 
@@ -90,10 +99,10 @@ func (s *ProxyService) writeAndCommitHistoryFilePair(
 	if err := closeHistoryTempFiles(true, dataFile, indexFile); err != nil {
 		return fmt.Errorf("sync history temp files: %w", err)
 	}
-	if err := s.historyFlushCheckpoint(historyFlushStageBeforeCommit); err != nil {
+	if err := checkpoint(historyFlushStageBeforeCommit); err != nil {
 		return fmt.Errorf("history flush checkpoint %s: %w", historyFlushStageBeforeCommit, err)
 	}
-	if err := commitHistoryFilePair(targets, temps, s.historyRename); err != nil {
+	if err := commitHistoryFilePair(targets, temps, rename); err != nil {
 		return fmt.Errorf("commit history file pair: %w", err)
 	}
 	return nil

@@ -748,6 +748,9 @@ export const useTrafficWorkspaceStore = defineStore('trafficWorkspace', () => {
     sourceHistoryKey?: string
   }): Promise<string | null> {
     const { entry, bodyView, source, sourceHistoryKey } = args
+    if (!bodyView || bodyView.reqBodyUnavailable) {
+      throw new Error('request_body_unavailable')
+    }
     if (!getTrafficCapabilities(entry).canEditRequest) {
       throw new Error(`Traffic type ${entry.type} cannot be opened in Request Editor`)
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHARImport } from '@/composables/useHARImport'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useHistoryStore } from '@/stores/history'
@@ -18,6 +19,7 @@ import { getErrorMessage } from '@/utils/dialog'
 const { t } = useI18n()
 const notify = useNotify()
 const historyStore = useHistoryStore()
+const { importing, importLabel, importHARFiles } = useHARImport()
 const proxyStore = useProxyStore()
 const trafficStore = useTrafficStore()
 const workspaceStore = useTrafficWorkspaceStore()
@@ -201,6 +203,20 @@ function updateClearAllHistoryModalVisible(value: boolean) {
         >
       </div>
       <div class="flex items-center gap-0.5">
+        <AppTooltip :text="importLabel" placement="bottom" :delay="500">
+          <template #trigger>
+            <UButton
+              size="sm"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-file-input"
+              :loading="importing"
+              :disabled="importing || clearAllHistoryPending"
+              :aria-label="importLabel"
+              @click="importHARFiles()"
+            />
+          </template>
+        </AppTooltip>
         <AppTooltip :text="t('history.refresh')" placement="bottom" :delay="500">
           <template #trigger>
             <UButton
@@ -221,7 +237,7 @@ function updateClearAllHistoryModalVisible(value: boolean) {
               color="neutral"
               variant="ghost"
               icon="i-lucide-trash-2"
-              :disabled="historyStore.metadataList.length === 0 || clearAllHistoryPending"
+              :disabled="historyStore.metadataList.length === 0 || clearAllHistoryPending || importing"
               :aria-label="t('history.clearAll')"
               @click="handleClearAllHistory"
             />

@@ -15,10 +15,14 @@ const props = withDefaults(
     value: string
     warningMessage?: string
     waiting?: boolean
+    bodyUnavailable?: boolean
+    copyDisabled?: boolean
   }>(),
   {
     warningMessage: '',
     waiting: false,
+    bodyUnavailable: false,
+    copyDisabled: false,
   },
 )
 
@@ -101,7 +105,7 @@ watch(
 )
 
 async function copyRawHTTPMessage() {
-  if (!props.value) {
+  if (!props.value || props.bodyUnavailable || props.copyDisabled) {
     return
   }
   try {
@@ -185,12 +189,20 @@ async function copyRawHTTPMessage() {
             variant="ghost"
             size="sm"
             square
-            :disabled="!props.value"
+            :disabled="!props.value || props.bodyUnavailable || props.copyDisabled"
             :aria-label="t('detail.copy_raw_http')"
             @click="copyRawHTTPMessage"
           />
         </UTooltip>
       </div>
+      <UAlert
+        v-if="props.bodyUnavailable"
+        icon="i-lucide-triangle-alert"
+        color="warning"
+        variant="soft"
+        :description="t('detail.body_unavailable')"
+        class="mx-2.5 mb-2"
+      />
       <UAlert
         v-if="props.warningMessage"
         icon="i-lucide-triangle-alert"

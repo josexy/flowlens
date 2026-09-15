@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, provide, ref } from 'vue'
+import { useHARImportDrop } from '@/composables/useHARImportDrop'
 import { useI18n } from 'vue-i18n'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import AppLoading from '@/components/common/AppLoading.vue'
@@ -14,6 +15,7 @@ import { TRAFFIC_STORE_KEY, FILTER_STORE_KEY } from '@/types/inject-keys'
 
 const { t } = useI18n()
 const historyStore = useHistoryStore()
+const { dropActive, dropTarget, onDragEnter, onDragOver, onDragLeave, resetDrop } = useHARImportDrop('history')
 const historyTrafficStore = useHistoryTrafficStore()
 const historyFilterStore = useHistoryFilterStore()
 const detailSplitSize = ref(60)
@@ -50,8 +52,15 @@ provide(FILTER_STORE_KEY, historyFilterStore)
             :min-size="isDetailVisible ? 20 : 100"
             class="flex min-h-0 min-w-0 flex-col overflow-hidden! bg-app-panel"
           >
-            <div class="flex h-full min-h-0 min-w-0 flex-col">
+            <div
+              class="relative flex h-full min-h-0 min-w-0 flex-col"
+              :data-file-drop-target="dropTarget"
+              @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop="resetDrop"
+            >
               <TrafficTable />
+              <div v-if="dropActive" class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary bg-elevated/90 text-sm font-medium text-primary" role="status">
+                {{ t('har_import.drop_hint') }}
+              </div>
             </div>
           </SplitterPanel>
           <template v-if="isDetailVisible">
@@ -76,10 +85,15 @@ provide(FILTER_STORE_KEY, historyFilterStore)
     </template>
     <div
       v-else
-      class="flex flex-1 items-center justify-center p-4 text-sm text-app-text-muted"
+      class="relative flex flex-1 items-center justify-center p-4 text-sm text-app-text-muted"
+      :data-file-drop-target="dropTarget"
+      @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop="resetDrop"
       role="status"
     >
       {{ t('history.selectHint') }}
+      <div v-if="dropActive" class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary bg-elevated/90 text-sm font-medium text-primary">
+        {{ t('har_import.drop_hint') }}
+      </div>
     </div>
   </div>
 </template>

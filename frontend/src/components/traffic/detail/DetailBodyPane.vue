@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TrafficBodyView } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
 import AppLoading from '@/components/common/AppLoading.vue'
 import BodyViewer from '../BodyViewer.vue'
@@ -19,6 +21,9 @@ const props = defineProps<{
 }>()
 
 const bodyViewerPanelClass = 'py-2.5 pl-2.5'
+const { t } = useI18n()
+const bodyUnavailable = computed(() => props.bodySide === 'request'
+  ? props.bodyView?.reqBodyUnavailable : props.bodyView?.rspBodyUnavailable)
 </script>
 
 <template>
@@ -26,8 +31,11 @@ const bodyViewerPanelClass = 'py-2.5 pl-2.5'
     class="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
     :aria-busy="props.isLoading ? 'true' : 'false'"
   >
+    <div v-if="bodyUnavailable" class="flex flex-1 items-center justify-center text-sm text-muted" role="status">
+      {{ t('detail.body_unavailable') }}
+    </div>
     <BodyViewer
-      v-if="props.bodyView"
+      v-else-if="props.bodyView"
       :key="`${props.bodyIdentity ?? 'unknown'}:${props.bodySide}`"
       :class="[bodyViewerPanelClass, props.isRefreshing ? 'pointer-events-none' : '']"
       :body="

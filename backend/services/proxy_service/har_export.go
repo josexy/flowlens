@@ -1150,10 +1150,11 @@ func harBodySize(message *HTTPMessage, body HARBody) int64 {
 }
 
 func harBodyExpected(message *HTTPMessage) bool {
-	// Only count a missing payload when capture observed at least one entity
-	// byte. A synthetic failed/canceled response has BodySize == -1, which is
-	// unknown rather than evidence that a cache payload went missing.
-	return message != nil && message.Metrics != nil && message.Metrics.BodySize > 0
+	// Completed imported messages can have an unavailable body of unknown
+	// transfer size. Failed/canceled responses with unknown size do not prove
+	// that a payload existed, and are not counted as missing captured bodies.
+	return message != nil && message.Metrics != nil && (message.Metrics.BodySize > 0 ||
+		(message.Metrics.State == HTTPMessageStateCompleted && message.Metrics.BodySize < 0))
 }
 
 func harMessageTimestamps(message *HTTPMessage) (int64, int64) {

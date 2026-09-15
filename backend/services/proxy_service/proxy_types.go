@@ -281,12 +281,14 @@ type TrafficLiveUpdate struct {
 }
 
 type TrafficBodyView struct {
-	RequestBody          string              `json:"reqBody"`
-	ResponseBody         string              `json:"rspBody"`
-	RequestBodyEncoding  string              `json:"reqBodyEnc,omitempty"` // "" or "base64"
-	ResponseBodyEncoding string              `json:"rspBodyEnc,omitempty"` // "" or "base64"
-	WebSocketMessages    []*WebSocketMessage `json:"wsMsgs,omitempty"`
-	WsMsgsTruncated      bool                `json:"wsMsgsTruncated,omitempty"`
+	RequestBodyUnavailable  bool                `json:"reqBodyUnavailable,omitempty"`
+	ResponseBodyUnavailable bool                `json:"rspBodyUnavailable,omitempty"`
+	RequestBody             string              `json:"reqBody"`
+	ResponseBody            string              `json:"rspBody"`
+	RequestBodyEncoding     string              `json:"reqBodyEnc,omitempty"` // "" or "base64"
+	ResponseBodyEncoding    string              `json:"rspBodyEnc,omitempty"` // "" or "base64"
+	WebSocketMessages       []*WebSocketMessage `json:"wsMsgs,omitempty"`
+	WsMsgsTruncated         bool                `json:"wsMsgsTruncated,omitempty"`
 }
 
 type trafficBodyViewInner struct {

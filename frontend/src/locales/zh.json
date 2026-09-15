@@ -236,6 +236,8 @@
     "ws_msgs_truncated": "已达到消息数量上限，部分消息未被采集。"
   },
   "detail": {
+    "body_unavailable": "正文不可用",
+    "request_body_unavailable": "请求正文不可用，无法执行此操作",
     "select_request": "选择一条流量记录查看详情",
     "raw_tcp_tunnel_info": "隧道信息",
     "raw_tcp_target": "目标地址",
@@ -427,9 +429,7 @@
     "response_headers_sorted_state": "响应头已按{state}排序",
     "response_trailers_sorted_state": "Trailer 已按{state}排序",
     "header_fields_truncated": "HeaderBlock 已截断，字段或顺序可能不完整。",
-    "header_order_unavailable": "原始顺序不可用，当前显示规范化字段。",
     "trailer_fields_truncated": "Trailer 已截断，字段或顺序可能不完整。",
-    "trailer_order_unavailable": "Trailer 原始顺序不可用，当前显示规范化字段。",
     "headers_copy_failed": "复制头信息失败：{error}",
     "copy_body": "复制内容",
     "save_body": "保存内容",
@@ -569,6 +569,17 @@
     "restart_saved_success": "已保存当前抓包并开始新的会话",
     "restart_discarded_success": "已丢弃当前抓包并开始新的会话",
     "restart_failed": "重新开始抓包失败: {error}"
+  },
+  "har_import": {
+    "title": "导入 HAR",
+    "file_filter": "HTTP Archive (*.har)",
+    "drop_hint": "释放以导入 HAR",
+    "progress": "正在导入 {current}/{total}",
+    "result": "已导入 {files} 个文件、{imported} 条记录；跳过 {skipped} 条，{missing} 个正文不可用，{failed} 项失败",
+    "no_entries": "没有可导入的记录",
+    "file_failed": "{file}：{error}",
+    "open_failed": "历史已保存，但未能打开，请刷新历史列表",
+    "failed": "导入失败：{error}"
   },
   "har_export": {
     "export_session": "导出HAR",
@@ -794,9 +805,7 @@
       "response_trailers_copied_json": "已复制 Trailer JSON",
       "response_trailers_copied_text": "已复制 Trailer 文本",
       "header_fields_truncated": "HeaderBlock 已截断，字段或顺序可能不完整。",
-      "header_order_unavailable": "原始顺序不可用，当前显示规范化字段。",
       "trailer_fields_truncated": "Trailer 已截断，字段或顺序可能不完整。",
-      "trailer_order_unavailable": "Trailer 原始顺序不可用，当前显示规范化字段。",
       "request_headers_cleared": "已清空请求头",
       "headers_copy_failed": "复制头信息失败：{error}"
     },

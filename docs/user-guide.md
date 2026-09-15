@@ -61,7 +61,7 @@ The toolbar system-proxy control can temporarily point supported operating-syste
 
 The original proxy snapshot is kept in process memory and is restored during a normal shutdown. A crash, forced termination, or power loss can leave the system proxy pointing at FlowLens. Restore it manually through the operating-system network settings; restarting FlowLens cannot recover a snapshot lost with the previous process.
 
-## Timing, Sizes, and HAR Export
+## Timing, Sizes, and HAR Import/Export
 
 FlowLens records request-attempt start, request-write end, and response first-byte/body-end events at the upstream transport boundary. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
 
@@ -81,6 +81,14 @@ HAR `headersSize` follows this display-size convention for every protocol; HTTP/
 Completed URL-encoded and multipart request bodies up to 4 MiB and 1,000 parameters are exported as `postData.params`, preserving parameter order, duplicates, empty values, filenames and part content types. Binary multipart values use Base64 with a per-parameter `_encoding` extension. Structured forms omit `postData.text`, as required by HAR. Larger forms, incomplete or malformed bodies, and unsupported form representations retain the raw `postData.text`; binary raw bodies use `_encoding: "base64"`. Readers that ignore `_encoding` cannot reconstruct those binary values. Multipart boundaries are represented structurally rather than preserved as raw text.
 
 HAR output is streamed to a temporary file in the destination directory and atomically replaces the target after completion. Missing Body-cache payloads are counted without dropping otherwise exportable entries.
+
+Use **Import HAR** beside the History refresh button, or drop `.har` files onto the capture/history traffic table, including its empty state. Multiple files are imported sequentially. Each successful file becomes a separate HBIN v2 history named after the file; importing it again creates another history. The first successful result opens in the existing history tab. The result reports imported files/entries, skipped entries, unavailable bodies and file failures. Canceling the file picker does nothing.
+
+Imported histories survive restart and follow the same deletion and retention rules as other histories. Their history creation date is the import date, while request timestamps retain the archive's original dates. The source file is not modified or retained as a separate copy. Invalid JSON, cancellation or write failure rolls back the affected file; invalid individual entries are skipped. Limits are 512 MiB per file, 32 MiB per JSON value/entry and 100,000 entries per file.
+
+HAR 1.2 and the common fields of 1.1 are supported, including a UTF-8 BOM. Header arrays retain their order, duplicates, case and empty values, with wire order marked unavailable. Text and Base64 bodies are supported; decoded content is not decompressed again. URL-encoded parameters can reconstruct a request body, while multipart parameters without raw body text cannot preserve the original multipart bytes and are marked unavailable. Missing payloads stay distinct from genuinely empty bodies: unavailable request bodies cannot be resent, opened for editing or copied as a complete request.
+
+Import maps measurements into the existing fields without adding source labels or changing HBIN versions. Valid FlowLens timestamp/state extensions take precedence. Other HAR timings are converted from milliseconds to microseconds, preserving total duration and known stages; pre-send waiting/connection costs are included in the request interval, and TLS is not counted twice. Missing, inconsistent and failed timings remain unknown. Header size is recalculated using the Raw display convention; encoded body sizes come from HAR `bodySize`, not decoded text length. Pages, cache details, standalone cookie attributes, WebSocket frames and unsupported extensions are not retained. Re-export therefore does not reproduce every original HAR field, and `blocked` may become part of `send`.
 
 HAR files are not automatically redacted. They can contain authorization headers, cookies, request/response bodies, and process paths; review them before sharing.
 

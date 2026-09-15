@@ -14,6 +14,7 @@ export const SHUTDOWN_UI_READY_EVENT = 'app:shutdown-ui-ready'
 export const SHORTCUTS_CHANGED_EVENT = 'app:shortcuts-changed'
 export const SHORTCUT_INVOKE_EVENT = 'app:shortcut-invoke'
 export const REQUEST_EDITOR_FILE_DROP_EVENT = 'request-editor:file-drop'
+export const HAR_FILE_DROP_EVENT = 'history:har-file-drop'
 export const LOCAL_DATA_CLEARED_EVENT = 'app:local-data-cleared'
 
 export interface PreferencesChangedPayload {

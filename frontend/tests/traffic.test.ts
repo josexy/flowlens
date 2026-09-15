@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { nextTick, ref } from 'vue'
+import { canHandleHARFileDrop, parseHARFileDrop, uniqueHARImportPaths } from '../src/utils/harImport.js'
 // @ts-expect-error Monaco does not publish declarations for its internal Monarch compiler.
 import { compile as compileMonarchLanguage } from 'monaco-editor/editor/standalone/common/monarch/monarchCompile.js'
 // @ts-expect-error Monaco does not publish declarations for its internal Monarch tokenizer.
@@ -29,6 +30,22 @@ import {
   type TrafficEntryLike,
   type TrafficProcessLike,
 } from '../src/utils/traffic.js'
+
+test('HAR drop targets exclude request body targets and inactive surfaces', () => {
+  assert.equal(parseHARFileDrop({ target: 'request-body-file:http-request:1', paths: ['C:/a.har'] }), null)
+  assert.equal(parseHARFileDrop({ target: 'har-import:history', paths: 'C:/a.har' }), null)
+  assert.deepEqual(parseHARFileDrop({ target: 'har-import:capture', paths: ['C:/a.har', null, 1] }), { surface: 'capture', paths: ['C:/a.har'] })
+  assert.equal(canHandleHARFileDrop('capture', 'traffic', 'capture', true), true)
+  assert.equal(canHandleHARFileDrop('history', 'traffic', 'capture', true), false)
+  assert.equal(canHandleHARFileDrop('capture', 'memstats', 'capture', true), false)
+  assert.equal(canHandleHARFileDrop('capture', 'traffic', 'capture', false), false)
+  assert.equal(canHandleHARFileDrop('capture', 'traffic', 'http-request', true), false)
+})
+
+test('HAR batch paths retain file order and platform case sensitivity', () => {
+  assert.deepEqual(uniqueHARImportPaths(['C:\\A.har', 'c:/a.har', 'C:/b.har', ''], true), ['C:\\A.har', 'C:/b.har'])
+  assert.deepEqual(uniqueHARImportPaths(['/tmp/A.har', '/tmp/a.har', '/tmp/A.har'], false), ['/tmp/A.har', '/tmp/a.har'])
+})
 import {
   TRAFFIC_TABLE_COLUMN_KEYS,
   createTrafficTableColumns,
