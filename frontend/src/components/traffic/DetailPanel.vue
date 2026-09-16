@@ -310,26 +310,17 @@ const requestHeaderWarning = computed(() => {
   if (selectedEntry.value?.request?.headersTruncated) {
     return t('detail.header_fields_truncated')
   }
-  if (selectedEntry.value?.request && !requestHeaderSource.value.hasWireOrder) {
-    return t('detail.header_order_unavailable')
-  }
   return ''
 })
 const responseHeaderWarning = computed(() => {
   if (selectedEntry.value?.response?.headersTruncated) {
     return t('detail.header_fields_truncated')
   }
-  if (selectedEntry.value?.response && !responseHeaderSource.value.hasWireOrder) {
-    return t('detail.header_order_unavailable')
-  }
   return ''
 })
 const responseTrailerWarning = computed(() => {
   if (selectedEntry.value?.response?.trailersTruncated) {
     return t('detail.trailer_fields_truncated')
-  }
-  if (selectedEntry.value?.response && !responseTrailerSource.value.hasWireOrder) {
-    return t('detail.trailer_order_unavailable')
   }
   return ''
 })
@@ -666,6 +657,8 @@ const formatTimestamp = formatToRFC3339
                   data-name="request-raw"
                   role="tabpanel"
                   :value="requestRawHTTPMessage"
+                  :body-unavailable="currentRawBodyView?.reqBodyUnavailable"
+                  :copy-disabled="!currentRawBodyView"
                   :warning-message="requestHeaderWarning"
                 />
                 <DetailHeadersPane
@@ -815,6 +808,8 @@ const formatTimestamp = formatToRFC3339
                     data-name="response-raw"
                     role="tabpanel"
                     :value="responseRawHTTPMessage"
+                    :body-unavailable="currentRawBodyView?.rspBodyUnavailable"
+                    :copy-disabled="!currentRawBodyView"
                     :warning-message="responseHeaderWarning"
                     :waiting="!hasRawHTTPResponse"
                   />

@@ -36,6 +36,13 @@ export function GetHistoryTrafficBodyView(key: string, id: number): $Cancellable
     return $Call.ByID(557338097, key, id);
 }
 
+/**
+ * ImportHAR commits one archive as a new history, independently of live capture.
+ */
+export function ImportHAR(request: $models.HARImportRequest): $CancellablePromise<proxyservice$0.HARImportResult> {
+    return $Call.ByID(1007668437, request);
+}
+
 export function ListHistoryKeys(): $CancellablePromise<(proxyservice$0.HistoryMetadata | null)[] | null> {
     return $Call.ByID(3378745645);
 }

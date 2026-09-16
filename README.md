@@ -38,7 +38,7 @@ FlowLens helps developers capture local proxy traffic, trace requests back to de
 - HTTP Request Editor, WebSocket Client, request resend, proxy selection, uTLS profiles, and HTTP/2 fingerprints
 - API Collections with folders, managed request bodies, and reusable protocol/fingerprint settings
 - Optional global and current-request Python 3.11+ hooks with a correlated live console
-- Current-capture and history HAR 1.2 export with streamed atomic writes
+- HAR import from the history toolbar or by dropping files onto the traffic table; current-capture and history HAR 1.2 export with streamed atomic writes
 - Windows, macOS, and Linux process attribution with application icons and metadata
 - Local history, categorization, runtime logs, storage controls, certificates, shortcuts, themes, and bilingual UI
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, provide, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useHARImportDrop } from '@/composables/useHARImportDrop'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import AppSplitterResizeHandle from '@/components/common/AppSplitterResizeHandle.vue'
 import FilterBar from '@/components/traffic/FilterBar.vue'
@@ -10,6 +12,8 @@ import { useFilterStore } from '@/stores/filter'
 import { TRAFFIC_STORE_KEY, FILTER_STORE_KEY } from '@/types/inject-keys'
 
 const trafficStore = useTrafficStore()
+const { t } = useI18n()
+const { dropActive, dropTarget, onDragEnter, onDragOver, onDragLeave, resetDrop } = useHARImportDrop('capture')
 const filterStore = useFilterStore()
 const detailSplitSize = ref(60)
 const isDetailVisible = computed(() => !!trafficStore.selectedEntry && trafficStore.showDetailPanel)
@@ -42,8 +46,15 @@ provide(FILTER_STORE_KEY, filterStore)
           :min-size="isDetailVisible ? 20 : 100"
           class="flex min-h-0 min-w-0 flex-col overflow-hidden! bg-app-panel"
         >
-          <div class="flex h-full min-h-0 min-w-0 flex-col">
+          <div
+            class="relative flex h-full min-h-0 min-w-0 flex-col"
+            :data-file-drop-target="dropTarget"
+            @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop="resetDrop"
+          >
             <TrafficTable />
+            <div v-if="dropActive" class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary bg-elevated/90 text-sm font-medium text-primary" role="status">
+              {{ t('har_import.drop_hint') }}
+            </div>
           </div>
         </SplitterPanel>
         <template v-if="isDetailVisible">

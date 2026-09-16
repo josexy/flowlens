@@ -10,6 +10,19 @@ export interface HARExportRequest {
     "trafficIds"?: number[] | null;
 }
 
+export interface HARImportDiagnostic {
+    "entry": number;
+    "code": string;
+}
+
+export interface HARImportResult {
+    "metadata"?: HistoryMetadata | null;
+    "imported": number;
+    "skipped": number;
+    "missingBodies": number;
+    "diagnostics": HARImportDiagnostic[] | null;
+}
+
 /**
  * HARWriteResult reports how much of an export request was represented.
  * MissingBodies counts individual request/response bodies, not traffic rows.
@@ -460,6 +473,8 @@ export interface TLSState {
 }
 
 export interface TrafficBodyView {
+    "reqBodyUnavailable"?: boolean;
+    "rspBodyUnavailable"?: boolean;
     "reqBody": string;
     "rspBody": string;
 

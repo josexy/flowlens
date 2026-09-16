@@ -181,7 +181,11 @@ async function buildCurl(
   }
 
   const bodyView = await store.getBodyView?.(entry.id, historyKey)
+  if (!bodyView || bodyView.reqBodyUnavailable) throw new Error(t('detail.request_body_unavailable'))
   const reqBody = bodyView?.reqBody ?? ''
+  if (reqBody && bodyView.reqBodyEnc === 'base64') {
+    return `printf %s ${shellQuote(reqBody)} | base64 -d | ${cmd} --data-binary @-`
+  }
   if (reqBody && bodyView?.reqBodyEnc !== 'base64') {
     cmd += ` \\\n  --data-raw ${shellQuote(reqBody)}`
   }
@@ -250,6 +254,8 @@ async function editEntries() {
       }
     } catch (error) {
       console.error('Failed to open traffic entry in Request Editor:', error)
+      notify.error(error instanceof Error && error.message === 'request_body_unavailable'
+        ? t('detail.request_body_unavailable') : String(error))
     }
   }
 
@@ -362,7 +368,11 @@ async function handleSelect(key: string) {
       break
     case 'copy-curl':
       if (!hasHttpEntries.value) return
-      await copyCurl()
+      try {
+        await copyCurl()
+      } catch (error) {
+        notify.error(error instanceof Error ? error.message : String(error))
+      }
       break
     case 'copy-target':
     case 'copy-url':

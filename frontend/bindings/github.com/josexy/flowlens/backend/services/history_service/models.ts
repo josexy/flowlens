@@ -6,3 +6,7 @@ export interface HARExportRequest {
     "path": string;
     "trafficIds"?: number[] | null;
 }
+
+export interface HARImportRequest {
+    "path": string;
+}

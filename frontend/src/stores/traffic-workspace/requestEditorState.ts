@@ -717,6 +717,7 @@ export function toHttpRequestEditorState(args: {
   sourceHistoryKey?: string
 }): HttpRequestEditorState {
   const { source, entry, bodyView, sourceHistoryKey } = args
+  if (bodyView?.reqBodyUnavailable) throw new Error('request_body_unavailable')
   const method = entry.method || 'GET'
   const requestURL = entry.url || ''
   const protocol = inferRequestProtocolFromHTTPMessage(entry.request)

@@ -236,6 +236,8 @@
     "ws_msgs_truncated": "Message limit reached. Some messages were not captured."
   },
   "detail": {
+    "body_unavailable": "Body unavailable",
+    "request_body_unavailable": "The request body is unavailable; this action cannot be completed",
     "select_request": "Select a traffic entry to view details",
     "raw_tcp_tunnel_info": "Tunnel Information",
     "raw_tcp_target": "Target",
@@ -427,9 +429,7 @@
     "response_headers_sorted_state": "Headers sorted {state}",
     "response_trailers_sorted_state": "Trailers sorted {state}",
     "header_fields_truncated": "Header block truncated; fields or order may be incomplete.",
-    "header_order_unavailable": "Original order unavailable; showing normalized fields.",
     "trailer_fields_truncated": "Trailers truncated; fields or order may be incomplete.",
-    "trailer_order_unavailable": "Original trailer order unavailable; showing normalized fields.",
     "headers_copy_failed": "Failed to copy headers: {error}",
     "copy_body": "Copy body",
     "save_body": "Save body",
@@ -569,6 +569,17 @@
     "restart_saved_success": "Saved the current capture and started a new session",
     "restart_discarded_success": "Discarded the current capture and started a new session",
     "restart_failed": "Failed to restart capture: {error}"
+  },
+  "har_import": {
+    "title": "Import HAR",
+    "file_filter": "HTTP Archive (*.har)",
+    "drop_hint": "Drop to import HAR",
+    "progress": "Importing {current}/{total}",
+    "result": "Imported {files} files and {imported} entries; skipped {skipped}, {missing} bodies unavailable, {failed} failures",
+    "no_entries": "No importable entries",
+    "file_failed": "{file}: {error}",
+    "open_failed": "History was saved but could not be opened. Refresh the history list.",
+    "failed": "Import failed: {error}"
   },
   "har_export": {
     "export_session": "Export HAR",
@@ -794,9 +805,7 @@
       "response_trailers_copied_json": "Trailers copied as JSON",
       "response_trailers_copied_text": "Trailers copied as text",
       "header_fields_truncated": "Header block truncated; fields or order may be incomplete.",
-      "header_order_unavailable": "Original order unavailable; showing normalized fields.",
       "trailer_fields_truncated": "Trailers truncated; fields or order may be incomplete.",
-      "trailer_order_unavailable": "Original trailer order unavailable; showing normalized fields.",
       "request_headers_cleared": "Headers cleared",
       "headers_copy_failed": "Failed to copy headers: {error}"
     },

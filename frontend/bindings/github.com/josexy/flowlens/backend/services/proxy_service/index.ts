@@ -18,6 +18,8 @@ export {
 
 export type {
     HARExportRequest,
+    HARImportDiagnostic,
+    HARImportResult,
     HARWriteResult,
     HTTPConnectionTimings,
     HTTPHeaderField,

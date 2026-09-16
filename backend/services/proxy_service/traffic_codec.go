@@ -156,10 +156,12 @@ func isSupportedHistoryFormatVersion(version uint16) bool {
 
 func convertToTrafficBodyView(bvi *trafficBodyViewInner) (*TrafficBodyView, error) {
 	bv := &TrafficBodyView{
-		RequestBodyEncoding:  bvi.RequestBodyEncoding,
-		ResponseBodyEncoding: bvi.ResponseBodyEncoding,
-		WebSocketMessages:    append([]*WebSocketMessage(nil), bvi.WebSocketMessages...),
-		WsMsgsTruncated:      bvi.WsMsgsTruncated,
+		RequestBodyUnavailable:  bvi.RequestBodyUnavailable,
+		ResponseBodyUnavailable: bvi.ResponseBodyUnavailable,
+		RequestBodyEncoding:     bvi.RequestBodyEncoding,
+		ResponseBodyEncoding:    bvi.ResponseBodyEncoding,
+		WebSocketMessages:       append([]*WebSocketMessage(nil), bvi.WebSocketMessages...),
+		WsMsgsTruncated:         bvi.WsMsgsTruncated,
 	}
 
 	if bvi.RequestBodyReader != nil {
@@ -236,6 +238,9 @@ func hbinWriteEntry(hindexFile io.Writer, hbinFile io.WriteSeeker, te *TrafficEn
 	if err != nil {
 		return err
 	}
+	if offset < 0 || offset > int64(^uint32(0)) {
+		return fmt.Errorf("hbin: header offset out of range: %d", offset)
+	}
 	// size|id1|header_index1|body_index1|id2|header_index2|body_index2
 	if err := binary.Write(hindexFile, binary.BigEndian, uint64(te.ID)); err != nil {
 		return err
@@ -249,6 +254,9 @@ func hbinWriteEntry(hindexFile io.Writer, hbinFile io.WriteSeeker, te *TrafficEn
 	offset, err = hbinFile.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err
+	}
+	if offset < 0 || offset > int64(^uint32(0)) {
+		return fmt.Errorf("hbin: body offset out of range: %d", offset)
 	}
 	if err := binary.Write(hindexFile, binary.BigEndian, uint32(offset)); err != nil {
 		return err
@@ -1175,6 +1183,11 @@ func hbinReadTime(r io.Reader) (time.Time, error) {
 	var ns int64
 	if err := binary.Read(r, binary.BigEndian, &ns); err != nil {
 		return time.Time{}, err
+	}
+	// v1/v2 encode the zero time through UnixNano too. Restore that existing
+	// representation instead of displaying its wrapped year-1754 timestamp.
+	if ns == (time.Time{}).UnixNano() {
+		return time.Time{}, nil
 	}
 	return time.Unix(0, ns).UTC(), nil
 }

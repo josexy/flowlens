@@ -33,6 +33,11 @@ type HistoryService struct {
 	initIndexMapOnce sync.Once
 	maintenanceWG    sync.WaitGroup
 	shutdownOnce     sync.Once
+	importMu         sync.Mutex
+	importWG         sync.WaitGroup
+	imports          map[uint64]context.CancelFunc
+	importSequence   uint64
+	importsClosed    bool
 }
 
 type historyProxyService interface {
@@ -94,6 +99,13 @@ func (s *HistoryService) ServiceShutdown() error {
 //wails:ignore
 func (s *HistoryService) Shutdown() error {
 	s.shutdownOnce.Do(func() {
+		s.importMu.Lock()
+		s.importsClosed = true
+		for _, cancel := range s.imports {
+			cancel()
+		}
+		s.importMu.Unlock()
+		s.importWG.Wait()
 		s.maintenanceWG.Wait()
 	})
 	return nil

@@ -5,6 +5,7 @@
     "src/utils/traffic-category.ts",
     "src/utils/traffic-table-columns.ts",
     "src/utils/traffic.ts",
+    "src/utils/harImport.ts",
     "src/utils/traffic-patch.ts",
     "src/utils/headers.ts",
     "src/utils/cookies.ts",

@@ -3222,6 +3222,9 @@ func (s *ProxyService) RecoverRequestBodyForEditing(
 	headerFields []HTTPHeaderField,
 	bodyView TrafficBodyView,
 ) (RequestBodyRecoveryResult, error) {
+	if bodyView.RequestBodyUnavailable {
+		return RequestBodyRecoveryResult{}, errors.New("request body unavailable")
+	}
 	s.requestDraftCacheOpsMu.RLock()
 	defer s.requestDraftCacheOpsMu.RUnlock()
 	s.runRequestDraftCacheOperationHook("recover")

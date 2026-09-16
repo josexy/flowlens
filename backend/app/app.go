@@ -448,6 +448,12 @@ func Run(assets Assets) {
 		if details != nil && len(details.Attributes) > 0 {
 			target = details.Attributes["data-file-drop-target"]
 		}
+		if target == "har-import:capture" || target == "har-import:history" {
+			_ = app.Event.Emit("history:har-file-drop", map[string]any{
+				"paths": event.Context().DroppedFiles(), "target": target,
+			})
+			return
+		}
 		proxySvc.EmitRequestEditorFileDrop(event.Context().DroppedFiles(), target)
 	})
 	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(event *application.WindowEvent) {
