@@ -1416,6 +1416,8 @@ func (s *ProxyService) SetLiveTrafficDetail(id uint64) {
 
 // DeleteTraffic deletes traffic entries
 func (s *ProxyService) DeleteTraffic(id []int64) {
+	s.clearDataMu.Lock()
+	defer s.clearDataMu.Unlock()
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
 	for _, i := range id {
@@ -1424,6 +1426,8 @@ func (s *ProxyService) DeleteTraffic(id []int64) {
 }
 
 func (s *ProxyService) deleteTrafficEntry(id uint64) {
+	s.clearDataMu.Lock()
+	defer s.clearDataMu.Unlock()
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
 	s.deleteTrafficEntryCaptureLocked(id)

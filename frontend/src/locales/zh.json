@@ -588,6 +588,23 @@
     "open_failed": "历史已保存，但未能打开，请刷新历史列表",
     "failed": "导入失败：{error}"
   },
+  "traffic_export": {
+    "title": "导出",
+    "choose_directory": "选择导出目录",
+    "formats": {
+      "request": "请求",
+      "request-headers": "请求头",
+      "request-body": "请求体",
+      "response": "响应",
+      "response-headers": "响应头",
+      "response-body": "响应体",
+      "request-response": "请求 + 响应",
+      "csv": "CSV",
+      "har": "HAR"
+    },
+    "result": "已导出 {exported} 条，跳过 {skipped} 条",
+    "failed": "导出失败：{error}"
+  },
   "har_export": {
     "export_session": "导出HAR",
     "export_selected": "导出HAR",

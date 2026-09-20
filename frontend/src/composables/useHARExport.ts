@@ -1,13 +1,11 @@
-import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Dialogs } from '@wailsio/runtime'
-import { ExportHAR as ExportCurrentHAR } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
+import { ExportHAR as ExportCurrentHAR, GetTrafficExportGeneration } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
 import { ExportHAR as ExportHistoryHAR } from '#bindings/github.com/josexy/flowlens/backend/services/history_service/historyservice'
 import type * as proxyservice from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
 import { getErrorMessage, isDialogCancelError } from '@/utils/dialog'
 import { useNotify } from '@/composables/useNotify'
-
-const exporting = ref(false)
+import { trafficExporting as exporting } from '@/composables/trafficExportState'
 
 export interface HARExportOptions {
   historyKey?: string | null
@@ -49,8 +47,11 @@ export function useHARExport() {
       return false
     }
 
+    options = { ...options, trafficIds: options.trafficIds ? [...options.trafficIds] : undefined }
+
     exporting.value = true
     try {
+      const captureGeneration = options.historyKey ? undefined : await GetTrafficExportGeneration()
       let selectedPath: string
       try {
         selectedPath = await Dialogs.SaveFile({
@@ -85,6 +86,7 @@ export function useHARExport() {
         : await ExportCurrentHAR({
             path: ensureHARExtension(path),
             trafficIds,
+            captureGeneration,
           })
 
       const message = t('har_export.success', {

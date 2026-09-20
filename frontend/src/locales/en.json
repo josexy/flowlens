@@ -588,6 +588,23 @@
     "open_failed": "History was saved but could not be opened. Refresh the history list.",
     "failed": "Import failed: {error}"
   },
+  "traffic_export": {
+    "title": "Export",
+    "choose_directory": "Choose export directory",
+    "formats": {
+      "request": "Request",
+      "request-headers": "Request Headers",
+      "request-body": "Request Body",
+      "response": "Response",
+      "response-headers": "Response Headers",
+      "response-body": "Response Body",
+      "request-response": "Request + Response",
+      "csv": "CSV",
+      "har": "HAR"
+    },
+    "result": "{exported} exported, {skipped} skipped",
+    "failed": "Export failed: {error}"
+  },
   "har_export": {
     "export_session": "Export HAR",
     "export_selected": "Export HAR",

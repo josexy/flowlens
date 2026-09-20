@@ -15,6 +15,15 @@ func logicalHTTPRequestHeaderSize(entry *TrafficEntry) int64 {
 		return -1
 	}
 	message := entry.Request
+	startLine := logicalHTTPRequestStartLine(entry)
+	if startLine == "" || message.HeaderFields == nil {
+		return -1
+	}
+	return logicalHTTPHeadSize(startLine, message.HeaderFields, logicalHeaderProtocol(message.Proto), true)
+}
+
+func logicalHTTPRequestStartLine(entry *TrafficEntry) string {
+	message := entry.Request
 	protocol := logicalHeaderProtocol(message.Proto)
 	method := strings.TrimSpace(entry.Method)
 	target := logicalRequestTarget(method, entry.URL, entry.Host)
@@ -31,16 +40,25 @@ func logicalHTTPRequestHeaderSize(entry *TrafficEntry) int64 {
 			target = value
 		}
 	}
-	if protocol == "" || method == "" || target == "" || message.HeaderFields == nil {
-		return -1
+	if protocol == "" || method == "" || target == "" {
+		return ""
 	}
-	return logicalHTTPHeadSize(method+" "+target+" "+protocol, message.HeaderFields, protocol, true)
+	return method + " " + target + " " + protocol
 }
 
 func logicalHTTPResponseHeaderSize(entry *TrafficEntry) int64 {
 	if entry == nil || entry.Response == nil || entry.Response.HeadersTruncated {
 		return -1
 	}
+	message := entry.Response
+	startLine := logicalHTTPResponseStartLine(entry)
+	if startLine == "" || message.HeaderFields == nil {
+		return -1
+	}
+	return logicalHTTPHeadSize(startLine, message.HeaderFields, logicalHeaderProtocol(message.Proto), false)
+}
+
+func logicalHTTPResponseStartLine(entry *TrafficEntry) string {
 	message := entry.Response
 	protocol := logicalHeaderProtocol(message.Proto)
 	status := strings.TrimSpace(entry.Status)
@@ -57,10 +75,10 @@ func logicalHTTPResponseHeaderSize(entry *TrafficEntry) int64 {
 			status = parts[0]
 		}
 	}
-	if protocol == "" || status == "" || message.HeaderFields == nil {
-		return -1
+	if protocol == "" || status == "" {
+		return ""
 	}
-	return logicalHTTPHeadSize(protocol+" "+status, message.HeaderFields, protocol, false)
+	return protocol + " " + status
 }
 
 func logicalHTTPHeadSize(startLine string, fields []HTTPHeaderField, protocol string, request bool) int64 {

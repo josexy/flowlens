@@ -29,7 +29,8 @@ import { useTrafficWorkspaceStore } from '@/stores/trafficWorkspace'
 import ResendNTimesModal from '../modal/ResendNTimesModal.vue'
 import ConfirmCardModal from '../modal/ConfirmCardModal.vue'
 import { useNotify } from '@/composables/useNotify'
-import { useHARExport } from '@/composables/useHARExport'
+import { useTrafficExport } from '@/composables/useTrafficExport'
+import { createTrafficExportMenu, type TrafficExportFormat } from '@/utils/trafficExport'
 import { useHistoryStore } from '@/stores/history'
 import { useSettingStore } from '@/stores/setting'
 
@@ -42,7 +43,7 @@ type AppMenuItem = ContextMenuItem & {
 
 const { t } = useI18n()
 const notify = useNotify()
-const { exporting: exportingHAR, exportHAR } = useHARExport()
+const { exporting, exportTraffic } = useTrafficExport()
 const historyStore = useHistoryStore()
 const settingStore = useSettingStore()
 type TrafficStoreLike =
@@ -449,16 +450,6 @@ async function handleSelect(key: string) {
       if (!canEditEntries.value) return
       await editEntries()
       break
-    case 'export-har':
-      if (!canExportHAR.value || hasOnlyRawTCPEntries.value) return
-      await exportHAR({
-        historyKey,
-        trafficIds: entries.map((current) => current.id),
-        filenameHint: currentHistoryMetadata.value?.alias
-          ? `${currentHistoryMetadata.value.alias}-selection`
-          : `flowlens-selection-${entries.length}`,
-      })
-      break
     case 'highlight-red':
     case 'highlight-orange':
     case 'highlight-yellow':
@@ -487,6 +478,19 @@ async function handleSelect(key: string) {
       requestDelete()
       break
   }
+}
+
+function exportSelection(format: TrafficExportFormat) {
+  const entries = [...contextMenuEntries.value]
+  if (!canExportHAR.value || entries.length === 0) return
+  void exportTraffic(format, {
+    historyKey: getHistoryKey(trafficStore.value),
+    trafficIds: entries.map((entry) => entry.id),
+    entry: entries[0],
+    filenameHint: currentHistoryMetadata.value?.alias
+      ? `${currentHistoryMetadata.value.alias}-selection`
+      : `flowlens-selection-${entries.length}`,
+  })
 }
 
 function createSelect(key: string) {
@@ -518,9 +522,9 @@ const menuItems = computed<AppMenuItem[]>(() => {
     item('show-details', t('context_menu.traffic_table.show_details'), {
       disabled: hasMultipleEntries.value,
     }),
-    item('export-har', t('har_export.export_selected'), {
-      disabled:
-        exportingHAR.value || hasOnlyRawTCPEntries.value || !canExportHAR.value,
+    item('export', t('traffic_export.title'), {
+      disabled: exporting.value || !canExportHAR.value,
+      children: createTrafficExportMenu(t, exportSelection, exporting.value || !canExportHAR.value, contextMenuEntries.value),
     }),
   ]
 

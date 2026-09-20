@@ -13,7 +13,8 @@ export {
     SendRequestBodyType,
     SendRequestProtocol,
     SendRequestProxyMode,
-    TLSClientHelloID
+    TLSClientHelloID,
+    TrafficExportKind
 } from "./models.js";
 
 export type {
@@ -57,6 +58,8 @@ export type {
     TrafficBodyView,
     TrafficEntry,
     TrafficError,
+    TrafficExportRequest,
+    TrafficExportResult,
     TrafficStatistics,
     WebSocketConnectRequest,
     WebSocketConnectResponse,

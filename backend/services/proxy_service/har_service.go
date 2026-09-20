@@ -11,6 +11,11 @@ import (
 func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, error) {
 	release := AcquireHARExport()
 	defer release()
+	s.clearDataMu.Lock()
+	defer s.clearDataMu.Unlock()
+	if err := s.validateTrafficExportGeneration(request.CaptureGeneration); err != nil {
+		return HARWriteResult{}, err
+	}
 
 	entries, sourceEntries, err := s.harExportSnapshots(request.TrafficIDs)
 	if err != nil {

@@ -28,6 +28,10 @@ export function ExportHAR(request: $models.HARExportRequest): $CancellablePromis
     return $Call.ByID(2209319660, request);
 }
 
+export function ExportTraffic(request: $models.TrafficExportRequest): $CancellablePromise<proxyservice$0.TrafficExportResult> {
+    return $Call.ByID(2665938170, request);
+}
+
 export function GetHistory(key: string): $CancellablePromise<(proxyservice$0.TrafficEntry | null)[] | null> {
     return $Call.ByID(376138247, key);
 }

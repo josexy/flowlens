@@ -8,5 +8,6 @@ export {
 
 export type {
     HARExportRequest,
-    HARImportRequest
+    HARImportRequest,
+    TrafficExportRequest
 } from "./models.js";

@@ -393,8 +393,9 @@ type SaveBodyToFileRequest struct {
 }
 
 type HARExportRequest struct {
-	Path       string   `json:"path"`
-	TrafficIDs []uint64 `json:"trafficIds,omitempty"`
+	CaptureGeneration *uint64  `json:"captureGeneration,omitempty"`
+	Path              string   `json:"path"`
+	TrafficIDs        []uint64 `json:"trafficIds,omitempty"`
 }
 
 type SendRequestFormDataItem struct {

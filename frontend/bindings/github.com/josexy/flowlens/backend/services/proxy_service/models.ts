@@ -6,6 +6,7 @@
 import * as settingservice$0 from "../setting_service/models.js";
 
 export interface HARExportRequest {
+    "captureGeneration"?: number | null;
     "path": string;
     "trafficIds"?: number[] | null;
 }
@@ -521,6 +522,37 @@ export interface TrafficEntry {
 export interface TrafficError {
     "timestamp": string;
     "error": string;
+}
+
+export enum TrafficExportKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    TrafficExportRequestMessage = "request",
+    TrafficExportRequestHeaders = "request-headers",
+    TrafficExportRequestBody = "request-body",
+    TrafficExportResponseMessage = "response",
+    TrafficExportResponseHeaders = "response-headers",
+    TrafficExportResponseBody = "response-body",
+    TrafficExportExchange = "request-response",
+    TrafficExportCSV = "csv",
+};
+
+export interface TrafficExportRequest {
+    "captureGeneration"?: number | null;
+    "kind": TrafficExportKind;
+    "path": string;
+    "targetType": string;
+    "trafficIds"?: number[] | null;
+}
+
+export interface TrafficExportResult {
+    "path": string;
+    "exported": number;
+    "skipped": number;
+    "headersDegraded": boolean;
 }
 
 export interface TrafficStatistics {

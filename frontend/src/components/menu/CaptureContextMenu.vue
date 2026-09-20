@@ -5,7 +5,8 @@ import type { ContextMenuItem } from '@nuxt/ui'
 import { UpdateHistoryAlias } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
 import CaptureAliasModal from '@/components/modal/CaptureAliasModal.vue'
 import { useNotify } from '@/composables/useNotify'
-import { useHARExport } from '@/composables/useHARExport'
+import { useTrafficExport } from '@/composables/useTrafficExport'
+import { createTrafficExportMenu } from '@/utils/trafficExport'
 
 const props = defineProps<{
   currentAlias: string
@@ -17,15 +18,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const notify = useNotify()
-const { exporting, exportHAR } = useHARExport()
+const { exporting, exportTraffic } = useTrafficExport()
 
 const aliasModalVisible = ref(false)
 const savingAlias = ref(false)
 
 function handleSelect(key: string) {
-  if (key === 'export-har') {
-    void exportHAR({ filenameHint: props.currentAlias || undefined })
-  } else if (key === 'set-alias') {
+  if (key === 'set-alias') {
     aliasModalVisible.value = true
   }
 }
@@ -47,10 +46,12 @@ async function handleAliasSave(aliasValue: string) {
 
 const menuItems = computed<ContextMenuItem[]>(() => [
   {
-    label: t('har_export.export_session'),
+    label: t('traffic_export.title'),
     icon: 'i-lucide-file-down',
     disabled: exporting.value,
-    onSelect: () => handleSelect('export-har'),
+    children: createTrafficExportMenu(t, (format) => {
+      void exportTraffic(format, { filenameHint: props.currentAlias || undefined })
+    }, exporting.value),
   },
   {
     label: t('capture.set_alias'),

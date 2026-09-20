@@ -5,13 +5,14 @@ import type { ContextMenuItem } from '@nuxt/ui'
 import { useHistoryStore } from '@/stores/history'
 import ConfirmCardModal from '@/components/modal/ConfirmCardModal.vue'
 import { useNotify } from '@/composables/useNotify'
-import { useHARExport } from '@/composables/useHARExport'
+import { useTrafficExport } from '@/composables/useTrafficExport'
+import { createTrafficExportMenu, type TrafficExportFormat } from '@/utils/trafficExport'
 import { getErrorMessage } from '@/utils/dialog'
 import { isHARExportableHistoryFormat } from '@/utils/traffic'
 
 const { t } = useI18n()
 const notify = useNotify()
-const { exporting, exportHAR } = useHARExport()
+const { exporting, exportTraffic } = useTrafficExport()
 const historyStore = useHistoryStore()
 const attrs = useAttrs()
 
@@ -43,17 +44,18 @@ function handleSelect(key: string) {
   const historyKey = contextMenuKey.value
   if (!historyKey) return
 
-  if (key === 'export-har') {
-    if (!canExportHAR.value) {
-      return
-    }
-    void exportHAR({
-      historyKey,
-      filenameHint: contextMetadata.value?.alias || historyKey,
-    })
-  } else if (key === 'delete') {
+  if (key === 'delete') {
     deleteModalVisible.value = true
   }
+}
+
+function exportHistory(format: TrafficExportFormat) {
+  const historyKey = contextMenuKey.value
+  if (!historyKey || !canExportHAR.value || deleting.value) return
+  void exportTraffic(format, {
+    historyKey,
+    filenameHint: contextMetadata.value?.alias || historyKey,
+  })
 }
 
 async function handleDeleteHistory() {
@@ -80,10 +82,10 @@ async function handleDeleteHistory() {
 
 const menuItems = computed<ContextMenuItem[]>(() => [
   {
-    label: t('har_export.export_session'),
+    label: t('traffic_export.title'),
     icon: 'i-lucide-file-down',
-    disabled: exporting.value || !canExportHAR.value,
-    onSelect: () => handleSelect('export-har'),
+    disabled: exporting.value || deleting.value || !canExportHAR.value,
+    children: createTrafficExportMenu(t, exportHistory, exporting.value || deleting.value || !canExportHAR.value),
   },
   {
     label: t('history.delete'),

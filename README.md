@@ -39,6 +39,7 @@ FlowLens helps developers capture local proxy traffic, trace requests back to de
 - API Collections with folders, managed request bodies, and reusable protocol/fingerprint settings
 - Optional global and current-request Python 3.11+ hooks with a correlated live console
 - HAR import from the history toolbar or by dropping files onto the traffic table; current-capture and history HAR 1.2 export with streamed atomic writes
+- Request/response, headers, body, combined exchange, and fixed-column CSV export from capture, history, and traffic context menus
 - Windows, macOS, and Linux process attribution with application icons and metadata
 - Local history, categorization, runtime logs, storage controls, certificates, shortcuts, themes, and bilingual UI
 

@@ -57,6 +57,10 @@ export function ExportHAR(request: $models.HARExportRequest): $CancellablePromis
     return $Call.ByID(999364280, request);
 }
 
+export function ExportTraffic(request: $models.TrafficExportRequest): $CancellablePromise<$models.TrafficExportResult> {
+    return $Call.ByID(2095088910, request);
+}
+
 export function GetLocalDataSize(): $CancellablePromise<$models.LocalDataSize> {
     return $Call.ByID(2690234029);
 }
@@ -93,6 +97,10 @@ export function GetTraffic(): $CancellablePromise<($models.TrafficEntry | null)[
  */
 export function GetTrafficBodyView(id: number): $CancellablePromise<$models.TrafficBodyView | null> {
     return $Call.ByID(2805500463, id);
+}
+
+export function GetTrafficExportGeneration(): $CancellablePromise<number> {
+    return $Call.ByID(1075209774);
 }
 
 export function RecoverRequestBodyForEditing(requestURL: string, headerFields: $models.HTTPHeaderField[] | null, bodyView: $models.TrafficBodyView): $CancellablePromise<$models.RequestBodyRecoveryResult> {
