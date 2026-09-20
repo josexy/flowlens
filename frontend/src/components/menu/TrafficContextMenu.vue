@@ -3,6 +3,7 @@ import { ref, shallowRef, computed, inject, useAttrs, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ContextMenuItem } from '@nuxt/ui'
 import type * as proxyservice from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
+import { ProcessStatus } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
 import type { useHistoryTrafficStore } from '@/stores/historyTraffic'
 import type { useTrafficStore } from '@/stores/traffic'
 import { TRAFFIC_STORE_KEY } from '@/types/inject-keys'
@@ -12,12 +13,16 @@ import {
   getTrafficPathLabel,
   getTrafficProtocol,
   getTrafficTarget,
+  getTrafficTotalDurationMicros,
+  getTrafficTotalSizeBytes,
   getTrafficTypeLabel,
   isHARExportableHistoryFormat,
   isRawTCPTraffic,
   splitHostportToIP,
 } from '@/utils/traffic'
 import { copyText } from '@/utils/clipboard'
+import { formatDurationMicros, formatFileSize } from '@/utils/format'
+import { getVisibleTrafficColumns, type TrafficTableColumnKey } from '@/utils/traffic-table-columns'
 import { ResendRequest as ResendProxyRequest } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
 import { ResendRequest as ResendHistoryRequest } from '#bindings/github.com/josexy/flowlens/backend/services/history_service/historyservice'
 import { useTrafficWorkspaceStore } from '@/stores/trafficWorkspace'
@@ -26,6 +31,7 @@ import ConfirmCardModal from '../modal/ConfirmCardModal.vue'
 import { useNotify } from '@/composables/useNotify'
 import { useHARExport } from '@/composables/useHARExport'
 import { useHistoryStore } from '@/stores/history'
+import { useSettingStore } from '@/stores/setting'
 
 // A superset of Nuxt UI's ContextMenuItem: keeps `key` (for command dispatch and
 // tests) and `color` (rendered as a swatch via the #item-leading slot).
@@ -38,6 +44,7 @@ const { t } = useI18n()
 const notify = useNotify()
 const { exporting: exportingHAR, exportHAR } = useHARExport()
 const historyStore = useHistoryStore()
+const settingStore = useSettingStore()
 type TrafficStoreLike =
   | ReturnType<typeof useTrafficStore>
   | ReturnType<typeof useHistoryTrafficStore>
@@ -47,6 +54,9 @@ const props = defineProps<{
 const injectedTrafficStore = inject(TRAFFIC_STORE_KEY, null)
 const trafficStore = computed(
   () => (props.trafficStore ?? injectedTrafficStore) as TrafficStoreLike,
+)
+const visibleColumns = computed(() =>
+  getVisibleTrafficColumns(trafficStore.value.columns, [...settingStore.hiddenTrafficColumnKeys]),
 )
 const workspaceStore = useTrafficWorkspaceStore()
 const attrs = useAttrs()
@@ -112,6 +122,32 @@ function setEntries(entries: proxyservice.TrafficEntry[]) {
   })
 }
 
+function getCopyRowValue(entry: proxyservice.TrafficEntry): string {
+  const process = entry.metadata?.process
+  let processLabel = '—'
+  if (process?.status === ProcessStatus.ProcessStatusPending) {
+    processLabel = t('traffic.process_identifying')
+  } else if (process?.status === ProcessStatus.ProcessStatusResolved) {
+    processLabel = process.displayName || process.processName ||
+      (process.pid ? t('traffic.process_pid', { pid: process.pid }) : '')
+  }
+
+  const values: Record<TrafficTableColumnKey, string | number> = {
+    id: entry.id,
+    method: getTrafficMethodLabel(entry),
+    host: getTrafficTarget(entry) || '—',
+    path: getTrafficPathLabel(entry),
+    process: processLabel,
+    statusCode: entry.error ? 'ERR' : entry.statusCode || '—',
+    type: getTrafficTypeLabel(entry),
+    destination: splitHostportToIP(entry.metadata?.remoteDestinationAddr || ''),
+    protocol: getTrafficProtocol(entry) || '—',
+    duration: formatDurationMicros(0, getTrafficTotalDurationMicros(entry) ?? -1),
+    size: formatFileSize(getTrafficTotalSizeBytes(entry) ?? -1),
+  }
+  return visibleColumns.value.map((column) => values[column.key]).join('\t')
+}
+
 function getCopyValue(entry: proxyservice.TrafficEntry, key: string): string {
   switch (key) {
     case 'copy-target':
@@ -131,16 +167,7 @@ function getCopyValue(entry: proxyservice.TrafficEntry, key: string): string {
     case 'copy-client-addr':
       return (entry.metadata?.localSourceAddr || '') as string
     case 'copy-row':
-      return [
-        entry.id,
-        getTrafficMethodLabel(entry),
-        getTrafficTarget(entry),
-        getTrafficPathLabel(entry),
-        entry.statusCode || '',
-        getTrafficTypeLabel(entry),
-        entry.metadata?.remoteDestinationAddr || '',
-        getTrafficProtocol(entry),
-      ].join('\t')
+      return getCopyRowValue(entry)
     default:
       return ''
   }
