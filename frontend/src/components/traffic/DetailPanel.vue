@@ -250,6 +250,11 @@ const responseTabItems = computed<TabsItem[]>(() => {
   return items
 })
 
+// Reka UI 2.10 keeps observing the initial tab buttons. Rebuild the tab bars when
+// their values change so replacement buttons are observed; labels keep the same key.
+const requestTabsKey = computed(() => requestTabItems.value.map((item) => item.value).join('|'))
+const responseTabsKey = computed(() => responseTabItems.value.map((item) => item.value).join('|'))
+
 const errorMessage = computed(() => {
   if (!selectedEntry.value) return undefined
   return selectedEntry.value.error?.error
@@ -635,6 +640,7 @@ const formatTimestamp = formatToRFC3339
             <div class="flex h-full min-h-0 flex-col">
               <div class="flex min-h-9.5 min-w-0 shrink-0 items-center gap-2 bg-app-panel px-2.5">
                 <UTabs
+                  :key="requestTabsKey"
                   :model-value="requestActiveTab"
                   :items="requestTabItems"
                   :content="false"
@@ -737,6 +743,7 @@ const formatTimestamp = formatToRFC3339
             <div class="flex h-full min-h-0 flex-col">
               <div class="flex min-h-9.5 min-w-0 shrink-0 items-center bg-app-panel px-2.5">
                 <UTabs
+                  :key="responseTabsKey"
                   :model-value="responseActiveTab"
                   :items="responseTabItems"
                   :content="false"
