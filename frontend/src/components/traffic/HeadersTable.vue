@@ -164,6 +164,9 @@ onUnmounted(() => {
           class="w-full min-w-0 overflow-hidden text-sm leading-[1.45] text-app-text break-all wrap-break-word [display:-webkit-box] [-webkit-line-clamp:1] [-webkit-box-orient:vertical] [line-clamp:1]"
           >{{ header.value }}</span
         >
+        <div v-if="$slots['value-trailing']" class="ml-1 shrink-0" @click.stop>
+          <slot name="value-trailing" :field="header" :index="index" />
+        </div>
       </div>
     </div>
   </div>

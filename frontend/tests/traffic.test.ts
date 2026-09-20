@@ -76,7 +76,8 @@ import {
 import {
   countRequestCookieRows,
   requestCookiesRecord,
-  responseCookiesRecord,
+  parseResponseCookies,
+  cookieHeaderFields,
 } from '../src/utils/cookies.js'
 import {
   UNKNOWN_FORMATTED_VALUE,
@@ -2064,19 +2065,90 @@ test('cookie helpers consume ordered header fields directly', () => {
     { first: ['one'], second: ['two'], third: ['three'] },
   )
   assert.deepEqual(
-    {
-      ...responseCookiesRecord([
-        { name: 'Set-Cookie', value: 'session=abc; HttpOnly' },
-        { name: 'set-cookie', value: 'session=def; Path=/' },
-      ]),
-    },
-    {
-      'session.Value': ['abc'],
-      'session.HttpOnly': ['true'],
-      'session#2.Value': ['def'],
-      'session#2.Path': ['/'],
-    },
+    parseResponseCookies([
+      { name: 'Set-Cookie', value: 'session=abc; HttpOnly' },
+      { name: 'set-cookie', value: 'session=def; Path=/' },
+    ]),
+    [
+      {
+        name: 'session',
+        value: 'abc',
+        hasEquals: true,
+        attributes: [{ name: 'HttpOnly', value: '', hasEquals: false }],
+        header: { name: 'Set-Cookie', value: 'session=abc; HttpOnly' },
+      },
+      {
+        name: 'session',
+        value: 'def',
+        hasEquals: true,
+        attributes: [{ name: 'Path', value: '/', hasEquals: true }],
+        header: { name: 'set-cookie', value: 'session=def; Path=/' },
+      },
+    ],
   )
+})
+
+test('response cookies preserve raw text, empty values, duplicate attributes and extensions', () => {
+  const raw =
+    'session.Value=abc==; domain=.example.test; Path=/; path=/next; Secure; HttpOnly=; SameSite=None; Partitioned; Extension=a=b; Expires=Wed, 21 Oct 2015 07:28:00 GMT'
+  const cookies = parseResponseCookies([
+    { name: 'Set-Cookie', value: raw },
+    { name: 'set-cookie', value: 'session.Value=' },
+    { name: 'Set-Cookie', value: 'session#2="quoted=="' },
+  ])
+  assert.equal(cookies.length, 3)
+  assert.equal(cookies[0]?.name, 'session.Value')
+  assert.equal(cookies[0]?.value, 'abc==')
+  assert.equal(cookies[0]?.header.value, raw)
+  assert.deepEqual(cookies[0]?.attributes, [
+    { name: 'domain', value: '.example.test', hasEquals: true },
+    { name: 'Path', value: '/', hasEquals: true },
+    { name: 'path', value: '/next', hasEquals: true },
+    { name: 'Secure', value: '', hasEquals: false },
+    { name: 'HttpOnly', value: '', hasEquals: true },
+    { name: 'SameSite', value: 'None', hasEquals: true },
+    { name: 'Partitioned', value: '', hasEquals: false },
+    { name: 'Extension', value: 'a=b', hasEquals: true },
+    { name: 'Expires', value: 'Wed, 21 Oct 2015 07:28:00 GMT', hasEquals: true },
+  ])
+  assert.equal(cookies[1]?.value, '')
+  assert.deepEqual(cookies[1]?.attributes, [])
+  assert.equal(cookies[2]?.name, 'session#2')
+  assert.equal(cookies[2]?.value, '"quoted=="')
+})
+
+test('cookie header copying preserves interleaved header casing and original values', () => {
+  const fields = [
+    { name: 'Set-Cookie', value: 'a=1; Secure' },
+    { name: 'set-cookie', value: 'a=2; Path=/next' },
+    { name: 'Content-Type', value: 'text/plain' },
+    { name: 'Set-Cookie', value: 'b=;  HttpOnly ' },
+  ]
+  const headers = cookieHeaderFields(fields, 'set-cookie')
+  assert.deepEqual(headers, [fields[0], fields[1], fields[3]])
+  assert.equal(
+    formatHeaderFieldsAsText(headers),
+    'Set-Cookie: a=1; Secure\nset-cookie: a=2; Path=/next\nSet-Cookie: b=;  HttpOnly ',
+  )
+  assert.deepEqual(parseResponseCookies(fields).map((cookie) => cookie.header), headers)
+})
+
+test('response cookie parsing keeps malformed headers inspectable and handles missing input', () => {
+  assert.deepEqual(parseResponseCookies(undefined), [])
+  assert.deepEqual(parseResponseCookies(null), [])
+  assert.deepEqual(parseResponseCookies([null, { name: 'Cookie', value: 'a=1' }]), [])
+  const cookies = parseResponseCookies([
+    { name: 'Set-Cookie', value: '' },
+    { name: 'Set-Cookie', value: 'name-only; =orphan; ; Flag' },
+  ])
+  assert.equal(cookies.length, 2)
+  assert.equal(cookies[0]?.header.value, '')
+  assert.equal(cookies[0]?.hasEquals, false)
+  assert.equal(cookies[1]?.hasEquals, false)
+  assert.deepEqual(cookies[1]?.attributes, [
+    { name: '', value: 'orphan', hasEquals: true },
+    { name: 'Flag', value: '', hasEquals: false },
+  ])
 })
 
 test('request cookie count includes only enabled named cookies', () => {

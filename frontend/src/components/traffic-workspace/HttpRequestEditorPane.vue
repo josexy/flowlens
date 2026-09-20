@@ -53,11 +53,10 @@ import {
   findInvalidRequestHeaderName,
   formatHeaderFieldsAsJson,
   formatHeaderFieldsAsText,
-  headersRecordToFields,
   synchronizeRequestRouteHeaders,
   type HeaderField,
 } from '@/utils/headers'
-import { countRequestCookieRows, hasHeader, responseCookiesRecord } from '@/utils/cookies'
+import { countRequestCookieRows, hasHeader, parseResponseCookies } from '@/utils/cookies'
 import { appendPythonLogBatch, filterPythonLogBatch } from '@/utils/pythonConsole'
 
 type SummaryTagType = 'default' | 'error' | 'primary' | 'info' | 'success' | 'warning'
@@ -365,6 +364,9 @@ function editableRowsToRecord(rows: EditableKeyValue[] | undefined): Record<stri
 const responseHeadersRecord = computed<Record<string, string[]>>(() =>
   editableRowsToRecord(state.value.response?.headers),
 )
+const responseHeaderFields = computed(() =>
+  editableRowsToHeaderFields(state.value.response?.headers ?? []),
+)
 
 const responseHeaderWarning = computed(() => {
   if (state.value.response?.headersTruncated) {
@@ -373,7 +375,7 @@ const responseHeaderWarning = computed(() => {
   return ''
 })
 
-const hasResponseCookies = computed(() => hasHeader(responseHeadersRecord.value, 'set-cookie'))
+const hasResponseCookies = computed(() => hasHeader(responseHeaderFields.value, 'set-cookie'))
 
 const responseTrailerWarning = computed(() => {
   if (state.value.response?.trailersTruncated) {
@@ -382,8 +384,8 @@ const responseTrailerWarning = computed(() => {
   return ''
 })
 
-const responseCookieFields = computed(() => responseCookiesRecord(responseHeadersRecord.value))
-const responseCookieCount = computed(() => headersRecordToFields(responseCookieFields.value).length)
+const responseCookies = computed(() => parseResponseCookies(responseHeaderFields.value))
+const responseCookieCount = computed(() => responseCookies.value.length)
 
 const responseContentType = computed(() => {
   const headers = responseHeadersRecord.value
@@ -1580,9 +1582,10 @@ onBeforeUnmount(() => {
                       data-name="response-cookies"
                       role="tabpanel"
                       :title="t('detail.cookie_list')"
-                      :cookies="responseCookieFields"
+                      :response-cookies="responseCookies"
                       :empty-title="t('detail.no_cookies')"
-                      :raw-headers="responseHeadersRecord"
+                      :raw-headers="responseHeaderFields"
+                      :warning-message="responseHeaderWarning"
                       header-name="set-cookie"
                     />
                     <div

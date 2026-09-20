@@ -33,7 +33,7 @@ import {
   normalizeHeaderFields,
   sortHeaderFields,
 } from '@/utils/headers'
-import { hasHeader, requestCookiesRecord, responseCookiesRecord } from '@/utils/cookies'
+import { hasHeader, requestCookiesRecord, parseResponseCookies } from '@/utils/cookies'
 import { isRawTCPTraffic, isWebSocketTraffic } from '@/utils/traffic'
 import { formatRawHTTPRequest, formatRawHTTPResponse } from '@/utils/httpRaw'
 import { parseUrlQuery } from '@/utils/urlHighlight'
@@ -327,13 +327,11 @@ const responseTrailerWarning = computed(() => {
 const requestCookieFields = computed(() =>
   requestCookiesRecord(selectedEntry.value?.request?.headerFields),
 )
-const responseCookieFields = computed(() =>
-  responseCookiesRecord(selectedEntry.value?.response?.headerFields),
+const responseCookies = computed(() =>
+  parseResponseCookies(selectedEntry.value?.response?.headerFields),
 )
 const requestCookiesCount = computed(() => headersRecordToFields(requestCookieFields.value).length)
-const responseCookiesCount = computed(
-  () => headersRecordToFields(responseCookieFields.value).length,
-)
+const responseCookiesCount = computed(() => responseCookies.value.length)
 const displayRequestHeaders = computed(() =>
   sortHeaderFields(requestHeaderSource.value.fields, requestHeaderSortOrder.value),
 )
@@ -836,9 +834,10 @@ const formatTimestamp = formatToRFC3339
                     data-name="response-cookies"
                     role="tabpanel"
                     :title="t('detail.cookie_list')"
-                    :cookies="responseCookieFields"
+                    :response-cookies="responseCookies"
                     :empty-title="t('detail.no_cookies')"
                     :raw-headers="selectedEntry.response?.headerFields"
+                    :warning-message="responseHeaderWarning"
                     header-name="set-cookie"
                   />
                   <DetailHeadersPane

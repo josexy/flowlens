@@ -10,6 +10,20 @@ export type NullableCookieHeaders =
   | (HeaderField | null)[]
 export type CookieHeaderName = 'cookie' | 'set-cookie'
 
+export interface CookieAttribute {
+  name: string
+  value: string
+  hasEquals: boolean
+}
+
+export interface ResponseCookie {
+  name: string
+  value: string
+  hasEquals: boolean
+  attributes: CookieAttribute[]
+  header: HeaderField
+}
+
 const REQUEST_COOKIE_HEADER = 'cookie'
 const RESPONSE_COOKIE_HEADER = 'set-cookie'
 
@@ -111,24 +125,24 @@ export function collectHeaderValues(
   return values
 }
 
-export function cookieHeadersRecord(
+export function cookieHeaderFields(
   headers: NullableCookieHeaders,
   expectedName: CookieHeaderName,
-): Record<string, string[]> {
-  const record: Record<string, string[]> = Object.create(null)
+): HeaderField[] {
+  const fields: HeaderField[] = []
   forEachHeader(headers, (name, headerValues) => {
     if (!isHeaderName(name, expectedName)) {
       return
     }
     if (headerValues.length === 0) {
-      appendRecordValue(record, name, '')
+      fields.push({ name, value: '' })
       return
     }
     for (const value of headerValues) {
-      appendRecordValue(record, name, value ?? '')
+      fields.push({ name, value: value ?? '' })
     }
   })
-  return record
+  return fields
 }
 
 export function requestCookieHeadersRecord(headers: EditableKeyValue[]): Record<string, string[]> {
@@ -154,52 +168,29 @@ export function requestCookiesRecord(
   return record
 }
 
-function createUniqueCookiePrefix(baseName: string, usedPrefixes: Set<string>): string {
-  const base = baseName || 'Cookie'
-  if (!usedPrefixes.has(base)) {
-    usedPrefixes.add(base)
-    return base
-  }
-
-  let suffix = 2
-  let candidate = `${base}#${suffix}`
-  while (usedPrefixes.has(candidate)) {
-    suffix += 1
-    candidate = `${base}#${suffix}`
-  }
-  usedPrefixes.add(candidate)
-  return candidate
-}
-
-export function responseCookiesRecord(
+export function parseResponseCookies(
   headers: NullableCookieHeaders,
-): Record<string, string[]> {
-  const record: Record<string, string[]> = Object.create(null)
-  const usedPrefixes = new Set<string>()
-
-  for (const headerValue of collectHeaderValues(headers, RESPONSE_COOKIE_HEADER)) {
-    const fields = headerValue.split(';')
+): ResponseCookie[] {
+  return cookieHeaderFields(headers, RESPONSE_COOKIE_HEADER).map((header) => {
+    const fields = header.value.split(';')
     const cookie = splitCookieField(fields.shift() ?? '')
-    const prefix = createUniqueCookiePrefix(cookie.key, usedPrefixes)
-    appendRecordValue(record, `${prefix}.Value`, cookie.value)
+    const attributes: CookieAttribute[] = []
 
     for (const rawAttribute of fields) {
       if (!rawAttribute.trim()) {
         continue
       }
       const attribute = splitCookieField(rawAttribute)
-      if (!attribute.key) {
-        continue
-      }
-      appendRecordValue(
-        record,
-        `${prefix}.${attribute.key}`,
-        attribute.hasEquals ? attribute.value : 'true',
-      )
+      attributes.push({ name: attribute.key, value: attribute.value, hasEquals: attribute.hasEquals })
     }
-  }
-
-  return record
+    return {
+      name: cookie.key,
+      value: cookie.value,
+      hasEquals: cookie.hasEquals,
+      attributes,
+      header,
+    }
+  })
 }
 
 export function requestCookieRows(headers: EditableKeyValue[]): EditableKeyValue[] {

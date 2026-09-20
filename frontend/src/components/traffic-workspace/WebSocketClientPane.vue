@@ -27,16 +27,14 @@ import { useWorkbenchStore } from '@/stores/workbench'
 import { registerShortcutHandler, useShortcutKbds } from '@/shortcuts'
 import {
   editableRowsToHeaderFields,
-  editableRowsToHeadersRecord,
   findInvalidRequestHeaderName,
   formatHeaderFieldsAsJson,
   formatHeaderFieldsAsText,
-  headersRecordToFields,
 } from '@/utils/headers'
 import {
   countRequestCookieRows,
   hasHeader,
-  responseCookiesRecord,
+  parseResponseCookies,
 } from '@/utils/cookies'
 
 type SummaryTagType = 'default' | 'error' | 'primary' | 'info' | 'success' | 'warning'
@@ -114,17 +112,12 @@ const requestCookieCount = computed(() => countRequestCookieRows(state.value.hea
 const responseHeaderFields = computed(() =>
   editableRowsToHeaderFields(state.value.responseHeaders),
 )
-const responseHeadersRecord = computed(() =>
-  editableRowsToHeadersRecord(state.value.responseHeaders),
-)
 const hasResponseHeaders = computed(() => responseHeaderFields.value.length > 0)
 const hasResponseCookies = computed(() =>
-  hasHeader(responseHeadersRecord.value, 'set-cookie'),
+  hasHeader(responseHeaderFields.value, 'set-cookie'),
 )
-const responseCookieFields = computed(() => responseCookiesRecord(responseHeadersRecord.value))
-const responseCookieCount = computed(
-  () => headersRecordToFields(responseCookieFields.value).length,
-)
+const responseCookies = computed(() => parseResponseCookies(responseHeaderFields.value))
+const responseCookieCount = computed(() => responseCookies.value.length)
 const hasErrorResponse = computed(() => state.value.connectionStatus === 'error')
 const hasCancelledResponse = computed(() => state.value.connectionStatus === 'cancelled')
 const isConnecting = computed(() => state.value.connectionStatus === 'connecting')
@@ -850,9 +843,9 @@ onBeforeUnmount(() => {
                     data-name="response-cookies"
                     role="tabpanel"
                     :title="t('detail.cookie_list')"
-                    :cookies="responseCookieFields"
+                    :response-cookies="responseCookies"
                     :empty-title="t('detail.no_cookies')"
-                    :raw-headers="responseHeadersRecord"
+                    :raw-headers="responseHeaderFields"
                     header-name="set-cookie"
                   />
                   <div
