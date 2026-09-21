@@ -10,6 +10,16 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CheckForUpdates starts the Wails updater flow without blocking the frontend
+ * binding call. The updater owns the check, download, verification, install,
+ * and restart UI; this guard only prevents overlapping checks from repeated
+ * clicks on the status bar button.
+ */
+export function CheckForUpdates(): $CancellablePromise<void> {
+    return $Call.ByID(4204358798);
+}
+
+/**
  * GetEnvironmentInfo returns build environment details for the running application.
  */
 export function GetEnvironmentInfo(): $CancellablePromise<$models.EnvironmentInfo> {

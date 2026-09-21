@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { Browser } from '@wailsio/runtime'
-import { computed, ref } from 'vue'
+import { Browser, Events, Updater } from '@wailsio/runtime'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { GetEnvironmentInfo } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
+import {
+  CheckForUpdates,
+  GetEnvironmentInfo,
+} from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
 import type { EnvironmentInfo } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/models'
 import { useNotify } from '@/composables/useNotify'
 import { useTrafficWorkspaceStore } from '@/stores/trafficWorkspace'
@@ -24,6 +27,40 @@ const environmentInfo = ref<EnvironmentInfo | null>(null)
 const environmentLoading = ref(false)
 const environmentError = ref('')
 const githubOpening = ref(false)
+const updateBusy = ref(false)
+const updateAvailable = ref(false)
+const updateReady = ref(false)
+const updateFailed = ref(false)
+const updaterOffs: Array<() => void> = []
+
+const updateIcon = computed(() => {
+  if (updateReady.value) {
+    return 'i-lucide-circle-check'
+  }
+  if (updateFailed.value) {
+    return 'i-lucide-circle-alert'
+  }
+  if (updateAvailable.value) {
+    return 'i-lucide-download'
+  }
+  return 'i-lucide-refresh-cw'
+})
+
+const updateLabel = computed(() => {
+  if (updateReady.value) {
+    return t('status.update_ready')
+  }
+  if (updateAvailable.value) {
+    return t('status.update_available')
+  }
+  if (updateFailed.value) {
+    return t('status.update_error')
+  }
+  if (updateBusy.value) {
+    return t('status.update_checking')
+  }
+  return t('status.action_update')
+})
 
 const environmentRows = computed(() => {
   if (!environmentInfo.value) {
@@ -86,6 +123,96 @@ async function openGithubProject() {
     githubOpening.value = false
   }
 }
+
+async function checkForUpdates() {
+  if (updateBusy.value) {
+    return
+  }
+  updateBusy.value = true
+  updateFailed.value = false
+  try {
+    await CheckForUpdates()
+  } catch (error) {
+    updateBusy.value = false
+    updateFailed.value = true
+    notify.error(
+      t('status.update_failed', {
+        error: errorMessage(error),
+      }),
+    )
+  }
+}
+
+onMounted(() => {
+  updaterOffs.push(
+    Events.On(Updater.Events.CheckStarted, () => {
+      updateBusy.value = true
+      updateAvailable.value = false
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.UpdateAvailable, () => {
+      updateBusy.value = true
+      updateAvailable.value = true
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.DownloadStarted, () => {
+      updateBusy.value = true
+    }),
+    Events.On(Updater.Events.DownloadComplete, () => {
+      updateBusy.value = true
+    }),
+    Events.On(Updater.Events.Verifying, () => {
+      updateBusy.value = true
+    }),
+    Events.On(Updater.Events.Installing, () => {
+      updateBusy.value = true
+    }),
+    Events.On(Updater.Events.NoUpdate, () => {
+      updateBusy.value = false
+      updateAvailable.value = false
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.User.Cancel, () => {
+      updateBusy.value = false
+      updateAvailable.value = false
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.User.Remind, () => {
+      updateBusy.value = false
+      updateAvailable.value = false
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.User.Skip, () => {
+      updateBusy.value = false
+      updateAvailable.value = false
+      updateReady.value = false
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.UpdateReady, () => {
+      updateBusy.value = false
+      updateAvailable.value = true
+      updateReady.value = true
+      updateFailed.value = false
+    }),
+    Events.On(Updater.Events.Error, () => {
+      updateBusy.value = false
+      updateReady.value = false
+      updateFailed.value = true
+    }),
+  )
+})
+
+onBeforeUnmount(() => {
+  for (const off of updaterOffs) {
+    off()
+  }
+  updaterOffs.length = 0
+})
 </script>
 
 <template>
@@ -131,6 +258,27 @@ async function openGithubProject() {
             :aria-label="t('status.action_github')"
             class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! text-app-text-muted! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
             @click="openGithubProject"
+          />
+        </UTooltip>
+
+        <UTooltip :text="updateLabel" :content="{ side: 'top' }">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            square
+            :icon="updateIcon"
+            :loading="updateBusy"
+            :disabled="updateBusy || updateReady"
+            :ui="statusActionButtonUi"
+            :aria-label="updateLabel"
+            :class="{
+              'text-app-accent!': updateAvailable || updateReady,
+              'text-app-error!': updateFailed,
+              'text-app-text-muted!': !updateAvailable && !updateReady && !updateFailed,
+            }"
+            class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
+            @click="checkForUpdates"
           />
         </UTooltip>
       </div>

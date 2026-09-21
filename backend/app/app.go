@@ -22,6 +22,8 @@ import (
 	shortcutservice "github.com/josexy/flowlens/backend/services/shortcut_service"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 type Assets struct {
@@ -43,6 +45,7 @@ const (
 	globalShortcutDebounce       = 250 * time.Millisecond
 	shutdownMinimumVisible       = 300 * time.Millisecond
 	shutdownUIReadyTimeout       = 2 * time.Second
+	updaterRestartGracePeriod    = 10 * time.Second
 )
 
 func Run(assets Assets) {
@@ -59,6 +62,7 @@ func Run(assets Assets) {
 	var windowStartupReady atomic.Bool
 	var mainFrontendReady atomic.Bool
 	var shutdownEventDispatched atomic.Bool
+	var updaterRestartRequested atomic.Bool
 	var shutdownCoordinator *gracefulShutdownCoordinator
 	var requestApplicationQuit func()
 	showMainWindow := func() {
@@ -153,6 +157,23 @@ func Run(assets Assets) {
 	}
 	var mainWindow *application.WebviewWindow
 	app := application.New(appOptions)
+	githubProvider, err := github.New(github.Config{
+		Repository:    "josexy/flowlens",
+		Prerelease:    false,
+		ChecksumAsset: "SHA256SUMS.txt",
+		AssetMatcher:  matchUpdaterAsset,
+	})
+	if err != nil {
+		reportStartupFailure("configure GitHub updater", err)
+		return
+	}
+	if err := app.Updater.Init(updater.Config{
+		CurrentVersion: appservice.APP_VERSION,
+		Providers:      []updater.Provider{githubProvider},
+	}); err != nil {
+		reportStartupFailure("initialize updater", err)
+		return
+	}
 
 	appSvc := appservice.New()
 	db, err := appdatabase.Open()
@@ -384,7 +405,8 @@ func Run(assets Assets) {
 		if shutdownCoordinator.InProgress() {
 			return
 		}
-		if settingsWindowDirty.Load() {
+		forceUpdaterQuit := updaterRestartRequested.Swap(false)
+		if settingsWindowDirty.Load() && !forceUpdaterQuit {
 			if _, ok := app.Window.GetByName(settingsWindowName); ok {
 				showSettingsWindow()
 				app.Event.Emit(confirmQuitRequestEventName)
@@ -394,6 +416,14 @@ func Run(assets Assets) {
 		}
 		shutdownCoordinator.Request()
 	}
+	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
+		updaterRestartRequested.Store(true)
+		time.AfterFunc(updaterRestartGracePeriod, func() {
+			if shutdownCoordinator == nil || !shutdownCoordinator.InProgress() {
+				updaterRestartRequested.Store(false)
+			}
+		})
+	})
 	tray = app.SystemTray.New()
 	if isMacOS {
 		tray.SetTemplateIcon(assets.TrayTemplateIcon)

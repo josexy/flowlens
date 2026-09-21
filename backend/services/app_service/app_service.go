@@ -4,7 +4,9 @@ import (
 	"context"
 	"runtime"
 	"runtime/debug"
+	"sync/atomic"
 
+	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -34,7 +36,8 @@ type EnvironmentInfo struct {
 var injectedBuildCommit string
 
 type AppService struct {
-	app *application.App
+	app                 *application.App
+	updateCheckInFlight atomic.Bool
 }
 
 func New() *AppService {
@@ -44,6 +47,22 @@ func New() *AppService {
 func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.app = application.Get()
 	return nil
+}
+
+// CheckForUpdates starts the Wails updater flow without blocking the frontend
+// binding call. The updater owns the check, download, verification, install,
+// and restart UI; this guard only prevents overlapping checks from repeated
+// clicks on the status bar button.
+func (a *AppService) CheckForUpdates() {
+	if a.app == nil || !a.updateCheckInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer a.updateCheckInFlight.Store(false)
+		if err := a.app.Updater.CheckAndInstall(context.Background()); err != nil {
+			logger.G().Warnf("Check for updates failed: %v", err)
+		}
+	}()
 }
 
 func (a *AppService) currentWindow() application.Window {
