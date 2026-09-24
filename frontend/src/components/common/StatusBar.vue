@@ -3,6 +3,7 @@ import { Browser, Events, Updater } from '@wailsio/runtime'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  CanSelfUpdate,
   CheckForUpdates,
   GetEnvironmentInfo,
 } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
@@ -28,6 +29,7 @@ const environmentLoading = ref(false)
 const environmentError = ref('')
 const githubOpening = ref(false)
 const updateBusy = ref(false)
+const updateSupported = ref(false)
 const updateAvailable = ref(false)
 const updateReady = ref(false)
 const updateFailed = ref(false)
@@ -50,11 +52,11 @@ const updateLabel = computed(() => {
   if (updateReady.value) {
     return t('status.update_ready')
   }
-  if (updateAvailable.value) {
-    return t('status.update_available')
-  }
   if (updateFailed.value) {
     return t('status.update_error')
+  }
+  if (updateAvailable.value) {
+    return t('status.update_available')
   }
   if (updateBusy.value) {
     return t('status.update_checking')
@@ -144,6 +146,13 @@ async function checkForUpdates() {
 }
 
 onMounted(() => {
+  void CanSelfUpdate()
+    .then((supported) => {
+      updateSupported.value = supported
+    })
+    .catch(() => {
+      updateSupported.value = false
+    })
   updaterOffs.push(
     Events.On(Updater.Events.CheckStarted, () => {
       updateBusy.value = true
@@ -201,6 +210,7 @@ onMounted(() => {
     }),
     Events.On(Updater.Events.Error, () => {
       updateBusy.value = false
+      updateAvailable.value = false
       updateReady.value = false
       updateFailed.value = true
     }),
@@ -261,7 +271,7 @@ onBeforeUnmount(() => {
           />
         </UTooltip>
 
-        <UTooltip :text="updateLabel" :content="{ side: 'top' }">
+        <UTooltip v-if="updateSupported" :text="updateLabel" :content="{ side: 'top' }">
           <UButton
             color="neutral"
             variant="ghost"

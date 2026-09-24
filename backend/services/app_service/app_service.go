@@ -2,6 +2,8 @@ package appservice
 
 import (
 	"context"
+	"errors"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"sync/atomic"
@@ -53,9 +55,15 @@ func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOp
 // binding call. The updater owns the check, download, verification, install,
 // and restart UI; this guard only prevents overlapping checks from repeated
 // clicks on the status bar button.
-func (a *AppService) CheckForUpdates() {
-	if a.app == nil || !a.updateCheckInFlight.CompareAndSwap(false, true) {
-		return
+func (a *AppService) CheckForUpdates() error {
+	if a.app == nil {
+		return errors.New("application is not ready")
+	}
+	if !CanSelfUpdate() {
+		return errors.New("self-update is unavailable for this installation")
+	}
+	if !a.updateCheckInFlight.CompareAndSwap(false, true) {
+		return nil
 	}
 	go func() {
 		defer a.updateCheckInFlight.Store(false)
@@ -63,6 +71,25 @@ func (a *AppService) CheckForUpdates() {
 			logger.G().Warnf("Check for updates failed: %v", err)
 		}
 	}()
+	return nil
+}
+
+// CanSelfUpdate reports whether this executable is installed in a location
+// that the updater can replace without invoking an installer or package
+// manager. Package-managed binaries and machine-wide Windows installs are
+// intentionally excluded because the updater helper has no elevation path.
+func CanSelfUpdate() bool {
+	executable, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return canSelfUpdatePath(runtime.GOOS, executable, os.Getenv("APPIMAGE"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"))
+}
+
+// CanSelfUpdate reports whether the running installation can be replaced by
+// the built-in updater.
+func (a *AppService) CanSelfUpdate() bool {
+	return CanSelfUpdate()
 }
 
 func (a *AppService) currentWindow() application.Window {

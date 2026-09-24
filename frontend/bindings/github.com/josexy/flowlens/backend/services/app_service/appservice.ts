@@ -10,6 +10,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CanSelfUpdate reports whether the running installation can be replaced by
+ * the built-in updater.
+ */
+export function CanSelfUpdate(): $CancellablePromise<boolean> {
+    return $Call.ByID(3323249888);
+}
+
+/**
  * CheckForUpdates starts the Wails updater flow without blocking the frontend
  * binding call. The updater owns the check, download, verification, install,
  * and restart UI; this guard only prevents overlapping checks from repeated

@@ -45,8 +45,32 @@ const (
 	globalShortcutDebounce       = 250 * time.Millisecond
 	shutdownMinimumVisible       = 300 * time.Millisecond
 	shutdownUIReadyTimeout       = 2 * time.Second
-	updaterRestartGracePeriod    = 10 * time.Second
+	updaterRestartGracePeriod    = 2 * time.Second
 )
+
+func waitForUpdaterRestart(app *application.App, requested *atomic.Bool) bool {
+	if requested.Swap(false) {
+		return true
+	}
+	if app == nil || app.Updater == nil || app.Updater.State() != updater.StateReady || app.Updater.DownloadedPath() == "" {
+		return false
+	}
+
+	timer := time.NewTimer(updaterRestartGracePeriod)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer timer.Stop()
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if requested.Swap(false) {
+				return true
+			}
+		case <-timer.C:
+			return requested.Swap(false)
+		}
+	}
+}
 
 func Run(assets Assets) {
 
@@ -405,7 +429,7 @@ func Run(assets Assets) {
 		if shutdownCoordinator.InProgress() {
 			return
 		}
-		forceUpdaterQuit := updaterRestartRequested.Swap(false)
+		forceUpdaterQuit := waitForUpdaterRestart(app, &updaterRestartRequested)
 		if settingsWindowDirty.Load() && !forceUpdaterQuit {
 			if _, ok := app.Window.GetByName(settingsWindowName); ok {
 				showSettingsWindow()
@@ -416,12 +440,13 @@ func Run(assets Assets) {
 		}
 		shutdownCoordinator.Request()
 	}
+	// Wails dispatches ordinary custom-event listeners asynchronously. The
+	// shutdown path waits briefly for this marker when a staged update is ready,
+	// so the updater's app.Quit cannot race the dirty-settings prompt.
 	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
 		updaterRestartRequested.Store(true)
 		time.AfterFunc(updaterRestartGracePeriod, func() {
-			if shutdownCoordinator == nil || !shutdownCoordinator.InProgress() {
-				updaterRestartRequested.Store(false)
-			}
+			updaterRestartRequested.Store(false)
 		})
 	})
 	tray = app.SystemTray.New()
