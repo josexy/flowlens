@@ -2,10 +2,15 @@ package appservice
 
 import (
 	"context"
+	"errors"
+	"os"
 	"runtime"
 	"runtime/debug"
+	"sync/atomic"
 
+	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 const (
@@ -34,7 +39,8 @@ type EnvironmentInfo struct {
 var injectedBuildCommit string
 
 type AppService struct {
-	app *application.App
+	app                 *application.App
+	updateCheckInFlight atomic.Bool
 }
 
 func New() *AppService {
@@ -44,6 +50,64 @@ func New() *AppService {
 func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.app = application.Get()
 	return nil
+}
+
+// CheckForUpdates starts the Wails updater flow without blocking the frontend
+// binding call. The updater owns the check, download, verification, install,
+// and restart UI; this guard only prevents overlapping checks from repeated
+// clicks on the status bar button.
+func (a *AppService) CheckForUpdates() error {
+	if a.app == nil {
+		return errors.New("application is not ready")
+	}
+	if !CanSelfUpdate() {
+		return errors.New("self-update is unavailable for this installation")
+	}
+	if !a.updateCheckInFlight.CompareAndSwap(false, true) {
+		return nil
+	}
+	go func() {
+		defer a.updateCheckInFlight.Store(false)
+		if err := a.app.Updater.CheckAndInstall(context.Background()); err != nil {
+			logger.G().Warnf("Check for updates failed: %v", err)
+		}
+	}()
+	return nil
+}
+
+// RestartForUpdate requests the application's guarded restart flow, including
+// the unsaved-settings confirmation, even if the update window was closed.
+func (a *AppService) RestartForUpdate() error {
+	if a.app == nil {
+		return errors.New("application is not ready")
+	}
+	if !CanSelfUpdate() {
+		return errors.New("self-update is unavailable for this installation")
+	}
+	if a.app.Updater.State() != updater.StateReady || a.app.Updater.DownloadedPath() == "" {
+		return updater.ErrNotReady
+	}
+	a.app.Event.Emit(updater.EventUserRestart)
+	return nil
+}
+
+// CanSelfUpdate reports whether this executable is installed in a location
+// that the updater can replace without invoking an installer or package
+// manager. Package-managed binaries and machine-wide Windows installs are
+// intentionally excluded because the updater helper has no elevation path.
+// Linux installations use manual updates until AppImage replacement is supported.
+func CanSelfUpdate() bool {
+	executable, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return canSelfUpdatePath(runtime.GOOS, executable, os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"))
+}
+
+// CanSelfUpdate reports whether the running installation can be replaced by
+// the built-in updater.
+func (a *AppService) CanSelfUpdate() bool {
+	return CanSelfUpdate()
 }
 
 func (a *AppService) currentWindow() application.Window {

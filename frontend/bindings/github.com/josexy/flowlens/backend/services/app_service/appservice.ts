@@ -10,10 +10,36 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CanSelfUpdate reports whether the running installation can be replaced by
+ * the built-in updater.
+ */
+export function CanSelfUpdate(): $CancellablePromise<boolean> {
+    return $Call.ByID(3323249888);
+}
+
+/**
+ * CheckForUpdates starts the Wails updater flow without blocking the frontend
+ * binding call. The updater owns the check, download, verification, install,
+ * and restart UI; this guard only prevents overlapping checks from repeated
+ * clicks on the status bar button.
+ */
+export function CheckForUpdates(): $CancellablePromise<void> {
+    return $Call.ByID(4204358798);
+}
+
+/**
  * GetEnvironmentInfo returns build environment details for the running application.
  */
 export function GetEnvironmentInfo(): $CancellablePromise<$models.EnvironmentInfo> {
     return $Call.ByID(1660576066);
+}
+
+/**
+ * RestartForUpdate requests the application's guarded restart flow, including
+ * the unsaved-settings confirmation, even if the update window was closed.
+ */
+export function RestartForUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3631527152);
 }
 
 /**

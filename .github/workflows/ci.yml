@@ -113,6 +113,7 @@ jobs:
         run: |
           npm run test:process-icon-cache
           npm run test:request-editor-state
+          npm run test:updater
           npm run test:traffic-utils
 
       - name: Check Tailwind diagnostics

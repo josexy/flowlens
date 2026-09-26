@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,6 +23,8 @@ import (
 	shortcutservice "github.com/josexy/flowlens/backend/services/shortcut_service"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 type Assets struct {
@@ -153,6 +156,31 @@ func Run(assets Assets) {
 	}
 	var mainWindow *application.WebviewWindow
 	app := application.New(appOptions)
+	app.Updater = updater.New(&updaterHost{
+		app: app,
+		quit: func() {
+			// Restart approval is complete before the helper is spawned. Begin
+			// normal cleanup without prompting again after its timeout has started.
+			shutdownCoordinator.Request()
+		},
+	})
+	githubProvider, err := github.New(github.Config{
+		Repository:    "josexy/flowlens",
+		Prerelease:    false,
+		ChecksumAsset: "SHA256SUMS.txt",
+		AssetMatcher:  matchUpdaterAsset,
+	})
+	if err != nil {
+		reportStartupFailure("configure GitHub updater", err)
+		return
+	}
+	if err := app.Updater.Init(updater.Config{
+		CurrentVersion: appservice.APP_VERSION,
+		Providers:      []updater.Provider{githubProvider},
+	}); err != nil {
+		reportStartupFailure("initialize updater", err)
+		return
+	}
 
 	appSvc := appservice.New()
 	db, err := appdatabase.Open()
@@ -394,6 +422,36 @@ func Run(assets Assets) {
 		}
 		shutdownCoordinator.Request()
 	}
+	updateRestart := &updaterRestartHandler{
+		allowRestart: func() bool {
+			if shutdownCoordinator.InProgress() || shutdownCoordinator.CanQuit() {
+				return false
+			}
+			if settingsWindowDirty.Load() {
+				if _, ok := app.Window.GetByName(settingsWindowName); ok {
+					showSettingsWindow()
+					app.Event.Emit(confirmQuitRequestEventName, "update")
+					return false
+				}
+				settingsWindowDirty.Store(false)
+			}
+			return true
+		},
+		restart: func() error {
+			if app.Updater.State() != updater.StateReady {
+				return updater.ErrNotReady
+			}
+			return app.Updater.Restart(context.Background())
+		},
+	}
+	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
+		if err := updateRestart.request(); err != nil {
+			logger.G().Warnf("Restart for update failed: %v", err)
+			app.Event.Emit(updater.EventError, updater.ErrorInfo{
+				Stage: updater.StageInstall, Message: err.Error(),
+			})
+		}
+	})
 	tray = app.SystemTray.New()
 	if isMacOS {
 		tray.SetTemplateIcon(assets.TrayTemplateIcon)
@@ -425,6 +483,10 @@ func Run(assets Assets) {
 			return
 		}
 		settingsWindowDirty.Store(false)
+		if event.Data == "update" {
+			app.Event.Emit(updater.EventUserRestart)
+			return
+		}
 		requestApplicationQuit()
 	})
 	app.Event.On(shutdownUIReadyEventName, func(event *application.CustomEvent) {

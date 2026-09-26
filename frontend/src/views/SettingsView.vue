@@ -126,6 +126,7 @@ const localDataClearPending = ref(false)
 const certGeneratedSuccess = ref(false)
 const showSaveStatus = ref(false)
 const quitConfirmVisible = ref(false)
+const quitReason = ref<'quit' | 'update'>('quit')
 
 let saveStatusTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedSystemFonts = false
@@ -286,7 +287,7 @@ function emitSettingsDirtyChanged(dirty: boolean) {
 
 function emitQuitConfirmed() {
   try {
-    void Events.Emit(QUIT_CONFIRMED_EVENT).catch(() => {})
+    void Events.Emit(QUIT_CONFIRMED_EVENT, quitReason.value).catch(() => {})
   } catch {
     // The backend retains its quit timeout if delivery fails.
   }
@@ -307,7 +308,8 @@ function listenConfirmQuitRequest() {
   if (offConfirmQuitRequest) {
     return
   }
-  offConfirmQuitRequest = Events.On(CONFIRM_QUIT_REQUEST_EVENT, () => {
+  offConfirmQuitRequest = Events.On(CONFIRM_QUIT_REQUEST_EVENT, (event) => {
+    quitReason.value = event.data === 'update' ? 'update' : 'quit'
     if (settingStore.isDirty) {
       quitConfirmVisible.value = true
       return
@@ -830,14 +832,14 @@ function handleConfirmQuit() {
       v-if="quitConfirmVisible"
       :show="quitConfirmVisible"
       :title="t('settings.quit_dirty_title')"
-      :positive-text="t('settings.quit_dirty_confirm')"
+      :positive-text="t(quitReason === 'update' ? 'settings.update_dirty_confirm' : 'settings.quit_dirty_confirm')"
       :negative-text="t('settings.quit_dirty_cancel')"
       positive-type="warning"
       @update:show="quitConfirmVisible = $event"
       @negative-click="handleCancelQuit"
       @positive-click="handleConfirmQuit"
     >
-      {{ t('settings.quit_dirty_message') }}
+      {{ t(quitReason === 'update' ? 'settings.update_dirty_message' : 'settings.quit_dirty_message') }}
     </ConfirmCardModal>
   </div>
 </template>

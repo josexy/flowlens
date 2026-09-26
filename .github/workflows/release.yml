@@ -125,6 +125,10 @@ jobs:
         working-directory: frontend
         run: npm run type-check
 
+      - name: Test updater interactions
+        working-directory: frontend
+        run: npm run test:updater
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build
@@ -272,6 +276,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist", "dist\portable" | Out-Null
 
           Copy-Item -LiteralPath "bin\flowlens-amd64-setup.exe" -Destination "dist\flowlens_${env:ASSET_VERSION}_windows_x64_setup.exe"
+          Copy-Item -LiteralPath "bin\flowlens.exe" -Destination "dist\flowlens_${env:ASSET_VERSION}_windows_amd64.exe"
           Copy-Item -LiteralPath "bin\flowlens.exe" -Destination "dist\portable\flowlens.exe"
           Copy-Item -LiteralPath "LICENSE", "README.md" -Destination "dist\portable"
           Compress-Archive -Path "dist\portable\*" -DestinationPath "dist\flowlens_${env:ASSET_VERSION}_windows_x64_portable.zip" -Force
@@ -299,6 +304,7 @@ jobs:
           name: windows-x64
           path: |
             dist/flowlens_${{ env.ASSET_VERSION }}_windows_x64_setup.exe
+            dist/flowlens_${{ env.ASSET_VERSION }}_windows_amd64.exe
             dist/flowlens_${{ env.ASSET_VERSION }}_windows_x64_portable.zip
           if-no-files-found: error
           retention-days: 3
@@ -497,7 +503,11 @@ jobs:
 
           rm -f \
             "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
-            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"
+            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_universal.zip"
+          ditto -c -k --norsrc --keepParent \
+            "dist/universal-dmg/FlowLens.app" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_universal.zip"
           create_dmg "FlowLens" "dist/arm64-dmg" "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg"
           create_dmg "FlowLens" "dist/universal-dmg" "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"
 
@@ -554,11 +564,18 @@ jobs:
             sleep 2
           done
 
+          zip_path="dist/flowlens_${ASSET_VERSION}_darwin_universal.zip"
+          test -f "${zip_path}"
+          test "$(unzip -Z1 "${zip_path}" | sed '/\/$/d' | awk -F/ 'NF {print $1}' | sort -u | wc -l | tr -d ' ')" = "1"
+          test "$(unzip -Z1 "${zip_path}" | sed '/\/$/d' | awk -F/ 'NF {print $1}' | sort -u)" = "FlowLens.app"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
         with:
           name: macos
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/flowlens_${{ env.ASSET_VERSION }}_darwin_universal.zip
           if-no-files-found: error
           retention-days: 3
 
@@ -760,9 +777,11 @@ jobs:
 
           expected=(
             "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_amd64.exe"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.zip"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.rpm"
@@ -807,9 +826,11 @@ jobs:
           | --- | --- | --- |
           | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe` | NSIS installer for normal desktop installation. |
           | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip` | Portable package. Unzip and run `flowlens.exe`. |
+          | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_amd64.exe` | Updater asset for portable installations. |
           | macOS Apple Silicon | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg` | DMG for Apple Silicon Macs. |
           | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg` | DMG for both Intel and Apple Silicon Macs. |
-          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package. |
+          | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.zip` | Updater asset containing only `FlowLens.app`. |
+          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package. Update manually. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb` | Debian / Ubuntu package. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.rpm` | Fedora / RHEL / openSUSE package. |
 
