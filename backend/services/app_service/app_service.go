@@ -10,6 +10,7 @@ import (
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 const (
@@ -74,16 +75,33 @@ func (a *AppService) CheckForUpdates() error {
 	return nil
 }
 
+// RestartForUpdate requests the application's guarded restart flow, including
+// the unsaved-settings confirmation, even if the update window was closed.
+func (a *AppService) RestartForUpdate() error {
+	if a.app == nil {
+		return errors.New("application is not ready")
+	}
+	if !CanSelfUpdate() {
+		return errors.New("self-update is unavailable for this installation")
+	}
+	if a.app.Updater.State() != updater.StateReady || a.app.Updater.DownloadedPath() == "" {
+		return updater.ErrNotReady
+	}
+	a.app.Event.Emit(updater.EventUserRestart)
+	return nil
+}
+
 // CanSelfUpdate reports whether this executable is installed in a location
 // that the updater can replace without invoking an installer or package
 // manager. Package-managed binaries and machine-wide Windows installs are
 // intentionally excluded because the updater helper has no elevation path.
+// Linux installations use manual updates until AppImage replacement is supported.
 func CanSelfUpdate() bool {
 	executable, err := os.Executable()
 	if err != nil {
 		return false
 	}
-	return canSelfUpdatePath(runtime.GOOS, executable, os.Getenv("APPIMAGE"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"))
+	return canSelfUpdatePath(runtime.GOOS, executable, os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"))
 }
 
 // CanSelfUpdate reports whether the running installation can be replaced by

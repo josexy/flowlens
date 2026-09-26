@@ -35,6 +35,14 @@ export function GetEnvironmentInfo(): $CancellablePromise<$models.EnvironmentInf
 }
 
 /**
+ * RestartForUpdate requests the application's guarded restart flow, including
+ * the unsaved-settings confirmation, even if the update window was closed.
+ */
+export function RestartForUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3631527152);
+}
+
+/**
  * WindowClose closes the window
  */
 export function WindowClose(): $CancellablePromise<void> {

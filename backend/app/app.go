@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -45,32 +46,7 @@ const (
 	globalShortcutDebounce       = 250 * time.Millisecond
 	shutdownMinimumVisible       = 300 * time.Millisecond
 	shutdownUIReadyTimeout       = 2 * time.Second
-	updaterRestartGracePeriod    = 2 * time.Second
 )
-
-func waitForUpdaterRestart(app *application.App, requested *atomic.Bool) bool {
-	if requested.Swap(false) {
-		return true
-	}
-	if app == nil || app.Updater == nil || app.Updater.State() != updater.StateReady || app.Updater.DownloadedPath() == "" {
-		return false
-	}
-
-	timer := time.NewTimer(updaterRestartGracePeriod)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer timer.Stop()
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if requested.Swap(false) {
-				return true
-			}
-		case <-timer.C:
-			return requested.Swap(false)
-		}
-	}
-}
 
 func Run(assets Assets) {
 
@@ -86,7 +62,6 @@ func Run(assets Assets) {
 	var windowStartupReady atomic.Bool
 	var mainFrontendReady atomic.Bool
 	var shutdownEventDispatched atomic.Bool
-	var updaterRestartRequested atomic.Bool
 	var shutdownCoordinator *gracefulShutdownCoordinator
 	var requestApplicationQuit func()
 	showMainWindow := func() {
@@ -181,6 +156,14 @@ func Run(assets Assets) {
 	}
 	var mainWindow *application.WebviewWindow
 	app := application.New(appOptions)
+	app.Updater = updater.New(&updaterHost{
+		app: app,
+		quit: func() {
+			// Restart approval is complete before the helper is spawned. Begin
+			// normal cleanup without prompting again after its timeout has started.
+			shutdownCoordinator.Request()
+		},
+	})
 	githubProvider, err := github.New(github.Config{
 		Repository:    "josexy/flowlens",
 		Prerelease:    false,
@@ -429,8 +412,7 @@ func Run(assets Assets) {
 		if shutdownCoordinator.InProgress() {
 			return
 		}
-		forceUpdaterQuit := waitForUpdaterRestart(app, &updaterRestartRequested)
-		if settingsWindowDirty.Load() && !forceUpdaterQuit {
+		if settingsWindowDirty.Load() {
 			if _, ok := app.Window.GetByName(settingsWindowName); ok {
 				showSettingsWindow()
 				app.Event.Emit(confirmQuitRequestEventName)
@@ -440,14 +422,35 @@ func Run(assets Assets) {
 		}
 		shutdownCoordinator.Request()
 	}
-	// Wails dispatches ordinary custom-event listeners asynchronously. The
-	// shutdown path waits briefly for this marker when a staged update is ready,
-	// so the updater's app.Quit cannot race the dirty-settings prompt.
+	updateRestart := &updaterRestartHandler{
+		allowRestart: func() bool {
+			if shutdownCoordinator.InProgress() || shutdownCoordinator.CanQuit() {
+				return false
+			}
+			if settingsWindowDirty.Load() {
+				if _, ok := app.Window.GetByName(settingsWindowName); ok {
+					showSettingsWindow()
+					app.Event.Emit(confirmQuitRequestEventName, "update")
+					return false
+				}
+				settingsWindowDirty.Store(false)
+			}
+			return true
+		},
+		restart: func() error {
+			if app.Updater.State() != updater.StateReady {
+				return updater.ErrNotReady
+			}
+			return app.Updater.Restart(context.Background())
+		},
+	}
 	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
-		updaterRestartRequested.Store(true)
-		time.AfterFunc(updaterRestartGracePeriod, func() {
-			updaterRestartRequested.Store(false)
-		})
+		if err := updateRestart.request(); err != nil {
+			logger.G().Warnf("Restart for update failed: %v", err)
+			app.Event.Emit(updater.EventError, updater.ErrorInfo{
+				Stage: updater.StageInstall, Message: err.Error(),
+			})
+		}
 	})
 	tray = app.SystemTray.New()
 	if isMacOS {
@@ -480,6 +483,10 @@ func Run(assets Assets) {
 			return
 		}
 		settingsWindowDirty.Store(false)
+		if event.Data == "update" {
+			app.Event.Emit(updater.EventUserRestart)
+			return
+		}
 		requestApplicationQuit()
 	})
 	app.Event.On(shutdownUIReadyEventName, func(event *application.CustomEvent) {

@@ -6,6 +6,7 @@ import {
   CanSelfUpdate,
   CheckForUpdates,
   GetEnvironmentInfo,
+  RestartForUpdate,
 } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
 import type { EnvironmentInfo } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/models'
 import { useNotify } from '@/composables/useNotify'
@@ -29,6 +30,7 @@ const environmentLoading = ref(false)
 const environmentError = ref('')
 const githubOpening = ref(false)
 const updateBusy = ref(false)
+const updateActionPending = ref(false)
 const updateSupported = ref(false)
 const updateAvailable = ref(false)
 const updateReady = ref(false)
@@ -127,13 +129,18 @@ async function openGithubProject() {
 }
 
 async function checkForUpdates() {
-  if (updateBusy.value) {
+  if (updateBusy.value || updateActionPending.value) {
     return
   }
-  updateBusy.value = true
+  updateActionPending.value = true
   updateFailed.value = false
   try {
-    await CheckForUpdates()
+    if (updateReady.value) {
+      await RestartForUpdate()
+    } else {
+      updateBusy.value = true
+      await CheckForUpdates()
+    }
   } catch (error) {
     updateBusy.value = false
     updateFailed.value = true
@@ -142,6 +149,8 @@ async function checkForUpdates() {
         error: errorMessage(error),
       }),
     )
+  } finally {
+    updateActionPending.value = false
   }
 }
 
@@ -184,24 +193,8 @@ onMounted(() => {
       updateReady.value = false
       updateFailed.value = false
     }),
-    Events.On(Updater.Events.User.Cancel, () => {
-      updateBusy.value = false
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = false
-    }),
-    Events.On(Updater.Events.User.Remind, () => {
-      updateBusy.value = false
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = false
-    }),
-    Events.On(Updater.Events.User.Skip, () => {
-      updateBusy.value = false
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = false
-    }),
+    // Closing the Wails window (including Skip/Remind) does not cancel the
+    // download. Keep its lifecycle state so Ready remains actionable here.
     Events.On(Updater.Events.UpdateReady, () => {
       updateBusy.value = false
       updateAvailable.value = true
@@ -278,8 +271,8 @@ onBeforeUnmount(() => {
             size="xs"
             square
             :icon="updateIcon"
-            :loading="updateBusy"
-            :disabled="updateBusy || updateReady"
+            :loading="updateBusy || updateActionPending"
+            :disabled="updateBusy || updateActionPending"
             :ui="statusActionButtonUi"
             :aria-label="updateLabel"
             :class="{

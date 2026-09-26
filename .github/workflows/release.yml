@@ -125,6 +125,10 @@ jobs:
         working-directory: frontend
         run: npm run type-check
 
+      - name: Test updater interactions
+        working-directory: frontend
+        run: npm run test:updater
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build
@@ -826,7 +830,7 @@ jobs:
           | macOS Apple Silicon | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg` | DMG for Apple Silicon Macs. |
           | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg` | DMG for both Intel and Apple Silicon Macs. |
           | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.zip` | Updater asset containing only `FlowLens.app`. |
-          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package and updater asset. |
+          | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package. Update manually. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb` | Debian / Ubuntu package. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.rpm` | Fedora / RHEL / openSUSE package. |
 
