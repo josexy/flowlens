@@ -505,7 +505,6 @@
     "mode_manual": "Manual install",
     "manual_notice_title": "Manual installation required",
     "manual_notice_description": "The GitHub Release page will open. Download the package for this platform and follow the operating system prompts to update.",
-    "integrity_note": "The download is checked against the SHA-256 value published with the release. This is not publisher-signature verification.",
     "progress": "{written} / {total}",
     "progress_with_rate": "{written} / {total} · {rate}",
     "unknown_size": "Unknown size",

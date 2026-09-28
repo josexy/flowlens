@@ -557,10 +557,6 @@ onBeforeUnmount(() => {
             <div v-if="notesHTML" v-html="notesHTML" />
             <p v-else class="text-app-text-muted">{{ t('updater.release_notes_empty') }}</p>
           </div>
-          <p class="mt-2 flex items-center gap-1.5 text-xs text-app-text-muted">
-            <UIcon name="i-lucide-shield-check" class="size-3.5 shrink-0" />
-            {{ t('updater.integrity_note') }}
-          </p>
         </section>
       </div>
     </div>

@@ -505,7 +505,6 @@
     "mode_manual": "手动安装",
     "manual_notice_title": "需要手动安装",
     "manual_notice_description": "将打开 GitHub Release 页面。下载适合当前平台的安装包后，请按系统提示完成更新。",
-    "integrity_note": "下载内容使用发布页提供的 SHA-256 校验值核对完整性；这不等同于发布者签名验证。",
     "progress": "{written} / {total}",
     "progress_with_rate": "{written} / {total} · {rate}",
     "unknown_size": "未知大小",
