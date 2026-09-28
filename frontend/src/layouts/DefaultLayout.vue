@@ -2,11 +2,15 @@
 import WindowRightResizeHitArea from '@/components/common/WindowRightResizeHitArea.vue'
 import TitleBar from '@/components/common/TitleBar.vue'
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { System } from '@wailsio/runtime'
 import { inferPlatformFromUserAgent } from '@/runtime/platform'
 import { useSettingStore } from '@/stores/setting'
 
 const settingStore = useSettingStore()
+const route = useRoute()
+const { t } = useI18n()
 const platform = ref<string>(inferPlatformFromUserAgent())
 const shouldShowResizeHitArea = computed(
   () =>
@@ -19,6 +23,9 @@ const contentStyle = computed(() => ({
   overflow: 'hidden',
   display: 'flex',
 }))
+const windowTitle = computed(() =>
+  route.name === 'update' ? t('updater.window_title') : t('app.title'),
+)
 
 onMounted(async () => {
   try {
@@ -34,7 +41,7 @@ onMounted(async () => {
   <div
     class="flex h-screen min-h-0 w-screen flex-col overflow-hidden bg-app-shell [--default-bg-color:var(--app-shell-bg)]"
   >
-    <TitleBar v-if="settingStore.usesCustomWindowFrame" />
+    <TitleBar v-if="settingStore.usesCustomWindowFrame" :title="windowTitle" />
     <div data-window-content class="relative min-h-0 min-w-0 flex-1" :style="contentStyle">
       <div data-window-content-host class="flex min-h-0 min-w-0 flex-1">
         <router-view v-slot="{ Component }">

@@ -9,36 +9,46 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
-// matchUpdaterAsset prefers the updater-specific artifacts when a release also
-// contains installers or legacy packages that would otherwise match Wails'
-// filename heuristic. Other platform/architecture combinations retain Wails'
-// default matching behavior.
-func matchUpdaterAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {
-	suffix := ""
+// matchUpdaterAsset selects either an updater-compatible artifact or the best
+// manual-install artifact for the current installation. Keeping both paths in
+// the same provider lets every released platform check versions and read notes.
+func matchUpdaterAsset(req updater.CheckRequest, assets []github.ReleaseAsset, selfUpdate bool) int {
+	var suffixes []string
 	switch req.Platform {
 	case "darwin":
-		suffix = "_darwin_universal.zip"
+		if selfUpdate {
+			suffixes = []string{"_darwin_universal.zip"}
+		} else if req.Arch == "arm64" {
+			suffixes = []string{"_macos_arm64.dmg", "_macos_universal.dmg"}
+		} else {
+			suffixes = []string{"_macos_universal.dmg"}
+		}
 	case "windows":
 		if req.Arch == "amd64" {
-			suffix = "_windows_amd64.exe"
+			if selfUpdate {
+				suffixes = []string{"_windows_amd64.exe"}
+			} else {
+				suffixes = []string{"_windows_x64_setup.exe"}
+			}
 		}
 	case "linux":
-		return -1 // The built-in updater cannot replace an AppImage mount.
+		if !selfUpdate && req.Arch == "amd64" {
+			suffixes = []string{"_linux_x64.appimage"}
+		}
 	}
-	if suffix != "" {
+	for _, suffix := range suffixes {
 		for index, asset := range assets {
 			if strings.HasSuffix(strings.ToLower(asset.Name), suffix) {
 				return index
 			}
 		}
-		return -1
 	}
-	return github.DefaultAssetMatcher(req, assets)
+	return -1
 }
 
-// updaterHost keeps the framework's download/window flow, but routes restart
-// through FlowLens before Wails spawns its helper. A permanent app listener owns
-// that action so closing the updater window cannot remove the restart entry point.
+// updaterHost connects the headless framework updater to FlowLens events and
+// shutdown. Restart is routed through a permanent application listener so
+// closing the custom update window cannot remove the guarded restart entry point.
 type updaterHost struct {
 	app  *application.App
 	quit func()

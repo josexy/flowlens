@@ -8,6 +8,9 @@ import { inferPlatformFromUserAgent } from '@/runtime/platform'
 import { useSettingStore } from '@/stores/setting'
 
 const { t } = useI18n()
+const props = defineProps<{
+  title?: string
+}>()
 const settingStore = useSettingStore()
 const isMaximized = ref(false)
 const platform = ref<string>(inferPlatformFromUserAgent())
@@ -128,7 +131,7 @@ const handleTitlebarDoubleClick = () => {
         class="cursor-default select-none text-sm text-app-text"
         :class="isMacOS ? 'font-medium' : 'font-semibold'"
       >
-        {{ t('app.title') }}
+        {{ props.title || t('app.title') }}
       </div>
     </div>
     <div v-if="showCustomControls" class="relative flex h-full items-center" @dblclick.stop>

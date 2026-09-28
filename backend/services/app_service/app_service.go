@@ -6,7 +6,6 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
-	"sync/atomic"
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -39,8 +38,9 @@ type EnvironmentInfo struct {
 var injectedBuildCommit string
 
 type AppService struct {
-	app                 *application.App
-	updateCheckInFlight atomic.Bool
+	app             *application.App
+	updates         *updateController
+	updateEventOffs []func()
 }
 
 func New() *AppService {
@@ -49,39 +49,120 @@ func New() *AppService {
 
 func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.app = application.Get()
+	applyMode := UpdateApplyModeManual
+	if CanSelfUpdate() {
+		applyMode = UpdateApplyModeSelf
+	}
+	a.updates = newUpdateController(
+		a.app.Updater,
+		APP_VERSION,
+		applyMode,
+		a.app.Event.Emit,
+	)
+	a.updateEventOffs = []func(){
+		a.app.Event.On(updater.EventDownloadStarted, func(_ *application.CustomEvent) {
+			a.updates.FrameworkPhase(UpdatePhaseDownloading)
+		}),
+		a.app.Event.On(updater.EventVerifying, func(_ *application.CustomEvent) {
+			a.updates.FrameworkPhase(UpdatePhaseVerifying)
+		}),
+		a.app.Event.On(updater.EventInstalling, func(_ *application.CustomEvent) {
+			a.updates.FrameworkPhase(UpdatePhasePreparing)
+		}),
+		a.app.Event.On(updater.EventUpdateReady, func(_ *application.CustomEvent) {
+			a.updates.FrameworkPhase(UpdatePhaseReady)
+		}),
+		a.app.Event.On(updater.EventDownloadProgress, func(event *application.CustomEvent) {
+			progress, err := progressFromEventData(event.Data)
+			if err != nil {
+				logger.G().Warnf("Ignore invalid updater progress event: %v", err)
+				return
+			}
+			a.updates.FrameworkProgress(progress)
+		}),
+		a.app.Event.On(updater.EventError, func(event *application.CustomEvent) {
+			info, err := errorInfoFromEventData(event.Data)
+			if err != nil {
+				logger.G().Warnf("Ignore invalid updater error event: %v", err)
+				return
+			}
+			a.updates.FrameworkError(info)
+		}),
+		a.app.Event.On(UpdateRestartFailedEventName, func(event *application.CustomEvent) {
+			message, ok := event.Data.(string)
+			if !ok || message == "" {
+				return
+			}
+			a.updates.RestartFailed(message)
+		}),
+	}
 	return nil
 }
 
-// CheckForUpdates starts the Wails updater flow without blocking the frontend
-// binding call. The updater owns the check, download, verification, install,
-// and restart UI; this guard only prevents overlapping checks from repeated
-// clicks on the status bar button.
+func (a *AppService) ServiceShutdown() error {
+	a.ShutdownUpdater()
+	return nil
+}
+
+// ShutdownUpdater cancels and waits for any active check or download. It is
+// idempotent because graceful shutdown and the Wails service lifecycle may
+// both reach it.
+//
+//wails:ignore
+func (a *AppService) ShutdownUpdater() {
+	for _, off := range a.updateEventOffs {
+		off()
+	}
+	a.updateEventOffs = nil
+	if a.updates != nil {
+		a.updates.Shutdown()
+	}
+}
+
+// GetUpdateSnapshot returns the authoritative state used by every window.
+func (a *AppService) GetUpdateSnapshot() UpdateSnapshot {
+	if a.updates == nil {
+		return UpdateSnapshot{
+			Phase:          UpdatePhaseIdle,
+			CurrentVersion: APP_VERSION,
+			ApplyMode:      UpdateApplyModeManual,
+		}
+	}
+	return a.updates.Snapshot()
+}
+
+// CheckForUpdates starts a check without opening the framework updater UI.
 func (a *AppService) CheckForUpdates() error {
-	if a.app == nil {
+	if a.app == nil || a.updates == nil {
 		return errors.New("application is not ready")
 	}
-	if !CanSelfUpdate() {
-		return errors.New("self-update is unavailable for this installation")
+	return a.updates.Check()
+}
+
+// DownloadUpdate downloads, verifies, and stages the release found by the
+// latest successful check.
+func (a *AppService) DownloadUpdate() error {
+	if a.app == nil || a.updates == nil {
+		return errors.New("application is not ready")
 	}
-	if !a.updateCheckInFlight.CompareAndSwap(false, true) {
-		return nil
+	return a.updates.Download()
+}
+
+// CancelUpdate cancels the active check or download and waits for cleanup.
+func (a *AppService) CancelUpdate() error {
+	if a.app == nil || a.updates == nil {
+		return errors.New("application is not ready")
 	}
-	go func() {
-		defer a.updateCheckInFlight.Store(false)
-		if err := a.app.Updater.CheckAndInstall(context.Background()); err != nil {
-			logger.G().Warnf("Check for updates failed: %v", err)
-		}
-	}()
-	return nil
+	return a.updates.Cancel()
 }
 
 // RestartForUpdate requests the application's guarded restart flow, including
 // the unsaved-settings confirmation, even if the update window was closed.
 func (a *AppService) RestartForUpdate() error {
-	if a.app == nil {
+	if a.app == nil || a.updates == nil {
 		return errors.New("application is not ready")
 	}
-	if !CanSelfUpdate() {
+	if a.updates.Snapshot().ApplyMode != UpdateApplyModeSelf {
 		return errors.New("self-update is unavailable for this installation")
 	}
 	if a.app.Updater.State() != updater.StateReady || a.app.Updater.DownloadedPath() == "" {

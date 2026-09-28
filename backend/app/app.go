@@ -36,6 +36,10 @@ type Assets struct {
 const (
 	trayLabelsEventName          = "app:tray-labels"
 	openSettingsWindowEventName  = "app:open-settings-window"
+	openUpdateWindowEventName    = "app:open-update-window"
+	updateWindowReadyEventName   = "app:update-window-ready"
+	updateWindowCloseRequestName = "app:update-window-close-requested"
+	updateWindowCloseBlockedName = "app:update-window-close-blocked"
 	settingsWindowDirtyEventName = "app:settings-window-dirty-changed"
 	confirmQuitRequestEventName  = "app:confirm-quit-request"
 	quitConfirmedEventName       = "app:quit-confirmed"
@@ -164,11 +168,14 @@ func Run(assets Assets) {
 			shutdownCoordinator.Request()
 		},
 	})
+	selfUpdate := appservice.CanSelfUpdate()
 	githubProvider, err := github.New(github.Config{
 		Repository:    "josexy/flowlens",
 		Prerelease:    false,
 		ChecksumAsset: "SHA256SUMS.txt",
-		AssetMatcher:  matchUpdaterAsset,
+		AssetMatcher: func(req updater.CheckRequest, assets []github.ReleaseAsset) int {
+			return matchUpdaterAsset(req, assets, selfUpdate)
+		},
 	})
 	if err != nil {
 		reportStartupFailure("configure GitHub updater", err)
@@ -177,6 +184,7 @@ func Run(assets Assets) {
 	if err := app.Updater.Init(updater.Config{
 		CurrentVersion: appservice.APP_VERSION,
 		Providers:      []updater.Provider{githubProvider},
+		Window:         updater.WindowNone,
 	}); err != nil {
 		reportStartupFailure("initialize updater", err)
 		return
@@ -347,6 +355,28 @@ func Run(assets Assets) {
 			settingsWindowDirty.Store(false)
 		})
 	}
+	showUpdateWindow := func() {
+		if updateWindow, ok := app.Window.GetByName(updaterWindowName); ok && updateWindow != nil {
+			if updateWindow.IsMinimised() {
+				updateWindow.UnMinimise()
+			}
+			updateWindow.Show().Focus()
+			return
+		}
+
+		updateWindow := app.Window.NewWithOptions(updaterWindowOptions(useCustomWindowFrame, isMacOS, assets.AppIcon))
+		updateWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+			snapshot := appSvc.GetUpdateSnapshot()
+			switch snapshot.Phase {
+			case appservice.UpdatePhaseChecking, appservice.UpdatePhaseDownloading:
+				event.Cancel()
+				updateWindow.DispatchWailsEvent(&application.CustomEvent{Name: updateWindowCloseRequestName})
+			case appservice.UpdatePhaseVerifying, appservice.UpdatePhasePreparing:
+				event.Cancel()
+				updateWindow.DispatchWailsEvent(&application.CustomEvent{Name: updateWindowCloseBlockedName})
+			}
+		})
+	}
 
 	dispatchShutdownRequest := func() {
 		if !mainFrontendReady.Load() || shutdownCoordinator == nil || !shutdownCoordinator.InProgress() {
@@ -366,6 +396,9 @@ func Run(assets Assets) {
 				if settingsWindow, ok := app.Window.GetByName(settingsWindowName); ok && settingsWindow != nil {
 					settingsWindow.Hide()
 				}
+				if updateWindow, ok := app.Window.GetByName(updaterWindowName); ok && updateWindow != nil {
+					updateWindow.Hide()
+				}
 				requestShowMainWindow()
 				dispatchShutdownRequest()
 			})
@@ -379,6 +412,9 @@ func Run(assets Assets) {
 				wrapped := fmt.Errorf("%s: %w", step, err)
 				shutdownErrors = append(shutdownErrors, wrapped)
 				logger.G().Errorf("Shutdown step failed: %v", wrapped)
+			}
+			if appSvc != nil {
+				appSvc.ShutdownUpdater()
 			}
 
 			if shortcutSvc != nil {
@@ -447,9 +483,7 @@ func Run(assets Assets) {
 	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
 		if err := updateRestart.request(); err != nil {
 			logger.G().Warnf("Restart for update failed: %v", err)
-			app.Event.Emit(updater.EventError, updater.ErrorInfo{
-				Stage: updater.StageInstall, Message: err.Error(),
-			})
+			app.Event.Emit(appservice.UpdateRestartFailedEventName, err.Error())
 		}
 	})
 	tray = app.SystemTray.New()
@@ -466,6 +500,17 @@ func Run(assets Assets) {
 	updateTrayMenu(tray, fallbackTrayLabels(currentLanguage(settingSvc)), showMainWindow, requestApplicationQuit)
 	app.Event.On(openSettingsWindowEventName, func(event *application.CustomEvent) {
 		showSettingsWindow()
+	})
+	app.Event.On(openUpdateWindowEventName, func(event *application.CustomEvent) {
+		showUpdateWindow()
+	})
+	app.Event.On(updateWindowReadyEventName, func(event *application.CustomEvent) {
+		if event.Sender != updaterWindowName {
+			return
+		}
+		if updateWindow, ok := app.Window.GetByName(updaterWindowName); ok && updateWindow != nil {
+			updateWindow.Show().Focus()
+		}
 	})
 	app.Event.On(settingsWindowDirtyEventName, func(event *application.CustomEvent) {
 		if event.Sender != settingsWindowName {

@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { Browser, Events, Updater } from '@wailsio/runtime'
+import { Browser } from '@wailsio/runtime'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { GetEnvironmentInfo } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
 import {
-  CanSelfUpdate,
-  CheckForUpdates,
-  GetEnvironmentInfo,
-  RestartForUpdate,
-} from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
-import type { EnvironmentInfo } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/models'
+  UpdatePhase,
+  type EnvironmentInfo,
+} from '#bindings/github.com/josexy/flowlens/backend/services/app_service/models'
 import { useNotify } from '@/composables/useNotify'
 import { useTrafficWorkspaceStore } from '@/stores/trafficWorkspace'
+import { useUpdaterStore } from '@/stores/updater'
 
 const { t } = useI18n()
 const notify = useNotify()
 const workspaceStore = useTrafficWorkspaceStore()
+const updaterStore = useUpdaterStore()
 const githubProjectUrl = 'https://github.com/josexy/flowlens'
 
 const statusActionButtonUi = {
@@ -29,13 +29,18 @@ const environmentInfo = ref<EnvironmentInfo | null>(null)
 const environmentLoading = ref(false)
 const environmentError = ref('')
 const githubOpening = ref(false)
-const updateBusy = ref(false)
-const updateActionPending = ref(false)
-const updateSupported = ref(false)
-const updateAvailable = ref(false)
-const updateReady = ref(false)
-const updateFailed = ref(false)
-const updaterOffs: Array<() => void> = []
+const updateBusy = computed(() => updaterStore.isBusy)
+const updateReady = computed(() => updaterStore.phase === UpdatePhase.UpdatePhaseReady)
+const updateFailed = computed(() => updaterStore.phase === UpdatePhase.UpdatePhaseError)
+const updateAvailable = computed(() =>
+  [
+    UpdatePhase.UpdatePhaseAvailable,
+    UpdatePhase.UpdatePhaseDownloading,
+    UpdatePhase.UpdatePhaseVerifying,
+    UpdatePhase.UpdatePhasePreparing,
+    UpdatePhase.UpdatePhaseReady,
+  ].includes(updaterStore.phase),
+)
 
 const updateIcon = computed(() => {
   if (updateReady.value) {
@@ -43,6 +48,9 @@ const updateIcon = computed(() => {
   }
   if (updateFailed.value) {
     return 'i-lucide-circle-alert'
+  }
+  if (updateBusy.value) {
+    return 'i-lucide-loader-circle'
   }
   if (updateAvailable.value) {
     return 'i-lucide-download'
@@ -57,11 +65,20 @@ const updateLabel = computed(() => {
   if (updateFailed.value) {
     return t('status.update_error')
   }
+  if (updateBusy.value) {
+    switch (updaterStore.phase) {
+      case UpdatePhase.UpdatePhaseDownloading:
+        return t('updater.downloading_title')
+      case UpdatePhase.UpdatePhaseVerifying:
+        return t('updater.verifying_title')
+      case UpdatePhase.UpdatePhasePreparing:
+        return t('updater.preparing_title')
+      default:
+        return t('status.update_checking')
+    }
+  }
   if (updateAvailable.value) {
     return t('status.update_available')
-  }
-  if (updateBusy.value) {
-    return t('status.update_checking')
   }
   return t('status.action_update')
 })
@@ -128,93 +145,24 @@ async function openGithubProject() {
   }
 }
 
-async function checkForUpdates() {
-  if (updateBusy.value || updateActionPending.value) {
-    return
-  }
-  updateActionPending.value = true
-  updateFailed.value = false
+async function openUpdateWindow() {
   try {
-    if (updateReady.value) {
-      await RestartForUpdate()
-    } else {
-      updateBusy.value = true
-      await CheckForUpdates()
-    }
+    await updaterStore.openWindow()
   } catch (error) {
-    updateBusy.value = false
-    updateFailed.value = true
     notify.error(
       t('status.update_failed', {
         error: errorMessage(error),
       }),
     )
-  } finally {
-    updateActionPending.value = false
   }
 }
 
 onMounted(() => {
-  void CanSelfUpdate()
-    .then((supported) => {
-      updateSupported.value = supported
-    })
-    .catch(() => {
-      updateSupported.value = false
-    })
-  updaterOffs.push(
-    Events.On(Updater.Events.CheckStarted, () => {
-      updateBusy.value = true
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = false
-    }),
-    Events.On(Updater.Events.UpdateAvailable, () => {
-      updateBusy.value = true
-      updateAvailable.value = true
-      updateReady.value = false
-      updateFailed.value = false
-    }),
-    Events.On(Updater.Events.DownloadStarted, () => {
-      updateBusy.value = true
-    }),
-    Events.On(Updater.Events.DownloadComplete, () => {
-      updateBusy.value = true
-    }),
-    Events.On(Updater.Events.Verifying, () => {
-      updateBusy.value = true
-    }),
-    Events.On(Updater.Events.Installing, () => {
-      updateBusy.value = true
-    }),
-    Events.On(Updater.Events.NoUpdate, () => {
-      updateBusy.value = false
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = false
-    }),
-    // Closing the Wails window (including Skip/Remind) does not cancel the
-    // download. Keep its lifecycle state so Ready remains actionable here.
-    Events.On(Updater.Events.UpdateReady, () => {
-      updateBusy.value = false
-      updateAvailable.value = true
-      updateReady.value = true
-      updateFailed.value = false
-    }),
-    Events.On(Updater.Events.Error, () => {
-      updateBusy.value = false
-      updateAvailable.value = false
-      updateReady.value = false
-      updateFailed.value = true
-    }),
-  )
+  void updaterStore.initialize().catch(() => {})
 })
 
 onBeforeUnmount(() => {
-  for (const off of updaterOffs) {
-    off()
-  }
-  updaterOffs.length = 0
+  updaterStore.cleanup()
 })
 </script>
 
@@ -264,24 +212,23 @@ onBeforeUnmount(() => {
           />
         </UTooltip>
 
-        <UTooltip v-if="updateSupported" :text="updateLabel" :content="{ side: 'top' }">
+        <UTooltip :text="updateLabel" :content="{ side: 'top' }">
           <UButton
             color="neutral"
             variant="ghost"
             size="xs"
             square
             :icon="updateIcon"
-            :loading="updateBusy || updateActionPending"
-            :disabled="updateBusy || updateActionPending"
             :ui="statusActionButtonUi"
             :aria-label="updateLabel"
             :class="{
               'text-app-accent!': updateAvailable || updateReady,
               'text-app-error!': updateFailed,
               'text-app-text-muted!': !updateAvailable && !updateReady && !updateFailed,
+              '[&_svg]:animate-spin': updateBusy,
             }"
             class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
-            @click="checkForUpdates"
+            @click="openUpdateWindow"
           />
         </UTooltip>
       </div>
