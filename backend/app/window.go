@@ -15,6 +15,11 @@ const (
 	settingsWindowDefaultHeight = 680
 	settingsWindowMinWidth      = 760
 	settingsWindowMinHeight     = 560
+	updaterWindowName           = "updater"
+	updaterWindowDefaultWidth   = 600
+	updaterWindowDefaultHeight  = 640
+	updaterWindowMinWidth       = 520
+	updaterWindowMinHeight      = 520
 )
 
 func settingsWindowOptions(useCustomWindowFrame bool, isMacOS bool, icon []byte) application.WebviewWindowOptions {
@@ -33,6 +38,38 @@ func settingsWindowOptions(useCustomWindowFrame bool, isMacOS bool, icon []byte)
 		URL:                        "/#/settings",
 		InitialPosition:            application.WindowCentered,
 		UseApplicationMenu:         isMacOS,
+		Mac: application.MacWindow{
+			TitleBar: macTitleBarForFrameMode(useCustomWindowFrame),
+			Backdrop: application.MacBackdropNormal,
+		},
+		Windows: application.WindowsWindow{
+			DisableFramelessWindowDecorations: false,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                icon,
+			WebviewGpuPolicy:    application.WebviewGpuPolicyOnDemand,
+			WindowIsTranslucent: useCustomWindowFrame,
+		},
+	}
+}
+
+func updaterWindowOptions(useCustomWindowFrame bool, isMacOS bool, icon []byte) application.WebviewWindowOptions {
+	return application.WebviewWindowOptions{
+		Name:                       updaterWindowName,
+		Title:                      appservice.APP_NAME,
+		Width:                      updaterWindowDefaultWidth,
+		Height:                     updaterWindowDefaultHeight,
+		MinWidth:                   updaterWindowMinWidth,
+		MinHeight:                  updaterWindowMinHeight,
+		StartState:                 application.WindowStateNormal,
+		Frameless:                  useCustomWindowFrame && !isMacOS,
+		BackgroundColour:           application.NewRGBA(36, 36, 41, 255),
+		BackgroundType:             application.BackgroundTypeSolid,
+		DefaultContextMenuDisabled: false,
+		URL:                        "/#/update",
+		InitialPosition:            application.WindowCentered,
+		UseApplicationMenu:         isMacOS,
+		Hidden:                     true,
 		Mac: application.MacWindow{
 			TitleBar: macTitleBarForFrameMode(useCustomWindowFrame),
 			Backdrop: application.MacBackdropNormal,

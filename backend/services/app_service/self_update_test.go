@@ -21,6 +21,8 @@ func TestCanSelfUpdatePath(t *testing.T) {
 		{"mounted AppImage", "linux", "/tmp/.mount_flowlens/usr/bin/flowlens", false},
 		{"unpackaged Linux", "linux", "/home/tester/flowlens", false},
 		{"macOS bundle", "darwin", "/Applications/FlowLens.app/Contents/MacOS/FlowLens", true},
+		{"mounted macOS DMG", "darwin", "/Volumes/FlowLens/FlowLens.app/Contents/MacOS/FlowLens", false},
+		{"macOS volume sibling prefix", "darwin", "/Volumes Backup/FlowLens.app/Contents/MacOS/FlowLens", true},
 		{"empty path", "windows", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

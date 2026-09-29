@@ -18,13 +18,25 @@ export function CanSelfUpdate(): $CancellablePromise<boolean> {
 }
 
 /**
- * CheckForUpdates starts the Wails updater flow without blocking the frontend
- * binding call. The updater owns the check, download, verification, install,
- * and restart UI; this guard only prevents overlapping checks from repeated
- * clicks on the status bar button.
+ * CancelUpdate cancels the active check or download and waits for cleanup.
+ */
+export function CancelUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(137014300);
+}
+
+/**
+ * CheckForUpdates starts a check without opening the framework updater UI.
  */
 export function CheckForUpdates(): $CancellablePromise<void> {
     return $Call.ByID(4204358798);
+}
+
+/**
+ * DownloadUpdate downloads, verifies, and stages the release found by the
+ * latest successful check.
+ */
+export function DownloadUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3931171182);
 }
 
 /**
@@ -32,6 +44,13 @@ export function CheckForUpdates(): $CancellablePromise<void> {
  */
 export function GetEnvironmentInfo(): $CancellablePromise<$models.EnvironmentInfo> {
     return $Call.ByID(1660576066);
+}
+
+/**
+ * GetUpdateSnapshot returns the authoritative state used by every window.
+ */
+export function GetUpdateSnapshot(): $CancellablePromise<$models.UpdateSnapshot> {
+    return $Call.ByID(3358282592);
 }
 
 /**

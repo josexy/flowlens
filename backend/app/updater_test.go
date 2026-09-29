@@ -14,15 +14,15 @@ func TestMatchUpdaterAssetUsesUniversalMacOSArchive(t *testing.T) {
 	assets := []github.ReleaseAsset{
 		{Name: "flowlens_v1.0.2_darwin_arm64.dmg"},
 		{Name: "flowlens_v1.0.2_darwin_universal.zip"},
-		{Name: "flowlens_v1.0.2_macos_universal.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_universal.dmg"},
 	}
 
 	for _, arch := range []string{"amd64", "arm64"} {
-		if got := matchUpdaterAsset(updater.CheckRequest{Platform: "darwin", Arch: arch}, assets); got != 1 {
+		if got := matchUpdaterAsset(updater.CheckRequest{Platform: "darwin", Arch: arch}, assets, true); got != 1 {
 			t.Fatalf("arch %s: expected universal archive at index 1, got %d", arch, got)
 		}
 	}
-	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "darwin", Arch: "amd64"}, assets[:1]); got != -1 {
+	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "darwin", Arch: "amd64"}, assets[:1], true); got != -1 {
 		t.Fatalf("missing universal archive: expected no updater asset, got %d", got)
 	}
 }
@@ -34,11 +34,39 @@ func TestMatchUpdaterAssetPrefersWindowsExecutableAndRejectsLinux(t *testing.T) 
 		{Name: "flowlens_v1.0.2_linux_x64.AppImage"},
 	}
 
-	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "windows", Arch: "amd64"}, assets); got != 1 {
+	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "windows", Arch: "amd64"}, assets, true); got != 1 {
 		t.Fatalf("windows: expected updater executable at index 1, got %d", got)
 	}
-	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "linux", Arch: "amd64"}, assets); got != -1 {
+	if got := matchUpdaterAsset(updater.CheckRequest{Platform: "linux", Arch: "amd64"}, assets, true); got != -1 {
 		t.Fatalf("linux: must not offer an AppImage for executable replacement, got %d", got)
+	}
+}
+
+func TestMatchUpdaterAssetSelectsManualInstallers(t *testing.T) {
+	assets := []github.ReleaseAsset{
+		{Name: "flowlens_v1.0.2_windows_x64_setup.exe"},
+		{Name: "flowlens_v1.0.2_windows_amd64.exe"},
+		{Name: "flowlens_v1.0.2_darwin_arm64.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_universal.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_universal.zip"},
+		{Name: "flowlens_v1.0.2_linux_x64.AppImage"},
+	}
+	tests := []struct {
+		name string
+		req  updater.CheckRequest
+		want int
+	}{
+		{name: "windows", req: updater.CheckRequest{Platform: "windows", Arch: "amd64"}, want: 0},
+		{name: "mac arm64", req: updater.CheckRequest{Platform: "darwin", Arch: "arm64"}, want: 2},
+		{name: "mac amd64 universal", req: updater.CheckRequest{Platform: "darwin", Arch: "amd64"}, want: 3},
+		{name: "linux", req: updater.CheckRequest{Platform: "linux", Arch: "amd64"}, want: 5},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := matchUpdaterAsset(test.req, assets, false); got != test.want {
+				t.Fatalf("matchUpdaterAsset() = %d, want %d", got, test.want)
+			}
+		})
 	}
 }
 

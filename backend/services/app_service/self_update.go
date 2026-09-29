@@ -13,8 +13,13 @@ func canSelfUpdatePath(goos, executable, programFiles, programFilesX86 string) b
 	switch goos {
 	case "windows":
 		return !pathWithinAny(goos, executable, programFiles, programFilesX86)
+	case "darwin":
+		// Applications launched directly from a mounted DMG live below /Volumes
+		// and cannot replace their own read-only bundle. Ask the user to install
+		// the release manually instead.
+		return !pathWithinAny(goos, executable, "/Volumes")
 	case "linux":
-		// Wails beta.20 replaces os.Executable(), which is inside the read-only
+		// Wails beta.26 replaces os.Executable(), which is inside the read-only
 		// mount for AppImages. The release also has no raw Linux binary suitable
 		// for replacing an unpackaged executable. Keep both on manual updates.
 		return false

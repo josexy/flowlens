@@ -4,6 +4,12 @@ import type * as settingservice from '#bindings/github.com/josexy/flowlens/backe
 import type * as shortcutservice from '#bindings/github.com/josexy/flowlens/backend/services/shortcut_service/models'
 
 export const OPEN_SETTINGS_WINDOW_EVENT = 'app:open-settings-window'
+export const OPEN_UPDATE_WINDOW_EVENT = 'app:open-update-window'
+export const UPDATE_WINDOW_READY_EVENT = 'app:update-window-ready'
+export const UPDATE_STATE_CHANGED_EVENT = 'app:update-state-changed'
+export const UPDATE_PROGRESS_EVENT = 'app:update-progress'
+export const UPDATE_WINDOW_CLOSE_REQUESTED_EVENT = 'app:update-window-close-requested'
+export const UPDATE_WINDOW_CLOSE_BLOCKED_EVENT = 'app:update-window-close-blocked'
 export const PREFERENCES_CHANGED_EVENT = 'app:preferences-changed'
 export const SETTINGS_SAVED_EVENT = 'app:settings-saved'
 export const SETTINGS_WINDOW_DIRTY_CHANGED_EVENT = 'app:settings-window-dirty-changed'

@@ -12,3 +12,62 @@ export interface EnvironmentInfo {
     "goos": string;
     "goarch": string;
 }
+
+export enum UpdateApplyMode {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    UpdateApplyModeSelf = "self",
+    UpdateApplyModeManual = "manual",
+};
+
+export interface UpdateFailure {
+    "stage": UpdatePhase;
+    "message": string;
+}
+
+export enum UpdatePhase {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    UpdatePhaseIdle = "idle",
+    UpdatePhaseChecking = "checking",
+    UpdatePhaseUpToDate = "up-to-date",
+    UpdatePhaseAvailable = "available",
+    UpdatePhaseDownloading = "downloading",
+    UpdatePhaseVerifying = "verifying",
+    UpdatePhasePreparing = "preparing",
+    UpdatePhaseReady = "ready",
+    UpdatePhaseError = "error",
+};
+
+export interface UpdateProgress {
+    "written": number;
+    "total": number;
+    "rate": number;
+}
+
+export interface UpdateRelease {
+    "version": string;
+    "name": string;
+    "notes": string;
+    "publishedAt": string;
+    "releaseURL": string;
+    "artifactName": string;
+    "artifactSize": number;
+}
+
+export interface UpdateSnapshot {
+    "revision": number;
+    "phase": UpdatePhase;
+    "currentVersion": string;
+    "applyMode": UpdateApplyMode;
+    "release"?: UpdateRelease | null;
+    "progress"?: UpdateProgress | null;
+    "failure"?: UpdateFailure | null;
+    "canCancel": boolean;
+}

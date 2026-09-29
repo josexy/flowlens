@@ -51,6 +51,9 @@ function emitTrayLabels() {
 }
 
 function showWindowWhenReady() {
+  if (currentWindowName === 'updater') {
+    return
+  }
   try {
     void Events.Emit('app:frontend-ready').catch(() => {})
   } catch {

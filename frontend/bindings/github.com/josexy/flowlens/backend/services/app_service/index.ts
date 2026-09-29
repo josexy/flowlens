@@ -6,6 +6,15 @@ export {
     AppService
 };
 
+export {
+    UpdateApplyMode,
+    UpdatePhase
+} from "./models.js";
+
 export type {
-    EnvironmentInfo
+    EnvironmentInfo,
+    UpdateFailure,
+    UpdateProgress,
+    UpdateRelease,
+    UpdateSnapshot
 } from "./models.js";

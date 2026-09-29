@@ -14,7 +14,7 @@ require (
 	github.com/klauspost/compress v1.19.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
-	github.com/wailsapp/wails/v3 v3.0.0-beta.20
+	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.53.0
