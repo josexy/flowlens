@@ -502,14 +502,14 @@ jobs:
           }
 
           rm -f \
-            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
-            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_universal.dmg" \
             "dist/flowlens_${ASSET_VERSION}_darwin_universal.zip"
           ditto -c -k --norsrc --keepParent \
             "dist/universal-dmg/FlowLens.app" \
             "dist/flowlens_${ASSET_VERSION}_darwin_universal.zip"
-          create_dmg "FlowLens" "dist/arm64-dmg" "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg"
-          create_dmg "FlowLens" "dist/universal-dmg" "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"
+          create_dmg "FlowLens" "dist/arm64-dmg" "dist/flowlens_${ASSET_VERSION}_darwin_arm64.dmg"
+          create_dmg "FlowLens" "dist/universal-dmg" "dist/flowlens_${ASSET_VERSION}_darwin_universal.dmg"
 
       - name: Notarize macOS DMGs
         if: steps.macos-signing.outputs.notarization_enabled == 'true'
@@ -521,8 +521,8 @@ jobs:
           set -euo pipefail
 
           for dmg_path in \
-            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
-            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"; do
+            "dist/flowlens_${ASSET_VERSION}_darwin_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_universal.dmg"; do
             xcrun notarytool submit "${dmg_path}" \
               --apple-id "${MACOS_NOTARY_APPLE_ID}" \
               --team-id "${MACOS_NOTARY_TEAM_ID}" \
@@ -554,8 +554,8 @@ jobs:
           }
 
           for dmg_path in \
-            "dist/flowlens_${ASSET_VERSION}_macos_arm64.dmg" \
-            "dist/flowlens_${ASSET_VERSION}_macos_universal.dmg"; do
+            "dist/flowlens_${ASSET_VERSION}_darwin_arm64.dmg" \
+            "dist/flowlens_${ASSET_VERSION}_darwin_universal.dmg"; do
             mount_dir="$(mktemp -d)"
             hdiutil attach "${dmg_path}" -mountpoint "${mount_dir}" -nobrowse -quiet
             test -d "${mount_dir}/FlowLens.app"
@@ -779,8 +779,8 @@ jobs:
             "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_amd64.exe"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip"
-            "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg"
-            "flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_arm64.dmg"
+            "flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.dmg"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.zip"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage"
             "flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb"
@@ -827,8 +827,8 @@ jobs:
           | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_setup.exe` | NSIS installer for normal desktop installation. |
           | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_x64_portable.zip` | Portable package. Unzip and run `flowlens.exe`. |
           | Windows x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_windows_amd64.exe` | Updater asset for portable installations. |
-          | macOS Apple Silicon | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_arm64.dmg` | DMG for Apple Silicon Macs. |
-          | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_macos_universal.dmg` | DMG for both Intel and Apple Silicon Macs. |
+          | macOS Apple Silicon | `flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_arm64.dmg` | DMG for Apple Silicon Macs. |
+          | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.dmg` | DMG for both Intel and Apple Silicon Macs. |
           | macOS Universal | `flowlens_${{ needs.metadata.outputs.tag_name }}_darwin_universal.zip` | Updater asset containing only `FlowLens.app`. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.AppImage` | Portable AppImage package. Update manually. |
           | Linux x64 | `flowlens_${{ needs.metadata.outputs.tag_name }}_linux_x64.deb` | Debian / Ubuntu package. |

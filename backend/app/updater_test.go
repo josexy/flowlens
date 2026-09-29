@@ -14,7 +14,7 @@ func TestMatchUpdaterAssetUsesUniversalMacOSArchive(t *testing.T) {
 	assets := []github.ReleaseAsset{
 		{Name: "flowlens_v1.0.2_darwin_arm64.dmg"},
 		{Name: "flowlens_v1.0.2_darwin_universal.zip"},
-		{Name: "flowlens_v1.0.2_macos_universal.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_universal.dmg"},
 	}
 
 	for _, arch := range []string{"amd64", "arm64"} {
@@ -46,8 +46,8 @@ func TestMatchUpdaterAssetSelectsManualInstallers(t *testing.T) {
 	assets := []github.ReleaseAsset{
 		{Name: "flowlens_v1.0.2_windows_x64_setup.exe"},
 		{Name: "flowlens_v1.0.2_windows_amd64.exe"},
-		{Name: "flowlens_v1.0.2_macos_arm64.dmg"},
-		{Name: "flowlens_v1.0.2_macos_universal.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_arm64.dmg"},
+		{Name: "flowlens_v1.0.2_darwin_universal.dmg"},
 		{Name: "flowlens_v1.0.2_darwin_universal.zip"},
 		{Name: "flowlens_v1.0.2_linux_x64.AppImage"},
 	}

@@ -19,9 +19,9 @@ func matchUpdaterAsset(req updater.CheckRequest, assets []github.ReleaseAsset, s
 		if selfUpdate {
 			suffixes = []string{"_darwin_universal.zip"}
 		} else if req.Arch == "arm64" {
-			suffixes = []string{"_macos_arm64.dmg", "_macos_universal.dmg"}
+			suffixes = []string{"_darwin_arm64.dmg", "_darwin_universal.dmg"}
 		} else {
-			suffixes = []string{"_macos_universal.dmg"}
+			suffixes = []string{"_darwin_universal.dmg"}
 		}
 	case "windows":
 		if req.Arch == "amd64" {
