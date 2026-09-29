@@ -21,7 +21,7 @@ concurrency:
 env:
   APP_NAME: flowlens
   TASK_VERSION: v3.50.0
-  WAILS_VERSION: v3.0.0-beta.20
+  WAILS_VERSION: v3.0.0-beta.26
 
 jobs:
   metadata:

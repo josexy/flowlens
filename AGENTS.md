@@ -161,3 +161,4 @@ Choose the minimal set by scope; for changes involving component structure, them
 - Commits use English Conventional Commits: `<type>(<scope>): <summary>`. One commit addresses only one class of problem; larger changes add a short description.
 - Before committing, confirm: in-scope files are verified, there are no unrelated changes, generated artifacts are in sync, bilingual copy is consistent, and frontend/backend interfaces match.
 - When done, state the implementation result, the verification commands, and any unresolved risk; do not treat "theoretically feasible" as done.
+- When upgrading the versions of the wail3 frontend/backend dependency libraries, the `WAILS_VERSION` environment variable in release.yml needs to be updated accordingly.
