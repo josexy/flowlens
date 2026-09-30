@@ -17,6 +17,7 @@ import (
 const caTrustLogTextLimit = 2 << 10
 
 var (
+	errCATrustCanceled           = errors.New("ca_trust_canceled")
 	errCATrustUnsupported        = errors.New("ca_trust_unsupported")
 	errCATrustCertificateChanged = errors.New("ca_trust_certificate_changed")
 	errCATrustInvalidCA          = errors.New("ca_trust_invalid_ca")
@@ -111,6 +112,10 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 	fingerprint := ""
 	stage := "resolve_configuration"
 	defer func() {
+		if errors.Is(err, errCATrustCanceled) {
+			logger.G().Infof("CA trust change canceled: action=%s stage=%s fingerprint=%s duration=%s", action, stage, fingerprint, time.Since(started))
+			return
+		}
 		if err != nil {
 			logger.G().Errorf("CA trust change failed: action=%s stage=%s fingerprint=%s duration=%s error=%q", action, stage, fingerprint, time.Since(started), caTrustLogText(err.Error()))
 			return

@@ -212,6 +212,25 @@ func TestCATrustVerifiesWrite(t *testing.T) {
 	}
 }
 
+func TestCATrustCanceledMutationPreservesState(t *testing.T) {
+	for _, install := range []bool{true, false} {
+		t.Run(map[bool]string{true: "install", false: "uninstall"}[install], func(t *testing.T) {
+			s, store, cert := newCATrustTestService(t)
+			store.certs[string(cert.Raw)] = !install
+			store.installErr = errCATrustCanceled
+			store.deleteErr = errCATrustCanceled
+			status, err := s.changeCurrentCACertificateTrust(caCertificateFingerprint(cert), install)
+			if !errors.Is(err, errCATrustCanceled) || status != nil {
+				t.Fatalf("cancellation was reported as success: %+v %v", status, err)
+			}
+			status, err = s.GetCurrentCACertificateTrustStatus()
+			if err != nil || status.Error != "" || status.Installed != !install || status.Present != !install {
+				t.Fatalf("canceled operation changed trust state: %+v %v", status, err)
+			}
+		})
+	}
+}
+
 // Reissue with the same key so these tests exercise CA validity independently
 // of certificate/key matching. This never touches a Windows certificate store.
 func reissueTestCA(t *testing.T, s *SettingService, mutate func(*x509.Certificate)) *x509.Certificate {

@@ -419,6 +419,7 @@ async function handleChangeCATrust() {
       t(install ? 'settings.ca_trust_install_success' : 'settings.ca_trust_uninstall_success'),
     )
   } catch (error) {
+    if (/\bca_trust_canceled\b/.test(formatError(error))) return
     notify.error(
       t(install ? 'settings.ca_trust_install_failed' : 'settings.ca_trust_uninstall_failed', {
         error: caTrustErrorMessage(error),

@@ -138,12 +138,12 @@ const loadCode = ts.transpileModule(loadFunction.getText(viewSource), {
 const guardCode = ts.transpileModule(readFileSync(new URL('../src/utils/latestOperation.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
+const changeFunction = viewSource.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'handleChangeCATrust')
+const changeCode = ts.transpileModule(changeFunction.getText(viewSource), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText
 
 test('the settings action cleans up an incomplete installation and refreshes after failure', async () => {
-  const changeFunction = viewSource.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'handleChangeCATrust')
-  const changeCode = ts.transpileModule(changeFunction.getText(viewSource), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText
   const calls = []
   const context = {
     isChangingCATrust: vue.ref(false),
@@ -156,9 +156,10 @@ test('the settings action cleans up an incomplete installation and refreshes aft
     InstallCurrentCACertificate: async () => calls.push('install'),
     UninstallCurrentCACertificate: async (fingerprint) => {
       calls.push(['uninstall', fingerprint])
-      throw new Error('authentication canceled')
+      throw new Error('removal denied')
     },
     loadCAInfo: async () => calls.push('refresh'),
+    formatError: String,
     caTrustErrorMessage: String,
     notify: { warn: () => {}, success: () => {}, error: () => calls.push('error') },
     t: (key) => key,
@@ -168,6 +169,47 @@ test('the settings action cleans up an incomplete installation and refreshes aft
   await context.exports.change()
   assert.deepEqual(calls, [['uninstall', 'target'], 'error', 'refresh'])
   assert.equal(context.isChangingCATrust.value, false)
+})
+
+test('canceling CA installation or removal refreshes status without success or failure notifications', async () => {
+  for (const installed of [false, true]) {
+    for (const error of [
+      new Error('ca_trust_canceled: The operation was canceled by the user.'),
+      'ca_trust_canceled: 用户取消了操作。',
+    ]) {
+      const calls = []
+      const change = async (fingerprint) => {
+        calls.push([installed ? 'uninstall' : 'install', fingerprint])
+        throw error
+      }
+      const context = {
+        isChangingCATrust: vue.ref(false),
+        isGeneratingCA: vue.ref(false),
+        isLoadingCAInfo: vue.ref(false),
+        settingStore: { isDirty: false },
+        caTrustStatus: vue.ref({ supported: true, present: installed, installed, sha256Fingerprint: 'target' }),
+        caTrustLoadFailed: vue.ref(false),
+        caInfoRequestGuard: { invalidate: () => {} },
+        InstallCurrentCACertificate: change,
+        UninstallCurrentCACertificate: change,
+        loadCAInfo: async () => calls.push('refresh'),
+        formatError: String,
+        caTrustErrorMessage: String,
+        notify: {
+          warn: () => calls.push('warning'),
+          success: () => calls.push('success'),
+          error: () => calls.push('error'),
+        },
+        t: (key) => key,
+        exports: {},
+      }
+      runInNewContext(`${changeCode}\nexports.change = handleChangeCATrust;`, context)
+      await context.exports.change()
+      assert.deepEqual(calls, [[installed ? 'uninstall' : 'install', 'target'], 'refresh'])
+      assert.equal(context.caTrustStatus.value.installed, installed)
+      assert.equal(context.isChangingCATrust.value, false)
+    }
+  }
 })
 
 function refreshHarness() {

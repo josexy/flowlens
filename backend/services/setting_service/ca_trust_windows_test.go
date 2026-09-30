@@ -5,10 +5,37 @@ package settingservice
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"testing"
 
 	"golang.org/x/sys/windows"
 )
+
+func TestWindowsCATrustCancellationError(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		err      error
+		canceled bool
+	}{
+		{"success", nil, false},
+		{"native cancellation", windows.ERROR_CANCELLED, true},
+		{"wrapped cancellation", fmt.Errorf("certificate operation: %w", windows.ERROR_CANCELLED), true},
+		{"access denied", windows.ERROR_ACCESS_DENIED, false},
+		{"operation aborted", windows.ERROR_OPERATION_ABORTED, false},
+		{"message without native code", errors.New("The operation was canceled by the user."), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := normalizeWindowsCATrustError(tc.err)
+			if errors.Is(err, errCATrustCanceled) != tc.canceled {
+				t.Fatalf("unexpected cancellation classification: %v", err)
+			}
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("native error was lost: %v", err)
+			}
+		})
+	}
+}
 
 func TestWindowsCATrustExactCertificateInMemory(t *testing.T) {
 	store, err := windows.CertOpenStore(windows.CERT_STORE_PROV_MEMORY, 0, 0, 0, 0)

@@ -36,6 +36,14 @@ func missingWindowsCertificate(err error) bool {
 		errors.Is(err, windows.ERROR_FILE_NOT_FOUND) || errors.Is(err, windows.ERROR_PATH_NOT_FOUND)
 }
 
+func normalizeWindowsCATrustError(err error) error {
+	// Match the native result code, independent of Windows' display language.
+	if errors.Is(err, windows.ERROR_CANCELLED) {
+		return fmt.Errorf("%w: %w", errCATrustCanceled, err)
+	}
+	return err
+}
+
 func (windowsCACertificateTrustStore) status(der []byte) (caTrustState, error) {
 	// SYSTEM_REGISTRY opens only the user's physical Root store. The logical
 	// SYSTEM store also enumerates machine/group-policy roots, which this
@@ -116,7 +124,7 @@ func addWindowsCertificate(store windows.Handle, der []byte) error {
 	// The service checks the physical user store first. ALWAYS ensures a
 	// machine certificate inherited by the logical store cannot suppress
 	// insertion into the user's store or replace a different certificate.
-	return windows.CertAddCertificateContextToStore(store, cert, windows.CERT_STORE_ADD_ALWAYS, nil)
+	return normalizeWindowsCATrustError(windows.CertAddCertificateContextToStore(store, cert, windows.CERT_STORE_ADD_ALWAYS, nil))
 }
 
 func deleteWindowsCertificates(store windows.Handle, der []byte) error {
@@ -127,7 +135,7 @@ func deleteWindowsCertificates(store windows.Handle, der []byte) error {
 		}
 		// This API frees the context even on failure; do not free it again.
 		if err := windows.CertDeleteCertificateFromStore(cert); err != nil {
-			return err
+			return normalizeWindowsCATrustError(err)
 		}
 	}
 }
