@@ -2,7 +2,10 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsSection from '@/components/settings/SettingsSection.vue'
-import type { CACertificateInfo } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
+import type {
+  CACertificateInfo,
+  CACertificateTrustStatus,
+} from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 import { formatUnixMicrosLocal } from '@/utils/format'
 
 type Tone = 'neutral' | 'success' | 'warning'
@@ -22,6 +25,11 @@ interface DetailItem {
 
 const props = defineProps<{
   caInfo: CACertificateInfo | null
+  caTrustStatus: CACertificateTrustStatus | null
+  caTrustLoading: boolean
+  caTrustLoadFailed: boolean
+  isChangingCaTrust: boolean
+  caSettingsDirty: boolean
   caHasExistingFiles: boolean
   isGenerating: boolean
   certGeneratedSuccess: boolean
@@ -30,6 +38,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   generateCa: [overwrite: boolean]
   requestRegenerate: []
+  changeCaTrust: []
 }>()
 
 const { t } = useI18n()
@@ -37,6 +46,59 @@ const { t } = useI18n()
 const isReady = computed(() => {
   const info = props.caInfo
   return Boolean(info?.certExists && info.keyExists && info.validPair && info.isCa && !info.error)
+})
+
+const trustUnknown = computed(() =>
+  props.caTrustLoading || props.caTrustLoadFailed || Boolean(props.caTrustStatus?.error),
+)
+const hasTrustEntry = computed(() => Boolean(props.caTrustStatus?.present || props.caTrustStatus?.installed))
+const trustAction = computed(() =>
+  t(hasTrustEntry.value ? 'settings.ca_trust_uninstall' : 'settings.ca_trust_install'),
+)
+const trustActionHint = computed(() => {
+  if (props.caTrustLoading) return t('settings.ca_trust_loading')
+  if (props.caSettingsDirty) return t('settings.ca_trust_save_first')
+  if (trustUnknown.value) return t('settings.ca_trust_status_unavailable')
+  return trustAction.value
+})
+const trustActionDisabled = computed(
+  () =>
+    trustUnknown.value || props.isGenerating || props.isChangingCaTrust || props.caSettingsDirty ||
+    !props.caTrustStatus?.sha256Fingerprint || (!hasTrustEntry.value && !isReady.value),
+)
+const generationDisabled = computed(
+  () =>
+    props.caTrustLoading || props.caTrustLoadFailed || props.isChangingCaTrust ||
+    Boolean(
+      props.caTrustStatus?.supported &&
+      (hasTrustEntry.value || (props.caTrustStatus.error && props.caTrustStatus.sha256Fingerprint)),
+    ),
+)
+const generationHint = computed(() => {
+  if (props.caTrustLoading) return t('settings.ca_trust_loading')
+  if (props.caTrustStatus?.supported && hasTrustEntry.value) {
+    return t('settings.ca_trust_uninstall_first')
+  }
+  if (generationDisabled.value && trustUnknown.value) return t('settings.ca_trust_status_unavailable')
+  return t(props.caHasExistingFiles ? 'settings.regenerate_ca' : 'settings.generate_ca')
+})
+const trustSummary = computed(() => {
+  if (props.caTrustLoading) return t('settings.ca_trust_loading')
+  if (trustUnknown.value) return t('settings.ca_trust_status_unavailable')
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return t('settings.ca_trust_partial')
+  return t(props.caTrustStatus?.installed ? 'settings.ca_trust_installed' : 'settings.ca_trust_not_installed')
+})
+const trustSummaryIcon = computed(() => {
+  if (props.caTrustLoading) return 'i-lucide-loader-circle'
+  if (trustUnknown.value) return 'i-lucide-shield-question'
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return 'i-lucide-shield-alert'
+  return props.caTrustStatus?.installed ? 'i-lucide-shield-check' : 'i-lucide-shield-minus'
+})
+const trustSummaryTone = computed<Tone>(() => {
+  if (props.caTrustLoading) return 'neutral'
+  if (trustUnknown.value) return 'warning'
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return 'warning'
+  return props.caTrustStatus?.installed ? 'success' : 'neutral'
 })
 
 const summaryTone = computed<Tone>(() => {
@@ -133,22 +195,28 @@ const pillValueClass: Record<Tone, string> = {
 <template>
   <SettingsSection :title="t('settings.section_certificate')">
     <template #actions>
-      <UButton
-        v-if="caHasExistingFiles"
-        color="neutral"
-        variant="outline"
-        :loading="isGenerating"
-        :label="t('settings.regenerate_ca')"
-        @click="emit('requestRegenerate')"
-      />
-      <UButton
-        v-else
-        color="neutral"
-        variant="outline"
-        :loading="isGenerating"
-        :label="t('settings.generate_ca')"
-        @click="emit('generateCa', false)"
-      />
+      <UTooltip v-if="caTrustStatus?.supported" :text="trustActionHint">
+        <UButton
+          color="neutral"
+          variant="outline"
+          :icon="hasTrustEntry ? 'i-lucide-shield-minus' : 'i-lucide-shield-plus'"
+          :aria-label="trustAction"
+          :loading="isChangingCaTrust"
+          :disabled="trustActionDisabled"
+          @click="emit('changeCaTrust')"
+        />
+      </UTooltip>
+      <UTooltip :text="generationHint">
+        <UButton
+          color="neutral"
+          variant="outline"
+          :loading="isGenerating"
+          :disabled="generationDisabled"
+          :icon="caHasExistingFiles ? 'i-lucide-refresh-cw' : 'i-lucide-file-plus-2'"
+          :aria-label="t(caHasExistingFiles ? 'settings.regenerate_ca' : 'settings.generate_ca')"
+          @click="caHasExistingFiles ? emit('requestRegenerate') : emit('generateCa', false)"
+        />
+      </UTooltip>
     </template>
 
     <div
@@ -163,6 +231,19 @@ const pillValueClass: Record<Tone, string> = {
       <div class="min-w-0 wrap-anywhere">
         <div>{{ statusSummary }}</div>
         <div v-if="statusDescription" class="mt-1">{{ statusDescription }}</div>
+        <div
+          v-if="caTrustStatus?.supported || caTrustLoadFailed"
+          class="mt-1 flex min-w-0 items-start gap-2"
+          :class="summaryTextClass[trustSummaryTone]"
+        >
+          <UIcon
+            :name="trustSummaryIcon"
+            class="mt-0.5 size-4 shrink-0"
+            :class="{ 'motion-safe:animate-spin': caTrustLoading }"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 wrap-anywhere">{{ trustSummary }}</span>
+        </div>
       </div>
     </div>
 

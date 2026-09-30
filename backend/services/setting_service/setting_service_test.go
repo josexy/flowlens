@@ -1202,7 +1202,9 @@ func TestGenerateCurrentCACertificateOverwriteBacksUpExistingFiles(t *testing.T)
 func newTestSettingServiceWithCAPaths(t *testing.T) *SettingService {
 	t.Helper()
 	dir := t.TempDir()
-	svc := &SettingService{}
+	// CA generation tests must not query the user's real Root store or login
+	// keychain, which may be unavailable on headless macOS test runners.
+	svc := &SettingService{caTrustStore: &testCATrustStore{certs: make(map[string]bool)}}
 	err := svc.Update(&Settings{
 		ProxyConfig: &ProxyConfig{
 			Mode:       ProxyModeHTTP,

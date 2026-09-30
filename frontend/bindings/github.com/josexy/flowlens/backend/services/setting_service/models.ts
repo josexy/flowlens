@@ -17,6 +17,22 @@ export interface CACertificateInfo {
     "error": string;
 }
 
+/**
+ * CACertificateTrustStatus describes the configured certificate in the current
+ * user's store and trust settings, excluding machine-wide or inherited trust.
+ */
+export interface CACertificateTrustStatus {
+    "supported": boolean;
+
+    /**
+     * Present also covers incomplete macOS installations requiring cleanup.
+     */
+    "present": boolean;
+    "installed": boolean;
+    "sha256Fingerprint": string;
+    "error": string;
+}
+
 export interface CacheConfig {
     "bodyCacheThresholdBytes": number;
     "maxWsMessages": number;

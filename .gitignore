@@ -61,3 +61,5 @@ node_modules
 frontend/dist
 frontend/package.json.md5
 .task
+
+.DS_Store

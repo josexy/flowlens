@@ -18,6 +18,7 @@ export {
 
 export type {
     CACertificateInfo,
+    CACertificateTrustStatus,
     CacheConfig,
     ClientCertConfig,
     CommonConfig,
