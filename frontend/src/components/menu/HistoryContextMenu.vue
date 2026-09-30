@@ -6,7 +6,7 @@ import { useHistoryStore } from '@/stores/history'
 import ConfirmCardModal from '@/components/modal/ConfirmCardModal.vue'
 import { useNotify } from '@/composables/useNotify'
 import { useTrafficExport } from '@/composables/useTrafficExport'
-import { createTrafficExportMenu, type TrafficExportFormat } from '@/utils/trafficExport'
+import type { TrafficExportFormat } from '@/utils/trafficExport'
 import { getErrorMessage } from '@/utils/dialog'
 import { isHARExportableHistoryFormat } from '@/utils/traffic'
 
@@ -85,7 +85,11 @@ const menuItems = computed<ContextMenuItem[]>(() => [
     label: t('traffic_export.title'),
     icon: 'i-lucide-file-down',
     disabled: exporting.value || deleting.value || !canExportHAR.value,
-    children: createTrafficExportMenu(t, exportHistory, exporting.value || deleting.value || !canExportHAR.value),
+    children: (['csv', 'har'] as const).map((format) => ({
+      label: t(`traffic_export.formats.${format}`),
+      disabled: exporting.value || deleting.value || !canExportHAR.value,
+      onSelect: () => exportHistory(format),
+    })),
   },
   {
     label: t('history.delete'),
