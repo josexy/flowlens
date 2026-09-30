@@ -48,7 +48,7 @@ func (s securityCACertificateTrustStore) command(timeout time.Duration, args ...
 }
 
 func (s securityCACertificateTrustStore) loginKeychain() (string, error) {
-	out, err := s.command(caSecurityQueryTimeout, "login-keychain", "-d", "user")
+	out, err := s.command(caSecurityQueryTimeout, "login-keychain")
 	if err != nil {
 		return "", err
 	}

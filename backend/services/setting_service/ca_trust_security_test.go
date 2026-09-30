@@ -61,7 +61,7 @@ func (s *testCASecurity) run(ctx context.Context, args ...string) ([]byte, error
 	}
 	switch args[0] {
 	case "login-keychain":
-		if !reflect.DeepEqual(args, []string{"login-keychain", "-d", "user"}) {
+		if !reflect.DeepEqual(args, []string{"login-keychain"}) {
 			s.t.Fatalf("wrong keychain domain: %v", args)
 		}
 		return []byte(fmt.Sprintf("    \"%s\"\n", s.keychain)), nil
