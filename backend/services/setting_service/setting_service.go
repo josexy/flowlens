@@ -547,7 +547,7 @@ func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateR
 	)
 	defer func() {
 		if err != nil {
-			logger.G().Errorf("CA certificate generation failed: %v", err)
+			logger.G().Errorf("CA certificate generation failed: error=%q", caTrustLogText(err.Error()))
 		}
 	}()
 

@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/josexy/flowlens/backend/pkg/logger"
 )
 
 const (
@@ -35,15 +37,33 @@ type securityCACertificateTrustStore struct {
 func (securityCACertificateTrustStore) supported() bool { return true }
 
 func (s securityCACertificateTrustStore) command(timeout time.Duration, args ...string) ([]byte, error) {
+	if len(args) == 0 {
+		err := errors.New("security command arguments are empty")
+		logger.G().Warnf("CA trust security command rejected: error=%v", err)
+		return nil, err
+	}
+	command := args[0]
+	started := time.Now()
+	logger.G().Debugf("CA trust security command started: command=%s timeout=%s", command, timeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	out, err := s.run(ctx, args...)
+	duration := time.Since(started)
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("ca_trust_timeout: %w", ctx.Err())
+		wrapped := fmt.Errorf("ca_trust_timeout: %w", ctx.Err())
+		logger.G().Warnf("CA trust security command timed out: command=%s timeout=%s duration=%s output_bytes=%d output=%q error=%v", command, timeout, duration, len(out), caTrustLogText(string(out)), wrapped)
+		return nil, wrapped
 	}
 	if err != nil {
-		return out, fmt.Errorf("security %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
+		wrapped := fmt.Errorf("security %s: %w: %s", command, err, strings.TrimSpace(string(out)))
+		if caSecurityExpectedEmptyResult(command, out) {
+			logger.G().Debugf("CA trust security command returned an expected empty result: command=%s duration=%s output_bytes=%d", command, duration, len(out))
+		} else {
+			logger.G().Warnf("CA trust security command failed: command=%s duration=%s output_bytes=%d error=%q output=%q", command, duration, len(out), caTrustLogText(err.Error()), caTrustLogText(string(out)))
+		}
+		return out, wrapped
 	}
+	logger.G().Debugf("CA trust security command succeeded: command=%s duration=%s output_bytes=%d", command, duration, len(out))
 	return out, nil
 }
 
@@ -61,8 +81,10 @@ func (s securityCACertificateTrustStore) loginKeychain() (string, error) {
 	clean := path.Clean(keychain)
 	if !path.IsAbs(clean) || strings.ContainsAny(keychain, "\x00\r\n") ||
 		strings.HasPrefix(clean, "/Library/Keychains/") || strings.HasPrefix(clean, "/System/") {
+		logger.G().Warnf("CA trust login keychain rejected: path=%q", caTrustLogText(keychain))
 		return "", errors.New("ca_trust_login_keychain_unavailable")
 	}
+	logger.G().Debugf("CA trust login keychain resolved: path=%q", keychain)
 	return keychain, nil
 }
 
@@ -131,16 +153,26 @@ func (s securityCACertificateTrustStore) status(der []byte) (caTrustState, error
 	if err != nil {
 		return caTrustState{}, err
 	}
+	fingerprint := caCertificateFingerprint(cert)
+	logger.G().Debugf("CA trust status query started: fingerprint=%s", fingerprint)
 	keychain, err := s.loginKeychain()
 	if err != nil {
+		logger.G().Warnf("CA trust status query failed: stage=login_keychain fingerprint=%s error=%q", fingerprint, caTrustLogText(err.Error()))
 		return caTrustState{}, err
 	}
 	certificatePresent, err := s.certificatePresent(keychain, der)
 	if err != nil {
+		logger.G().Warnf("CA trust status query failed: stage=keychain_certificate fingerprint=%s keychain=%q error=%q", fingerprint, keychain, caTrustLogText(err.Error()))
 		return caTrustState{}, err
 	}
 	trustPresent, trusted, err := s.userTrust(cert)
-	return caTrustState{present: certificatePresent || trustPresent, installed: certificatePresent && trusted}, err
+	state := caTrustState{present: certificatePresent || trustPresent, installed: certificatePresent && trusted}
+	if err != nil {
+		logger.G().Warnf("CA trust status query failed: stage=user_trust fingerprint=%s keychain=%q certificate_present=%t trust_present=%t trusted=%t error=%q", fingerprint, keychain, certificatePresent, trustPresent, trusted, caTrustLogText(err.Error()))
+		return state, err
+	}
+	logger.G().Debugf("CA trust status query completed: fingerprint=%s keychain=%q certificate_present=%t trust_present=%t trusted=%t installed=%t", fingerprint, keychain, certificatePresent, trustPresent, trusted, state.installed)
+	return state, nil
 }
 
 func (s securityCACertificateTrustStore) install(der []byte) error {
@@ -152,11 +184,13 @@ func (s securityCACertificateTrustStore) install(der []byte) error {
 	if err != nil {
 		return err
 	}
+	fingerprint := caCertificateFingerprint(cert)
+	result := "trustAsRoot"
+	if caSecuritySelfSigned(cert) {
+		result = "trustRoot"
+	}
+	logger.G().Infof("CA trust installation started: fingerprint=%s keychain=%q trust_result=%s policies=ssl,basic", fingerprint, keychain, result)
 	return withCATrustPublicSnapshot(der, func(file string) error {
-		result := "trustAsRoot"
-		if caSecuritySelfSigned(cert) {
-			result = "trustRoot"
-		}
 		// Omitting -d keeps trust in the current-user domain. Both policies are
 		// explicit; no private key, shell, sudo, or administrator domain is used.
 		_, err := s.command(caSecurityActionTimeout, "add-trusted-cert", "-r", result,
@@ -180,7 +214,10 @@ func (s securityCACertificateTrustStore) uninstall(der []byte) error {
 	if err != nil {
 		return err
 	}
+	fingerprintText := caCertificateFingerprint(cert)
+	logger.G().Infof("CA certificate removal started: fingerprint=%s keychain=%q trust_present=%t", fingerprintText, keychain, trustPresent)
 	if trustPresent {
+		logger.G().Debugf("CA user trust removal started: fingerprint=%s", fingerprintText)
 		err = withCATrustPublicSnapshot(der, func(file string) error {
 			out, err := s.command(caSecurityActionTimeout, "remove-trusted-cert", file)
 			if err != nil && !caSecurityNoTrustSettings(out) && !caSecurityMissingItem(out) {
@@ -191,13 +228,19 @@ func (s securityCACertificateTrustStore) uninstall(der []byte) error {
 		if err != nil {
 			return err
 		}
+		logger.G().Debugf("CA user trust removal command completed: fingerprint=%s", fingerprintText)
 	}
 	// The login keychain is explicitly scoped, and full DER was checked before
 	// using SHA256 for removal. Never identify a certificate by its subject.
 	fingerprint := sha256.Sum256(der)
-	for range 64 {
+	for attempt := 1; attempt <= 64; attempt++ {
 		present, err := s.certificatePresent(keychain, der)
 		if err != nil || !present {
+			if err != nil {
+				logger.G().Warnf("CA certificate removal query failed: fingerprint=%s keychain=%q attempt=%d error=%q", fingerprintText, keychain, attempt, caTrustLogText(err.Error()))
+			} else {
+				logger.G().Infof("CA certificate removal completed: fingerprint=%s keychain=%q attempts=%d", fingerprintText, keychain, attempt-1)
+			}
 			return err
 		}
 		out, err := s.command(caSecurityActionTimeout, "delete-certificate", "-Z", hex.EncodeToString(fingerprint[:]), keychain)
@@ -205,6 +248,7 @@ func (s securityCACertificateTrustStore) uninstall(der []byte) error {
 			return err
 		}
 	}
+	logger.G().Errorf("CA certificate removal verification failed: fingerprint=%s keychain=%q attempts=%d", fingerprintText, keychain, 64)
 	return errors.New("ca_trust_verification_failed")
 }
 
@@ -235,6 +279,18 @@ func caSecurityMissingItem(out []byte) bool {
 
 func caSecurityNoTrustSettings(out []byte) bool {
 	return bytes.Contains(out, []byte("No Trust Settings were found.")) || bytes.Contains(out, []byte(": -25263"))
+}
+
+func caSecurityExpectedEmptyResult(command string, out []byte) bool {
+	if command == "trust-settings-export" || command == "remove-trusted-cert" {
+		if caSecurityNoTrustSettings(out) {
+			return true
+		}
+	}
+	if command == "find-certificate" || command == "remove-trusted-cert" || command == "delete-certificate" {
+		return caSecurityMissingItem(out)
+	}
+	return false
 }
 
 func runCACertificateSecurity(ctx context.Context, args ...string) ([]byte, error) {

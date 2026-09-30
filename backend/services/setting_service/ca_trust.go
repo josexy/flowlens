@@ -8,10 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
 )
+
+const caTrustLogTextLimit = 2 << 10
 
 var (
 	errCATrustUnsupported        = errors.New("ca_trust_unsupported")
@@ -48,15 +51,24 @@ func (s *SettingService) certificateTrustStore() caCertificateTrustStore {
 func (s *SettingService) GetCurrentCACertificateTrustStatus() (*CACertificateTrustStatus, error) {
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	logger.G().Debug("CA trust status request started")
 	store := s.certificateTrustStore()
 	if !store.supported() {
+		logger.G().Debug("CA trust status request skipped: platform unsupported")
 		return &CACertificateTrustStatus{}, nil
 	}
 	certPath, _, err := s.currentCAPaths()
 	if err != nil {
+		logger.G().Warnf("CA trust status request failed to resolve certificate path: error=%q", caTrustLogText(err.Error()))
 		return nil, err
 	}
-	return caTrustStatus(store, certPath), nil
+	status := caTrustStatus(store, certPath)
+	if status.Error != "" {
+		logger.G().Warnf("CA trust status request completed with unknown state: cert=%q fingerprint=%s error=%q", certPath, status.SHA256Fingerprint, caTrustLogText(status.Error))
+	} else {
+		logger.G().Debugf("CA trust status request completed: cert=%q fingerprint=%s present=%t installed=%t", certPath, status.SHA256Fingerprint, status.Present, status.Installed)
+	}
+	return status, nil
 }
 
 func caTrustStatus(store caCertificateTrustStore, certPath string) *CACertificateTrustStatus {
@@ -90,6 +102,21 @@ func (s *SettingService) UninstallCurrentCACertificate(expectedSHA256Fingerprint
 func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint string, install bool) (status *CACertificateTrustStatus, err error) {
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	action := "uninstall"
+	if install {
+		action = "install"
+	}
+	started := time.Now()
+	logger.G().Infof("CA trust change requested: action=%s expected_fingerprint=%q", action, caTrustLogText(expectedFingerprint))
+	fingerprint := ""
+	stage := "resolve_configuration"
+	defer func() {
+		if err != nil {
+			logger.G().Errorf("CA trust change failed: action=%s stage=%s fingerprint=%s duration=%s error=%q", action, stage, fingerprint, time.Since(started), caTrustLogText(err.Error()))
+			return
+		}
+		logger.G().Infof("CA trust change succeeded: action=%s fingerprint=%s present=%t installed=%t duration=%s", action, fingerprint, status.Present, status.Installed, time.Since(started))
+	}()
 	store := s.certificateTrustStore()
 	if !store.supported() {
 		return nil, errCATrustUnsupported
@@ -98,21 +125,16 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 	if err != nil {
 		return nil, err
 	}
+	stage = "read_certificate"
 	cert, certBytes, err := readCAPublicCertificate(certPath)
 	if err != nil {
 		return nil, err
 	}
-	fingerprint := caCertificateFingerprint(cert)
+	fingerprint = caCertificateFingerprint(cert)
+	stage = "validate_certificate"
 	if expectedFingerprint == "" || expectedFingerprint != fingerprint {
 		return nil, errCATrustCertificateChanged
 	}
-	defer func() {
-		if err != nil {
-			logger.G().Errorf("CA trust change failed: install=%t fingerprint=%s error=%v", install, fingerprint, err)
-		} else {
-			logger.G().Infof("CA trust change succeeded: install=%t fingerprint=%s", install, fingerprint)
-		}
-	}()
 	if install {
 		if !cert.IsCA || !cert.BasicConstraintsValid {
 			return nil, errCATrustInvalidCA
@@ -130,11 +152,14 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 			return nil, fmt.Errorf("%w: %v", errCATrustInvalidPair, pairErr)
 		}
 	}
+	stage = "query_status"
 	state, err := store.status(cert.Raw)
 	if err != nil {
 		return nil, err
 	}
+	logger.G().Debugf("CA trust change initial state: action=%s fingerprint=%s present=%t installed=%t", action, fingerprint, state.present, state.installed)
 	if (install && !state.installed) || (!install && state.present) {
+		stage = action
 		if install {
 			err = store.install(cert.Raw)
 		} else {
@@ -146,6 +171,7 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 	}
 	// Verify against the same public certificate, without depending on the key
 	// or a path that another settings operation might have changed.
+	stage = "verify_status"
 	state, err = store.status(cert.Raw)
 	if err != nil {
 		return nil, err
@@ -204,4 +230,20 @@ func readCAPublicCertificate(path string) (*x509.Certificate, []byte, error) {
 func caCertificateFingerprint(cert *x509.Certificate) string {
 	fingerprint := sha256.Sum256(cert.Raw)
 	return colonHex(fingerprint[:])
+}
+
+// Diagnostics may contain partial PEM output when security fails or times out.
+// Keep those payloads out of logs, including errors wrapped by the service.
+func caTrustLogText(text string) string {
+	if strings.Contains(text, "-----BEGIN ") || strings.Contains(text, "-----END ") {
+		return "<PEM output omitted>"
+	}
+	if strings.Contains(text, "<?xml") || strings.Contains(text, "<plist") || strings.Contains(text, "bplist00") {
+		return "<trust settings output omitted>"
+	}
+	preview := strings.Join(strings.Fields(text), " ")
+	if len(preview) <= caTrustLogTextLimit {
+		return preview
+	}
+	return strings.ToValidUTF8(preview[:caTrustLogTextLimit], "") + "... [truncated]"
 }
