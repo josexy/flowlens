@@ -11,12 +11,18 @@ import RootCAPathList from '@/components/settings/RootCAPathList.vue'
 import type { FileFilter } from '@/utils/dialog'
 import type {
   CACertificateInfo,
+  CACertificateTrustStatus,
   ClientCertConfig,
   ProxyConfig,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 
 defineProps<{
   caInfo: CACertificateInfo | null
+  caTrustStatus: CACertificateTrustStatus | null
+  caTrustLoading: boolean
+  caTrustLoadFailed: boolean
+  isChangingCaTrust: boolean
+  caSettingsDirty: boolean
   caHasExistingFiles: boolean
   isGenerating: boolean
   certGeneratedSuccess: boolean
@@ -25,6 +31,7 @@ const proxyConfig = defineModel<ProxyConfig>('proxyConfig', { required: true })
 
 const emit = defineEmits<{
   generateCa: [overwrite: boolean]
+  changeCaTrust: []
 }>()
 
 const { t } = useI18n()
@@ -71,11 +78,17 @@ function handleRegenerateConfirm() {
   <div class="flex min-w-0 flex-col gap-6 border-t border-app-border pt-6">
     <CACertificateInfoPanel
       :ca-info="caInfo"
+      :ca-trust-status="caTrustStatus"
+      :ca-trust-loading="caTrustLoading"
+      :ca-trust-load-failed="caTrustLoadFailed"
+      :is-changing-ca-trust="isChangingCaTrust"
+      :ca-settings-dirty="caSettingsDirty"
       :ca-has-existing-files="caHasExistingFiles"
       :is-generating="isGenerating"
       :cert-generated-success="certGeneratedSuccess"
       @generate-ca="emit('generateCa', $event)"
       @request-regenerate="regenerateModalVisible = true"
+      @change-ca-trust="emit('changeCaTrust')"
     >
       <SettingsRow :label="t('toolbar.ca_cert_path')" wide>
         <CertificateFileInput

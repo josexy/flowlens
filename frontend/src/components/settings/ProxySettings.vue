@@ -6,12 +6,18 @@ import ProxyConnectionSettings from '@/components/settings/ProxyConnectionSettin
 import ProcessAttributionSettings from '@/components/settings/ProcessAttributionSettings.vue'
 import type {
   CACertificateInfo,
+  CACertificateTrustStatus,
   ProcessAttributionConfig,
   ProxyConfig,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 
 defineProps<{
   caInfo: CACertificateInfo | null
+  caTrustStatus: CACertificateTrustStatus | null
+  caTrustLoading: boolean
+  caTrustLoadFailed: boolean
+  isChangingCaTrust: boolean
+  caSettingsDirty: boolean
   caHasExistingFiles: boolean
   isGenerating: boolean
   certGeneratedSuccess: boolean
@@ -24,6 +30,7 @@ const processAttributionConfig = defineModel<ProcessAttributionConfig>('processA
 
 const emit = defineEmits<{
   generateCa: [overwrite: boolean]
+  changeCaTrust: []
 }>()
 
 const { t } = useI18n()
@@ -40,10 +47,16 @@ const { t } = useI18n()
     <ProxyCertificateSettings
       v-model:proxy-config="proxyConfig"
       :ca-info="caInfo"
+      :ca-trust-status="caTrustStatus"
+      :ca-trust-loading="caTrustLoading"
+      :ca-trust-load-failed="caTrustLoadFailed"
+      :is-changing-ca-trust="isChangingCaTrust"
+      :ca-settings-dirty="caSettingsDirty"
       :ca-has-existing-files="caHasExistingFiles"
       :is-generating="isGenerating"
       :cert-generated-success="certGeneratedSuccess"
       @generate-ca="emit('generateCa', $event)"
+      @change-ca-trust="emit('changeCaTrust')"
     />
   </div>
 </template>

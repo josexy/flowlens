@@ -140,6 +140,10 @@ New history files use HBIN v2, which adds upstream connection timestamps. Existi
 
 HTTPS capture requires a locally trusted CA certificate. Generate or inspect the FlowLens CA under Settings, add it to the trust store used by the client application, then restart the proxy service when required.
 
+On Windows, the shield icon beside **Generate CA / Regenerate CA** installs the saved MITM CA into the **current user's Trusted Root Certification Authorities** store. Once installed, the icon changes to uninstall. The status below the CA summary reflects this user store only; it does not include certificates inherited from the local computer or guarantee that every application uses Windows trust. Save pending settings before using the button. Installation requires a valid CA certificate and matching private key; only the public certificate is added to Windows.
+
+Uninstall removes only the exact configured certificate from the current user's store and leaves its local certificate/key files intact. It remains available if the private key is missing or the certificate has expired. Uninstall an installed CA before regenerating it. FlowLens does not automatically replace trust or clean up historical CAs; macOS, Linux, machine-wide trust and application-specific stores still require manual management. If querying the store fails, the action is disabled until the status can be refreshed by reopening Proxy settings.
+
 Default proxy settings:
 
 | Setting | Default |

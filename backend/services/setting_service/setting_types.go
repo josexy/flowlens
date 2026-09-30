@@ -189,6 +189,15 @@ type GenerateCACertificateRequest struct {
 	ValidDays  int    `json:"validDays"`
 }
 
+// CACertificateTrustStatus describes the configured certificate in the current
+// user's Root store, not effective trust inherited from other stores.
+type CACertificateTrustStatus struct {
+	Supported         bool   `json:"supported"`
+	Installed         bool   `json:"installed"`
+	SHA256Fingerprint string `json:"sha256Fingerprint"`
+	Error             string `json:"error"`
+}
+
 type LogConfig struct {
 	Enabled bool
 	Level   string

@@ -18,6 +18,9 @@ import {
   ListSystemFonts,
   GetCACertificateInfo,
   GenerateCurrentCACertificate,
+  GetCurrentCACertificateTrustStatus,
+  InstallCurrentCACertificate,
+  UninstallCurrentCACertificate,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/settingservice'
 import {
   MainWindowCloseBehavior,
@@ -77,7 +80,7 @@ type FontSelectOption = {
 
 type SettingsTabKey = 'general' | 'proxy' | 'pythonPlugins' | 'shortcuts' | 'logs' | 'storage'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const settingStore = useSettingStore()
 const loggingStore = useLoggingStore()
 const notify = useNotify()
@@ -117,6 +120,9 @@ const isLoaded = ref(false)
 const dataSize = ref<proxyservice.LocalDataSize>({ cacheBytes: 0, historyBytes: 0 })
 const systemFonts = ref<settingservice.FontOption[]>([])
 const caInfo = ref<settingservice.CACertificateInfo | null>(null)
+const caTrustStatus = ref<settingservice.CACertificateTrustStatus | null>(null)
+const caTrustLoadFailed = ref(false)
+const isChangingCATrust = ref(false)
 const isLoadingFonts = ref(false)
 const isLoadingCAInfo = ref(false)
 const isGeneratingCA = ref(false)
@@ -133,7 +139,9 @@ let hasLoadedSystemFonts = false
 let offConfirmQuitRequest: (() => void) | null = null
 let offSaveShortcut: (() => void) | null = null
 let isCommittingSettings = false
+let isUnmounted = false
 const dataSizeRequestGuard = createLatestOperationGuard()
+const caInfoRequestGuard = createLatestOperationGuard()
 const dirtySections = new Set<SettingsDirtySection>()
 
 function addFontOption(
@@ -361,14 +369,64 @@ function handleFontSelectOpen(open: boolean) {
 }
 
 async function loadCAInfo() {
+  if (isUnmounted) return
+  const token = caInfoRequestGuard.begin()
   isLoadingCAInfo.value = true
-  try {
-    caInfo.value = await GetCACertificateInfo()
-  } catch (e) {
-    console.error('GetCACertificateInfo failed', e)
+  const [infoResult, trustResult] = await Promise.allSettled([
+    Promise.resolve().then(() => GetCACertificateInfo()),
+    Promise.resolve().then(() => GetCurrentCACertificateTrustStatus()),
+  ])
+  if (!caInfoRequestGuard.isCurrent(token)) return
+  if (infoResult.status === 'fulfilled') {
+    caInfo.value = infoResult.value
+  } else {
+    caInfo.value = null
     notify.error(t('settings.error_load_ca_info'))
+  }
+  caTrustLoadFailed.value = trustResult.status === 'rejected' || !trustResult.value
+  if (trustResult.status === 'fulfilled' && trustResult.value) {
+    caTrustStatus.value = trustResult.value
+  } else {
+    notify.error(t('settings.ca_trust_status_unavailable'))
+  }
+  isLoadingCAInfo.value = false
+}
+
+function caTrustErrorMessage(error: unknown) {
+  const detail = formatError(error)
+  const code = detail.match(/\bca_trust_[a-z_]+\b/)?.[0]
+  if (code && te(`settings.ca_trust_errors.${code}`)) {
+    return t(`settings.ca_trust_errors.${code}`)
+  }
+  return detail
+}
+
+async function handleChangeCATrust() {
+  if (isChangingCATrust.value || isGeneratingCA.value || isLoadingCAInfo.value) return
+  if (settingStore.isDirty) {
+    notify.warn(t('settings.ca_trust_save_first'))
+    return
+  }
+  const status = caTrustStatus.value
+  if (!status?.supported || status.error || caTrustLoadFailed.value || !status.sha256Fingerprint) return
+  const install = !status.installed
+  caInfoRequestGuard.invalidate()
+  isChangingCATrust.value = true
+  try {
+    const changeTrust = install ? InstallCurrentCACertificate : UninstallCurrentCACertificate
+    await changeTrust(status.sha256Fingerprint)
+    notify.success(
+      t(install ? 'settings.ca_trust_install_success' : 'settings.ca_trust_uninstall_success'),
+    )
+  } catch (error) {
+    notify.error(
+      t(install ? 'settings.ca_trust_install_failed' : 'settings.ca_trust_uninstall_failed', {
+        error: caTrustErrorMessage(error),
+      }),
+    )
   } finally {
-    isLoadingCAInfo.value = false
+    await loadCAInfo()
+    isChangingCATrust.value = false
   }
 }
 
@@ -386,13 +444,23 @@ async function loadLogStatus() {
 }
 
 async function handleGenerateCA(overwrite: boolean) {
+  if (isGeneratingCA.value || isChangingCATrust.value || isLoadingCAInfo.value) return
   if (settingStore.isDirty) {
     notify.warn(t('settings.ca_save_first'))
     return
   }
+  if (caTrustStatus.value?.supported && caTrustStatus.value.installed) {
+    notify.warn(t('settings.ca_trust_uninstall_first'))
+    return
+  }
+  if (caTrustLoadFailed.value || (caTrustStatus.value?.error && caTrustStatus.value.sha256Fingerprint)) {
+    notify.warn(t('settings.ca_trust_status_unavailable'))
+    return
+  }
+  caInfoRequestGuard.invalidate()
   isGeneratingCA.value = true
   try {
-    caInfo.value = await GenerateCurrentCACertificate({
+    await GenerateCurrentCACertificate({
       overwrite,
       commonName: '',
       validDays: 0,
@@ -403,8 +471,9 @@ async function handleGenerateCA(overwrite: boolean) {
     }, 5000)
   } catch (e) {
     console.error('GenerateCurrentCACertificate failed', e)
-    notify.error(t('settings.error_generate_ca'))
+    notify.error(`${t('settings.error_generate_ca')} ${caTrustErrorMessage(e)}`)
   } finally {
+    await loadCAInfo()
     isGeneratingCA.value = false
   }
 }
@@ -469,7 +538,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  isUnmounted = true
   dataSizeRequestGuard.invalidate()
+  caInfoRequestGuard.invalidate()
   if (saveStatusTimer) {
     clearTimeout(saveStatusTimer)
   }
@@ -709,10 +780,16 @@ function handleConfirmQuit() {
             v-model:proxy-config="settingStore.settings.proxyConfig"
             v-model:process-attribution-config="settingStore.settings.processAttributionConfig"
             :ca-info="caInfo"
+            :ca-trust-status="caTrustStatus"
+            :ca-trust-loading="isLoadingCAInfo"
+            :ca-trust-load-failed="caTrustLoadFailed"
+            :is-changing-ca-trust="isChangingCATrust"
+            :ca-settings-dirty="settingStore.isDirty"
             :ca-has-existing-files="caHasExistingFiles"
             :is-generating="isGeneratingCA"
             :cert-generated-success="certGeneratedSuccess"
             @generate-ca="handleGenerateCA"
+            @change-ca-trust="handleChangeCATrust"
           />
           <ShortcutSettings
             v-if="shortcutPanelMounted && settingStore.settings?.shortcuts"

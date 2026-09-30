@@ -17,6 +17,17 @@ export interface CACertificateInfo {
     "error": string;
 }
 
+/**
+ * CACertificateTrustStatus describes the configured certificate in the current
+ * user's Root store, not effective trust inherited from other stores.
+ */
+export interface CACertificateTrustStatus {
+    "supported": boolean;
+    "installed": boolean;
+    "sha256Fingerprint": string;
+    "error": string;
+}
+
 export interface CacheConfig {
     "bodyCacheThresholdBytes": number;
     "maxWsMessages": number;

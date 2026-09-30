@@ -55,6 +55,8 @@ const (
 
 type SettingService struct {
 	mu                    sync.RWMutex
+	caMu                  sync.Mutex
+	caTrustStore          caCertificateTrustStore
 	loadMu                sync.Mutex
 	persistMu             sync.Mutex
 	settings              *Settings
@@ -508,6 +510,8 @@ func defaultLocalIPv4AddressOptions() []LocalIPAddress {
 }
 
 func (s *SettingService) GetCACertificateInfo() (*CACertificateInfo, error) {
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	certPath, keyPath, err := s.currentCAPaths()
 	if err != nil {
 		return nil, err
@@ -516,6 +520,8 @@ func (s *SettingService) GetCACertificateInfo() (*CACertificateInfo, error) {
 }
 
 func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateRequest) (info *CACertificateInfo, err error) {
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	certPath, keyPath, err := s.currentCAPaths()
 	if err != nil {
 		return nil, err
@@ -549,6 +555,11 @@ func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateR
 	keyExists := pathExists(keyPath)
 	if (certExists || keyExists) && !req.Overwrite {
 		return nil, errors.New("ca certificate or key already exists")
+	}
+	if req.Overwrite && certExists {
+		if err = s.checkCAReplacement(certPath); err != nil {
+			return nil, err
+		}
 	}
 
 	certPEM, keyPEM, err := generateCACertificatePEM(req.CommonName, req.ValidDays)

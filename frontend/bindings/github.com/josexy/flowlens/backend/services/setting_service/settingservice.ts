@@ -25,12 +25,20 @@ export function GetCACertificateInfo(): $CancellablePromise<$models.CACertificat
     return $Call.ByID(2936179192);
 }
 
+export function GetCurrentCACertificateTrustStatus(): $CancellablePromise<$models.CACertificateTrustStatus | null> {
+    return $Call.ByID(99230379);
+}
+
 export function GetProxyConfig(): $CancellablePromise<$models.ProxyConfig | null> {
     return $Call.ByID(2423391465);
 }
 
 export function GetWindowConfig(): $CancellablePromise<$models.WindowConfig | null> {
     return $Call.ByID(1736532847);
+}
+
+export function InstallCurrentCACertificate(expectedSHA256Fingerprint: string): $CancellablePromise<$models.CACertificateTrustStatus | null> {
+    return $Call.ByID(1245737450, expectedSHA256Fingerprint);
 }
 
 export function ListLocalIPv4Addresses(): $CancellablePromise<$models.LocalIPAddress[] | null> {
@@ -65,6 +73,10 @@ export function SetLanguage(language: string): $CancellablePromise<void> {
 
 export function SetThemeMode(mode: string): $CancellablePromise<void> {
     return $Call.ByID(3404974341, mode);
+}
+
+export function UninstallCurrentCACertificate(expectedSHA256Fingerprint: string): $CancellablePromise<$models.CACertificateTrustStatus | null> {
+    return $Call.ByID(1365331383, expectedSHA256Fingerprint);
 }
 
 /**
