@@ -190,9 +190,11 @@ type GenerateCACertificateRequest struct {
 }
 
 // CACertificateTrustStatus describes the configured certificate in the current
-// user's Root store, not effective trust inherited from other stores.
+// user's store and trust settings, excluding machine-wide or inherited trust.
 type CACertificateTrustStatus struct {
-	Supported         bool   `json:"supported"`
+	Supported bool `json:"supported"`
+	// Present also covers incomplete macOS installations requiring cleanup.
+	Present           bool   `json:"present"`
 	Installed         bool   `json:"installed"`
 	SHA256Fingerprint string `json:"sha256Fingerprint"`
 	Error             string `json:"error"`

@@ -51,8 +51,9 @@ const isReady = computed(() => {
 const trustUnknown = computed(() =>
   props.caTrustLoading || props.caTrustLoadFailed || Boolean(props.caTrustStatus?.error),
 )
+const hasTrustEntry = computed(() => Boolean(props.caTrustStatus?.present || props.caTrustStatus?.installed))
 const trustAction = computed(() =>
-  t(props.caTrustStatus?.installed ? 'settings.ca_trust_uninstall' : 'settings.ca_trust_install'),
+  t(hasTrustEntry.value ? 'settings.ca_trust_uninstall' : 'settings.ca_trust_install'),
 )
 const trustActionHint = computed(() => {
   if (props.caTrustLoading) return t('settings.ca_trust_loading')
@@ -63,19 +64,19 @@ const trustActionHint = computed(() => {
 const trustActionDisabled = computed(
   () =>
     trustUnknown.value || props.isGenerating || props.isChangingCaTrust || props.caSettingsDirty ||
-    !props.caTrustStatus?.sha256Fingerprint || (!props.caTrustStatus?.installed && !isReady.value),
+    !props.caTrustStatus?.sha256Fingerprint || (!hasTrustEntry.value && !isReady.value),
 )
 const generationDisabled = computed(
   () =>
     props.caTrustLoading || props.caTrustLoadFailed || props.isChangingCaTrust ||
     Boolean(
       props.caTrustStatus?.supported &&
-      (props.caTrustStatus.installed || (props.caTrustStatus.error && props.caTrustStatus.sha256Fingerprint)),
+      (hasTrustEntry.value || (props.caTrustStatus.error && props.caTrustStatus.sha256Fingerprint)),
     ),
 )
 const generationHint = computed(() => {
   if (props.caTrustLoading) return t('settings.ca_trust_loading')
-  if (props.caTrustStatus?.supported && props.caTrustStatus.installed) {
+  if (props.caTrustStatus?.supported && hasTrustEntry.value) {
     return t('settings.ca_trust_uninstall_first')
   }
   if (generationDisabled.value && trustUnknown.value) return t('settings.ca_trust_status_unavailable')
@@ -84,16 +85,19 @@ const generationHint = computed(() => {
 const trustSummary = computed(() => {
   if (props.caTrustLoading) return t('settings.ca_trust_loading')
   if (trustUnknown.value) return t('settings.ca_trust_status_unavailable')
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return t('settings.ca_trust_partial')
   return t(props.caTrustStatus?.installed ? 'settings.ca_trust_installed' : 'settings.ca_trust_not_installed')
 })
 const trustSummaryIcon = computed(() => {
   if (props.caTrustLoading) return 'i-lucide-loader-circle'
   if (trustUnknown.value) return 'i-lucide-shield-question'
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return 'i-lucide-shield-alert'
   return props.caTrustStatus?.installed ? 'i-lucide-shield-check' : 'i-lucide-shield-minus'
 })
 const trustSummaryTone = computed<Tone>(() => {
   if (props.caTrustLoading) return 'neutral'
   if (trustUnknown.value) return 'warning'
+  if (hasTrustEntry.value && !props.caTrustStatus?.installed) return 'warning'
   return props.caTrustStatus?.installed ? 'success' : 'neutral'
 })
 
@@ -195,7 +199,7 @@ const pillValueClass: Record<Tone, string> = {
         <UButton
           color="neutral"
           variant="outline"
-          :icon="caTrustStatus.installed ? 'i-lucide-shield-minus' : 'i-lucide-shield-plus'"
+          :icon="hasTrustEntry ? 'i-lucide-shield-minus' : 'i-lucide-shield-plus'"
           :aria-label="trustAction"
           :loading="isChangingCaTrust"
           :disabled="trustActionDisabled"

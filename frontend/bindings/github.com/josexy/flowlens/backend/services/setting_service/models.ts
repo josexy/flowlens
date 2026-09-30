@@ -19,10 +19,15 @@ export interface CACertificateInfo {
 
 /**
  * CACertificateTrustStatus describes the configured certificate in the current
- * user's Root store, not effective trust inherited from other stores.
+ * user's store and trust settings, excluding machine-wide or inherited trust.
  */
 export interface CACertificateTrustStatus {
     "supported": boolean;
+
+    /**
+     * Present also covers incomplete macOS installations requiring cleanup.
+     */
+    "present": boolean;
     "installed": boolean;
     "sha256Fingerprint": string;
     "error": string;

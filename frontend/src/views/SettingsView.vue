@@ -409,7 +409,7 @@ async function handleChangeCATrust() {
   }
   const status = caTrustStatus.value
   if (!status?.supported || status.error || caTrustLoadFailed.value || !status.sha256Fingerprint) return
-  const install = !status.installed
+  const install = !status.installed && !status.present
   caInfoRequestGuard.invalidate()
   isChangingCATrust.value = true
   try {
@@ -449,7 +449,7 @@ async function handleGenerateCA(overwrite: boolean) {
     notify.warn(t('settings.ca_save_first'))
     return
   }
-  if (caTrustStatus.value?.supported && caTrustStatus.value.installed) {
+  if (caTrustStatus.value?.supported && (caTrustStatus.value.installed || caTrustStatus.value.present)) {
     notify.warn(t('settings.ca_trust_uninstall_first'))
     return
   }

@@ -32,6 +32,8 @@ function panelState(overrides = {}) {
     generationDisabled: generationDisabled.value,
     generationHint: generationHint.value,
     summary: trustSummary.value,
+    summaryIcon: trustSummaryIcon.value,
+    summaryTone: trustSummaryTone.value,
   });`, {
     exports,
     defineProps: () => props,
@@ -62,6 +64,19 @@ test('a missing key prevents installation but allows removal of an installed CA'
   assert.equal(panel.state().actionDisabled, true)
   panel.props.caTrustStatus.installed = true
   assert.equal(panel.state().actionDisabled, false)
+})
+
+test('an incomplete macOS installation remains removable and blocks regeneration', () => {
+  const panel = panelState({
+    caInfo: { certExists: true, keyExists: false, error: 'missing key' },
+    caTrustStatus: { supported: true, present: true, installed: false, sha256Fingerprint: 'fingerprint', error: '' },
+  })
+  assert.equal(panel.state().action, 'settings.ca_trust_uninstall')
+  assert.equal(panel.state().actionDisabled, false)
+  assert.equal(panel.state().summary, 'settings.ca_trust_partial')
+  assert.equal(panel.state().summaryIcon, 'i-lucide-shield-alert')
+  assert.equal(panel.state().summaryTone, 'warning')
+  assert.equal(panel.state().generationDisabled, true)
 })
 
 test('unknown trust is never presented as not installed and prevents changes', () => {
@@ -123,6 +138,37 @@ const loadCode = ts.transpileModule(loadFunction.getText(viewSource), {
 const guardCode = ts.transpileModule(readFileSync(new URL('../src/utils/latestOperation.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
+
+test('the settings action cleans up an incomplete installation and refreshes after failure', async () => {
+  const changeFunction = viewSource.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'handleChangeCATrust')
+  const changeCode = ts.transpileModule(changeFunction.getText(viewSource), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const calls = []
+  const context = {
+    isChangingCATrust: vue.ref(false),
+    isGeneratingCA: vue.ref(false),
+    isLoadingCAInfo: vue.ref(false),
+    settingStore: { isDirty: false },
+    caTrustStatus: vue.ref({ supported: true, present: true, installed: false, sha256Fingerprint: 'target' }),
+    caTrustLoadFailed: vue.ref(false),
+    caInfoRequestGuard: { invalidate: () => {} },
+    InstallCurrentCACertificate: async () => calls.push('install'),
+    UninstallCurrentCACertificate: async (fingerprint) => {
+      calls.push(['uninstall', fingerprint])
+      throw new Error('authentication canceled')
+    },
+    loadCAInfo: async () => calls.push('refresh'),
+    caTrustErrorMessage: String,
+    notify: { warn: () => {}, success: () => {}, error: () => calls.push('error') },
+    t: (key) => key,
+    exports: {},
+  }
+  runInNewContext(`${changeCode}\nexports.change = handleChangeCATrust;`, context)
+  await context.exports.change()
+  assert.deepEqual(calls, [['uninstall', 'target'], 'error', 'refresh'])
+  assert.equal(context.isChangingCATrust.value, false)
+})
 
 function refreshHarness() {
   const exports = {}

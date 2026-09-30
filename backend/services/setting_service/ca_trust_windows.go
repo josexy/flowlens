@@ -36,19 +36,20 @@ func missingWindowsCertificate(err error) bool {
 		errors.Is(err, windows.ERROR_FILE_NOT_FOUND) || errors.Is(err, windows.ERROR_PATH_NOT_FOUND)
 }
 
-func (windowsCACertificateTrustStore) contains(der []byte) (bool, error) {
+func (windowsCACertificateTrustStore) status(der []byte) (caTrustState, error) {
 	// SYSTEM_REGISTRY opens only the user's physical Root store. The logical
 	// SYSTEM store also enumerates machine/group-policy roots, which this
 	// feature must neither report as installed by the user nor remove.
 	store, err := openCurrentUserRootStore(windows.CERT_STORE_PROV_SYSTEM_REGISTRY, windows.CERT_STORE_READONLY_FLAG|windows.CERT_STORE_OPEN_EXISTING_FLAG)
 	if missingWindowsCertificate(err) {
-		return false, nil
+		return caTrustState{}, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("query current-user Root store: %w", err)
+		return caTrustState{}, fmt.Errorf("query current-user Root store: %w", err)
 	}
 	defer windows.CertCloseStore(store, 0)
-	return windowsStoreContainsCertificate(store, der)
+	present, err := windowsStoreContainsCertificate(store, der)
+	return caTrustState{present: present, installed: present}, err
 }
 
 func (windowsCACertificateTrustStore) install(der []byte) error {

@@ -26,9 +26,16 @@ var (
 // owns configuration, validation and serialization with CA generation.
 type caCertificateTrustStore interface {
 	supported() bool
-	contains([]byte) (bool, error)
+	status([]byte) (caTrustState, error)
 	install([]byte) error
 	uninstall([]byte) error
+}
+
+type caTrustState struct {
+	// present includes incomplete installations, such as a keychain certificate
+	// without trust settings, or trust settings without a keychain certificate.
+	present   bool
+	installed bool
 }
 
 func (s *SettingService) certificateTrustStore() caCertificateTrustStore {
@@ -64,7 +71,8 @@ func caTrustStatus(store caCertificateTrustStore, certPath string) *CACertificat
 		return status
 	}
 	status.SHA256Fingerprint = caCertificateFingerprint(cert)
-	status.Installed, err = store.contains(cert.Raw)
+	state, err := store.status(cert.Raw)
+	status.Present, status.Installed = state.present, state.installed
 	if err != nil {
 		status.Error = err.Error()
 	}
@@ -122,11 +130,11 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 			return nil, fmt.Errorf("%w: %v", errCATrustInvalidPair, pairErr)
 		}
 	}
-	installed, err := store.contains(cert.Raw)
+	state, err := store.status(cert.Raw)
 	if err != nil {
 		return nil, err
 	}
-	if install != installed {
+	if (install && !state.installed) || (!install && state.present) {
 		if install {
 			err = store.install(cert.Raw)
 		} else {
@@ -138,14 +146,14 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 	}
 	// Verify against the same public certificate, without depending on the key
 	// or a path that another settings operation might have changed.
-	installed, err = store.contains(cert.Raw)
+	state, err = store.status(cert.Raw)
 	if err != nil {
 		return nil, err
 	}
-	if installed != install {
+	if (install && !state.installed) || (!install && state.present) {
 		return nil, errors.New("ca_trust_verification_failed")
 	}
-	return &CACertificateTrustStatus{Supported: true, Installed: installed, SHA256Fingerprint: fingerprint}, nil
+	return &CACertificateTrustStatus{Supported: true, Present: state.present, Installed: state.installed, SHA256Fingerprint: fingerprint}, nil
 }
 
 func (s *SettingService) checkCAReplacement(certPath string) error {
@@ -162,11 +170,11 @@ func (s *SettingService) checkCAReplacement(certPath string) error {
 		}
 		return err
 	}
-	installed, err := store.contains(cert.Raw)
+	state, err := store.status(cert.Raw)
 	if err != nil {
 		return err
 	}
-	if installed {
+	if state.present {
 		return errCATrustUninstallFirst
 	}
 	return nil

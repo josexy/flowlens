@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package settingservice
 
@@ -9,8 +9,8 @@ func newCACertificateTrustStore() caCertificateTrustStore {
 }
 
 func (unsupportedCACertificateTrustStore) supported() bool { return false }
-func (unsupportedCACertificateTrustStore) contains([]byte) (bool, error) {
-	return false, errCATrustUnsupported
+func (unsupportedCACertificateTrustStore) status([]byte) (caTrustState, error) {
+	return caTrustState{}, errCATrustUnsupported
 }
 func (unsupportedCACertificateTrustStore) install([]byte) error   { return errCATrustUnsupported }
 func (unsupportedCACertificateTrustStore) uninstall([]byte) error { return errCATrustUnsupported }

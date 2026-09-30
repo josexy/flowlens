@@ -26,8 +26,9 @@ type testCATrustStore struct {
 }
 
 func (s *testCATrustStore) supported() bool { return !s.unsupported }
-func (s *testCATrustStore) contains(der []byte) (bool, error) {
-	return s.certs[string(der)], s.queryErr
+func (s *testCATrustStore) status(der []byte) (caTrustState, error) {
+	installed := s.certs[string(der)]
+	return caTrustState{present: installed, installed: installed}, s.queryErr
 }
 func (s *testCATrustStore) install(der []byte) error {
 	s.installRuns++
