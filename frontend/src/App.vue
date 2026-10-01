@@ -210,7 +210,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <UApp :toaster="{ position: 'top-center' }">
+  <UApp :toaster="{ position: 'top-center', progress: false }">
     <AppShortcutHost>
       <DefaultLayout />
     </AppShortcutHost>
