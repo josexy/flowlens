@@ -277,8 +277,10 @@ const activeTab = ref<TabKey>('raw')
 
 watch(
   availableTabs,
-  (tabs) => {
-    if (tabs.length > 0 && !tabs.includes(activeTab.value)) {
+  (tabs, previousTabs) => {
+    if (tabs.includes('image') && !previousTabs?.includes('image')) {
+      activeTab.value = 'image'
+    } else if (tabs.length > 0 && !tabs.includes(activeTab.value)) {
       activeTab.value = tabs[0]!
     }
   },
