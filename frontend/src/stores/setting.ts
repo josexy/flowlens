@@ -32,6 +32,12 @@ import {
   WindowFrameMode,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 import type { ThemeMode } from '@/stores/theme'
+import {
+  DEFAULT_THEME_PRIMARY_COLOR,
+  DEFAULT_THEME_NEUTRAL_COLOR,
+  normalizeThemePrimaryColor,
+  normalizeThemeNeutralColor,
+} from '@/utils/themeColors'
 import type { ShortcutConfig, ShortcutModifier } from '@/shortcuts/types'
 import { shortcutCatalog } from '@/shortcuts/catalog'
 import {
@@ -159,12 +165,20 @@ function ensureCommonConfig(settings: settingservice.Settings) {
       codeFontFamily: '',
       pointerCursor: false,
       themeMode: DEFAULT_THEME_MODE,
+      themePrimaryColor: DEFAULT_THEME_PRIMARY_COLOR,
+      themeNeutralColor: DEFAULT_THEME_NEUTRAL_COLOR,
       language: DEFAULT_LANGUAGE,
     }
   }
   settings.commonConfig.logLevel ||= DEFAULT_LOG_LEVEL
   settings.commonConfig.logDisabled ??= false
   settings.commonConfig.pointerCursor ??= false
+  settings.commonConfig.themePrimaryColor = normalizeThemePrimaryColor(
+    settings.commonConfig.themePrimaryColor,
+  )
+  settings.commonConfig.themeNeutralColor = normalizeThemeNeutralColor(
+    settings.commonConfig.themeNeutralColor,
+  )
   return settings.commonConfig
 }
 
@@ -306,6 +320,8 @@ function cloneCommonConfig(config: settingservice.CommonConfig): settingservice.
     codeFontFamily: config.codeFontFamily,
     pointerCursor: config.pointerCursor,
     themeMode: config.themeMode,
+    themePrimaryColor: config.themePrimaryColor,
+    themeNeutralColor: config.themeNeutralColor,
     language: config.language,
   }
 }
@@ -875,6 +891,8 @@ export const useSettingStore = defineStore('setting', () => {
         codeFontFamily: '',
         pointerCursor: false,
         themeMode: DEFAULT_THEME_MODE,
+        themePrimaryColor: DEFAULT_THEME_PRIMARY_COLOR,
+        themeNeutralColor: DEFAULT_THEME_NEUTRAL_COLOR,
         language: DEFAULT_LANGUAGE,
       }
     }
@@ -883,6 +901,8 @@ export const useSettingStore = defineStore('setting', () => {
     settings.value.commonConfig.appFontFamily = ''
     settings.value.commonConfig.codeFontFamily = ''
     settings.value.commonConfig.pointerCursor = false
+    settings.value.commonConfig.themePrimaryColor = DEFAULT_THEME_PRIMARY_COLOR
+    settings.value.commonConfig.themeNeutralColor = DEFAULT_THEME_NEUTRAL_COLOR
     const windowConfig = ensureWindowConfig(settings.value)
     windowConfig.frameMode = DEFAULT_WINDOW_FRAME_MODE
     windowConfig.mainWindowCloseBehavior = DEFAULT_MAIN_WINDOW_CLOSE_BEHAVIOR

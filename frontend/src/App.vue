@@ -186,6 +186,7 @@ onMounted(async () => {
     await settingStore.load()
     locale.value = settingStore.language
     themeStore.initializeTheme(settingStore.themeMode)
+    await themeStore.loadThemeColors()
   } catch (e) {
     console.error('Load settings failed', e)
     themeStore.initializeTheme()
@@ -200,6 +201,7 @@ onBeforeUnmount(() => {
   offPreferencesChanged = null
   offSettingsSaved?.()
   offSettingsSaved = null
+  themeStore.cleanup()
   offShortcutsChanged?.()
   offShortcutsChanged = null
   offShutdownRequested?.()

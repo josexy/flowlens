@@ -62,6 +62,13 @@ type SettingService struct {
 	settings              *Settings
 	activeWindowFrameMode WindowFrameMode
 	repository            *settingRepository
+	themeSavedColors      themeColors
+	themePreviewColors    *themeColors
+	themePreviewSession   uint64
+	themeSessionCounter   uint64
+	themePreviewSequence  uint64
+	themeColorRevision    uint64
+	themeColorsChanged    func(ThemeColorState)
 
 	processAttributionEnabled atomic.Bool
 	processAttributionReady   atomic.Bool
@@ -625,7 +632,31 @@ func (s *SettingService) Save() error {
 	}
 	sanitizeShortcutSettings(snapshot)
 	sanitizePythonPluginConfig(snapshot.PythonPluginConfig)
-	return s.repository.save(context.Background(), snapshot)
+	err = s.repository.save(context.Background(), snapshot)
+	s.mu.Lock()
+	colors := commonThemeColors(snapshot.CommonConfig)
+	if err != nil {
+		// UpdatePreservingShortcuts stages the candidate before Save. A failed
+		// write must not let a later unrelated Save persist those colors.
+		if commonThemeColors(s.settings.CommonConfig) == colors {
+			saved := s.savedThemeColorsLocked()
+			s.settings.CommonConfig.ThemePrimaryColor = saved.primary
+			s.settings.CommonConfig.ThemeNeutralColor = saved.neutral
+		}
+		s.mu.Unlock()
+		return err
+	}
+	s.themeSavedColors = colors
+	if s.themePreviewColors != nil && *s.themePreviewColors == colors {
+		s.themePreviewColors = nil
+	}
+	s.themeColorRevision++
+	state, changed := s.themeColorStateLocked(), s.themeColorsChanged
+	s.mu.Unlock()
+	if changed != nil {
+		changed(state)
+	}
+	return nil
 }
 
 // SaveTrafficTableConfig persists only the traffic_table section and updates
@@ -774,6 +805,7 @@ func (s *SettingService) loadLocked() error {
 	s.mu.Lock()
 	s.settings = settings
 	s.setupDefaultSettingsLocked()
+	s.themeSavedColors = commonThemeColors(s.settings.CommonConfig)
 	s.mu.Unlock()
 	return nil
 }
@@ -783,6 +815,8 @@ func (s *SettingService) setupDefaultSettingsLocked() {
 		s.settings.CommonConfig = &CommonConfig{}
 	}
 	s.settings.CommonConfig.LogLevel = string(logger.NormalizeLogLevel(s.settings.CommonConfig.LogLevel))
+	s.settings.CommonConfig.ThemePrimaryColor = normalizeThemePrimaryColor(s.settings.CommonConfig.ThemePrimaryColor)
+	s.settings.CommonConfig.ThemeNeutralColor = normalizeThemeNeutralColor(s.settings.CommonConfig.ThemeNeutralColor)
 	if !isValidThemeMode(s.settings.CommonConfig.ThemeMode) {
 		s.settings.CommonConfig.ThemeMode = defaultThemeMode
 	}

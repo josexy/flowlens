@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import colors from 'tailwindcss/colors'
+import { THEME_PRIMARY_COLORS, THEME_NEUTRAL_COLORS } from '@/utils/themeColors'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import SettingsSection from '@/components/settings/SettingsSection.vue'
 import type {
@@ -20,6 +22,7 @@ const DEFAULT_FONT_OPTION_VALUE = '__default_font__'
 defineProps<{
   fontOptions: SelectOption[]
   isLoadingFonts: boolean
+  isSaving?: boolean
   windowFrameModeOptions: SelectOption<WindowFrameMode>[]
   mainWindowCloseBehaviorOptions: SelectOption<MainWindowCloseBehavior>[]
   windowFrameModePendingRestart: boolean
@@ -33,6 +36,30 @@ const windowConfig = defineModel<WindowConfig>('windowConfig', { required: true 
 
 const { t } = useI18n()
 
+const primaryColorOptions = computed(() =>
+  THEME_PRIMARY_COLORS.map((value) => ({
+    value,
+    label: t(`settings.theme_colors.palette.${value}`),
+    swatch: colors[value][500],
+  })),
+)
+const neutralColorOptions = computed(() =>
+  THEME_NEUTRAL_COLORS.map((value) => ({
+    value,
+    label: t(`settings.theme_colors.palette.${value}`),
+    swatch: colors[value][500],
+  })),
+)
+const primaryColorSwatch = computed(
+  () =>
+    primaryColorOptions.value.find((item) => item.value === commonConfig.value.themePrimaryColor)
+      ?.swatch,
+)
+const neutralColorSwatch = computed(
+  () =>
+    neutralColorOptions.value.find((item) => item.value === commonConfig.value.themeNeutralColor)
+      ?.swatch,
+)
 const appFontFamilyModel = computed({
   get: () => commonConfig.value.appFontFamily || DEFAULT_FONT_OPTION_VALUE,
   set: (value: string) => {
@@ -56,6 +83,58 @@ const fontSelectVirtualize = { estimateSize: 32, overscan: 8 }
 <template>
   <div class="min-w-0">
     <SettingsSection :title="t('settings.section_appearance')">
+      <SettingsRow :label="t('settings.theme_colors.primary')" wide>
+        <USelectMenu
+          v-model="commonConfig.themePrimaryColor"
+          :items="primaryColorOptions"
+          value-key="value"
+          :search-input="false"
+          :aria-label="t('settings.theme_colors.primary')"
+          :disabled="isSaving"
+          class="w-full max-w-80"
+        >
+          <template #leading>
+            <span
+              class="size-3 shrink-0 rounded-full"
+              :style="{ backgroundColor: primaryColorSwatch }"
+              aria-hidden="true"
+            />
+          </template>
+          <template #item-leading="{ item }">
+            <span
+              class="size-3 shrink-0 rounded-full"
+              :style="{ backgroundColor: item.swatch }"
+              aria-hidden="true"
+            />
+          </template>
+        </USelectMenu>
+      </SettingsRow>
+      <SettingsRow :label="t('settings.theme_colors.neutral')" wide>
+        <USelectMenu
+          v-model="commonConfig.themeNeutralColor"
+          :items="neutralColorOptions"
+          value-key="value"
+          :search-input="false"
+          :aria-label="t('settings.theme_colors.neutral')"
+          :disabled="isSaving"
+          class="w-full max-w-80"
+        >
+          <template #leading>
+            <span
+              class="size-3 shrink-0 rounded-full"
+              :style="{ backgroundColor: neutralColorSwatch }"
+              aria-hidden="true"
+            />
+          </template>
+          <template #item-leading="{ item }">
+            <span
+              class="size-3 shrink-0 rounded-full"
+              :style="{ backgroundColor: item.swatch }"
+              aria-hidden="true"
+            />
+          </template>
+        </USelectMenu>
+      </SettingsRow>
       <SettingsRow :label="t('settings.app_font_label')" wide align="start">
         <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <USelectMenu

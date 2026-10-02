@@ -52,6 +52,8 @@ export interface CommonConfig {
     "codeFontFamily": string;
     "pointerCursor": boolean;
     "themeMode": string;
+    "themePrimaryColor": string;
+    "themeNeutralColor": string;
     "language": string;
 }
 
@@ -191,6 +193,26 @@ export enum ShortcutScope {
     ShortcutScopeApplication = "application",
     ShortcutScopeGlobal = "global",
 };
+
+export interface ThemeColorPreviewRequest {
+    "primaryColor": string;
+    "neutralColor": string;
+    "sessionID": number;
+    "sequence": number;
+}
+
+/**
+ * ThemeColorState is the effective appearance, independent of settings drafts.
+ * SessionID and Sequence identify the one settings window allowed to preview.
+ */
+export interface ThemeColorState {
+    "primaryColor": string;
+    "neutralColor": string;
+    "preview": boolean;
+    "revision": number;
+    "sessionID": number;
+    "sequence": number;
+}
 
 export interface TrafficTableConfig {
     "hiddenColumns": string[] | null;

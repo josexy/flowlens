@@ -57,13 +57,15 @@ const (
 )
 
 type CommonConfig struct {
-	LogLevel       string `json:"logLevel"`
-	LogDisabled    bool   `json:"logDisabled"`
-	AppFontFamily  string `json:"appFontFamily"`
-	CodeFontFamily string `json:"codeFontFamily"`
-	PointerCursor  bool   `json:"pointerCursor"`
-	ThemeMode      string `json:"themeMode"`
-	Language       string `json:"language"`
+	LogLevel          string `json:"logLevel"`
+	LogDisabled       bool   `json:"logDisabled"`
+	AppFontFamily     string `json:"appFontFamily"`
+	CodeFontFamily    string `json:"codeFontFamily"`
+	PointerCursor     bool   `json:"pointerCursor"`
+	ThemeMode         string `json:"themeMode"`
+	ThemePrimaryColor string `json:"themePrimaryColor"`
+	ThemeNeutralColor string `json:"themeNeutralColor"`
+	Language          string `json:"language"`
 }
 
 type ProxyConfig struct {

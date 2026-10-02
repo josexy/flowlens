@@ -12,6 +12,7 @@ export const UPDATE_WINDOW_CLOSE_REQUESTED_EVENT = 'app:update-window-close-requ
 export const UPDATE_WINDOW_CLOSE_BLOCKED_EVENT = 'app:update-window-close-blocked'
 export const PREFERENCES_CHANGED_EVENT = 'app:preferences-changed'
 export const SETTINGS_SAVED_EVENT = 'app:settings-saved'
+export const THEME_COLORS_CHANGED_EVENT = 'app:theme-colors-changed'
 export const SETTINGS_WINDOW_DIRTY_CHANGED_EVENT = 'app:settings-window-dirty-changed'
 export const CONFIRM_QUIT_REQUEST_EVENT = 'app:confirm-quit-request'
 export const QUIT_CONFIRMED_EVENT = 'app:quit-confirmed'
