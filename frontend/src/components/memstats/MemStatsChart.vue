@@ -328,7 +328,7 @@ watch(chartData, (data) => {
 })
 
 watch(
-  () => themeStore.isDark,
+  () => themeStore.appearanceRevision,
   () => {
     nextTick(createPlot)
   },

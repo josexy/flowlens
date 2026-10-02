@@ -33,6 +33,10 @@ export function GetProxyConfig(): $CancellablePromise<$models.ProxyConfig | null
     return $Call.ByID(2423391465);
 }
 
+export function GetThemeColorState(): $CancellablePromise<$models.ThemeColorState> {
+    return $Call.ByID(3508270838);
+}
+
 export function GetWindowConfig(): $CancellablePromise<$models.WindowConfig | null> {
     return $Call.ByID(1736532847);
 }
@@ -51,6 +55,10 @@ export function ListSystemFonts(): $CancellablePromise<$models.FontOption[] | nu
 
 export function Load(): $CancellablePromise<void> {
     return $Call.ByID(1518463851);
+}
+
+export function PreviewThemeColors(request: $models.ThemeColorPreviewRequest): $CancellablePromise<$models.ThemeColorState> {
+    return $Call.ByID(1135286010, request);
 }
 
 export function Save(): $CancellablePromise<void> {

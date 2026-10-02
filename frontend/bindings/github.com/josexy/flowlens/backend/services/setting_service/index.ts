@@ -33,6 +33,8 @@ export type {
     ShortcutBinding,
     ShortcutConfig,
     ShortcutOverride,
+    ThemeColorPreviewRequest,
+    ThemeColorState,
     TrafficTableConfig,
     WindowConfig
 } from "./models.js";

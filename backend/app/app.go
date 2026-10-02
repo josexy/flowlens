@@ -197,6 +197,9 @@ func Run(assets Assets) {
 		return
 	}
 	settingSvc = settingservice.New(db)
+	settingservice.SetThemeColorsChangedHandler(settingSvc, func(state settingservice.ThemeColorState) {
+		app.Event.Emit(settingservice.ThemeColorsChangedEvent, state)
+	})
 	if err := settingSvc.Load(); err != nil {
 		_ = db.Close()
 		reportStartupFailure("load application settings", err)
@@ -350,8 +353,12 @@ func Run(assets Assets) {
 		}
 
 		settingsWindowDirty.Store(false)
+		if err := settingservice.BeginThemeColorPreview(settingSvc); err != nil {
+			logger.G().Warnf("Start theme color preview: %v", err)
+		}
 		settingsWindow := app.Window.NewWithOptions(settingsWindowOptions(useCustomWindowFrame, isMacOS, assets.AppIcon))
 		settingsWindow.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+			settingservice.EndThemeColorPreview(settingSvc)
 			settingsWindowDirty.Store(false)
 		})
 	}
@@ -529,9 +536,11 @@ func Run(assets Assets) {
 		}
 		settingsWindowDirty.Store(false)
 		if event.Data == "update" {
+			settingservice.EndThemeColorPreview(settingSvc)
 			app.Event.Emit(updater.EventUserRestart)
 			return
 		}
+		settingservice.EndThemeColorPreview(settingSvc)
 		requestApplicationQuit()
 	})
 	app.Event.On(shutdownUIReadyEventName, func(event *application.CustomEvent) {

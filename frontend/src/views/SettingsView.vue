@@ -28,6 +28,7 @@ import {
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 import type * as settingservice from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 import { useSettingStore, type SettingsDirtySection } from '@/stores/setting'
+import { useThemeStore } from '@/stores/theme'
 import { useLoggingStore } from '@/stores/logging'
 import { useNotify } from '@/composables/useNotify'
 import GeneralSettings from '@/components/settings/GeneralSettings.vue'
@@ -82,6 +83,7 @@ type SettingsTabKey = 'general' | 'proxy' | 'pythonPlugins' | 'shortcuts' | 'log
 
 const { t, te } = useI18n()
 const settingStore = useSettingStore()
+const themeStore = useThemeStore()
 const loggingStore = useLoggingStore()
 const notify = useNotify()
 
@@ -138,7 +140,7 @@ let saveStatusTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedSystemFonts = false
 let offConfirmQuitRequest: (() => void) | null = null
 let offSaveShortcut: (() => void) | null = null
-let isCommittingSettings = false
+const isCommittingSettings = ref(false)
 let isUnmounted = false
 const dataSizeRequestGuard = createLatestOperationGuard()
 const caInfoRequestGuard = createLatestOperationGuard()
@@ -327,7 +329,7 @@ function listenConfirmQuitRequest() {
 }
 
 function markSettingsSectionDirty(section: SettingsDirtySection) {
-  if (!isLoaded.value || isCommittingSettings) {
+  if (!isLoaded.value || isCommittingSettings.value) {
     return
   }
   dirtySections.add(section)
@@ -526,7 +528,7 @@ onMounted(async () => {
   offSaveShortcut = registerShortcutHandler({
     commandId: 'app.save',
     when: () => settingStore.isDirty,
-    enabled: () => !settingStore.isSaving && !isCommittingSettings,
+    enabled: () => !settingStore.isSaving && !isCommittingSettings.value,
     run: handleSave,
     priority: 10,
   })
@@ -613,6 +615,17 @@ watch(
 
 const commonConfigRef = computed(() => settingStore.settings?.commonConfig)
 watch(
+  () => [commonConfigRef.value?.themePrimaryColor, commonConfigRef.value?.themeNeutralColor],
+  ([primary, neutral]) => {
+    if (isLoaded.value && !isCommittingSettings.value && primary && neutral) {
+      void themeStore.previewThemeColors(primary, neutral).catch((error) => {
+        if (!isUnmounted)
+          notify.error(t('settings.theme_colors.preview_failed', { error: formatError(error) }))
+      })
+    }
+  },
+)
+watch(
   commonConfigRef,
   () => {
     if (isLoaded.value) {
@@ -627,7 +640,7 @@ const shortcutsConfigRef = computed(() => settingStore.settings?.shortcuts)
 watch(
   shortcutsConfigRef,
   () => {
-    if (isLoaded.value && !isCommittingSettings) {
+    if (isLoaded.value && !isCommittingSettings.value) {
       settingStore.clearShortcutApplyResult()
       markSettingsSectionDirty('shortcuts')
     }
@@ -641,7 +654,7 @@ const pythonPluginConfigRef = computed(
 watch(
   pythonPluginConfigRef,
   () => {
-    if (isLoaded.value && !isCommittingSettings) {
+    if (isLoaded.value && !isCommittingSettings.value) {
       markSettingsSectionDirty('pythonPlugins')
     }
   },
@@ -673,8 +686,10 @@ watch(activeTab, (tab) => {
 })
 
 async function handleSave() {
-  isCommittingSettings = true
+  if (isCommittingSettings.value || settingStore.isSaving) return
+  isCommittingSettings.value = true
   try {
+    await themeStore.flushThemeColorPreview()
     const result = await settingStore.save({ dirtySections: [...dirtySections] })
     if (!result) {
       return
@@ -693,7 +708,7 @@ async function handleSave() {
   } catch (error) {
     notify.error(t('settings.save_failed', { error: formatError(error) }))
   } finally {
-    isCommittingSettings = false
+    isCommittingSettings.value = false
   }
 }
 
@@ -766,6 +781,7 @@ function handleConfirmQuit() {
             v-model:window-config="settingStore.settings.windowConfig"
             :font-options="fontOptions"
             :is-loading-fonts="isLoadingFonts"
+            :is-saving="isCommittingSettings"
             :window-frame-mode-options="windowFrameModeOptions"
             :main-window-close-behavior-options="mainWindowCloseBehaviorOptions"
             :window-frame-mode-pending-restart="windowFrameModePendingRestart"
@@ -892,13 +908,14 @@ function handleConfirmQuit() {
               icon="i-lucide-refresh-cw"
               class="min-w-22 shrink-0"
               :label="t('settings.reset')"
+              :disabled="isCommittingSettings"
               @click="handleReset"
             />
             <UButton
               icon="i-lucide-save"
               class="min-w-22 shrink-0"
               :disabled="!settingStore.isDirty"
-              :loading="settingStore.isSaving"
+              :loading="settingStore.isSaving || isCommittingSettings"
               :label="t('settings.save')"
               @click="handleSave"
             />

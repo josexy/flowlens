@@ -1,17 +1,37 @@
 import { defineStore } from 'pinia'
-import { shallowRef, computed } from 'vue'
-import { Window } from '@wailsio/runtime'
+import { shallowRef, computed, onScopeDispose } from 'vue'
+import { Events, Window } from '@wailsio/runtime'
+import { THEME_COLORS_CHANGED_EVENT } from '@/runtime/appEvents'
+import { useAppConfig } from '@nuxt/ui/runtime/vue/composables/useAppConfig.js'
+import {
+  GetThemeColorState,
+  PreviewThemeColors,
+} from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/settingservice'
+import {
+  DEFAULT_THEME_PRIMARY_COLOR,
+  DEFAULT_THEME_NEUTRAL_COLOR,
+  parseThemeColorState,
+} from '@/utils/themeColors'
 
 export type ThemeMode = 'auto' | 'light' | 'dark'
-
-const LIGHT_WINDOW_BACKGROUND = '#f9faf9'
-const DARK_WINDOW_BACKGROUND = '#1d2229'
-const LIGHT_BACKGROUND_RGB = { r: 249, g: 250, b: 249, a: 255 } as const
-const DARK_BACKGROUND_RGB = { r: 29, g: 34, b: 41, a: 255 } as const
 
 export const useThemeStore = defineStore('theme', () => {
   const themeMode = shallowRef<ThemeMode>('light')
   const systemPrefersDark = shallowRef(false)
+  const primaryColor = shallowRef(DEFAULT_THEME_PRIMARY_COLOR as string)
+  const neutralColor = shallowRef(DEFAULT_THEME_NEUTRAL_COLOR as string)
+  const appearanceRevision = shallowRef(0)
+  const appConfig = useAppConfig()
+  let colorRevision = -1
+  let previewSession = 0
+  let previewSequence = 0
+  let backgroundFrame = 0
+  let stopSystemPreference: (() => void) | undefined
+  let colorsObserver: MutationObserver | undefined
+  let nativeBackgroundWrite: Promise<void> = Promise.resolve()
+  let disposed = false
+  let offThemeColorsChanged: (() => void) | undefined
+  const pendingPreviews = new Set<Promise<void>>()
 
   const isDark = computed(() => {
     if (themeMode.value === 'auto') {
@@ -20,27 +40,120 @@ export const useThemeStore = defineStore('theme', () => {
     return themeMode.value === 'dark'
   })
 
-  const applyWindowAndRootBackground = () => {
-    if (typeof document === 'undefined') return
-
-    const useDark = isDark.value
-    const rgb = useDark ? DARK_BACKGROUND_RGB : LIGHT_BACKGROUND_RGB
-    const backgroundColor = useDark ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND
-
-    document.documentElement.classList.toggle('dark', useDark)
-    document.documentElement.style.backgroundColor = backgroundColor
-    document.body.style.backgroundColor = backgroundColor
-
-    const app = document.getElementById('app')
-    if (app) {
-      app.style.backgroundColor = backgroundColor
+  // Nuxt UI patches its color stylesheet through useHead. Observe that patch
+  // so CSS readers and the native window see the applied palette, even when
+  // head rendering finishes after Vue's nextTick.
+  const scheduleAppearanceRefresh = () => {
+    if (disposed) return
+    if (typeof document === 'undefined') {
+      appearanceRevision.value++
+      return
     }
-
-    void Window.SetBackgroundColour(rgb.r, rgb.g, rgb.b, rgb.a).catch(() => {})
+    cancelAnimationFrame(backgroundFrame)
+    backgroundFrame = requestAnimationFrame(() => {
+      backgroundFrame = 0
+      const revision = ++appearanceRevision.value
+      const color = getComputedStyle(document.body).backgroundColor
+      const context = document
+        .createElement('canvas')
+        .getContext('2d', { willReadFrequently: true })
+      if (!context) return
+      // Canvas converts CSS colors, including Tailwind's OKLCH, to sRGB bytes.
+      context.fillStyle = color
+      context.fillRect(0, 0, 1, 1)
+      const rgba = context.getImageData(0, 0, 1, 1).data
+      nativeBackgroundWrite = nativeBackgroundWrite
+        .catch(() => {})
+        .then(async () => {
+          if (!disposed && revision === appearanceRevision.value) {
+            await Window.SetBackgroundColour(rgba[0]!, rgba[1]!, rgba[2]!, rgba[3]!)
+          }
+        })
+        .catch(() => {})
+    })
   }
 
   const applyThemeAppearance = () => {
-    applyWindowAndRootBackground()
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', isDark.value)
+      for (const element of [
+        document.documentElement,
+        document.body,
+        document.getElementById('app'),
+      ]) {
+        element?.style.removeProperty('background-color')
+      }
+      if (!colorsObserver && typeof MutationObserver !== 'undefined') {
+        colorsObserver = new MutationObserver((mutations) => {
+          if (
+            mutations.some(
+              (mutation) =>
+                (mutation.target instanceof Element
+                  ? mutation.target
+                  : mutation.target.parentElement
+                )?.closest('#nuxt-ui-colors') ||
+                Array.from(mutation.addedNodes).some(
+                  (node) => (node as Element).id === 'nuxt-ui-colors',
+                ),
+            )
+          )
+            scheduleAppearanceRefresh()
+        })
+        colorsObserver.observe(document.head, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        })
+      }
+    }
+    scheduleAppearanceRefresh()
+  }
+
+  function applyThemeColorState(value: unknown) {
+    if (disposed) return
+    const state = parseThemeColorState(value)
+    if (!state || state.revision <= colorRevision) return
+    colorRevision = state.revision
+    previewSequence =
+      state.sessionID === previewSession
+        ? Math.max(previewSequence, state.sequence)
+        : state.sequence
+    previewSession = state.sessionID
+    primaryColor.value = state.primaryColor
+    neutralColor.value = state.neutralColor
+    appConfig.ui.colors.primary = state.primaryColor
+    appConfig.ui.colors.neutral = state.neutralColor
+    applyThemeAppearance()
+  }
+
+  async function loadThemeColors() {
+    if (disposed) return
+    offThemeColorsChanged ??= Events.On(THEME_COLORS_CHANGED_EVENT, (event) => {
+      applyThemeColorState(event.data)
+    })
+    applyThemeColorState(await GetThemeColorState())
+  }
+
+  function previewThemeColors(primary: string, neutral: string): Promise<void> {
+    const run = async () => {
+      if (!previewSession) await loadThemeColors()
+      if (disposed) return
+      applyThemeColorState(
+        await PreviewThemeColors({
+          sessionID: previewSession,
+          sequence: ++previewSequence,
+          primaryColor: primary,
+          neutralColor: neutral,
+        }),
+      )
+    }
+    const promise = run().finally(() => pendingPreviews.delete(promise))
+    pendingPreviews.add(promise)
+    return promise
+  }
+
+  async function flushThemeColorPreview() {
+    await Promise.allSettled([...pendingPreviews])
   }
 
   const initializeTheme = (configuredMode?: string) => {
@@ -56,12 +169,15 @@ export const useThemeStore = defineStore('theme', () => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     systemPrefersDark.value = mediaQuery.matches
 
-    mediaQuery.addEventListener('change', (e) => {
+    stopSystemPreference?.()
+    const onChange = (e: MediaQueryListEvent) => {
       systemPrefersDark.value = e.matches
       if (themeMode.value === 'auto') {
         applyThemeAppearance()
       }
-    })
+    }
+    mediaQuery.addEventListener('change', onChange)
+    stopSystemPreference = () => mediaQuery.removeEventListener('change', onChange)
 
     applyThemeAppearance()
   }
@@ -92,13 +208,31 @@ export const useThemeStore = defineStore('theme', () => {
     }
   })
 
+  function cleanup() {
+    disposed = true
+    stopSystemPreference?.()
+    offThemeColorsChanged?.()
+    offThemeColorsChanged = undefined
+    colorsObserver?.disconnect()
+    if (typeof document !== 'undefined') cancelAnimationFrame(backgroundFrame)
+  }
+  onScopeDispose(cleanup)
+
   return {
     themeMode,
     isDark,
     systemPrefersDark,
+    primaryColor,
+    neutralColor,
+    appearanceRevision,
     themeModeLabel,
     initializeTheme,
     setThemeMode,
     cycleTheme,
+    applyThemeColorState,
+    loadThemeColors,
+    previewThemeColors,
+    flushThemeColorPreview,
+    cleanup,
   }
 })
