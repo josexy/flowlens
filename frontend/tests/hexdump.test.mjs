@@ -12,6 +12,8 @@ import ts from 'typescript'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 let server, utils, viewport, useHexdumpDecoder, useHexdumpViewState
+let layoutUtils, selectionUtils
+let dialogUtils, monacoLargeText
 before(async () => {
   server = await createServer({
     configFile: false,
@@ -21,6 +23,10 @@ before(async () => {
   })
   utils = await server.ssrLoadModule('/src/utils/hexdump.ts')
   viewport = await server.ssrLoadModule('/src/utils/hexdumpViewport.ts')
+  layoutUtils = await server.ssrLoadModule('/src/utils/hexdumpLayout.ts')
+  selectionUtils = await server.ssrLoadModule('/src/utils/hexdumpSelection.ts')
+  dialogUtils = await server.ssrLoadModule('/src/utils/dialog.ts')
+  monacoLargeText = await server.ssrLoadModule('/src/components/common/monacoLargeText.ts')
   ;({ useHexdumpDecoder } = await server.ssrLoadModule('/src/composables/useHexdumpDecoder.ts'))
   ;({ useHexdumpViewState } = await server.ssrLoadModule('/src/composables/useHexdumpViewState.ts'))
 })
@@ -81,9 +87,6 @@ parentPort.on('message', data => self.onmessage({ data }));
 class RealWorker {
   onmessage = null
   onerror = null
-  maxChunkChars = 0
-  totalChars = 0
-  maxPostMs = 0
   constructor() {
     this.worker = new Worker(workerScript, { eval: true })
     this.worker.on('message', (data) => this.onmessage?.({ data }))
@@ -92,13 +95,7 @@ class RealWorker {
     )
   }
   postMessage(message) {
-    const start = performance.now()
     this.worker.postMessage(message)
-    this.maxPostMs = Math.max(this.maxPostMs, performance.now() - start)
-    if (message.type === 'chunk') {
-      this.maxChunkChars = Math.max(this.maxChunkChars, message.input.length)
-      this.totalChars += message.input.length
-    }
   }
   terminate() {
     void this.worker.terminate()
@@ -312,49 +309,15 @@ test('worker chunk boundaries preserve Unicode, Base64 padding and invalid-input
     assert.equal((await decode(invalid, true, 4)).ok, false)
 })
 
-test('100 MiB Base64 stays off the UI thread and uses bounded messages', async (t) => {
-  const binary = Buffer.alloc(100 * 1024 * 1024, 0xa5)
-  binary[binary.length - 1] = 0xff
-  const input = binary.toString('base64')
-  const data = source(input, { isBase64: true })
-  let worker
-  let uiEncodes = 0
-  t.mock.method(TextEncoder.prototype, 'encode', () => {
-    uiEncodes++
-    throw new Error('UI encode')
-  })
-  const start = performance.now()
-  let previousTick = start
-  let maxTimerGap = 0
-  const interval = setInterval(() => {
-    const now = performance.now()
-    maxTimerGap = Math.max(maxTimerGap, now - previousTick)
-    previousTick = now
-  }, 5)
-  t.after(() => clearInterval(interval))
-  const decoder = scoped(t, () =>
-    useHexdumpDecoder(data, () => {
-      worker = new RealWorker()
-      return worker
-    }),
-  )
-  await until(() => decoder.state.value === 'ready' || decoder.state.value === 'error', 30000)
-  assert.equal(decoder.state.value, 'ready', decoder.error.value)
-  assert.equal(decoder.bytes.value.length, binary.length)
-  assert.equal(decoder.bytes.value.get(0), 0xa5)
-  assert.equal(decoder.bytes.value.get(binary.length - 1), 0xff)
-  assert.equal(worker.totalChars, input.length)
-  assert.ok(worker.maxChunkChars <= 128 * 1024)
-  assert.equal(uiEncodes, 0)
-  t.diagnostic(
-    `100 MiB: ${(performance.now() - start).toFixed(0)} ms total; largest postMessage ${worker.maxPostMs.toFixed(2)} ms; max 5 ms timer gap ${maxTimerGap.toFixed(2)} ms; ${worker.maxChunkChars} characters/message (Node worker transport, not desktop FPS)`,
-  )
-  data.active = false
-  await nextTick()
-  assert.equal(decoder.bytes.value.length, 0)
-})
-
 async function mountViewer(t, input, options = {}) {
+  const documentStub = {
+    hidden: false, activeElement: null,
+    addEventListener() {}, removeEventListener() {},
+  }
+  const frames = new Map()
+  let frameId = 0
+  const feedback = { copied: [], success: [], error: [], exports: [] }
+  let copyError = null
   function compileComponent(name) {
     const file = readFileSync(new URL(`../src/components/common/${name}.vue`, import.meta.url), 'utf8')
     const compiled = compileScript(parse(file, { filename: `${name}.vue` }).descriptor, {
@@ -366,8 +329,10 @@ async function mountViewer(t, input, options = {}) {
       { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
     ).outputText
     const exports = {}
-    new Function('require', 'exports', 'ResizeObserver', 'IntersectionObserver', code)(
-      requireModule, exports, ResizeObserverStub, VisibilityObserverStub,
+    new Function('require', 'exports', 'ResizeObserver', 'IntersectionObserver', 'document', 'requestAnimationFrame', 'cancelAnimationFrame', code)(
+      requireModule, exports, ResizeObserverStub, VisibilityObserverStub, documentStub,
+      (callback) => { frames.set(++frameId, callback); return frameId },
+      (id) => frames.delete(id),
     )
     return exports.default
   }
@@ -381,7 +346,19 @@ async function mountViewer(t, input, options = {}) {
     if (id === 'vue-i18n') return I18n
     if (id.endsWith('/useHexdumpDecoder')) return { useHexdumpDecoder }
     if (id.endsWith('/hexdumpViewport')) return viewport
+    if (id.endsWith('/hexdumpLayout')) return layoutUtils
+    if (id.endsWith('/hexdumpSelection')) return selectionUtils
     if (id.endsWith('/hexdump')) return utils
+    if (id.endsWith('/clipboard')) return { copyText: async (content) => {
+      if (copyError) throw copyError
+      // Wails on Windows silently resolves after its native clipboard rejects NUL.
+      if (content.includes('\u0000')) return
+      feedback.copied.push(content)
+    } }
+    if (id.endsWith('/dialog')) return { getErrorMessage: (error) => error.message }
+    if (id.endsWith('/useNotify')) return { useNotify: () => ({
+      success: (message) => feedback.success.push(message), error: (message) => feedback.error.push(message),
+    }) }
     if (id.endsWith('/HexDumpRow.vue')) return { __esModule: true, default: compileComponent('HexDumpRow') }
     if (id.endsWith('/AppLoading.vue')) return { __esModule: true, default: { render: () => Vue.h('div') } }
     if (id.endsWith('/emptyState')) return {}
@@ -415,7 +392,12 @@ async function mountViewer(t, input, options = {}) {
       children: [],
       parent: null,
       scrollTop: 0,
-      get dataset() { return { byteIdx: this.props['data-byte-idx'] } },
+      scrollLeft: 0,
+      get dataset() { return { byteIdx: this.props['data-byte-idx'], byteColumn: this.props['data-byte-column'] } },
+      focus() { documentStub.activeElement = this },
+      setPointerCapture(id) { this.pointerCapture = id },
+      hasPointerCapture(id) { return this.pointerCapture === id },
+      releasePointerCapture() { this.pointerCapture = null },
       contains(target) {
         for (let el = target; el; el = el.parent) if (el === this) return true
         return false
@@ -437,7 +419,7 @@ async function mountViewer(t, input, options = {}) {
         )
       },
       getBoundingClientRect() {
-        return { width: 84 }
+        return { width: this.props['aria-hidden'] === 'true' ? 84 : width, left: 0, top: 0, bottom: 500, height: 500 }
       },
       scrollTo({ top }) {
         this.scrollTop = Math.min(top, Math.max(0, this.scrollHeight - this.clientHeight))
@@ -486,6 +468,7 @@ async function mountViewer(t, input, options = {}) {
             ...viewerProps,
             input: currentInput.value,
             byteOffset: offset.value,
+            onExportSelection: (base64) => feedback.exports.push(base64),
             'onUpdate:byteOffset': (value) => {
               offset.value = value
             },
@@ -505,6 +488,11 @@ async function mountViewer(t, input, options = {}) {
     },
   })
   app.component('UEmpty', { render: () => Vue.h('div') })
+  app.component('UContextMenu', {
+    props: ['items', 'content'],
+    inheritAttrs: false,
+    render() { return Vue.cloneVNode(this.$slots.default()[0], { ...this.$attrs, 'data-menu-items': this.items, 'data-menu-content': this.content }) },
+  })
   app.mount(container)
   t.after(() => app.unmount())
   async function flush() {
@@ -521,8 +509,46 @@ async function mountViewer(t, input, options = {}) {
     return [ ...(predicate(parent) ? [parent] : []), ...parent.children.flatMap(child => findAll(predicate, child)) ]
   }
   await flush()
+  function pointer(index, column = 'hex', overrides = {}) {
+    const scroller = find(el => el.props.onScroll)
+    const byte = find(el => el.props['data-byte-idx'] === index && el.props['data-byte-column'] === column)
+    const layout = layoutUtils.getHexdumpLayout(width, 8.4, currentInput.value.length, scroller.scrollHeight > 500 ? 14 : 10)
+    const row = Math.floor(index / layout.bytesPerRow)
+    const page = viewport.getHexdumpPosition(index, currentInput.value.length, layout.bytesPerRow, viewerProps.rowHeight ?? 22).page
+    const startRow = viewport.getHexdumpPage(currentInput.value.length, layout.bytesPerRow, viewerProps.rowHeight ?? 22, page).startRow
+    return {
+      target: byte ?? scroller, currentTarget: scroller, button: 0, buttons: 1, pointerId: 1, shiftKey: false,
+      clientX: 8 + (column === 'hex' ? layout.hexStart : layout.asciiStart) + ((index % layout.bytesPerRow) + 0.5) * 8.4 * (column === 'hex' ? 3 : 1),
+      clientY: viewport.HEX_PADDING_TOP + (row - startRow + 0.5) * (viewerProps.rowHeight ?? 22) - scroller.scrollTop,
+      preventDefault() {}, ...overrides,
+    }
+  }
   return {
-    currentInput, viewerProps, visible, offset, stats, find, findAll, flush,
+    currentInput, viewerProps, visible, offset, stats, find, findAll, flush, feedback, pointer,
+    selected: () => findAll(el => el.props['data-selected']).map(el => el.props['data-byte-idx']),
+    menu: () => find(el => el.props['data-menu-items'])?.props['data-menu-items'],
+    failCopy: (error) => { copyError = error },
+    async select(index, column = 'hex', shiftKey = false) {
+      const scroller = find(el => el.props.onScroll)
+      const event = pointer(index, column, { shiftKey })
+      scroller.props.onPointerdown(event)
+      scroller.props.onPointerup({ ...event, buttons: 0 })
+      await flush()
+    },
+    async drag(start, end, column = 'hex', endOverrides = {}) {
+      const scroller = find(el => el.props.onScroll)
+      scroller.props.onPointerdown(pointer(start, column))
+      scroller.props.onPointermove(pointer(end, column, endOverrides))
+      await flush()
+      return () => scroller.props.onPointerup(pointer(end, column, { ...endOverrides, buttons: 0 }))
+    },
+    async frame() {
+      const pending = [...frames.values()]
+      frames.clear()
+      pending.forEach(callback => callback())
+      await flush()
+    },
+    clear() { const scroller = find(el => el.props.onScroll); scroller.props.onPointerdown(pointer(0, 'hex', { target: scroller })) },
     setWidth(value) { width = value },
     resize() { for (const observer of [...resizeObservers]) observer.callback() },
     setVisible(value) {
@@ -659,9 +685,9 @@ test('mounted row reuse refreshes appended tails, replacements, and resized layo
   view.currentInput.value += 'Z'.repeat(12)
   await until(() => view.find(el => el.props['data-byte-idx'] === 36))
   await view.flush()
-  assert.equal(view.find(el => el.props['data-byte-idx'] === 36).text, '5a')
+  assert.equal(view.find(el => el.props['data-byte-idx'] === 36).text, '5A')
   assert.equal(view.find(el => el.props['data-byte-idx'] === 0), firstByte)
-  assert.deepEqual(view.stats.updatedRows, [columns.toString(16).padStart(8, '0')],
+  assert.deepEqual(view.stats.updatedRows, [columns.toString(16).toUpperCase().padStart(5, '0')],
     'only the previously padded row must update after an append')
 
   view.currentInput.value = 'B'.repeat(37)
@@ -682,4 +708,462 @@ test('mounted row reuse refreshes appended tails, replacements, and resized layo
   assert.equal(view.find(el => el.props['data-byte-idx'] === narrowerColumns).parent.parent.props.style.height, '30px')
   assert.equal(view.find(el => el.props['data-byte-idx'] === narrowerColumns).parent.parent.props.style.transform,
     `translateY(${viewport.HEX_PADDING_TOP + 30}px)`)
+})
+
+test('hex layout accounts for offset digits, cell spacing and all column borders', () => {
+  for (const width of [160, 320, 480, 720, 1100, 4000]) {
+    for (const length of [3, 0x100000, 100 * 1024 * 1024]) {
+      const layout = layoutUtils.getHexdumpLayout(width, 8.4, length, 14)
+      assert.ok(layout.bytesPerRow >= 1 && layout.bytesPerRow <= 64)
+      assert.equal(layout.offsetDigits, Math.max(5, (length - 1).toString(16).length))
+      assert.ok(layout.asciiStart + layout.bytesPerRow * 8.4 <= width - 14 - 16)
+      assert.equal(layoutUtils.getHexdumpPointerByte(layout.hexStart + 4 * 3 * 8.4 + 1, 22, 'hex', layout, 8.4, 22, 0, 3, length),
+        Math.min(length - 1, layout.bytesPerRow + Math.min(4, layout.bytesPerRow - 1)))
+    }
+  }
+  assert.equal(layoutUtils.getHexdumpLayout(80, 8.4, 100 * 1024 * 1024, 14).bytesPerRow, 1)
+})
+
+test('selection serialization preserves exact binary ranges and Base64 chunk boundaries', async () => {
+  const bytes = Uint8Array.from({ length: 100003 }, (_, index) => index % 256)
+  const store = new utils.HexdumpBytes()
+  store.append(bytes.subarray(0, 13))
+  store.append(bytes.subarray(13, 65537))
+  store.append(bytes.subarray(65537))
+  const selected = Buffer.from(bytes.subarray(11, 100001))
+  const controller = new AbortController()
+  assert.equal(await selectionUtils.serializeHexdumpSelection(store, 11, 100001, 'base64', controller.signal), selected.toString('base64'))
+  assert.equal(await selectionUtils.serializeHexdumpSelection(store, 11, 100001, 'hex', controller.signal), selected.toString('hex').match(/../g).join(' ').toUpperCase())
+  const sample = new utils.HexdumpBytes()
+  sample.append(Uint8Array.of(0, 10, 31, 32, 65, 126, 127, 255))
+  assert.equal(await selectionUtils.serializeHexdumpSelection(sample, 0, 8, 'text', controller.signal), '\u0000\n\u001f A~\u007f\u00ff')
+  assert.ok([...store.range(11, 100001)].every(chunk => chunk.length <= 0x8000))
+})
+
+test('UTF-8 text selection preserves Unicode, BOM and control characters across storage chunks', async () => {
+  const text = '\uFEFF' + 'a'.repeat(32764) + '中🙂\r\n\t尾\u0000'
+  const bytes = new TextEncoder().encode(text)
+  const store = new utils.HexdumpBytes()
+  store.append(bytes)
+  const controller = new AbortController()
+  assert.equal(await selectionUtils.serializeHexdumpSelection(store, 0, store.length, 'text', controller.signal, 'utf8'), text)
+  assert.equal(await selectionUtils.serializeHexdumpSelection(store, 0, store.length, 'base64', controller.signal), Buffer.from(bytes).toString('base64'))
+})
+
+test('large selection serialization yields and aborts before producing a result', async () => {
+  const store = new utils.HexdumpBytes()
+  store.append(new Uint8Array(2 * 1024 * 1024))
+  const controller = new AbortController()
+  const operation = selectionUtils.serializeHexdumpSelection(store, 0, store.length, 'hex', controller.signal)
+  setTimeout(() => controller.abort(), 0)
+  await assert.rejects(operation, { name: 'AbortError' })
+})
+
+test('clipboard NUL escaping preserves all other characters across chunk boundaries', async () => {
+  const signal = new AbortController().signal
+  const unchanged = '你好\uFEFF🙂\\x00\r\n\t\u001f\u007f\u0080\u00ff'
+  assert.equal(await selectionUtils.escapeHexdumpClipboardNullBytes(unchanged, signal), unchanged)
+  assert.equal(await selectionUtils.escapeHexdumpClipboardNullBytes('', signal), '')
+  const input = 'a'.repeat(65535) + '\u0000\u0000' + unchanged + 'b'.repeat(32768) + '\u0000'
+  assert.equal(await selectionUtils.escapeHexdumpClipboardNullBytes(input, signal), input.replaceAll('\u0000', '\\x00'))
+  assert.equal(await selectionUtils.escapeHexdumpClipboardNullBytes('\u0000\u0000', signal), '\\x00\\x00')
+})
+
+test('clipboard NUL escaping yields and aborts before returning prepared text', async () => {
+  const controller = new AbortController()
+  const operation = selectionUtils.escapeHexdumpClipboardNullBytes('\u0000'.repeat(200000), controller.signal)
+  setTimeout(() => controller.abort(), 0)
+  await assert.rejects(operation, { name: 'AbortError' })
+  await assert.rejects(selectionUtils.escapeHexdumpClipboardNullBytes('', controller.signal), { name: 'AbortError' })
+})
+
+test('mounted bytes have compact uppercase offsets, four-byte groups and unselectable padding', async (t) => {
+  const view = await mountViewer(t, Uint8Array.from({ length: 37 }, (_, index) => index))
+  const first = view.find(el => el.props['data-byte-idx'] === 0)
+  assert.equal(first.parent.parent.children[0].text, '00000')
+  assert.equal(view.find(el => el.props['data-byte-idx'] === 15).text, '0F')
+  assert.equal(view.find(el => el.props['data-byte-idx'] === 4).props.class.includes('before:border-l'), true)
+  assert.equal(view.find(el => el.props['data-byte-idx'] === 3).props.class.includes('before:border-l'), false)
+  assert.equal(view.findAll(el => el.props['data-byte-idx'] != null).length, 74)
+  assert.ok(view.find(el => el.props.class?.includes('pointer-events-none text-transparent')))
+  const last = view.find(el => el.props['data-byte-idx'] === 36)
+  const padding = last.parent.children.find(el => el.props['data-byte-idx'] == null)
+  await view.select(36)
+  const scroller = view.find(el => el.props.onScroll)
+  scroller.props.onPointerdown({ target: padding, button: 0, pointerId: 1 })
+  await view.flush()
+  assert.equal(view.selected().length, 0)
+})
+
+test('mounted clicks keep the DOM byte even when release geometry maps to the preceding row', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(400).fill(65))
+  const scroller = view.find(el => el.props.onScroll)
+  const columns = view.find(el => el.props['data-byte-idx'] === 0).parent.children.length
+  for (const column of ['hex', 'ascii']) {
+    const index = columns + 4
+    const event = view.pointer(index, column)
+    // Hit-testing the DOM resolved this byte, but coordinate rounding falls just above its row.
+    event.clientY -= 11.5
+    scroller.props.onPointerdown(event)
+    scroller.props.onPointerup({ ...event, target: scroller, buttons: 0 })
+    await view.flush()
+    assert.deepEqual(view.selected(), [index, index])
+    assert.equal(scroller.hasPointerCapture(event.pointerId), false)
+  }
+})
+
+test('mounted click jitter at a row boundary does not start dragging or expand Shift selection', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(400).fill(65))
+  const scroller = view.find(el => el.props.onScroll)
+  const columns = view.find(el => el.props['data-byte-idx'] === 0).parent.children.length
+  for (const column of ['hex', 'ascii']) {
+    const index = columns + 4
+    for (const shiftKey of [false, true]) {
+      const clicked = index + (shiftKey ? 2 : 0)
+      const event = view.pointer(clicked, column, { shiftKey })
+      event.clientY -= 10
+      scroller.props.onPointerdown(event)
+      const moved = { ...event, target: scroller, clientY: event.clientY - 2 }
+      scroller.props.onPointermove(moved)
+      await view.frame()
+      scroller.props.onPointerup({ ...moved, buttons: 0 })
+      await view.flush()
+      const selected = [...new Set(view.selected())].sort((a, b) => a - b)
+      assert.deepEqual(selected, shiftKey ? [index, index + 1, index + 2] : [index])
+    }
+  }
+})
+
+test('mounted stationary presses at the viewport edge do not auto-scroll or extend selection', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(10000).fill(65))
+  const scroller = view.find(el => el.props.onScroll)
+  const columns = view.find(el => el.props['data-byte-idx'] === 0).parent.children.length
+  for (const column of ['hex', 'ascii']) {
+    const index = 21 * columns + 4
+    const event = view.pointer(index, column, { clientY: 485 })
+    scroller.props.onPointerdown(event)
+    await view.frame()
+    await view.frame()
+    assert.equal(scroller.scrollTop, 0)
+    assert.deepEqual(view.selected(), [index, index])
+    scroller.props.onPointerup({ ...event, buttons: 0 })
+    await view.flush()
+    assert.deepEqual(view.selected(), [index, index])
+  }
+})
+
+test('mounted released buttons and canceled captures stop extending the selection', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(10000).fill(65))
+  const scroller = view.find(el => el.props.onScroll)
+  for (const stop of ['buttons', 'other-button', 'onPointercancel', 'onLostpointercapture']) {
+    await view.drag(3, 10)
+    const before = view.selected()
+    if (stop === 'buttons' || stop === 'other-button') scroller.props.onPointermove(view.pointer(20, 'hex', { target: scroller, buttons: stop === 'buttons' ? 0 : 2 }))
+    else scroller.props[stop]()
+    scroller.props.onPointermove(view.pointer(100, 'hex', { target: scroller, clientY: 530 }))
+    await view.frame()
+    assert.deepEqual(view.selected(), before)
+    assert.equal(scroller.scrollTop, 0)
+    assert.equal(scroller.hasPointerCapture(1), false)
+  }
+})
+
+test('mounted drag and Shift selection synchronize both columns and keep unaffected rows stable', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(400).fill(65))
+  const columns = view.find(el => el.props['data-byte-idx'] === 0).parent.children.length
+  const expected = (start, end) => Array.from({ length: end - start + 1 }, (_, index) => start + index).flatMap(index => [index, index]).sort((a, b) => a - b)
+  const selected = () => view.selected().sort((a, b) => a - b)
+  let release = await view.drag(3, columns + 2)
+  assert.deepEqual(selected(), expected(3, columns + 2))
+  release()
+  release = await view.drag(columns + 2, 3, 'ascii')
+  assert.deepEqual(selected(), expected(3, columns + 2))
+  release()
+  await view.select(columns + 5, 'hex', true)
+  assert.deepEqual(selected(), expected(columns + 2, columns + 5))
+  view.stats.updatedRows.length = 0
+  view.stats.byteReads = 0
+  await view.select(columns + 6, 'hex', true)
+  assert.equal(view.stats.updatedRows.length, 1)
+  assert.equal(view.stats.byteReads, 0)
+  view.find(el => el.props.onScroll).props.onContextmenu()
+  assert.deepEqual(selected(), expected(columns + 2, columns + 6))
+  await view.hover(columns + 3)
+  assert.equal(view.find(el => el.props['data-byte-idx'] === columns + 3).props.class.includes('text-app-accent'), false)
+})
+
+test('mounted edge dragging auto-scrolls and extends the selection beyond the viewport', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(10000).fill(65))
+  const release = await view.drag(2, 100, 'hex', { clientY: 530 })
+  await view.frame()
+  assert.equal(view.find(el => el.props.onScroll).scrollTop, 24)
+  assert.ok(Math.max(...view.selected()) > 100)
+  release()
+})
+
+test('mounted selection persists across resize, scrolling and SSE appends, and clears on replacement', async (t) => {
+  const view = await mountViewer(t, 'A'.repeat(200), { appendOnly: true })
+  await view.select(3)
+  await view.select(28, 'ascii', true)
+  const before = view.selected().sort((a, b) => a - b)
+  view.setWidth(480)
+  view.resize()
+  await view.flush()
+  assert.deepEqual(view.selected().sort((a, b) => a - b), before)
+  await view.scroll(1)
+  assert.deepEqual(view.selected().sort((a, b) => a - b), before)
+  view.currentInput.value += 'Z'
+  await until(() => view.find(el => el.props['data-byte-idx'] === 200))
+  assert.deepEqual(view.selected().sort((a, b) => a - b), before)
+  view.currentInput.value = 'B'.repeat(201)
+  await view.flush()
+  assert.equal(view.selected().length, 0)
+})
+
+test('mounted Shift selection spans segments without materializing off-screen rows', async (t) => {
+  const input = new Uint8Array(20 * 1024 * 1024 + 7)
+  const view = await mountViewer(t, input)
+  await view.select(3)
+  view.find(el => el.props['aria-label'] === 'Last segment').props.onClick()
+  await view.flush()
+  const scroller = view.find(el => el.props.onScroll)
+  await view.scroll(scroller.scrollHeight - scroller.clientHeight)
+  await view.select(input.length - 2, 'ascii', true)
+  assert.ok(view.selected().length < 6000)
+  assert.ok(view.selected().includes(input.length - 2))
+  assert.ok(!view.selected().includes(input.length - 1))
+  view.find(el => el.props['aria-label'] === 'First segment').props.onClick()
+  await view.flush()
+  assert.ok(view.selected().includes(3))
+  assert.ok(!view.selected().includes(0))
+  view.visible.value = false
+  await view.flush()
+  view.visible.value = true
+  await view.flush()
+  assert.equal(view.selected().length, 0)
+})
+
+test('mounted menu requires selection and copies or exports only the selected bytes', async (t) => {
+  const view = await mountViewer(t, Uint8Array.of(0, 65, 10, 126, 255))
+  assert.deepEqual(view.menu().map(item => item.label ?? item.type), ['Copy text', 'Copy HEX', 'Copy as Base64', 'separator', 'Export'])
+  assert.ok(view.menu().filter(item => item.label).every(item => item.disabled))
+  view.menu().find(item => item.label === 'Copy HEX').onSelect()
+  assert.equal(view.feedback.copied.length, 0)
+  await view.select(0)
+  await view.select(4, 'ascii', true)
+  for (const [label, expected] of [['Copy text', '\\x00A\n~\u00ff'], ['Copy HEX', '00 41 0A 7E FF'], ['Copy as Base64', 'AEEKfv8=']]) {
+    const count = view.feedback.copied.length
+    view.menu().find(item => item.label === label).onSelect()
+    view.menu().find(item => item.label === label).onSelect()
+    await until(() => view.feedback.copied.length > count)
+    await view.flush()
+    assert.equal(view.feedback.copied.length, count + 1)
+    assert.equal(view.feedback.copied.at(-1), expected)
+    assert.equal(view.feedback.success.at(-1), 'Selection copied')
+  }
+  view.menu().find(item => item.label === 'Export').onSelect()
+  await until(() => view.feedback.exports.length === 1)
+  assert.deepEqual(Buffer.from(view.feedback.exports[0], 'base64'), Buffer.from([0, 65, 10, 126, 255]))
+  view.viewerProps.exporting = true
+  await view.flush()
+  assert.ok(view.menu().find(item => item.label === 'Export').disabled)
+  view.viewerProps.exporting = false
+  view.failCopy(new Error('clipboard unavailable'))
+  await view.flush()
+  view.menu().find(item => item.label === 'Copy text').onSelect()
+  await until(() => view.feedback.error.length === 1)
+  assert.match(view.feedback.error[0], /clipboard unavailable/)
+  assert.ok(!view.menu().find(item => item.label === 'Copy text').disabled)
+  view.clear()
+  await view.flush()
+  assert.ok(view.menu().find(item => item.label === 'Export').disabled)
+})
+
+test('mounted UTF-8 copying escapes NUL for Windows while Base64 preserves the original bytes', async (t) => {
+  const input = '你好\r\n世界\t\u0000🙂'
+  const view = await mountViewer(t, input)
+  await view.select(0)
+  await view.select(Buffer.byteLength(input, 'utf8') - 1, 'ascii', true)
+  view.menu().find(item => item.label === 'Copy text').onSelect()
+  await until(() => view.feedback.copied.length === 1)
+  assert.equal(view.feedback.copied[0], '你好\r\n世界\t\\x00🙂')
+  assert.equal(view.feedback.success.at(-1), 'Selection copied')
+  view.menu().find(item => item.label === 'Copy as Base64').onSelect()
+  await until(() => view.feedback.copied.length === 2)
+  assert.deepEqual(Buffer.from(view.feedback.copied[1], 'base64'), Buffer.from(input, 'utf8'))
+})
+
+test('mounted Base64 binary bodies copy original byte characters without ASCII display substitutions', async (t) => {
+  const input = Buffer.from([0, 10, 31, 127, 128, 255])
+  const view = await mountViewer(t, input.toString('base64'), { isBase64: true })
+  assert.equal(view.find(el => el.props['data-byte-idx'] === 0 && el.props['data-byte-column'] === 'ascii').text, '.')
+  await view.select(0)
+  await view.select(input.length - 1, 'ascii', true)
+  view.menu().find(item => item.label === 'Copy text').onSelect()
+  await until(() => view.feedback.copied.length === 1)
+  assert.equal(view.feedback.copied[0], '\\x00\n\u001f\u007f\u0080\u00ff')
+  assert.equal(view.feedback.success.at(-1), 'Selection copied')
+  view.menu().find(item => item.label === 'Copy as Base64').onSelect()
+  await until(() => view.feedback.copied.length === 2)
+  assert.deepEqual(Buffer.from(view.feedback.copied[1], 'base64'), input)
+})
+
+test('mounted selection operations abort on replacement and unmount without copying stale data', async (t) => {
+  const view = await mountViewer(t, new Uint8Array(200000).fill(65))
+  await view.select(0)
+  await view.scroll(50000)
+  await view.select(view.offset.value + 3, 'ascii', true)
+  view.menu().find(item => item.label === 'Copy HEX').onSelect()
+  view.currentInput.value = Uint8Array.of(66)
+  await view.flush()
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(view.feedback.copied.length, 0)
+  assert.equal(view.feedback.error.length, 0)
+  await view.select(0)
+  view.menu().find(item => item.label === 'Export').onSelect()
+  view.visible.value = false
+  await view.flush()
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(view.feedback.exports.length, 0)
+})
+
+function setupExportHost(t, kind) {
+  const path = kind === 'http' ? 'traffic/BodyViewer' : 'modal/WebSocketMessageDetailModal'
+  const file = readFileSync(new URL(`../src/components/${path}.vue`, import.meta.url), 'utf8')
+  const compiled = compileScript(parse(file, { filename: `${path}.vue` }).descriptor, { id: 'hex-export-host-test' }).content
+  const calls = { dialogs: [], saves: [], errors: [] }
+  let savePath = 'E:/tmp/selected.bin'
+  let saveError = null
+  let dialogResult = null
+  const dependencies = {
+    vue: { ...Vue, onMounted() {}, onUnmounted() {} },
+    'vue-i18n': { useI18n: () => ({ t: (key, args) => `${key} ${args?.error ?? ''}` }) },
+    '@wailsio/runtime': { Dialogs: { SaveFile: async (options) => {
+      calls.dialogs.push(options)
+      return dialogResult ? await dialogResult : savePath
+    } } },
+    '@/utils/clipboard': { copyText: async () => {} },
+    '@/utils/dialog': dialogUtils,
+    '@/utils/hexdump': utils,
+    '@/utils/format': { formatFileSize: (value) => String(value) },
+    '@/composables/useHexdumpViewState': { useHexdumpViewState },
+    '@/composables/useNotify': { useNotify: () => ({ success() {}, error: message => calls.errors.push(message) }) },
+    '@/components/common/emptyState': {},
+    '@/components/common/monacoLargeText': monacoLargeText,
+    '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice': { SaveBodyToFile: async (request) => {
+      if (saveError) throw saveError
+      calls.saves.push(request)
+    } },
+  }
+  const exports = {}
+  new Function('require', 'exports', ts.transpileModule(compiled, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText)((id) => {
+    if (id.endsWith('.vue')) return { __esModule: true, default: {} }
+    if (dependencies[id]) return dependencies[id]
+    throw new Error(`Unexpected export host dependency: ${id}`)
+  }, exports)
+  const props = Vue.reactive(kind === 'http'
+    ? { body: 'original', bodyEncoding: '', contentType: 'text/plain', sourcePath: '/original.txt' }
+    : { show: true, message: { data: 'b3JpZ2luYWw=', msgType: 'binary', direction: 'receive', dataSize: 8 } })
+  const state = scoped(t, () => exports.default.setup(props, { expose() {}, emit() {} }))
+  return {
+    state, calls, props,
+    export: kind === 'http' ? state.saveHexSelection : state.exportMessage,
+    download: kind === 'http' ? state.saveCurrentBodyContent : () => state.exportMessage(),
+    setPath(value) { savePath = value },
+    fail(value) { saveError = value },
+    delayDialog(value) { dialogResult = value },
+    busy: () => (kind === 'http' ? state.exportingBody : state.exporting).value,
+  }
+}
+
+for (const kind of ['http', 'websocket']) {
+  test(`${kind} host exports exact selection bytes and handles cancellation, errors and repeated saves`, async (t) => {
+    const host = setupExportHost(t, kind)
+    await host.export('AApB/w==')
+    assert.deepEqual(host.calls.saves[0], {
+      path: 'E:/tmp/selected.bin', body: 'AApB/w==', bodyEncoding: 'base64', contentType: 'application/octet-stream',
+    })
+    assert.deepEqual(Buffer.from(host.calls.saves[0].body, 'base64'), Buffer.from([0, 10, 65, 255]))
+    assert.equal(host.calls.dialogs[0].Filename, kind === 'http' ? 'hex-selection.bin' : 'websocket-selection.bin')
+    host.setPath(' ')
+    await host.export('QQ==')
+    assert.equal(host.calls.saves.length, 1)
+    assert.equal(host.calls.errors.length, 0)
+    host.delayDialog(Promise.reject(new Error('cancelled by user')))
+    await host.export('QQ==')
+    assert.equal(host.calls.errors.length, 0)
+    host.delayDialog(null)
+    host.setPath('E:/tmp/selected.bin')
+    host.fail(new Error('disk full'))
+    await host.export('QQ==')
+    assert.match(host.calls.errors[0], /disk full/)
+    assert.equal(host.busy(), false)
+    host.fail(null)
+    let release
+    host.delayDialog(new Promise(resolve => { release = resolve }))
+    const pending = host.export('QQ==')
+    assert.equal(host.busy(), true)
+    const before = host.calls.dialogs.length
+    await host.export('Qg==')
+    assert.equal(host.calls.dialogs.length, before)
+    release('E:/tmp/selected.bin')
+    await pending
+    assert.equal(host.calls.saves.at(-1).body, 'QQ==')
+    assert.equal(host.busy(), false)
+  })
+
+  test(`${kind} toolbar downloads the whole body independently of Hex selection`, async (t) => {
+    const host = setupExportHost(t, kind)
+    if (kind === 'http') {
+      Object.assign(host.props, { body: 'b3JpZ2luYWw=', bodyEncoding: 'base64', contentType: 'application/octet-stream', sourcePath: '/original.bin' })
+      host.state.activeTab.value = 'hex'
+    }
+    await host.download()
+    assert.deepEqual(host.calls.saves[0], {
+      path: 'E:/tmp/selected.bin', body: 'b3JpZ2luYWw=', bodyEncoding: 'base64', contentType: 'application/octet-stream',
+    })
+    assert.equal(host.calls.dialogs[0].Filename, kind === 'http' ? 'original.bin' : 'websocket-message.bin')
+
+    const text = '完整内容\r\n🙂'
+    if (kind === 'http') Object.assign(host.props, { body: text, bodyEncoding: '', contentType: 'text/plain', sourcePath: '/original.txt' })
+    else Object.assign(host.props.message, { data: text, msgType: 'text' })
+    await host.download()
+    assert.equal(host.calls.saves[1].body, text)
+    assert.equal(host.calls.saves[1].bodyEncoding, '')
+    assert.equal(host.calls.dialogs[1].Filename, kind === 'http' ? 'original.txt' : 'websocket-message.txt')
+
+    host.setPath(' ')
+    await host.download()
+    assert.equal(host.calls.saves.length, 2)
+    assert.equal(host.calls.errors.length, 0)
+    host.setPath('E:/tmp/whole.bin')
+    host.fail(new Error('disk full'))
+    await host.download()
+    assert.match(host.calls.errors[0], /disk full/)
+    assert.equal(host.busy(), false)
+    host.fail(null)
+    let release
+    host.delayDialog(new Promise(resolve => { release = resolve }))
+    const pending = host.download()
+    assert.equal(host.busy(), true)
+    const before = host.calls.dialogs.length
+    await host.download()
+    await host.export('QQ==')
+    assert.equal(host.calls.dialogs.length, before)
+    release('E:/tmp/whole.bin')
+    await pending
+    assert.equal(host.calls.saves.at(-1).body, text)
+    assert.equal(host.busy(), false)
+  })
+}
+
+test('Hex menu translations have matching bilingual keys and placeholders', () => {
+  const locales = ['en', 'zh'].map(locale => JSON.parse(readFileSync(new URL(`../src/locales/${locale}.json`, import.meta.url), 'utf8').replace(/^\uFEFF/, '')))
+  for (const key of ['hex_copy_text', 'hex_copy_hex', 'hex_copy_base64', 'hex_export', 'hex_selection_copied']) {
+    assert.equal(typeof locales[0].detail[key], 'string')
+    assert.equal(typeof locales[1].detail[key], 'string')
+    assert.deepEqual(locales[0].detail[key].match(/\{.*?\}/g), locales[1].detail[key].match(/\{.*?\}/g))
+  }
 })

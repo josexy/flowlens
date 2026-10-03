@@ -22,6 +22,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const notification = useNotify()
 const wrapText = ref(false)
+const exporting = ref(false)
 const visible = computed({
   get: () => props.show,
   set: (value: boolean) => emit('update:show', value),
@@ -63,14 +64,20 @@ async function copyTextMessage() {
   }
 }
 
-async function exportMessage() {
-  if (!props.message) {
+async function exportMessage(selection?: string) {
+  if (!props.message || exporting.value) {
     return
   }
-
+  exporting.value = true
   try {
-    const isBinary = props.message.msgType === 'binary'
-    const filename = isBinary ? 'websocket-message.bin' : 'websocket-message.txt'
+    const isBinary = selection !== undefined || props.message.msgType === 'binary'
+    const body = selection ?? props.message.data
+    const filename =
+      selection !== undefined
+        ? 'websocket-selection.bin'
+        : isBinary
+          ? 'websocket-message.bin'
+          : 'websocket-message.txt'
     const selectedPath = await Dialogs.SaveFile({
       Filename: filename,
     })
@@ -80,7 +87,7 @@ async function exportMessage() {
     }
     await SaveBodyToFile({
       path: savePath,
-      body: props.message.data,
+      body,
       bodyEncoding: isBinary ? 'base64' : '',
       contentType: isBinary ? 'application/octet-stream' : 'text/plain',
     })
@@ -89,6 +96,8 @@ async function exportMessage() {
       return
     }
     notification.error(t('detail.body_save_failed', { error: getErrorMessage(error) }))
+  } finally {
+    exporting.value = false
   }
 }
 </script>
@@ -160,7 +169,8 @@ async function exportMessage() {
                   variant="ghost"
                   icon="i-lucide-download"
                   :aria-label="t('detail.save_body')"
-                  @click="exportMessage"
+                  :disabled="exporting"
+                  @click="exportMessage()"
                 />
               </template>
             </AppTooltip>
@@ -184,6 +194,9 @@ async function exportMessage() {
               :input="props.message.data"
               is-base64
               :row-height="24"
+              :active="props.show"
+              :exporting="exporting"
+              @export-selection="exportMessage"
             />
           </div>
         </div>

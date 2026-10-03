@@ -21,6 +21,7 @@ import { formatFileSize } from '@/utils/format'
 
 const { t } = useI18n()
 const notify = useNotify()
+const exportingBody = ref(false)
 
 const props = defineProps<{
   body: string
@@ -246,9 +247,14 @@ function updateImageScrollbarPresence() {
   hasImageHorizontalScrollbar.value = element.scrollWidth > element.clientWidth + 1
 }
 
-async function saveBodyToFile(body: string, bodyEncoding: string) {
+async function saveBodyToFile(
+  body: string,
+  bodyEncoding: string,
+  filename = suggestedFilename.value,
+  contentType = props.contentType ?? '',
+) {
   const selectedPath = await Dialogs.SaveFile({
-    Filename: suggestedFilename.value,
+    Filename: filename,
   })
   const savePath = selectedPath.trim()
   if (!savePath) {
@@ -258,7 +264,7 @@ async function saveBodyToFile(body: string, bodyEncoding: string) {
     path: savePath,
     body,
     bodyEncoding,
-    contentType: props.contentType ?? '',
+    contentType,
   })
 }
 
@@ -636,9 +642,11 @@ async function copyBodyContent() {
 }
 
 async function saveCurrentBodyContent() {
+  if (exportingBody.value) return
   const saveTarget = currentSaveTarget.value
   if (!saveTarget) return
 
+  exportingBody.value = true
   try {
     await saveBodyToFile(saveTarget.body, saveTarget.bodyEncoding)
   } catch (error) {
@@ -646,6 +654,22 @@ async function saveCurrentBodyContent() {
       return
     }
     notify.error(t('detail.body_save_failed', { error: getErrorMessage(error) }))
+  } finally {
+    exportingBody.value = false
+  }
+}
+
+async function saveHexSelection(base64: string) {
+  if (exportingBody.value) return
+  exportingBody.value = true
+  try {
+    await saveBodyToFile(base64, 'base64', 'hex-selection.bin', 'application/octet-stream')
+  } catch (error) {
+    if (!isDialogCancelError(error)) {
+      notify.error(t('detail.body_save_failed', { error: getErrorMessage(error) }))
+    }
+  } finally {
+    exportingBody.value = false
   }
 }
 
@@ -838,6 +862,7 @@ function tabLabel(tab: TabKey): string {
               size="sm"
               square
               :aria-label="t('detail.save_body')"
+              :disabled="exportingBody"
               @click="saveCurrentBodyContent"
             />
           </UTooltip>
@@ -927,6 +952,8 @@ function tabLabel(tab: TabKey): string {
               :input="props.body"
               :is-base64="props.bodyEncoding === 'base64'"
               :append-only="isServerSentEvents && props.bodyEncoding !== 'base64'"
+              :exporting="exportingBody"
+              @export-selection="saveHexSelection"
             />
           </div>
         </div>

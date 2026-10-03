@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { ContextMenuItem } from '@nuxt/ui'
 import AppLoading from '@/components/common/AppLoading.vue'
 import HexDumpRow from '@/components/common/HexDumpRow.vue'
 import { appEmptyStateSize, appEmptyStateUi } from '@/components/common/emptyState'
 import { type HexByte, type HexdumpBytes } from '@/utils/hexdump'
 import { useHexdumpDecoder } from '@/composables/useHexdumpDecoder'
 import { getHexdumpPage, getHexdumpPosition, HEX_PADDING_TOP } from '@/utils/hexdumpViewport'
+import { getHexdumpLayout, getHexdumpPointerByte } from '@/utils/hexdumpLayout'
+import {
+  escapeHexdumpClipboardNullBytes,
+  serializeHexdumpSelection,
+  type HexdumpCopyFormat,
+} from '@/utils/hexdumpSelection'
+import { copyText } from '@/utils/clipboard'
+import { getErrorMessage } from '@/utils/dialog'
+import { useNotify } from '@/composables/useNotify'
 
 const props = withDefaults(
   defineProps<{
@@ -15,14 +25,18 @@ const props = withDefaults(
     active?: boolean
     appendOnly?: boolean
     rowHeight?: number
+    exporting?: boolean
   }>(),
   {
     isBase64: false,
     active: true,
     appendOnly: false,
     rowHeight: 22,
+    exporting: false,
   },
 )
+
+const emit = defineEmits<{ exportSelection: [base64: string] }>()
 
 const byteOffset = defineModel<number>('byteOffset', { default: 0 })
 
@@ -31,8 +45,18 @@ watch(
   (next, previous) => {
     // Standalone users (WebSocket message details) do not own a position model.
     // Only an append within the same stream may inherit another input's offset.
-    if (props.appendOnly && !next[1] && !previous[1] && next[0].length > previous[0].length) return
+    if (
+      props.appendOnly &&
+      !next[1] &&
+      !previous[1] &&
+      typeof next[0] === 'string' &&
+      typeof previous[0] === 'string' &&
+      next[0].length > previous[0].length
+    )
+      return
     byteOffset.value = 0
+    clearSelection()
+    cancelOperation()
   },
 )
 
@@ -41,10 +65,6 @@ interface HexDumpLine {
   offsetHex: string
   byteLength: number
   bytes: (HexByte | null)[]
-}
-
-interface HexDumpLayout {
-  bytesPerRow: number
 }
 
 interface HexVirtualRow {
@@ -57,20 +77,18 @@ interface HexVirtualRow {
 interface HexRenderedRows {
   revision: number
   bytesPerRow: number
+  offsetDigits: number
   rows: { virtualRow: HexVirtualRow; line: HexDumpLine }[]
 }
 
 const WIDTH_FALLBACK = 720
-const VIEWER_HORIZONTAL_PADDING = 24
 const SCROLLBAR_GUTTER_WIDTH = 14
 const NO_SCROLL_FRAME_GUTTER_WIDTH = 10
-const OFFSET_COLUMN_WIDTH = 82
-const SECTION_GAP = 10
-const HEX_BYTE_GAP = 2
 const CHAR_WIDTH_FALLBACK = 7.5
 const ROW_OVERSCAN = 10
-const MAX_BYTES_PER_ROW = 64
+const DRAG_THRESHOLD = 4
 const { t } = useI18n()
+const notify = useNotify()
 const rootRef = useTemplateRef<HTMLElement>('hexRoot')
 const scrollRef = useTemplateRef<HTMLElement>('hexScroll')
 const measureRef = useTemplateRef<HTMLElement>('hexMeasure')
@@ -82,6 +100,20 @@ const hoveredByteIdx = shallowRef(-1)
 const hasVerticalScrollbar = shallowRef(false)
 const isVisible = shallowRef(false)
 const isDocumentVisible = shallowRef(typeof document === 'undefined' || !document.hidden)
+const selectionAnchor = shallowRef<number | null>(null)
+const selectionFocus = shallowRef<number | null>(null)
+const operationBusy = shallowRef(false)
+let operationController: AbortController | null = null
+let drag: {
+  pointerId: number
+  column: 'hex' | 'ascii'
+  startX: number
+  startY: number
+  x: number
+  y: number
+  active: boolean
+} | null = null
+let dragFrame: number | null = null
 const decoder = useHexdumpDecoder(
   {
     get input() {
@@ -108,7 +140,14 @@ let resizeObserver: ResizeObserver | null = null
 let visibilityObserver: IntersectionObserver | null = null
 let restoringPosition = false
 
-const layout = computed<HexDumpLayout>(() => chooseLayout(containerWidth.value))
+const layout = computed(() =>
+  getHexdumpLayout(
+    containerWidth.value,
+    charWidth.value,
+    bytes.value.length,
+    frameGutterWidth.value,
+  ),
+)
 const page = computed(() =>
   getHexdumpPage(bytes.value.length, layout.value.bytesPerRow, props.rowHeight, pageIndex.value),
 )
@@ -143,7 +182,11 @@ const renderedRows = computed<HexRenderedRows>((previous) => {
   const revision = decoder.revision.value
   const rowHeight = props.rowHeight
   const startRow = page.value.startRow
-  const canReuse = previous?.revision === revision && previous.bytesPerRow === bytesPerRow
+  const offsetDigits = layout.value.offsetDigits
+  const canReuse =
+    previous?.revision === revision &&
+    previous.bytesPerRow === bytesPerRow &&
+    previous.offsetDigits === offsetDigits
   // Retain only the preceding viewport, never a growing cache of visited rows
   // or a reference to the full byte store. A new decode invalidates all rows.
   const cached = new Map(canReuse ? previous.rows.map((row) => [row.line.offset, row]) : [])
@@ -156,10 +199,15 @@ const renderedRows = computed<HexRenderedRows>((previous) => {
     const byteLength = Math.min(bytesPerRow, sourceBytes.length - offset)
     // Appending may fill the last, previously padded row. Earlier rows keep
     // their identity so their byte nodes do not need another render.
-    const line = oldRow?.line.byteLength === byteLength
-      ? oldRow.line
-      : buildRow(sourceBytes, globalRow, bytesPerRow)
-    if (oldRow?.line === line && oldRow.virtualRow.start === start && oldRow.virtualRow.size === rowHeight) {
+    const line =
+      oldRow?.line.byteLength === byteLength
+        ? oldRow.line
+        : buildRow(sourceBytes, globalRow, bytesPerRow)
+    if (
+      oldRow?.line === line &&
+      oldRow.virtualRow.start === start &&
+      oldRow.virtualRow.size === rowHeight
+    ) {
       rows.push(oldRow)
       continue
     }
@@ -174,10 +222,14 @@ const renderedRows = computed<HexRenderedRows>((previous) => {
     })
   }
 
-  if (canReuse && rows.length === previous.rows.length && rows.every((row, index) => row === previous.rows[index])) {
+  if (
+    canReuse &&
+    rows.length === previous.rows.length &&
+    rows.every((row, index) => row === previous.rows[index])
+  ) {
     return previous
   }
-  return { revision, bytesPerRow, rows }
+  return { revision, bytesPerRow, offsetDigits, rows }
 })
 const virtualRows = computed(() => renderedRows.value.rows)
 
@@ -189,29 +241,122 @@ const viewerStyle = computed(() => ({
   height: `${virtualContentHeight.value}px`,
   '--hex-row-height': `${props.rowHeight}px`,
   '--hex-bytes-per-row': String(layout.value.bytesPerRow),
+  '--hex-offset-width': `${layout.value.offsetWidth}px`,
+  minWidth: `${layout.value.asciiStart + layout.value.bytesPerRow * charWidth.value}px`,
 }))
 
-function chooseLayout(width: number): HexDumpLayout {
-  const usableWidth = Math.max(
-    0,
-    width -
-      frameGutterWidth.value -
-      VIEWER_HORIZONTAL_PADDING -
-      OFFSET_COLUMN_WIDTH -
-      SECTION_GAP * 2,
-  )
+const selection = computed(() => {
+  if (selectionAnchor.value === null || selectionFocus.value === null) return null
+  return {
+    start: Math.min(selectionAnchor.value, selectionFocus.value),
+    endExclusive: Math.max(selectionAnchor.value, selectionFocus.value) + 1,
+  }
+})
+const canSelect = computed(
+  () =>
+    props.active &&
+    isVisible.value &&
+    isDocumentVisible.value &&
+    decodeState.value === 'ready' &&
+    bytes.value.length > 0,
+)
+const canOperate = computed(
+  () => canSelect.value && selection.value !== null && !operationBusy.value && !props.exporting,
+)
+const menuItems = computed<ContextMenuItem[]>(() => [
+  {
+    label: t('detail.hex_copy_text'),
+    disabled: !canOperate.value,
+    onSelect: () => void runSelectionOperation('text'),
+  },
+  {
+    label: t('detail.hex_copy_hex'),
+    disabled: !canOperate.value,
+    onSelect: () => void runSelectionOperation('hex'),
+  },
+  {
+    label: t('detail.hex_copy_base64'),
+    disabled: !canOperate.value,
+    onSelect: () => void runSelectionOperation('base64'),
+  },
+  { type: 'separator' },
+  {
+    label: t('detail.hex_export'),
+    disabled: !canOperate.value,
+    onSelect: () => void runSelectionOperation('base64', true),
+  },
+])
 
-  for (let candidate = MAX_BYTES_PER_ROW; candidate >= 1; candidate--) {
-    const neededWidth =
-      candidate * 2 * charWidth.value +
-      Math.max(0, candidate - 1) * HEX_BYTE_GAP +
-      candidate * charWidth.value
-    if (usableWidth >= neededWidth) {
-      return { bytesPerRow: candidate }
+function rowSelection(offset: number, byteLength: number) {
+  const range = selection.value
+  if (!range || range.endExclusive <= offset || range.start >= offset + byteLength)
+    return { start: -1, endExclusive: -1 }
+  return {
+    start: Math.max(offset, range.start),
+    endExclusive: Math.min(offset + byteLength, range.endExclusive),
+  }
+}
+
+function clearSelection() {
+  stopDrag()
+  selectionAnchor.value = null
+  selectionFocus.value = null
+}
+
+function cancelOperation() {
+  operationController?.abort()
+  operationController = null
+  operationBusy.value = false
+}
+
+async function runSelectionOperation(format: HexdumpCopyFormat, exporting = false) {
+  const range = selection.value
+  if (!canOperate.value || !range) return
+  const controller = new AbortController()
+  operationController = controller
+  operationBusy.value = true
+  try {
+    const content = await serializeHexdumpSelection(
+      bytes.value,
+      range.start,
+      range.endExclusive,
+      format,
+      controller.signal,
+      props.isBase64 || props.input instanceof Uint8Array ? 'binary' : 'utf8',
+    )
+    controller.signal.throwIfAborted()
+    if (exporting) emit('exportSelection', content)
+    else {
+      const clipboardContent =
+        format === 'text'
+          ? await escapeHexdumpClipboardNullBytes(content, controller.signal)
+          : content
+      controller.signal.throwIfAborted()
+      await copyText(clipboardContent)
+      if (!controller.signal.aborted) notify.success(t('detail.hex_selection_copied'))
+    }
+  } catch (error) {
+    if (!controller.signal.aborted)
+      notify.error(
+        t(exporting ? 'detail.body_save_failed' : 'detail.body_copy_failed', {
+          error: getErrorMessage(error),
+        }),
+      )
+  } finally {
+    if (operationController === controller) {
+      operationController = null
+      operationBusy.value = false
     }
   }
+}
 
-  return { bytesPerRow: 1 }
+function focusHex() {
+  if (canSelect.value) scrollRef.value?.focus({ preventScroll: true })
+}
+
+function handleMenuClose(event: Event) {
+  event.preventDefault()
+  focusHex()
 }
 
 function buildRow(sourceBytes: HexdumpBytes, rowIndex: number, bytesPerRow: number): HexDumpLine {
@@ -235,14 +380,14 @@ function buildRow(sourceBytes: HexdumpBytes, rowIndex: number, bytesPerRow: numb
 
   return {
     offset,
-    offsetHex: offset.toString(16).padStart(8, '0'),
+    offsetHex: offset.toString(16).toUpperCase().padStart(layout.value.offsetDigits, '0'),
     byteLength: Math.min(bytesPerRow, sourceBytes.length - offset),
     bytes: rowBytes,
   }
 }
 
 function formatHexByte(value: number) {
-  return value.toString(16).padStart(2, '0')
+  return value.toString(16).padStart(2, '0').toUpperCase()
 }
 
 function formatAsciiByte(value: number) {
@@ -297,6 +442,125 @@ function handleHexMouseOver(event: MouseEvent) {
   if (Number.isInteger(nextHoveredIdx) && nextHoveredIdx !== hoveredByteIdx.value) {
     hoveredByteIdx.value = nextHoveredIdx
   }
+}
+
+function handlePointerDown(event: PointerEvent) {
+  if (event.button !== 0 || !canSelect.value) return
+  const element = scrollRef.value
+  if (!element) return
+  const target = (event.target as HTMLElement).closest<HTMLElement>('[data-byte-idx]')
+  focusHex()
+  if (!target || !element.contains(target)) {
+    clearSelection()
+    return
+  }
+  const index = Number(target.dataset.byteIdx)
+  if (!Number.isInteger(index) || index < 0 || index >= bytes.value.length) return
+  event.preventDefault()
+  stopDrag()
+  if (!event.shiftKey || selectionAnchor.value === null) selectionAnchor.value = index
+  selectionFocus.value = index
+  drag = {
+    pointerId: event.pointerId,
+    column: target.dataset.byteColumn === 'ascii' ? 'ascii' : 'hex',
+    startX: event.clientX,
+    startY: event.clientY,
+    x: event.clientX,
+    y: event.clientY,
+    active: false,
+  }
+  element.setPointerCapture(event.pointerId)
+}
+
+function updateDragSelection() {
+  const element = scrollRef.value
+  if (!element || !drag?.active || restoringPosition) return
+  const rect = element.getBoundingClientRect()
+  const index = getHexdumpPointerByte(
+    drag.x - rect.left - 8 + element.scrollLeft,
+    drag.y - rect.top + element.scrollTop - HEX_PADDING_TOP,
+    drag.column,
+    layout.value,
+    charWidth.value,
+    props.rowHeight,
+    page.value.startRow,
+    page.value.rowCount,
+    bytes.value.length,
+  )
+  if (index >= 0) selectionFocus.value = index
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (!drag || drag.pointerId !== event.pointerId) return
+  if ((event.buttons & 1) === 0) {
+    stopDrag()
+    return
+  }
+  drag.x = event.clientX
+  drag.y = event.clientY
+  // Keep the DOM byte selected on a click. Recomputing its coordinates on a
+  // slight move or release can resolve to a different row in the WebView.
+  if (!drag.active) {
+    if (Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < DRAG_THRESHOLD) return
+    drag.active = true
+  }
+  updateDragSelection()
+  if (dragFrame === null) dragFrame = requestAnimationFrame(autoScrollSelection)
+}
+
+function stopDrag() {
+  const previous = drag
+  drag = null
+  if (dragFrame !== null) cancelAnimationFrame(dragFrame)
+  dragFrame = null
+  if (previous && scrollRef.value?.hasPointerCapture(previous.pointerId))
+    scrollRef.value.releasePointerCapture(previous.pointerId)
+}
+
+function handlePointerUp(event: PointerEvent) {
+  if (drag?.pointerId !== event.pointerId) return
+  if (drag.active) {
+    drag.x = event.clientX
+    drag.y = event.clientY
+    updateDragSelection()
+  }
+  stopDrag()
+}
+
+function autoScrollSelection() {
+  dragFrame = null
+  const element = scrollRef.value
+  if (!drag?.active || !element || !canSelect.value) {
+    stopDrag()
+    return
+  }
+  const rect = element.getBoundingClientRect()
+  const delta =
+    drag.y < rect.top + 28
+      ? -Math.min(24, rect.top + 28 - drag.y)
+      : drag.y > rect.bottom - 28
+        ? Math.min(24, drag.y - rect.bottom + 28)
+        : 0
+  if (delta && !restoringPosition) {
+    const before = element.scrollTop
+    scrollToOffset(before + delta)
+    if (before === element.scrollTop) {
+      if (delta > 0 && page.value.index < page.value.count - 1) changePage(page.value.index + 1)
+      else if (delta < 0 && page.value.index > 0) {
+        const previousPage = getHexdumpPage(
+          bytes.value.length,
+          layout.value.bytesPerRow,
+          props.rowHeight,
+          page.value.index - 1,
+        )
+        byteOffset.value =
+          (previousPage.startRow + previousPage.rowCount - 1) * layout.value.bytesPerRow
+        void restorePosition()
+      }
+    } else handleHexScroll({ currentTarget: element } as unknown as Event)
+    if (!restoringPosition) updateDragSelection()
+  }
+  dragFrame = requestAnimationFrame(autoScrollSelection)
 }
 
 function handleHexScroll(event: Event) {
@@ -400,10 +664,19 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearSelection()
+  cancelOperation()
   resizeObserver?.disconnect()
   visibilityObserver?.disconnect()
   if (typeof document !== 'undefined')
     document.removeEventListener('visibilitychange', updateDocumentVisibility)
+})
+
+watch(canSelect, (active) => {
+  if (!active) {
+    stopDrag()
+    cancelOperation()
+  }
 })
 
 function updateDocumentVisibility() {
@@ -482,27 +755,46 @@ function updateDocumentVisibility() {
       :ui="appEmptyStateUi"
     />
 
-    <div
+    <UContextMenu
       v-else
-      ref="hexScroll"
-      class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pl-3 pr-[calc(12px+var(--hex-frame-gutter))]"
-      @scroll="handleHexScroll"
-      @mouseover="handleHexMouseOver"
-      @mouseleave="hoveredByteIdx = -1"
+      :items="menuItems"
+      :content="{ onCloseAutoFocus: handleMenuClose }"
     >
       <div
-        class="relative min-w-0 text-sm"
-        :style="{ ...viewerStyle, fontFamily: 'var(--code-font-family)' }"
+        ref="hexScroll"
+        tabindex="0"
+        :aria-label="t('detail.hex')"
+        class="min-h-0 flex-1 select-none overflow-auto pl-2 pr-[calc(8px+var(--hex-frame-gutter))] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-app-accent"
+        @scroll="handleHexScroll"
+        @mouseover="handleHexMouseOver"
+        @mouseleave="hoveredByteIdx = -1"
+        @pointerdown="handlePointerDown"
+        @pointermove="handlePointerMove"
+        @pointerup="handlePointerUp"
+        @pointercancel="stopDrag"
+        @lostpointercapture="stopDrag"
+        @contextmenu="stopDrag"
       >
-        <HexDumpRow
-          v-for="{ virtualRow, line } in virtualRows"
-          :key="virtualRow.key"
-          :line="line"
-          :top="virtualRow.start"
-          :row-height="virtualRow.size"
-          :hovered-byte-idx="hoveredByteIdx >= line.offset && hoveredByteIdx < line.offset + line.byteLength ? hoveredByteIdx : -1"
-        />
+        <div
+          class="relative min-w-0 text-sm"
+          :style="{ ...viewerStyle, fontFamily: 'var(--code-font-family)' }"
+        >
+          <HexDumpRow
+            v-for="{ virtualRow, line } in virtualRows"
+            :key="virtualRow.key"
+            :line="line"
+            :top="virtualRow.start"
+            :row-height="virtualRow.size"
+            :hovered-byte-idx="
+              hoveredByteIdx >= line.offset && hoveredByteIdx < line.offset + line.byteLength
+                ? hoveredByteIdx
+                : -1
+            "
+            :selection-start="rowSelection(line.offset, line.byteLength).start"
+            :selection-end="rowSelection(line.offset, line.byteLength).endExclusive"
+          />
+        </div>
       </div>
-    </div>
+    </UContextMenu>
   </div>
 </template>

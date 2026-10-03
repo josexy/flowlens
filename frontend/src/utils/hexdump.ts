@@ -7,7 +7,7 @@ export interface HexByte {
 
 export interface HexLine {
   offsetHex: string
-  bytes: (HexByte | null)[] // always 16 elements; null = padding on last line
+  bytes: (HexByte | null)[] // null = padding on the last line
 }
 
 export function decodeHexdumpBytes(input: string | Uint8Array, isBase64 = false): Uint8Array {
@@ -100,6 +100,18 @@ export class HexdumpBytes {
       else return chunk.data[index - chunk.start]
     }
     return undefined
+  }
+
+  *range(start: number, endExclusive: number): Generator<Uint8Array> {
+    const end = Math.min(this.length, endExclusive)
+    for (const chunk of this.chunks) {
+      if (chunk.start >= end) break
+      const first = Math.max(0, start - chunk.start)
+      const last = Math.min(chunk.used, end - chunk.start)
+      for (let offset = first; offset < last; offset += 0x8000) {
+        yield chunk.data.subarray(offset, Math.min(last, offset + 0x8000))
+      }
+    }
   }
 }
 
