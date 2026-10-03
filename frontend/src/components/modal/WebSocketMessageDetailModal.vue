@@ -184,7 +184,6 @@ async function exportMessage() {
               :input="props.message.data"
               is-base64
               :row-height="24"
-              :show-info-bar="false"
             />
           </div>
         </div>

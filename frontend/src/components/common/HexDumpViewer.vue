@@ -15,14 +15,12 @@ const props = withDefaults(
     active?: boolean
     appendOnly?: boolean
     rowHeight?: number
-    showInfoBar?: boolean
   }>(),
   {
     isBase64: false,
     active: true,
     appendOnly: false,
     rowHeight: 22,
-    showInfoBar: true,
   },
 )
 
@@ -120,18 +118,6 @@ const frameGutterWidth = computed(() =>
 const shellStyle = computed(() => ({
   '--hex-frame-gutter': `${frameGutterWidth.value}px`,
 }))
-
-const hoveredByte = computed((): HexByte | null => {
-  const value = bytes.value.get(hoveredByteIdx.value)
-  if (value == null) return null
-
-  return {
-    hex: formatHexByte(value),
-    ascii: formatAsciiByte(value),
-    value,
-    globalIdx: hoveredByteIdx.value,
-  }
-})
 
 const visibleRowRange = computed<{ startIndex: number; endIndex: number }>((previous) => {
   const startIndex = Math.max(
@@ -438,39 +424,6 @@ function updateDocumentVisibility() {
       aria-hidden="true"
       >0000000000</span
     >
-
-    <div
-      v-if="props.showInfoBar"
-      class="flex min-h-6.5 shrink-0 flex-wrap items-center gap-1.5 bg-app-elevated px-3 py-0.75 text-sm mr-(--hex-frame-gutter) [border-bottom:1px_solid_var(--app-border-color)]"
-      style="font-family: var(--code-font-family)"
-    >
-      <template v-if="hoveredByte">
-        <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">{{ t('detail.hex_offset') }}</span>
-          <span class="font-semibold text-app-text"
-            >0x{{ hoveredByte.globalIdx.toString(16).padStart(8, '0') }}</span
-          >
-        </span>
-        <span class="text-app-text-muted">·</span>
-        <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">{{ t('detail.hex_value') }}</span>
-          <span class="font-semibold text-app-text">0x{{ hoveredByte.hex }}</span>
-        </span>
-        <span class="text-app-text-muted">·</span>
-        <span class="inline-flex items-center gap-1">
-          <span class="text-app-text-muted">{{ t('detail.hex_decimal') }}</span>
-          <span class="font-semibold text-app-text">{{ hoveredByte.value }}</span>
-        </span>
-        <template v-if="hoveredByte.value >= 0x20 && hoveredByte.value < 0x7f">
-          <span class="text-app-text-muted">·</span>
-          <span class="inline-flex items-center gap-1">
-            <span class="text-app-text-muted">{{ t('detail.hex_character') }}</span>
-            <span class="font-semibold text-app-text">{{ hoveredByte.ascii }}</span>
-          </span>
-        </template>
-      </template>
-      <span v-else class="text-sm text-app-text-muted">{{ t('detail.hex_hover_hint') }}</span>
-    </div>
 
     <div
       v-if="page.count > 1 && decodeState === 'ready'"
