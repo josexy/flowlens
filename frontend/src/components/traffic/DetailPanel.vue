@@ -39,7 +39,7 @@ import { formatRawHTTPRequest, formatRawHTTPResponse } from '@/utils/httpRaw'
 import { parseUrlQuery } from '@/utils/urlHighlight'
 
 type SummaryTagType = 'default' | 'error' | 'info' | 'success' | 'warning'
-type ResponseSummaryChip = { key: string; text: string; type: SummaryTagType }
+type ResponseSummaryChip = { key: string; text: string; type: SummaryTagType; tooltip?: string }
 interface DisplayedBodyViewState {
   entryId: number
   bodyView: TrafficBodyView
@@ -280,7 +280,12 @@ const responseProtocolText = computed(() => {
 
 const responseSummaryChips = computed(() => {
   return [
-    { key: 'status', text: responseStatusCodeText.value, type: responseStatusTagType.value },
+    {
+      key: 'status',
+      text: responseStatusCodeText.value,
+      type: responseStatusTagType.value,
+      tooltip: selectedEntry.value?.status?.trim(),
+    },
     { key: 'protocol', text: responseProtocolText.value, type: 'default' },
   ] as ResponseSummaryChip[]
 })
@@ -757,14 +762,19 @@ const formatTimestamp = formatToRFC3339
                       v-if="!errorMessage"
                       class="ml-auto flex min-w-max flex-[0_0_auto] flex-nowrap items-center gap-1.5"
                     >
-                      <span
+                      <UTooltip
                         v-for="chip in responseSummaryChips"
                         :key="chip.key"
-                        class="inline-flex min-h-5 shrink-0 items-center justify-center rounded-(--radius-sm,6px) px-2 text-sm leading-none font-bold tabular-nums"
-                        :class="summaryChipVariantClass[chip.type]"
+                        :text="chip.tooltip"
+                        :disabled="!chip.tooltip"
                       >
-                        {{ chip.text }}
-                      </span>
+                        <span
+                          class="inline-flex min-h-5 shrink-0 items-center justify-center rounded-(--radius-sm,6px) px-2 text-sm leading-none font-bold tabular-nums"
+                          :class="summaryChipVariantClass[chip.type]"
+                        >
+                          {{ chip.text }}
+                        </span>
+                      </UTooltip>
                     </div>
                   </template>
                 </UTabs>

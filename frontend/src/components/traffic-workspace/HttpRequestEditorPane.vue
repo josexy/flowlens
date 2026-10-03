@@ -60,7 +60,7 @@ import { countRequestCookieRows, hasHeader, parseResponseCookies } from '@/utils
 import { appendPythonLogBatch, filterPythonLogBatch } from '@/utils/pythonConsole'
 
 type SummaryTagType = 'default' | 'error' | 'primary' | 'info' | 'success' | 'warning'
-type ResponseMetaChip = { key: string; text: string; type: SummaryTagType }
+type ResponseMetaChip = { key: string; text: string; type: SummaryTagType; tooltip?: string }
 
 const props = defineProps<{
   tabKey: string
@@ -460,6 +460,7 @@ const responseMetaChips = computed<ResponseMetaChip[]>(() => {
       key: 'status',
       text: state.value.response?.statusCode ? String(state.value.response.statusCode) : '-',
       type: responseStatusTagType.value,
+      tooltip: state.value.response?.statusText?.trim(),
     },
     {
       key: 'protocol',
@@ -1494,14 +1495,19 @@ onBeforeUnmount(() => {
                             v-if="responseMetaChips.length > 0"
                             class="ml-auto flex min-w-max flex-[0_0_auto] items-center gap-1.5"
                           >
-                            <span
+                            <UTooltip
                               v-for="chip in responseMetaChips"
                               :key="chip.key"
-                              class="inline-flex min-h-5 shrink-0 items-center rounded-full px-2 text-sm font-bold leading-none tabular-nums"
-                              :class="chipToneClass[chip.type]"
+                              :text="chip.tooltip"
+                              :disabled="!chip.tooltip"
                             >
-                              {{ chip.text }}
-                            </span>
+                              <span
+                                class="inline-flex min-h-5 shrink-0 items-center rounded-full px-2 text-sm font-bold leading-none tabular-nums"
+                                :class="chipToneClass[chip.type]"
+                              >
+                                {{ chip.text }}
+                              </span>
+                            </UTooltip>
                           </div>
                         </template>
                       </UTabs>
