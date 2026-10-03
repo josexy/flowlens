@@ -57,11 +57,10 @@ export function useTrafficExport() {
         exported: result.exported,
         skipped: result.skipped,
       })
-      const detail = result.path ? `${message}\n${result.path}` : message
       if (result.exported === 0 || result.skipped > 0 || result.headersDegraded) {
-        notify.warning(detail)
+        notify.warning(message)
       } else {
-        notify.success(detail)
+        notify.success(message)
       }
       return result.exported > 0
     } catch (error) {
