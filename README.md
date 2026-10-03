@@ -14,7 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/josexy/flowlens" alt="License"></a>
 </p>
 
-FlowLens helps developers capture local proxy traffic, trace requests back to desktop processes, inspect precise timing and transfer sizes, replay or edit requests, export HAR files, and keep useful sessions in local history. It is built with Wails v3, Go, Vue 3, TypeScript, Nuxt UI, and Tailwind CSS.
+FlowLens captures proxy traffic, identifies local processes, and lets you inspect, edit, replay, and save requests. Built with Wails v3, Go, Vue 3, TypeScript, Nuxt UI, and Tailwind CSS.
 
 > [!IMPORTANT]
 > FlowLens is currently beta. Internal contracts and local development data may change without compatibility migration before a stable release.
@@ -31,17 +31,14 @@ FlowLens helps developers capture local proxy traffic, trace requests back to de
 
 ## Highlights
 
-- HTTP/HTTPS MITM capture and SOCKS5 proxy mode
-- Live SSE bodies and WebSocket messages
-- Ordered request/response headers and response trailers with duplicate, casing, and empty-value preservation
-- Microsecond transport timing, terminal states, logical header sizes, and encoded Body sizes
-- HTTP Request Editor, WebSocket Client, request resend, proxy selection, uTLS profiles, and HTTP/2 fingerprints
-- API Collections with folders, managed request bodies, and reusable protocol/fingerprint settings
-- Optional global and current-request Python 3.11+ hooks with a correlated live console
-- HAR import from the history toolbar or by dropping files onto the traffic table; current-capture and history HAR 1.2 export with streamed atomic writes
-- Request/response, headers, body, combined exchange, and fixed-column CSV export from capture, history, and traffic context menus
-- Windows, macOS, and Linux process attribution with application icons and metadata
-- Local history, categorization, runtime logs, storage controls, certificates, shortcuts, themes, and bilingual UI
+- HTTP/HTTPS MITM capture, SOCKS5 proxying, live SSE bodies, and WebSocket messages
+- Ordered headers/trailers, microsecond timing, transfer sizes, and text, image, and hex body views
+- Request editing/resend, WebSocket Client, proxy selection, uTLS profiles, and HTTP/2 fingerprints
+- API Collections, local history, categorization, and optional Python 3.11+ request hooks with a live console
+- HAR import by file picker or drag-and-drop; capture/history export to CSV and HAR
+- Traffic-row export of requests, responses, headers, bodies, and combined exchanges
+- Process attribution and icons on Windows, macOS, and Linux; managed system proxy and current-user CA trust controls on Windows/macOS
+- App update checks, shortcuts, customizable theme colors and font sizes, persistent detail layout, and Chinese/English UI
 
 ## Install
 
@@ -53,7 +50,11 @@ Download the latest build from [GitHub Releases](https://github.com/josexy/flowl
 | macOS | Apple Silicon DMG or universal DMG |
 | Linux x64 | AppImage, Debian package, or RPM package |
 
-Each release includes `SHA256SUMS.txt`. Packages may be unsigned when platform signing credentials were unavailable, so Windows or macOS can display an operating-system warning. Signed Linux releases include detached signatures and the matching public key; check the release notes before installing.
+Verify downloads with `SHA256SUMS.txt`. Unsigned Windows/macOS packages may trigger operating-system warnings; signed Linux releases include detached signatures and a public key.
+
+Use the status-bar update control to check releases. Eligible Windows/macOS installations can download, verify, and apply updates after restart; Linux, Windows installs under Program Files, and apps running from a mounted macOS DMG require manual updates.
+
+Start the proxy and configure your client to use `127.0.0.1:8080` by default. For HTTPS, generate and trust the CA in Settings; Windows/macOS offer a current-user install/uninstall control. See the [User Guide](docs/user-guide.md) for setup details.
 
 ## Quick Start from Source
 
@@ -61,13 +62,9 @@ Each release includes `SHA256SUMS.txt`. Packages may be unsigned when platform s
 
 - Go 1.27 or newer
 - Node.js 24 LTS (24.21+; the version used by CI is pinned in `.node-version`)
-- npm (included with Node.js; no separate npm version requirement)
-- Wails v3 CLI (`wails3`)
-- Task CLI (`task`), recommended
+- npm (bundled with Node.js), Wails v3 CLI (`wails3`), and preferably Task (`task`)
 
-Python 3.11+ is optional and required only for Python request hooks. Platform packaging can additionally require NSIS, Xcode command-line tools/signing credentials, Docker, or native Linux packaging dependencies.
-
-On Windows, **Settings > Python > Detect** also finds Microsoft Store Python and existing runtimes listed by Python Install Manager. FlowLens does not install Python automatically. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python).
+Python 3.11+ is needed only for Python request hooks; FlowLens detects existing interpreters but does not install them. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python) and [platform build requirements](build/README.md).
 
 ### Run the Desktop App
 
@@ -95,6 +92,7 @@ The embedded frontend dev server uses port `9245` by default. Override it with `
 - [Python Plugin Examples](docs/examples/python-plugins)
 - [Platform Build and Packaging](build/README.md)
 - [Contributing Guide](CONTRIBUTING.md)
+- [Engineering Guidelines](AGENTS.md)
 - [Security Policy](SECURITY.md)
 
 ## Development
@@ -103,11 +101,9 @@ Common commands run from the repository root unless noted otherwise.
 
 | Command | Purpose |
 | --- | --- |
-| `task dev` | Start the Wails development app |
-| `task build` | Build for the current platform |
-| `task package` | Package for the current platform |
-| `task run` | Run the built binary |
+| `task build` / `task package` / `task run` | Build, package, or run for the current platform |
 | `go test ./...` | Run backend tests |
+| `task lint:go` | Check Go lint and formatting |
 | `wails3 generate bindings -ts -i` | Regenerate TypeScript bindings after exported API/model changes |
 | `task version VERSION=1.2.3` | Synchronize release version metadata |
 | `task version VERSION=1.2.3 CHECK=true` | Check release version metadata without writing |
@@ -118,27 +114,20 @@ Frontend checks:
 cd frontend
 npm run type-check
 npm run lint
-npm run test:process-icon-cache
-npm run test:request-editor-state
-npm run test:traffic-utils
 npm run lint:tailwind
 npm run build
 ```
 
-When `build/config.yml` file associations or application metadata change, refresh generated build assets with:
-
-```shell
-wails3 task common:update:build-assets
-```
+Run the relevant `test:*` scripts from [frontend/package.json](frontend/package.json); scope-specific checks are listed in [AGENTS.md](AGENTS.md#verification). After changing metadata or file associations in `build/config.yml`, run `wails3 task common:update:build-assets`.
 
 ## Data and Security
 
-FlowLens stores its SQLite database, API Collection files, history, logs, certificates, and caches under the operating-system user configuration directory. The exact paths and cleanup behavior are documented in the [User Guide](docs/user-guide.md#settings-and-local-storage).
+Local data is stored under the operating-system user configuration directory. See [storage and cleanup](docs/user-guide.md#settings-and-local-storage) for paths and retention behavior.
 
 - Use FlowLens only for traffic you own or are authorized to inspect.
 - Listening on `ALL` (`0.0.0.0`) exposes the proxy to reachable devices.
 - Keep the generated MITM CA private key private and remove the CA from trust stores when it is no longer needed.
-- Captures, history, HAR files, API Collections, logs, cached bodies, and process metadata may contain credentials or other sensitive data.
+- Captures, exports, history, API Collections, logs, caches, and process metadata may contain sensitive data; exports are not automatically redacted.
 - Python plugins execute as trusted local code; interpreter isolation is not a security sandbox.
 - An abnormal shutdown can prevent managed system-proxy restoration. See [Managed System Proxy](docs/user-guide.md#managed-system-proxy) for recovery details.
 
