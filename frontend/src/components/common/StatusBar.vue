@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
             :disabled="!settingStore.settings || settingStore.isSavingTrafficDetailConfig"
             :ui="statusActionButtonUi"
             :aria-label="layoutToggleLabel"
-            class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! text-app-text-muted! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
+            class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! text-app-text-muted! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft! disabled:cursor-default aria-disabled:cursor-default"
             @click="toggleDetailLayout"
           />
         </UTooltip>
