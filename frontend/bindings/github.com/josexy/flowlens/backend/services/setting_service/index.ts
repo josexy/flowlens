@@ -12,6 +12,7 @@ export {
     ProxyMode,
     ShortcutModifier,
     ShortcutScope,
+    TrafficDetailLayout,
     UpstreamProxyMode,
     WindowFrameMode
 } from "./models.js";
@@ -35,6 +36,7 @@ export type {
     ShortcutOverride,
     ThemeColorPreviewRequest,
     ThemeColorState,
+    TrafficDetailConfig,
     TrafficTableConfig,
     WindowConfig
 } from "./models.js";

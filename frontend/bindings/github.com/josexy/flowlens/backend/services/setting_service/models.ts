@@ -152,6 +152,7 @@ export interface Settings {
     "historyRetentionConfig": HistoryRetentionConfig | null;
     "processAttributionConfig": ProcessAttributionConfig | null;
     "trafficTableConfig": TrafficTableConfig | null;
+    "trafficDetailConfig": TrafficDetailConfig | null;
     "pythonPluginConfig": PythonPluginConfig | null;
     "shortcuts": ShortcutConfig | null;
 }
@@ -215,6 +216,20 @@ export interface ThemeColorState {
     "sessionID": number;
     "sequence": number;
 }
+
+export interface TrafficDetailConfig {
+    "layout": TrafficDetailLayout;
+}
+
+export enum TrafficDetailLayout {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    TrafficDetailLayoutVertical = "vertical",
+    TrafficDetailLayoutHorizontal = "horizontal",
+};
 
 export interface TrafficTableConfig {
     "hiddenColumns": string[] | null;

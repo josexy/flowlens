@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, provide } from 'vue'
 import { useHARImportDrop } from '@/composables/useHARImportDrop'
+import { useTrafficDetailSplit } from '@/composables/useTrafficDetailSplit'
 import { useI18n } from 'vue-i18n'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import AppLoading from '@/components/common/AppLoading.vue'
@@ -18,18 +19,13 @@ const historyStore = useHistoryStore()
 const { dropActive, dropTarget, onDragEnter, onDragOver, onDragLeave, resetDrop } = useHARImportDrop('history')
 const historyTrafficStore = useHistoryTrafficStore()
 const historyFilterStore = useHistoryFilterStore()
-const detailSplitSize = ref(60)
 const isDetailVisible = computed(
   () => !!historyTrafficStore.selectedEntry && historyTrafficStore.showDetailPanel,
 )
 
-function handleLayout(sizes: number[]) {
-  const nextSize = sizes[0]
-  if (!isDetailVisible.value || typeof nextSize !== 'number') {
-    return
-  }
-  detailSplitSize.value = nextSize
-}
+const { layout, firstPanel, firstPanelSize: detailSplitSize, handleLayout } =
+  useTrafficDetailSplit(60, isDetailVisible)
+const splitDirection = computed(() => layout.value === 'vertical' ? 'horizontal' : 'vertical')
 
 provide(TRAFFIC_STORE_KEY, historyTrafficStore)
 provide(FILTER_STORE_KEY, historyFilterStore)
@@ -43,11 +39,12 @@ provide(FILTER_STORE_KEY, historyFilterStore)
         class="relative min-h-0 flex-1 overflow-hidden bg-app-content"
       >
         <SplitterGroup
-          direction="horizontal"
-          class="flex h-full bg-transparent"
+          :direction="splitDirection"
+          class="flex h-full min-h-0 min-w-0 bg-transparent"
           @layout="handleLayout"
         >
           <SplitterPanel
+            ref="firstPanel"
             :default-size="isDetailVisible ? detailSplitSize : 100"
             :min-size="isDetailVisible ? 20 : 100"
             class="flex min-h-0 min-w-0 flex-col overflow-hidden! bg-app-panel"

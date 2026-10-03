@@ -372,9 +372,9 @@ func (s *SettingService) Update(settings *Settings) error {
 }
 
 // UpdatePreservingShortcuts replaces ordinary settings sections while retaining
-// the backend-latest shortcut and Python plugin runtime configurations. Both are
-// written through narrow services and must not be overwritten by a settings
-// window based on an older Get snapshot.
+// the backend-latest shortcut, traffic detail, and Python runtime configurations.
+// These are written through narrow services and must not be overwritten by a
+// settings window based on an older Get snapshot.
 func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 	if settings == nil {
 		return errors.New("settings cannot be nil")
@@ -386,10 +386,12 @@ func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 	s.mu.Lock()
 	shortcuts := cloneAndSanitizeShortcutConfig(s.settings.Shortcuts)
 	pythonPlugins := cloneAndSanitizePythonPluginConfig(s.settings.PythonPluginConfig)
+	trafficDetail := cloneAndSanitizeTrafficDetailConfig(s.settings.TrafficDetailConfig)
 	s.settings = settings
 	s.setupDefaultSettingsLocked()
 	s.settings.Shortcuts = shortcuts
 	s.settings.PythonPluginConfig = pythonPlugins
+	s.settings.TrafficDetailConfig = trafficDetail
 	s.mu.Unlock()
 	return nil
 }
@@ -693,6 +695,32 @@ func (s *SettingService) SaveTrafficTableConfig(config *TrafficTableConfig) erro
 	return nil
 }
 
+// SaveTrafficDetailConfig writes only the traffic_detail section. Serialize with
+// whole-settings Save and publish the in-memory config only after a successful write.
+func (s *SettingService) SaveTrafficDetailConfig(config *TrafficDetailConfig) error {
+	if config == nil {
+		return errors.New("traffic detail config cannot be nil")
+	}
+	if s.repository == nil || s.repository.db == nil {
+		return errors.New("settings database is not available")
+	}
+	if err := s.ensureLoaded(); err != nil {
+		return err
+	}
+
+	normalized := cloneAndSanitizeTrafficDetailConfig(config)
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	if err := s.repository.saveTrafficDetailConfig(context.Background(), normalized); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.settings.TrafficDetailConfig = cloneAndSanitizeTrafficDetailConfig(normalized)
+	s.mu.Unlock()
+	return nil
+}
+
 // SavePythonPluginConfig persists only the Python runtime section and updates
 // the in-memory snapshot after the database write succeeds. The persistence
 // mutex prevents whole-settings saves from racing this authoritative update.
@@ -890,6 +918,7 @@ func (s *SettingService) setupDefaultSettingsLocked() {
 		s.settings.TrafficTableConfig = &TrafficTableConfig{}
 	}
 	sanitizeTrafficTableConfig(s.settings.TrafficTableConfig)
+	s.settings.TrafficDetailConfig = cloneAndSanitizeTrafficDetailConfig(s.settings.TrafficDetailConfig)
 	if s.settings.PythonPluginConfig == nil {
 		s.settings.PythonPluginConfig = defaultPythonPluginConfig()
 	} else {
@@ -953,6 +982,14 @@ func cloneAndSanitizeTrafficTableConfig(config *TrafficTableConfig) *TrafficTabl
 		clone.HiddenColumns = append([]string(nil), config.HiddenColumns...)
 	}
 	sanitizeTrafficTableConfig(clone)
+	return clone
+}
+
+func cloneAndSanitizeTrafficDetailConfig(config *TrafficDetailConfig) *TrafficDetailConfig {
+	clone := &TrafficDetailConfig{Layout: TrafficDetailLayoutVertical}
+	if config != nil && config.Layout == TrafficDetailLayoutHorizontal {
+		clone.Layout = TrafficDetailLayoutHorizontal
+	}
 	return clone
 }
 

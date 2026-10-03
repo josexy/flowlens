@@ -591,8 +591,8 @@ func TestLoadEmptyDatabaseUsesDefaultsUntilSave(t *testing.T) {
 	if err := svc.repository.db.QueryRow(`SELECT COUNT(*) FROM app_settings`).Scan(&sectionCount); err != nil {
 		t.Fatalf("count saved settings sections: %v", err)
 	}
-	if sectionCount != 9 {
-		t.Fatalf("settings section count after Save = %d, want 9", sectionCount)
+	if sectionCount != 10 {
+		t.Fatalf("settings section count after Save = %d, want 10", sectionCount)
 	}
 	if _, err := os.Stat(settingPath); !os.IsNotExist(err) {
 		t.Fatalf("SQLite Save unexpectedly created legacy settings file: %v", err)
@@ -895,8 +895,8 @@ func TestShortcutSettingsRoundTripPreservesDisabledAndUnknownOverrides(t *testin
 	if err := svc.repository.db.QueryRow(`SELECT COUNT(*) FROM app_settings`).Scan(&sectionCount); err != nil {
 		t.Fatalf("count settings sections: %v", err)
 	}
-	if sectionCount != 9 {
-		t.Fatalf("settings section count = %d, want 9", sectionCount)
+	if sectionCount != 10 {
+		t.Fatalf("settings section count = %d, want 10", sectionCount)
 	}
 
 	reloaded := newPersistentTestSettingService(t)

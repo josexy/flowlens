@@ -10,11 +10,29 @@ import {
 import { useNotify } from '@/composables/useNotify'
 import { useTrafficWorkspaceStore } from '@/stores/trafficWorkspace'
 import { useUpdaterStore } from '@/stores/updater'
+import { useSettingStore } from '@/stores/setting'
+import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const notify = useNotify()
 const workspaceStore = useTrafficWorkspaceStore()
 const updaterStore = useUpdaterStore()
+const settingStore = useSettingStore()
+const workbenchStore = useWorkbenchStore()
+const showLayoutToggle = computed(
+  () => workbenchStore.activeContent === 'traffic'
+    && ['capture', 'history'].includes(workspaceStore.activeTab.type),
+)
+const layoutToggleLabel = computed(() =>
+  settingStore.trafficDetailLayout === 'vertical'
+    ? t('status.switch_horizontal_layout')
+    : t('status.switch_vertical_layout'),
+)
+const layoutIcon = computed(() =>
+  settingStore.trafficDetailLayout === 'vertical'
+    ? 'i-lucide-panels-top-bottom'
+    : 'i-lucide-panels-left-right',
+)
 const githubProjectUrl = 'https://github.com/josexy/flowlens'
 
 const statusActionButtonUi = {
@@ -157,6 +175,14 @@ async function openUpdateWindow() {
   }
 }
 
+async function toggleDetailLayout() {
+  try {
+    await settingStore.toggleTrafficDetailLayout()
+  } catch (error) {
+    notify.error(t('status.layout_save_failed', { error: errorMessage(error) }))
+  }
+}
+
 onMounted(() => {
   void updaterStore.initialize().catch(() => {})
 })
@@ -229,6 +255,20 @@ onBeforeUnmount(() => {
             }"
             class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
             @click="openUpdateWindow"
+          />
+        </UTooltip>
+        <UTooltip v-if="showLayoutToggle" :text="layoutToggleLabel" :content="{ side: 'top' }">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            square
+            :icon="layoutIcon"
+            :disabled="!settingStore.settings || settingStore.isSavingTrafficDetailConfig"
+            :ui="statusActionButtonUi"
+            :aria-label="layoutToggleLabel"
+            class="size-6! min-w-6! justify-center! rounded-(--radius-sm,6px)! border-0! bg-transparent! p-0! text-app-text-muted! shadow-none! transition-colors! hover:bg-app-accent-softer! hover:text-app-accent! focus-visible:bg-transparent! focus-visible:text-app-accent! focus-visible:outline-1! focus-visible:outline-offset-1! focus-visible:outline-app-accent! active:bg-app-accent-soft!"
+            @click="toggleDetailLayout"
           />
         </UTooltip>
       </div>

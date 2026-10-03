@@ -16,6 +16,7 @@ const (
 	settingsSectionHistoryRetention   = "history_retention"
 	settingsSectionProcessAttribution = "process_attribution"
 	settingsSectionTrafficTable       = "traffic_table"
+	settingsSectionTrafficDetail      = "traffic_detail"
 	settingsSectionPythonPlugins      = "python_plugins"
 	settingsSectionShortcuts          = "shortcuts"
 	settingsPayloadVersion            = 1
@@ -124,6 +125,27 @@ func (r *settingRepository) saveTrafficTableConfig(ctx context.Context, config *
 	return nil
 }
 
+func (r *settingRepository) saveTrafficDetailConfig(ctx context.Context, config *TrafficDetailConfig) error {
+	if config == nil {
+		return fmt.Errorf("traffic detail config cannot be nil")
+	}
+	payload, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("encode settings section %q: %w", settingsSectionTrafficDetail, err)
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO app_settings(section, payload_version, payload_json, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(section) DO UPDATE SET
+			payload_version = excluded.payload_version,
+			payload_json = excluded.payload_json,
+			updated_at = excluded.updated_at
+	`, settingsSectionTrafficDetail, settingsPayloadVersion, payload, time.Now().UnixMilli()); err != nil {
+		return fmt.Errorf("save settings section %q: %w", settingsSectionTrafficDetail, err)
+	}
+	return nil
+}
+
 func (r *settingRepository) savePythonPluginConfig(ctx context.Context, config *PythonPluginConfig) error {
 	if config == nil {
 		return fmt.Errorf("python plugin config cannot be nil")
@@ -157,6 +179,7 @@ func saveSettingsTx(ctx context.Context, tx *sql.Tx, settings *Settings) error {
 		{name: settingsSectionHistoryRetention, value: settings.HistoryRetentionConfig},
 		{name: settingsSectionProcessAttribution, value: settings.ProcessAttributionConfig},
 		{name: settingsSectionTrafficTable, value: settings.TrafficTableConfig},
+		{name: settingsSectionTrafficDetail, value: settings.TrafficDetailConfig},
 		{name: settingsSectionPythonPlugins, value: settings.PythonPluginConfig},
 		{name: settingsSectionShortcuts, value: settings.Shortcuts},
 	}
@@ -227,6 +250,12 @@ func decodeSettingSection(settings *Settings, section string, payload []byte) er
 			return settingSectionDecodeError(section, err)
 		}
 		settings.TrafficTableConfig = value
+	case settingsSectionTrafficDetail:
+		var value *TrafficDetailConfig
+		if err := json.Unmarshal(payload, &value); err != nil || value == nil {
+			return settingSectionDecodeError(section, err)
+		}
+		settings.TrafficDetailConfig = value
 	case settingsSectionPythonPlugins:
 		var value *PythonPluginConfig
 		if err := json.Unmarshal(payload, &value); err != nil || value == nil {
@@ -255,6 +284,7 @@ func isKnownSettingsSection(section string) bool {
 		settingsSectionHistoryRetention,
 		settingsSectionProcessAttribution,
 		settingsSectionTrafficTable,
+		settingsSectionTrafficDetail,
 		settingsSectionPythonPlugins,
 		settingsSectionShortcuts:
 		return true

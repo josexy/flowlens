@@ -19,6 +19,7 @@
     "test:ca-trust": "node --test tests/caTrust.test.mjs",
     "test:traffic-utils": "tsc -p tsconfig.traffic-test.json && node node_modules/.tmp/traffic-test/tests/traffic.test.js",
     "test:traffic-table": "node --test tests/trafficTable.test.mjs",
+    "test:traffic-detail-layout": "node --test tests/trafficDetailLayout.test.mjs",
     "test:hexdump": "node --test tests/hexdump.test.mjs",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --cache",

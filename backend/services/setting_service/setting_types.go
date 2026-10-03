@@ -127,6 +127,17 @@ type TrafficTableConfig struct {
 	HiddenColumns []string `json:"hiddenColumns"`
 }
 
+type TrafficDetailLayout string
+
+const (
+	TrafficDetailLayoutVertical   TrafficDetailLayout = "vertical"
+	TrafficDetailLayoutHorizontal TrafficDetailLayout = "horizontal"
+)
+
+type TrafficDetailConfig struct {
+	Layout TrafficDetailLayout `json:"layout"`
+}
+
 type PythonPluginConfig struct {
 	Enabled         bool   `json:"enabled"`
 	InterpreterPath string `json:"interpreterPath"`
@@ -156,6 +167,7 @@ type Settings struct {
 	HistoryRetentionConfig   *HistoryRetentionConfig   `json:"historyRetentionConfig"`
 	ProcessAttributionConfig *ProcessAttributionConfig `json:"processAttributionConfig"`
 	TrafficTableConfig       *TrafficTableConfig       `json:"trafficTableConfig"`
+	TrafficDetailConfig      *TrafficDetailConfig      `json:"trafficDetailConfig"`
 	PythonPluginConfig       *PythonPluginConfig       `json:"pythonPluginConfig"`
 	Shortcuts                *ShortcutConfig           `json:"shortcuts"`
 }

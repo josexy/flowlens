@@ -8,6 +8,7 @@ import {
   SetThemeMode,
   GetActiveWindowFrameMode,
   SaveTrafficTableConfig,
+  SaveTrafficDetailConfig,
   UpdatePreservingShortcuts,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/settingservice'
 import {
@@ -28,6 +29,7 @@ import {
   HistoryRetentionUnit,
   MainWindowCloseBehavior,
   ProxyMode,
+  TrafficDetailLayout,
   UpstreamProxyMode,
   WindowFrameMode,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
@@ -47,6 +49,9 @@ import {
 } from '@/utils/traffic-table-columns'
 
 export type AppLanguage = 'zh' | 'en'
+export type AppTrafficDetailLayout =
+  | TrafficDetailLayout.TrafficDetailLayoutVertical
+  | TrafficDetailLayout.TrafficDetailLayoutHorizontal
 export type AppWindowFrameMode =
   | WindowFrameMode.WindowFrameModeCustom
   | WindowFrameMode.WindowFrameModeSystem
@@ -333,6 +338,20 @@ function ensurePythonPluginConfig(settings: settingservice.Settings) {
   return settings.pythonPluginConfig
 }
 
+function normalizeTrafficDetailLayout(value: string | undefined): AppTrafficDetailLayout {
+  return value === TrafficDetailLayout.TrafficDetailLayoutHorizontal
+    ? TrafficDetailLayout.TrafficDetailLayoutHorizontal
+    : TrafficDetailLayout.TrafficDetailLayoutVertical
+}
+
+function ensureTrafficDetailConfig(settings: settingservice.Settings) {
+  settings.trafficDetailConfig ??= { layout: TrafficDetailLayout.TrafficDetailLayoutVertical }
+  settings.trafficDetailConfig.layout = normalizeTrafficDetailLayout(
+    settings.trafficDetailConfig.layout,
+  )
+  return settings.trafficDetailConfig
+}
+
 function ensureShortcutConfig(settings: settingservice.Settings) {
   if (!settings.shortcuts) {
     settings.shortcuts = { overrides: {} }
@@ -530,6 +549,9 @@ function cloneSettings(settings: settingservice.Settings): settingservice.Settin
     trafficTableConfig: settings.trafficTableConfig
       ? cloneTrafficTableConfig(settings.trafficTableConfig)
       : null,
+    trafficDetailConfig: {
+      layout: normalizeTrafficDetailLayout(settings.trafficDetailConfig?.layout),
+    },
     pythonPluginConfig: settings.pythonPluginConfig
       ? clonePythonPluginConfig(settings.pythonPluginConfig)
       : null,
@@ -561,6 +583,7 @@ export const useSettingStore = defineStore('setting', () => {
   const isDirty = ref(false)
   const isSaving = ref(false)
   const isSavingTrafficTableConfig = ref(false)
+  const isSavingTrafficDetailConfig = ref(false)
   const lastProxyApplyResult = ref<proxyservice.ProxyConfigApplyResult | null>(null)
   const lastShortcutApplyResult = ref<shortcutservice.ShortcutApplyResult | null>(null)
   const lastPythonRuntimeStatus = ref<pythonpluginservice.RuntimeStatus | null>(null)
@@ -587,6 +610,9 @@ export const useSettingStore = defineStore('setting', () => {
         normalizeHiddenTrafficColumnKeys(settings.value?.trafficTableConfig?.hiddenColumns),
       ),
   )
+  const trafficDetailLayout = computed(() =>
+    normalizeTrafficDetailLayout(settings.value?.trafficDetailConfig?.layout),
+  )
 
   async function runLoad() {
     settings.value = await Get()
@@ -598,6 +624,7 @@ export const useSettingStore = defineStore('setting', () => {
       ensureHistoryRetentionConfig(settings.value)
       ensureProcessAttributionConfig(settings.value)
       ensureTrafficTableConfig(settings.value)
+      ensureTrafficDetailConfig(settings.value)
       ensurePythonPluginConfig(settings.value)
       ensureShortcutConfig(settings.value)
     }
@@ -639,6 +666,7 @@ export const useSettingStore = defineStore('setting', () => {
     ensureHistoryRetentionConfig(nextSettings)
     ensureProcessAttributionConfig(nextSettings)
     ensureTrafficTableConfig(nextSettings)
+    ensureTrafficDetailConfig(nextSettings)
     ensurePythonPluginConfig(nextSettings)
     ensureShortcutConfig(nextSettings)
     settings.value = nextSettings
@@ -693,6 +721,7 @@ export const useSettingStore = defineStore('setting', () => {
     ensureHistoryRetentionConfig(currentSettings)
     ensureProcessAttributionConfig(currentSettings)
     ensureTrafficTableConfig(currentSettings)
+    ensureTrafficDetailConfig(currentSettings)
     ensurePythonPluginConfig(currentSettings)
     ensureShortcutConfig(currentSettings)
     ensureCommonConfig(latestSettings)
@@ -702,6 +731,7 @@ export const useSettingStore = defineStore('setting', () => {
     ensureHistoryRetentionConfig(latestSettings)
     ensureProcessAttributionConfig(latestSettings)
     ensureTrafficTableConfig(latestSettings)
+    ensureTrafficDetailConfig(latestSettings)
     ensurePythonPluginConfig(latestSettings)
     ensureShortcutConfig(latestSettings)
 
@@ -787,6 +817,7 @@ export const useSettingStore = defineStore('setting', () => {
           ensureHistoryRetentionConfig(persistedSettings)
           ensureProcessAttributionConfig(persistedSettings)
           ensureTrafficTableConfig(persistedSettings)
+          ensureTrafficDetailConfig(persistedSettings)
           ensurePythonPluginConfig(persistedSettings)
           ensureShortcutConfig(persistedSettings)
           settings.value = persistedSettings
@@ -891,6 +922,28 @@ export const useSettingStore = defineStore('setting', () => {
       throw error
     } finally {
       isSavingTrafficTableConfig.value = false
+    }
+  }
+
+  async function toggleTrafficDetailLayout(): Promise<boolean> {
+    if (!settings.value || isSavingTrafficDetailConfig.value) return false
+
+    const previousLayout = trafficDetailLayout.value
+    const nextLayout =
+      previousLayout === TrafficDetailLayout.TrafficDetailLayoutVertical
+        ? TrafficDetailLayout.TrafficDetailLayoutHorizontal
+        : TrafficDetailLayout.TrafficDetailLayoutVertical
+    ensureTrafficDetailConfig(settings.value).layout = nextLayout
+    isSavingTrafficDetailConfig.value = true
+    try {
+      await SaveTrafficDetailConfig({ layout: nextLayout })
+      if (settings.value) ensureTrafficDetailConfig(settings.value).layout = nextLayout
+      return true
+    } catch (error) {
+      if (settings.value) ensureTrafficDetailConfig(settings.value).layout = previousLayout
+      throw error
+    } finally {
+      isSavingTrafficDetailConfig.value = false
     }
   }
 
@@ -1096,6 +1149,9 @@ export const useSettingStore = defineStore('setting', () => {
     isSaving,
     hiddenTrafficColumnKeys,
     isSavingTrafficTableConfig,
+    trafficDetailLayout,
+    isSavingTrafficDetailConfig,
+    toggleTrafficDetailLayout,
     lastProxyApplyResult,
     lastShortcutApplyResult,
     lastPythonRuntimeStatus,

@@ -17,6 +17,7 @@ import CookieTablePane from './CookieTablePane.vue'
 import QueryTablePane from './QueryTablePane.vue'
 import { useI18n } from 'vue-i18n'
 import { useNotify } from '@/composables/useNotify'
+import { useTrafficDetailSplit } from '@/composables/useTrafficDetailSplit'
 import type {
   WebSocketDirectionFilter,
   WebSocketDisplayMessage,
@@ -67,12 +68,46 @@ const websocketViewMode = ref<WebSocketViewMode>('list')
 const requestHeaderSortOrder = ref<HeaderSortOrder>('default')
 const responseHeaderSortOrder = ref<HeaderSortOrder>('default')
 const responseTrailerSortOrder = ref<HeaderSortOrder>('default')
-const responseTabsUi = { list: 'items-center' }
+// Relative border thickness follows font size and display scaling, while border
+// painting avoids fractional fill rounding. Keep it inside the scroll area.
+const detailTabsUi = {
+  list: 'items-center overflow-x-auto overflow-y-hidden scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden',
+  indicator: 'bottom-0 h-0 rounded-none border-t-[0.125em] border-primary bg-transparent',
+  trigger: 'shrink-0',
+}
+
+function handleDetailTabsWheel(event: WheelEvent) {
+  if (event.ctrlKey || event.defaultPrevented) return
+
+  const element = (event.currentTarget as HTMLElement | null)
+    ?.querySelector<HTMLElement>('[role="tablist"]')
+  if (!element) return
+
+  const maxScrollLeft = element.scrollWidth - element.clientWidth
+  if (maxScrollLeft <= 0) return
+
+  let delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+  if (delta === 0) return
+  if (event.deltaMode === 1) {
+    const style = getComputedStyle(element)
+    delta *= Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize)
+  } else if (event.deltaMode === 2) {
+    delta *= element.clientWidth
+  }
+
+  const nextScrollLeft = Math.min(Math.max(element.scrollLeft + delta, 0), maxScrollLeft)
+  if (nextScrollLeft === element.scrollLeft) return
+
+  event.preventDefault()
+  element.scrollLeft = nextScrollLeft
+}
 
 const isWebSocket = computed(
   () => isWebSocketTraffic(selectedEntry.value),
 )
 const isRawTCP = computed(() => isRawTCPTraffic(selectedEntry.value))
+const hasSplitPanels = computed(() => !!selectedEntry.value && !isRawTCP.value)
+const { layout, firstPanel, firstPanelSize, handleLayout } = useTrafficDetailSplit(50, hasSplitPanels)
 
 const requestHeadersCount = computed(() => {
   return requestHeaderSource.value.fields.length
@@ -632,24 +667,33 @@ const formatTimestamp = formatToRFC3339
     />
     <div v-else class="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <!-- 请求和响应部分的分割 -->
-      <SplitterGroup direction="vertical" class="flex h-full min-h-0 flex-col bg-transparent">
+      <SplitterGroup
+        :direction="layout"
+        class="flex h-full min-h-0 min-w-0 bg-transparent"
+        @layout="handleLayout"
+      >
         <SplitterPanel
-          :default-size="50"
+          ref="firstPanel"
+          :default-size="firstPanelSize"
           :min-size="30"
-          class="flex min-h-0 flex-[1_1_0] flex-col overflow-hidden"
+          class="flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden"
         >
           <!-- 总览+Request 部分 -->
           <div
             class="relative flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-app-panel"
           >
             <div class="flex h-full min-h-0 flex-col">
-              <div class="flex min-h-9.5 min-w-0 shrink-0 items-center gap-2 bg-app-panel px-2.5">
+              <div
+                class="flex min-h-9.5 min-w-0 shrink-0 items-center gap-2 bg-app-panel px-2.5"
+                @wheel="handleDetailTabsWheel"
+              >
                 <UTabs
                   :key="requestTabsKey"
                   :model-value="requestActiveTab"
                   :items="requestTabItems"
                   :content="false"
                   variant="link"
+                  :ui="detailTabsUi"
                   class="min-w-0 flex-1"
                   @update:model-value="requestActiveTab = String($event)"
                 />
@@ -737,23 +781,26 @@ const formatTimestamp = formatToRFC3339
         </SplitterPanel>
         <AppSplitterResizeHandle />
         <SplitterPanel
-          :default-size="50"
+          :default-size="100 - firstPanelSize"
           :min-size="30"
-          class="flex min-h-0 flex-[1_1_0] flex-col overflow-hidden"
+          class="flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden"
         >
           <!-- Response 部分 -->
           <div
             class="relative flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-app-panel"
           >
             <div class="flex h-full min-h-0 flex-col">
-              <div class="flex min-h-9.5 min-w-0 shrink-0 items-center bg-app-panel px-2.5">
+              <div
+                class="flex min-h-9.5 min-w-0 shrink-0 items-center bg-app-panel px-2.5"
+                @wheel="handleDetailTabsWheel"
+              >
                 <UTabs
                   :key="responseTabsKey"
                   :model-value="responseActiveTab"
                   :items="responseTabItems"
                   :content="false"
                   variant="link"
-                  :ui="responseTabsUi"
+                  :ui="detailTabsUi"
                   class="min-w-0 flex-1"
                   @update:model-value="responseActiveTab = String($event)"
                 >

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useHARImportDrop } from '@/composables/useHARImportDrop'
+import { useTrafficDetailSplit } from '@/composables/useTrafficDetailSplit'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import AppSplitterResizeHandle from '@/components/common/AppSplitterResizeHandle.vue'
 import FilterBar from '@/components/traffic/FilterBar.vue'
@@ -15,16 +16,10 @@ const trafficStore = useTrafficStore()
 const { t } = useI18n()
 const { dropActive, dropTarget, onDragEnter, onDragOver, onDragLeave, resetDrop } = useHARImportDrop('capture')
 const filterStore = useFilterStore()
-const detailSplitSize = ref(60)
 const isDetailVisible = computed(() => !!trafficStore.selectedEntry && trafficStore.showDetailPanel)
-
-function handleLayout(sizes: number[]) {
-  const nextSize = sizes[0]
-  if (!isDetailVisible.value || typeof nextSize !== 'number') {
-    return
-  }
-  detailSplitSize.value = nextSize
-}
+const { layout, firstPanel, firstPanelSize: detailSplitSize, handleLayout } =
+  useTrafficDetailSplit(60, isDetailVisible)
+const splitDirection = computed(() => layout.value === 'vertical' ? 'horizontal' : 'vertical')
 
 provide(TRAFFIC_STORE_KEY, trafficStore)
 provide(FILTER_STORE_KEY, filterStore)
@@ -37,11 +32,12 @@ provide(FILTER_STORE_KEY, filterStore)
       class="min-h-0 flex-1 overflow-hidden bg-app-content"
     >
       <SplitterGroup
-        direction="horizontal"
-        class="flex h-full bg-transparent"
+        :direction="splitDirection"
+        class="flex h-full min-h-0 min-w-0 bg-transparent"
         @layout="handleLayout"
       >
         <SplitterPanel
+          ref="firstPanel"
           :default-size="isDetailVisible ? detailSplitSize : 100"
           :min-size="isDetailVisible ? 20 : 100"
           class="flex min-h-0 min-w-0 flex-col overflow-hidden! bg-app-panel"

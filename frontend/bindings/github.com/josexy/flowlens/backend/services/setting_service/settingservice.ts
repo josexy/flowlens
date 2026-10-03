@@ -66,6 +66,14 @@ export function Save(): $CancellablePromise<void> {
 }
 
 /**
+ * SaveTrafficDetailConfig writes only the traffic_detail section. Serialize with
+ * whole-settings Save and publish the in-memory config only after a successful write.
+ */
+export function SaveTrafficDetailConfig(config: $models.TrafficDetailConfig | null): $CancellablePromise<void> {
+    return $Call.ByID(1551559372, config);
+}
+
+/**
  * SaveTrafficTableConfig persists only the traffic_table section and updates
  * the in-memory snapshot after the database write succeeds. The persistence
  * mutex serializes this narrow database write with ordinary whole-settings Save
@@ -89,9 +97,9 @@ export function UninstallCurrentCACertificate(expectedSHA256Fingerprint: string)
 
 /**
  * UpdatePreservingShortcuts replaces ordinary settings sections while retaining
- * the backend-latest shortcut and Python plugin runtime configurations. Both are
- * written through narrow services and must not be overwritten by a settings
- * window based on an older Get snapshot.
+ * the backend-latest shortcut, traffic detail, and Python runtime configurations.
+ * These are written through narrow services and must not be overwritten by a
+ * settings window based on an older Get snapshot.
  */
 export function UpdatePreservingShortcuts(settings: $models.Settings | null): $CancellablePromise<void> {
     return $Call.ByID(1387277136, settings);
