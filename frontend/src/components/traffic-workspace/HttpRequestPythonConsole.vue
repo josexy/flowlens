@@ -360,7 +360,7 @@ onBeforeUnmount(() => {
               />
               <span class="sr-only">{{ t(typeLabelKey(entry)) }}</span>
               <span
-                class="min-w-0 truncate rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                class="min-w-0 truncate rounded-full px-1.5 py-0.5 text-[0.6875rem] font-semibold"
                 :class="typeClass(entry)"
                 >{{ t(levelLabelKey(entry)) }}</span
               >

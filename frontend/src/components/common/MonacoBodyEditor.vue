@@ -53,7 +53,6 @@ const themeStore = useThemeStore()
 const settingStore = useSettingStore()
 
 const EDITOR_SCROLLBAR_GUTTER_WIDTH = 10
-const EDITOR_FONT_SIZE = 13
 const TAIL_FOLLOW_THRESHOLD_PX = 80
 const editorInstance = shallowRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
 const monacoInstance = shallowRef<MonacoApi | null>(null)
@@ -150,7 +149,7 @@ const editorOptions = computed<MonacoEditorOptions>(() => {
     minimap: { enabled: false },
     stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
-    fontSize: EDITOR_FONT_SIZE,
+    fontSize: settingStore.resolvedCodeFontSize,
     fontFamily: settingStore.resolvedCodeFontFamily,
     automaticLayout: true,
     ...suggestionOptions,
@@ -187,7 +186,7 @@ const editorFontMeasurementRequest = computed<MonacoFontMeasurementRequest>(() =
   fontSize:
     typeof props.options.fontSize === 'number'
       ? props.options.fontSize
-      : EDITOR_FONT_SIZE,
+      : settingStore.resolvedCodeFontSize,
   fontWeight:
     typeof props.options.fontWeight === 'string'
       ? props.options.fontWeight

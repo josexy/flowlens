@@ -47,7 +47,7 @@ defineExpose({
   >
     <!-- Match the native input's font line box and flex centering to keep selection aligned. -->
     <div
-      class="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-[normal]"
+      class="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,0.8125rem) font-normal leading-[normal]"
       aria-hidden="true"
     >
       <div
@@ -73,7 +73,7 @@ defineExpose({
     </div>
     <input
       ref="inputRef"
-      class="relative w-full min-w-0 whitespace-pre border-none bg-transparent py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,13px) font-normal leading-[normal] text-transparent caret-app-text outline-none placeholder:text-app-text-muted"
+      class="relative w-full min-w-0 whitespace-pre border-none bg-transparent py-0 pl-(--request-url-padding-x,5px) pr-(--request-url-pr) text-(length:--request-url-font-size,0.8125rem) font-normal leading-[normal] text-transparent caret-app-text outline-none placeholder:text-app-text-muted"
       type="text"
       :placeholder="props.placeholder"
       spellcheck="false"

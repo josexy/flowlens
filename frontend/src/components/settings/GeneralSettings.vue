@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import colors from 'tailwindcss/colors'
 import { THEME_PRIMARY_COLORS, THEME_NEUTRAL_COLORS } from '@/utils/themeColors'
+import { APP_FONT_SIZE, CODE_FONT_SIZE, normalizeFontSize } from '@/stores/setting'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import SettingsSection from '@/components/settings/SettingsSection.vue'
 import type {
@@ -71,6 +72,19 @@ const codeFontFamilyModel = computed({
   get: () => commonConfig.value.codeFontFamily || DEFAULT_FONT_OPTION_VALUE,
   set: (value: string) => {
     commonConfig.value.codeFontFamily = value === DEFAULT_FONT_OPTION_VALUE ? '' : value
+  },
+})
+
+const appFontSizeModel = computed({
+  get: () => normalizeFontSize(commonConfig.value.appFontSize, APP_FONT_SIZE),
+  set: (value: number | null | undefined) => {
+    commonConfig.value.appFontSize = normalizeFontSize(value, APP_FONT_SIZE)
+  },
+})
+const codeFontSizeModel = computed({
+  get: () => normalizeFontSize(commonConfig.value.codeFontSize, CODE_FONT_SIZE),
+  set: (value: number | null | undefined) => {
+    commonConfig.value.codeFontSize = normalizeFontSize(value, CODE_FONT_SIZE)
   },
 })
 
@@ -150,10 +164,37 @@ const fontSelectVirtualize = { estimateSize: 32, overscan: 8 }
           />
           <span
             class="block max-w-full truncate text-sm text-app-text-muted"
-            :style="{ fontFamily: commonConfig.appFontFamily || 'var(--app-font-family)' }"
+            :style="{
+              fontFamily: commonConfig.appFontFamily || 'var(--app-font-family)',
+              fontSize: `${appFontSizeModel}px`,
+            }"
           >
             {{ t('settings.font_preview_text') }}
           </span>
+        </div>
+      </SettingsRow>
+      <SettingsRow :label="t('settings.app_font_size_label')" wide>
+        <div class="flex min-w-0 items-center gap-2">
+          <UInputNumber
+            v-model="appFontSizeModel"
+            orientation="vertical"
+            :min="APP_FONT_SIZE.min"
+            :max="APP_FONT_SIZE.max"
+            :step="1"
+            :disabled="isSaving"
+            :aria-label="t('settings.app_font_size_label')"
+            class="w-full max-w-44"
+          />
+          <span class="shrink-0 text-sm text-app-text-muted">{{ t('settings.unit_pixels') }}</span>
+          <UButton
+            icon="i-lucide-rotate-ccw"
+            color="neutral"
+            variant="ghost"
+            :disabled="isSaving || appFontSizeModel === APP_FONT_SIZE.default"
+            :aria-label="t('settings.font_size_reset')"
+            :title="t('settings.font_size_reset')"
+            @click="appFontSizeModel = APP_FONT_SIZE.default"
+          />
         </div>
       </SettingsRow>
       <SettingsRow :label="t('settings.code_font_label')" wide align="start">
@@ -171,10 +212,37 @@ const fontSelectVirtualize = { estimateSize: 32, overscan: 8 }
           />
           <span
             class="block max-w-full truncate font-(family-name:--code-font-family) text-sm text-app-text-muted"
-            :style="{ fontFamily: commonConfig.codeFontFamily || 'var(--code-font-family)' }"
+            :style="{
+              fontFamily: commonConfig.codeFontFamily || 'var(--code-font-family)',
+              fontSize: `${codeFontSizeModel}px`,
+            }"
           >
             {{ t('settings.code_font_preview_text') }}
           </span>
+        </div>
+      </SettingsRow>
+      <SettingsRow :label="t('settings.code_font_size_label')" wide>
+        <div class="flex min-w-0 items-center gap-2">
+          <UInputNumber
+            v-model="codeFontSizeModel"
+            orientation="vertical"
+            :min="CODE_FONT_SIZE.min"
+            :max="CODE_FONT_SIZE.max"
+            :step="1"
+            :disabled="isSaving"
+            :aria-label="t('settings.code_font_size_label')"
+            class="w-full max-w-44"
+          />
+          <span class="shrink-0 text-sm text-app-text-muted">{{ t('settings.unit_pixels') }}</span>
+          <UButton
+            icon="i-lucide-rotate-ccw"
+            color="neutral"
+            variant="ghost"
+            :disabled="isSaving || codeFontSizeModel === CODE_FONT_SIZE.default"
+            :aria-label="t('settings.font_size_reset')"
+            :title="t('settings.font_size_reset')"
+            @click="codeFontSizeModel = CODE_FONT_SIZE.default"
+          />
         </div>
       </SettingsRow>
       <SettingsRow

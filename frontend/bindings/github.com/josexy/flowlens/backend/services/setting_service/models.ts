@@ -49,7 +49,9 @@ export interface CommonConfig {
     "logLevel": string;
     "logDisabled": boolean;
     "appFontFamily": string;
+    "appFontSize": number;
     "codeFontFamily": string;
+    "codeFontSize": number;
     "pointerCursor": boolean;
     "themeMode": string;
     "themePrimaryColor": string;

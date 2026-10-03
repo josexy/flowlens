@@ -454,7 +454,7 @@ onBeforeUnmount(() => {
       >
         <RequestUrlInput
           v-model="state.url"
-          class="min-w-0 flex-1 [--request-url-height:100%] [--request-url-border-width:0px] [--request-url-border-color:transparent] [--request-url-bg:var(--app-panel-bg)] [--request-url-padding-x:12px] [--request-url-font-size:15px]"
+          class="min-w-0 flex-1 [--request-url-height:100%] [--request-url-border-width:0px] [--request-url-border-color:transparent] [--request-url-bg:var(--app-panel-bg)] [--request-url-padding-x:12px] [--request-url-font-size:0.9375rem]"
           :placeholder="t('workspace.websocket_client.url_placeholder')"
         >
           <template #suffix>
@@ -885,7 +885,7 @@ onBeforeUnmount(() => {
                             <UIcon name="i-lucide-circle-alert" class="flex size-5.5" />
                           </div>
                           <div class="flex min-w-0 flex-col gap-1">
-                            <div class="text-[15px] font-bold text-app-text">
+                            <div class="text-[0.9375rem] font-bold text-app-text">
                               {{ t('workspace.websocket_client.response_error_title') }}
                             </div>
                             <div class="text-sm leading-normal text-app-text-secondary">

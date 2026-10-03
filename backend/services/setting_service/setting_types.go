@@ -60,7 +60,9 @@ type CommonConfig struct {
 	LogLevel          string `json:"logLevel"`
 	LogDisabled       bool   `json:"logDisabled"`
 	AppFontFamily     string `json:"appFontFamily"`
+	AppFontSize       int    `json:"appFontSize"`
 	CodeFontFamily    string `json:"codeFontFamily"`
+	CodeFontSize      int    `json:"codeFontSize"`
 	PointerCursor     bool   `json:"pointerCursor"`
 	ThemeMode         string `json:"themeMode"`
 	ThemePrimaryColor string `json:"themePrimaryColor"`

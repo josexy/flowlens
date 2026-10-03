@@ -36,6 +36,12 @@ const (
 	defaultCACertValidDays       = 3650
 	defaultThemeMode             = "light"
 	defaultLanguage              = "zh"
+	defaultAppFontSize           = 16
+	minAppFontSize               = 12
+	maxAppFontSize               = 24
+	defaultCodeFontSize          = 13
+	minCodeFontSize              = 10
+	maxCodeFontSize              = 32
 	defaultHistoryRetentionValue = 7
 	minHistoryRetentionValue     = 1
 	maxHistoryRetentionValue     = 9999
@@ -815,6 +821,12 @@ func (s *SettingService) setupDefaultSettingsLocked() {
 		s.settings.CommonConfig = &CommonConfig{}
 	}
 	s.settings.CommonConfig.LogLevel = string(logger.NormalizeLogLevel(s.settings.CommonConfig.LogLevel))
+	if size := s.settings.CommonConfig.AppFontSize; size < minAppFontSize || size > maxAppFontSize {
+		s.settings.CommonConfig.AppFontSize = defaultAppFontSize
+	}
+	if size := s.settings.CommonConfig.CodeFontSize; size < minCodeFontSize || size > maxCodeFontSize {
+		s.settings.CommonConfig.CodeFontSize = defaultCodeFontSize
+	}
 	s.settings.CommonConfig.ThemePrimaryColor = normalizeThemePrimaryColor(s.settings.CommonConfig.ThemePrimaryColor)
 	s.settings.CommonConfig.ThemeNeutralColor = normalizeThemeNeutralColor(s.settings.CommonConfig.ThemeNeutralColor)
 	if !isValidThemeMode(s.settings.CommonConfig.ThemeMode) {

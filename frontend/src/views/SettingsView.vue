@@ -765,7 +765,7 @@ function handleConfirmQuit() {
         class="flex-1 overflow-y-auto px-7 pb-5 max-[720px]:px-4.5 max-[720px]:pb-4"
       >
         <div class="mb-6 max-w-260 border-b border-app-border pb-4 pt-5 max-[720px]:pt-4">
-          <h2 class="text-[18px] font-bold leading-[1.35] text-app-text">{{ activeTabTitle }}</h2>
+          <h2 class="text-lg font-bold leading-[1.35] text-app-text">{{ activeTabTitle }}</h2>
         </div>
 
         <div class="relative min-w-0 max-w-260" :aria-busy="activeTabLoading">

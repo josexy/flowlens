@@ -290,26 +290,30 @@ test('native background and CSS consumers refresh after the Nuxt UI stylesheet p
   assert.ok(app.store.appearanceRevision > revision)
 })
 
-function settingsStore(t, service) {
+function settingsStore(t, service, globals = {}) {
   const cache = new Map()
   const load = (path) => {
     if (cache.has(path)) return cache.get(path)
-    const exports = evaluate(readSource(path), (id) => {
-      if (id === 'vue') return vue
-      if (id === 'pinia') return pinia
-      if (id === '@/utils/themeColors') return palette
-      if (id.startsWith('@/')) return load(`src/${id.slice(2)}.ts`)
-      if (id.endsWith('/setting_service/models'))
-        return load(
-          'bindings/github.com/josexy/flowlens/backend/services/setting_service/models.ts',
-        )
-      if (id.endsWith('/settingservice')) return service
-      if (id.endsWith('/shortcutservice'))
-        return { GetShortcutRuntimeState: async () => ({ commands: {}, warnings: [] }) }
-      if (id.endsWith('/pythonpluginservice')) return { GetRuntimeStatus: async () => null }
-      if (id.endsWith('/proxyservice')) return {}
-      throw new Error(`Unexpected settings import: ${id}`)
-    })
+    const exports = evaluate(
+      readSource(path),
+      (id) => {
+        if (id === 'vue') return vue
+        if (id === 'pinia') return pinia
+        if (id === '@/utils/themeColors') return palette
+        if (id.startsWith('@/')) return load(`src/${id.slice(2)}.ts`)
+        if (id.endsWith('/setting_service/models'))
+          return load(
+            'bindings/github.com/josexy/flowlens/backend/services/setting_service/models.ts',
+          )
+        if (id.endsWith('/settingservice')) return service
+        if (id.endsWith('/shortcutservice'))
+          return { GetShortcutRuntimeState: async () => ({ commands: {}, warnings: [] }) }
+        if (id.endsWith('/pythonpluginservice')) return { GetRuntimeStatus: async () => null }
+        if (id.endsWith('/proxyservice')) return {}
+        throw new Error(`Unexpected settings import: ${id}`)
+      },
+      globals,
+    )
     cache.set(path, exports)
     return exports
   }
@@ -318,6 +322,75 @@ function settingsStore(t, service) {
   t.after(() => store.$dispose())
   return store
 }
+
+test('font sizes preview, save, sync across windows, reload, and reset independently', async (t) => {
+  let persisted = { commonConfig: { themeMode: 'dark', language: 'en' } }
+  let staged
+  const bridge = {
+    Get: async () => structuredClone(persisted),
+    GetActiveWindowFrameMode: async () => 'custom',
+    UpdatePreservingShortcuts: async (value) => {
+      staged = JSON.parse(JSON.stringify(value))
+    },
+    Save: async () => {
+      persisted = staged
+    },
+  }
+  const styles = new Map()
+  const store = settingsStore(t, bridge, {
+    document: {
+      documentElement: {
+        style: { setProperty: (name, value) => styles.set(name, value) },
+        toggleAttribute() {},
+      },
+    },
+  })
+  await store.load()
+  assert.equal(store.settings.commonConfig.appFontSize, 16)
+  assert.equal(store.resolvedCodeFontSize, 13)
+  assert.equal(styles.get('--app-font-size'), '16px')
+
+  store.settings.commonConfig.appFontSize = 20
+  store.settings.commonConfig.codeFontSize = 18
+  store.previewAppearance()
+  assert.equal(styles.get('--app-font-size'), '20px')
+  assert.equal(store.resolvedCodeFontSize, 18)
+  assert.equal(persisted.commonConfig.appFontSize, undefined, 'preview does not save')
+  await store.save({ dirtySections: ['common'] })
+  assert.equal(persisted.commonConfig.appFontSize, 20)
+  assert.equal(persisted.commonConfig.codeFontSize, 18)
+
+  const mainWindow = settingsStore(t, bridge)
+  await mainWindow.load()
+  assert.equal(mainWindow.settings.commonConfig.appFontSize, 20)
+  assert.equal(mainWindow.resolvedCodeFontSize, 18)
+  mainWindow.syncExternalSettings({
+    ...structuredClone(persisted),
+    commonConfig: {
+      ...persisted.commonConfig,
+      appFontSize: 24,
+      codeFontSize: 32,
+    },
+  })
+  assert.equal(mainWindow.settings.commonConfig.appFontSize, 24)
+  assert.equal(mainWindow.resolvedCodeFontSize, 32)
+  store.resetToDefaults()
+  store.previewAppearance()
+  assert.equal(styles.get('--app-font-size'), '16px')
+  assert.equal(store.resolvedCodeFontSize, 13)
+})
+
+test('invalid font sizes cannot reach CSS or editor options', async (t) => {
+  for (const value of [undefined, null, NaN, Infinity, -1, 0, 9, 33, 16.5]) {
+    const store = settingsStore(t, {
+      Get: async () => ({ commonConfig: { appFontSize: value, codeFontSize: value } }),
+      GetActiveWindowFrameMode: async () => 'custom',
+    })
+    await store.load()
+    assert.equal(store.settings.commonConfig.appFontSize, 16)
+    assert.equal(store.resolvedCodeFontSize, 13)
+  }
+})
 
 test('ordinary settings saves clone colors while retaining the latest mode and language', async (t) => {
   let persisted = { commonConfig: { themeMode: 'light', language: 'zh' } }

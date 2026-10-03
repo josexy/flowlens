@@ -74,6 +74,21 @@ const DEFAULT_APP_FONT_FAMILY =
   "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif"
 const DEFAULT_CODE_FONT_FAMILY =
   "'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'SFMono-Regular', 'Menlo', 'Monaco', 'Courier New', monospace"
+export const APP_FONT_SIZE = { default: 16, min: 12, max: 24 } as const
+export const CODE_FONT_SIZE = { default: 13, min: 10, max: 32 } as const
+
+export function normalizeFontSize(
+  value: number | null | undefined,
+  bounds: { default: number; min: number; max: number },
+): number {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= bounds.min &&
+    value <= bounds.max
+    ? value
+    : bounds.default
+}
+
 const DEFAULT_THEME_MODE: ThemeMode = 'light'
 const DEFAULT_LANGUAGE: AppLanguage = 'zh'
 const DEFAULT_WINDOW_FRAME_MODE: AppWindowFrameMode = WindowFrameMode.WindowFrameModeCustom
@@ -105,6 +120,10 @@ function applyAppearanceSettings(commonConfig: settingservice.CommonConfig | nul
   document.documentElement.style.setProperty(
     '--code-font-family',
     buildFontStack(commonConfig?.codeFontFamily, DEFAULT_CODE_FONT_FAMILY),
+  )
+  document.documentElement.style.setProperty(
+    '--app-font-size',
+    `${normalizeFontSize(commonConfig?.appFontSize, APP_FONT_SIZE)}px`,
   )
   document.documentElement.toggleAttribute('data-pointer-cursor', commonConfig?.pointerCursor ?? false)
 }
@@ -162,7 +181,9 @@ function ensureCommonConfig(settings: settingservice.Settings) {
       logLevel: DEFAULT_LOG_LEVEL,
       logDisabled: false,
       appFontFamily: '',
+      appFontSize: APP_FONT_SIZE.default,
       codeFontFamily: '',
+      codeFontSize: CODE_FONT_SIZE.default,
       pointerCursor: false,
       themeMode: DEFAULT_THEME_MODE,
       themePrimaryColor: DEFAULT_THEME_PRIMARY_COLOR,
@@ -173,6 +194,14 @@ function ensureCommonConfig(settings: settingservice.Settings) {
   settings.commonConfig.logLevel ||= DEFAULT_LOG_LEVEL
   settings.commonConfig.logDisabled ??= false
   settings.commonConfig.pointerCursor ??= false
+  settings.commonConfig.appFontSize = normalizeFontSize(
+    settings.commonConfig.appFontSize,
+    APP_FONT_SIZE,
+  )
+  settings.commonConfig.codeFontSize = normalizeFontSize(
+    settings.commonConfig.codeFontSize,
+    CODE_FONT_SIZE,
+  )
   settings.commonConfig.themePrimaryColor = normalizeThemePrimaryColor(
     settings.commonConfig.themePrimaryColor,
   )
@@ -317,7 +346,9 @@ function cloneCommonConfig(config: settingservice.CommonConfig): settingservice.
     logLevel: config.logLevel,
     logDisabled: config.logDisabled,
     appFontFamily: config.appFontFamily,
+    appFontSize: config.appFontSize,
     codeFontFamily: config.codeFontFamily,
+    codeFontSize: config.codeFontSize,
     pointerCursor: config.pointerCursor,
     themeMode: config.themeMode,
     themePrimaryColor: config.themePrimaryColor,
@@ -546,6 +577,9 @@ export const useSettingStore = defineStore('setting', () => {
   // Computed here so Monaco components get a plain string (not a CSS var).
   const resolvedCodeFontFamily = computed(() =>
     buildFontStack(settings.value?.commonConfig?.codeFontFamily, DEFAULT_CODE_FONT_FAMILY),
+  )
+  const resolvedCodeFontSize = computed(() =>
+    normalizeFontSize(settings.value?.commonConfig?.codeFontSize, CODE_FONT_SIZE),
   )
   const hiddenTrafficColumnKeys = computed(
     () =>
@@ -888,7 +922,9 @@ export const useSettingStore = defineStore('setting', () => {
         logLevel: DEFAULT_LOG_LEVEL,
         logDisabled: false,
         appFontFamily: '',
+        appFontSize: APP_FONT_SIZE.default,
         codeFontFamily: '',
+        codeFontSize: CODE_FONT_SIZE.default,
         pointerCursor: false,
         themeMode: DEFAULT_THEME_MODE,
         themePrimaryColor: DEFAULT_THEME_PRIMARY_COLOR,
@@ -899,7 +935,9 @@ export const useSettingStore = defineStore('setting', () => {
     settings.value.commonConfig.logLevel = DEFAULT_LOG_LEVEL
     settings.value.commonConfig.logDisabled = false
     settings.value.commonConfig.appFontFamily = ''
+    settings.value.commonConfig.appFontSize = APP_FONT_SIZE.default
     settings.value.commonConfig.codeFontFamily = ''
+    settings.value.commonConfig.codeFontSize = CODE_FONT_SIZE.default
     settings.value.commonConfig.pointerCursor = false
     settings.value.commonConfig.themePrimaryColor = DEFAULT_THEME_PRIMARY_COLOR
     settings.value.commonConfig.themeNeutralColor = DEFAULT_THEME_NEUTRAL_COLOR
@@ -1064,6 +1102,7 @@ export const useSettingStore = defineStore('setting', () => {
     shortcutRuntimeState,
     activeWindowFrameMode,
     resolvedCodeFontFamily,
+    resolvedCodeFontSize,
     themeMode,
     language,
     windowFrameMode,
