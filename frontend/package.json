@@ -21,6 +21,7 @@
     "test:traffic-table": "node --test tests/trafficTable.test.mjs",
     "test:traffic-detail-layout": "node --test tests/trafficDetailLayout.test.mjs",
     "test:hexdump": "node --test tests/hexdump.test.mjs",
+    "test:sse": "node --test tests/sse.test.mjs",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --cache",
     "lint:tailwind": "node scripts/check-tailwind-diagnostics.mjs",

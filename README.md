@@ -31,7 +31,7 @@ FlowLens captures proxy traffic, identifies local processes, and lets you inspec
 
 ## Highlights
 
-- HTTP/HTTPS MITM capture, SOCKS5 proxying, live SSE bodies, and WebSocket messages
+- HTTP/HTTPS MITM capture, SOCKS5 proxying, live SSE message lists with per-message inspection, and WebSocket messages
 - Ordered headers/trailers, microsecond timing, transfer sizes, and text, image, and hex body views
 - Request editing/resend, WebSocket Client, proxy selection, uTLS profiles, and HTTP/2 fingerprints
 - API Collections, local history, categorization, and optional Python 3.11+ request hooks with a live console

@@ -46,6 +46,7 @@ const bodyUnavailable = computed(() => props.bodySide === 'request'
         props.bodySide === 'request' ? props.bodyView.reqBodyEnc : props.bodyView.rspBodyEnc
       "
       :source-path="props.sourcePath"
+      :enable-sse="props.bodySide === 'response'"
     />
     <BodyViewer
       v-else-if="props.showEmptyFallback"
@@ -54,6 +55,7 @@ const bodyUnavailable = computed(() => props.bodySide === 'request'
       :content-type="props.fallbackContentType"
       body-encoding=""
       :source-path="props.fallbackSourcePath"
+      :enable-sse="props.bodySide === 'response'"
     />
     <AppLoading
       v-if="props.showLoadingPlaceholder"

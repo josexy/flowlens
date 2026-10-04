@@ -236,6 +236,25 @@
     "ws_msgs_truncated": "已达到消息数量上限，部分消息未被采集。"
   },
   "detail": {
+    "sse": {
+      "tab": "SSE",
+      "event_type": "事件类型",
+      "id": "ID",
+      "preview": "数据摘要",
+      "message_count": "消息数：{count}",
+      "parsing": "正在解析…",
+      "jump_to_latest": "跳到最新消息",
+      "empty": "暂无完整消息",
+      "empty_data": "（空）",
+      "unavailable": "响应体为 Base64 编码，无法解析 SSE。可保存或切换到“十六进制”查看。",
+      "incomplete": "响应末尾的事件不完整，可在“原始”中查看。",
+      "open_message": "查看第 {sequence} 条 SSE 消息",
+      "message_detail": "SSE 消息详情",
+      "data": "数据",
+      "raw_event": "事件原文",
+      "copy_message": "复制当前内容",
+      "save_message": "保存当前内容"
+    },
     "body_unavailable": "正文不可用",
     "request_body_unavailable": "请求正文不可用，无法执行此操作",
     "select_request": "选择一条流量记录查看详情",

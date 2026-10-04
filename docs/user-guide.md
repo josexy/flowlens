@@ -19,6 +19,10 @@ Text body and Raw HTTP viewers display the complete available content without pa
 
 HTTP Request Editor can run global and current-request Python hooks. Configure Python under `Settings > Python` and see the [Python plugin guide](technical/python-plugins.md) for setup, API details, limits, and examples.
 
+SSE responses (`text/event-stream`) open the **SSE** body tab by default in HTTP Request Editor, capture details, and history details. The virtualized list shows complete data events in order, with their event type, effective ID, and a short data preview. Click a row to inspect its full data or original event block; small valid JSON messages also offer a formatted view. Scrolling up pauses following new messages; **Jump to latest message** resumes it. Heartbeats and control-only blocks remain available in the **Raw** tab. Events without a terminating blank line are incomplete and are not counted as messages, including after the stream stops. Encoded binary bodies cannot be parsed in the SSE view and remain available for saving and hex viewing.
+
+The response-body toolbar copies or saves the entire SSE response. The message-detail dialog copies or saves only its selected view. The list is reconstructed from the available response body and does not add per-message timestamps or change saved traffic formats.
+
 ## Keyboard Shortcuts
 
 Open `Settings > Shortcuts` to search commands, record or clear a binding, and restore one or all known commands.

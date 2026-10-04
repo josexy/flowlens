@@ -236,6 +236,25 @@
     "ws_msgs_truncated": "Message limit reached. Some messages were not captured."
   },
   "detail": {
+    "sse": {
+      "tab": "SSE",
+      "event_type": "Event type",
+      "id": "ID",
+      "preview": "Data preview",
+      "message_count": "Messages: {count}",
+      "parsing": "Parsing…",
+      "jump_to_latest": "Jump to latest message",
+      "empty": "No complete messages",
+      "empty_data": "(empty)",
+      "unavailable": "This body is Base64-encoded and cannot be parsed as SSE. Save it or open the Hex tab.",
+      "incomplete": "The event at the end of the response is incomplete. View it in the Raw tab.",
+      "open_message": "View SSE message {sequence}",
+      "message_detail": "SSE message details",
+      "data": "Data",
+      "raw_event": "Raw event",
+      "copy_message": "Copy displayed content",
+      "save_message": "Save displayed content"
+    },
     "body_unavailable": "Body unavailable",
     "request_body_unavailable": "The request body is unavailable; this action cannot be completed",
     "select_request": "Select a traffic entry to view details",

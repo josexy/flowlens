@@ -1681,6 +1681,7 @@ onBeforeUnmount(() => {
                           :content-type="responseContentType"
                           :body-encoding="state.response?.bodyEncoding || ''"
                           :source-path="responseBodySourcePath"
+                          enable-sse
                         />
                       </div>
                     </div>

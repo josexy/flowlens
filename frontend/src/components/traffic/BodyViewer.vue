@@ -8,6 +8,7 @@ import { SaveBodyToFile } from '#bindings/github.com/josexy/flowlens/backend/ser
 import { appEmptyStateSize, appEmptyStateUi } from '@/components/common/emptyState'
 import HexDumpViewer from '@/components/common/HexDumpViewer.vue'
 import MonacoBodyEditor from '@/components/common/MonacoBodyEditor.vue'
+import SseMessageViewer from './SseMessageViewer.vue'
 import { MONACO_LARGE_TEXT_THRESHOLD_CHARS } from '@/components/common/monacoLargeText'
 import { useNotify } from '@/composables/useNotify'
 import { getErrorMessage, isDialogCancelError } from '@/utils/dialog'
@@ -24,10 +25,11 @@ const props = defineProps<{
   contentType?: string
   bodyEncoding?: string
   sourcePath?: string
+  enableSse?: boolean
 }>()
 
 type BodyCategory = 'json' | 'xml' | 'html' | 'js' | 'css' | 'text' | 'image' | 'svg' | 'binary'
-type TabKey = 'formatted' | 'image' | 'raw' | 'hex'
+type TabKey = 'formatted' | 'image' | 'raw' | 'sse' | 'hex'
 type ToolbarAction = 'wrap' | 'copy' | 'save'
 
 const IMAGE_SCALE_MIN = 0.2
@@ -57,6 +59,7 @@ const isServerSentEvents = computed(() => {
   const mediaType = ((props.contentType ?? '').toLowerCase().split(';')[0] ?? '').trim()
   return mediaType === 'text/event-stream'
 })
+const hasSse = computed(() => props.enableSse === true && isServerSentEvents.value)
 
 const monacoLanguage = computed(() => {
   switch (bodyCategory.value) {
@@ -269,6 +272,7 @@ const availableTabs = computed((): TabKey[] => {
   if (hasFormatted.value) tabs.push('formatted')
   if (hasImage.value) tabs.push('image')
   tabs.push('raw')
+  if (hasSse.value) tabs.push('sse')
   tabs.push('hex')
   return tabs
 })
@@ -278,7 +282,9 @@ const activeTab = ref<TabKey>('raw')
 watch(
   availableTabs,
   (tabs, previousTabs) => {
-    if (tabs.includes('image') && !previousTabs?.includes('image')) {
+    if (tabs.includes('sse') && !previousTabs?.includes('sse')) {
+      activeTab.value = 'sse'
+    } else if (tabs.includes('image') && !previousTabs?.includes('image')) {
       activeTab.value = 'image'
     } else if (tabs.length > 0 && !tabs.includes(activeTab.value)) {
       activeTab.value = tabs[0]!
@@ -510,7 +516,9 @@ const suggestedFilename = computed(() => {
 const copyableBodyContent = computed(() => {
   if (!hasBody.value) return ''
   if (activeTab.value === 'formatted') return formattedBody.value
-  if (activeTab.value === 'raw' && !isBinaryEncoded.value) return props.body
+  if ((activeTab.value === 'raw' || activeTab.value === 'sse') && !isBinaryEncoded.value) {
+    return props.body
+  }
   return ''
 })
 
@@ -524,6 +532,7 @@ const currentSaveTarget = computed((): { body: string; bodyEncoding: string } | 
         bodyEncoding: '',
       }
     case 'raw':
+    case 'sse':
       return {
         body: props.body,
         bodyEncoding: isBinaryEncoded.value ? (props.bodyEncoding ?? '') : '',
@@ -679,6 +688,8 @@ function tabLabel(tab: TabKey): string {
       return t('detail.preview')
     case 'raw':
       return t('detail.raw')
+    case 'sse':
+      return t('detail.sse.tab')
     case 'hex':
       return t('detail.hex')
   }
@@ -688,7 +699,7 @@ function tabLabel(tab: TabKey): string {
 <template>
   <div class="body-viewer flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
     <UEmpty
-      v-if="!hasBody"
+      v-if="!hasBody && !hasSse"
       icon="i-lucide-file-x-2"
       :title="t('common.no_content')"
       :size="appEmptyStateSize"
@@ -746,7 +757,19 @@ function tabLabel(tab: TabKey): string {
       </div>
 
       <div class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pt-1.5">
-        <div v-show="showTextPanel" class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden" role="tabpanel">
+        <SseMessageViewer
+          v-if="hasSse"
+          v-show="activeTab === 'sse'"
+          :body="props.body"
+          :body-encoding="props.bodyEncoding"
+          :active="activeTab === 'sse'"
+        />
+        <div
+          v-if="!hasSse || showTextPanel"
+          v-show="showTextPanel"
+          class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+          role="tabpanel"
+        >
           <MonacoBodyEditor
             :value="textEditorBody"
             :language="textEditorLanguage"
