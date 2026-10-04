@@ -29,7 +29,6 @@ const props = withDefaults(
     language?: string
     readonly?: boolean
     wordWrap?: boolean
-    allowLargeTextWordWrap?: boolean
     followTailOnAppend?: boolean
     flowLensPythonApi?: boolean
     options?: MonacoEditorOptions
@@ -38,7 +37,6 @@ const props = withDefaults(
     language: 'plaintext',
     readonly: false,
     wordWrap: false,
-    allowLargeTextWordWrap: false,
     followTailOnAppend: false,
     flowLensPythonApi: false,
     options: () => ({}),
@@ -65,9 +63,7 @@ const editorValue = computed({
 })
 
 const usesLargeTextOptimizations = computed(
-  () =>
-    props.readonly &&
-    (props.allowLargeTextWordWrap || requiresMonacoLargeTextOptimizations(props.value)),
+  () => props.readonly && requiresMonacoLargeTextOptimizations(props.value),
 )
 const usesFlowLensPythonApi = computed(
   () =>
@@ -79,11 +75,6 @@ const editorLanguage = computed(() =>
   usesLargeTextOptimizations.value
     ? 'plaintext'
     : resolveMonacoLightLanguage(props.language, usesFlowLensPythonApi.value),
-)
-const editorWordWrap = computed(
-  () =>
-    props.wordWrap &&
-    (!usesLargeTextOptimizations.value || props.allowLargeTextWordWrap),
 )
 const modelBracketPairColorization = computed<MonacoBracketPairColorizationOptions>(() => {
   if (usesLargeTextOptimizations.value) {
@@ -162,15 +153,7 @@ const editorOptions = computed<MonacoEditorOptions>(() => {
     matchBrackets: usesLargeTextOptimizations.value
       ? ('never' as const)
       : (props.options.matchBrackets ?? 'always'),
-    wordWrap: usesLargeTextOptimizations.value && !props.allowLargeTextWordWrap
-      ? ('off' as const)
-      : (props.options.wordWrap ?? (editorWordWrap.value ? 'on' : 'off')),
-    wordWrapOverride1: usesLargeTextOptimizations.value && !props.allowLargeTextWordWrap
-      ? ('off' as const)
-      : (props.options.wordWrapOverride1 ?? 'inherit'),
-    wordWrapOverride2: usesLargeTextOptimizations.value && !props.allowLargeTextWordWrap
-      ? ('off' as const)
-      : (props.options.wordWrapOverride2 ?? 'inherit'),
+    wordWrap: props.options.wordWrap ?? (props.wordWrap ? 'on' : 'off'),
     scrollbar: {
       ...baseScrollbar,
       ...scrollbarOption,
@@ -223,10 +206,9 @@ function handleMount(editor: MonacoEditor.IStandaloneCodeEditor) {
 function prepareLargeTextModelUpdate(
   editor: MonacoEditor.IStandaloneCodeEditor,
   model: MonacoEditor.ITextModel | null,
-  forceWordWrapOff = false,
 ) {
   if (!model) {
-    return false
+    return
   }
 
   const monaco = monacoInstance.value
@@ -239,25 +221,15 @@ function prepareLargeTextModelUpdate(
   }
   syncMonacoModelBracketPairColorization(model, modelBracketPairColorization.value)
   if (!usesLargeTextOptimizations.value) {
-    return false
+    return
   }
 
   // The wrapper applies value before language/options. Switch the expensive
   // settings off first when a live body crosses into large-text mode.
-  const shouldDisableWordWrap = forceWordWrapOff || !props.allowLargeTextWordWrap
   editor.updateOptions({
     bracketPairColorization: { enabled: false },
     matchBrackets: 'never',
-    ...(shouldDisableWordWrap
-      ? {
-          wordWrap: 'off',
-          wordWrapOverride1: 'off',
-          wordWrapOverride2: 'off',
-        }
-      : {}),
   })
-
-  return forceWordWrapOff && props.allowLargeTextWordWrap
 }
 
 onBeforeUnmount(() => {
@@ -294,9 +266,9 @@ watch(
     }
 
     const model = editor?.getModel() ?? null
-    const shouldRestoreLargeTextWordWrap = editor
-      ? prepareLargeTextModelUpdate(editor, model, true)
-      : false
+    if (editor) {
+      prepareLargeTextModelUpdate(editor, model)
+    }
     const incrementalAppendText =
       props.followTailOnAppend &&
       props.readonly &&
@@ -312,12 +284,6 @@ watch(
         !editor ||
         !nextValue.startsWith(previousValue)
       ) {
-        if (shouldRestoreLargeTextWordWrap && editor) {
-          await nextTick()
-          if (editorInstance.value === editor) {
-            editor.updateOptions(editorOptions.value)
-          }
-        }
         return
       }
     }
@@ -352,9 +318,6 @@ watch(
     await nextTick()
     if (editorInstance.value !== activeEditor) {
       return
-    }
-    if (shouldRestoreLargeTextWordWrap) {
-      activeEditor.updateOptions(editorOptions.value)
     }
     activeEditor.setScrollTop(
       wasNearBottom ? activeEditor.getScrollHeight() : previousScrollTop,

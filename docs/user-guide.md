@@ -15,6 +15,8 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 
 Request header rows are sent in their displayed order. The URL remains the routing source of truth; the backend controls pseudo-headers, `Host`, body framing, generated content types, and the fallback `User-Agent`. Invalid layouts are rejected instead of being silently reordered.
 
+Text body and Raw HTTP viewers display the complete available content without pagination. Editor search and selection cover the full text; toolbar copy and save also use the complete content. Automatic wrapping can be toggled at any text size. Documents of at least 512K characters or lines of at least 128K characters use plain text without syntax highlighting or bracket matching to reduce rendering work. Hex viewing retains its existing paging and rendering limits.
+
 HTTP Request Editor can run global and current-request Python hooks. Configure Python under `Settings > Python` and see the [Python plugin guide](technical/python-plugins.md) for setup, API details, limits, and examples.
 
 ## Keyboard Shortcuts

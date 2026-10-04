@@ -443,10 +443,7 @@
     "body_copied": "Body copied",
     "body_copy_failed": "Failed to copy body: {error}",
     "body_save_failed": "Failed to save body: {error}",
-    "wrap_body": "Wrap body",
-    "large_text_previous_chunk": "Previous segment",
-    "large_text_next_chunk": "Next segment",
-    "large_text_chunk_page": "{current} / {total}"
+    "wrap_body": "Wrap body"
   },
   "status": {
     "total": "Total {count} items",

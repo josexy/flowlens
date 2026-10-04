@@ -443,10 +443,7 @@
     "body_copied": "内容已复制",
     "body_copy_failed": "复制内容失败: {error}",
     "body_save_failed": "保存内容失败: {error}",
-    "wrap_body": "自动换行",
-    "large_text_previous_chunk": "上一段",
-    "large_text_next_chunk": "下一段",
-    "large_text_chunk_page": "{current} / {total}"
+    "wrap_body": "自动换行"
   },
   "status": {
     "total": "共 {count} 项",

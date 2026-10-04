@@ -111,8 +111,6 @@ import { remeasureMonacoFontsAfterLoad } from '../src/components/common/monacoFo
 import {
   MONACO_LARGE_TEXT_THRESHOLD_CHARS,
   MONACO_LONG_LINE_THRESHOLD_CHARS,
-  MONACO_WRAPPED_CHUNK_SIZE_CHARS,
-  getMonacoWrappedTextChunk,
   requiresMonacoLargeTextOptimizations,
 } from '../src/components/common/monacoLargeText.js'
 import { syncMonacoModelBracketPairColorization } from '../src/components/common/monacoModelOptions.js'
@@ -696,7 +694,6 @@ test('Monaco coalesces identical pending font loads and remeasures after load fa
 })
 
 test('Monaco large-text mode covers large documents and pathological long lines', () => {
-  assert.equal(MONACO_LONG_LINE_THRESHOLD_CHARS, MONACO_WRAPPED_CHUNK_SIZE_CHARS)
   assert.equal(requiresMonacoLargeTextOptimizations('short\ntext'), false)
   assert.equal(requiresMonacoLargeTextOptimizations('a'.repeat(20_000)), false)
   assert.equal(
@@ -721,60 +718,6 @@ test('Monaco large-text mode covers large documents and pathological long lines'
     ),
     true,
   )
-})
-
-test('Monaco wrapped chunks preserve the complete source and clamp page indexes', () => {
-  const source = 'a'.repeat(MONACO_WRAPPED_CHUNK_SIZE_CHARS * 2 + 17)
-  const singleChunk = getMonacoWrappedTextChunk(
-    'a'.repeat(MONACO_WRAPPED_CHUNK_SIZE_CHARS),
-    0,
-  )
-  const multipleChunks = getMonacoWrappedTextChunk(
-    'a'.repeat(MONACO_WRAPPED_CHUNK_SIZE_CHARS + 1),
-    0,
-  )
-  const first = getMonacoWrappedTextChunk(source, -1)
-  const chunks = Array.from({ length: first.count }, (_, index) =>
-    getMonacoWrappedTextChunk(source, index),
-  )
-  const last = getMonacoWrappedTextChunk(source, Number.MAX_SAFE_INTEGER)
-  const positiveInfinity = getMonacoWrappedTextChunk(source, Number.POSITIVE_INFINITY)
-  const negativeInfinity = getMonacoWrappedTextChunk(source, Number.NEGATIVE_INFINITY)
-  const empty = getMonacoWrappedTextChunk('', Number.NaN)
-
-  assert.equal(first.index, 0)
-  assert.equal(last.index, first.count - 1)
-  assert.equal(positiveInfinity.index, first.count - 1)
-  assert.equal(negativeInfinity.index, 0)
-  assert.deepEqual(empty, { text: '', index: 0, count: 1, start: 0, end: 0 })
-  assert.equal(singleChunk.count, 1)
-  assert.equal(multipleChunks.count, 2)
-  assert.equal(chunks.map((chunk) => chunk.text).join(''), source)
-  assert.equal(chunks[0]?.start, 0)
-  assert.equal(chunks.at(-1)?.end, source.length)
-  assert.equal(chunks.every((chunk) => chunk.text.length <= MONACO_WRAPPED_CHUNK_SIZE_CHARS), true)
-})
-
-test('Monaco wrapped chunk boundaries do not split CRLF or UTF-16 surrogate pairs', () => {
-  const prefix = 'a'.repeat(MONACO_WRAPPED_CHUNK_SIZE_CHARS - 1)
-  const crlfSource = `${prefix}\r\nend`
-  const emojiSource = `${prefix}😀end`
-
-  const crlfChunks = [
-    getMonacoWrappedTextChunk(crlfSource, 0),
-    getMonacoWrappedTextChunk(crlfSource, 1),
-  ]
-  const emojiChunks = [
-    getMonacoWrappedTextChunk(emojiSource, 0),
-    getMonacoWrappedTextChunk(emojiSource, 1),
-  ]
-
-  assert.equal(crlfChunks[0]?.text.endsWith('\r'), false)
-  assert.equal(crlfChunks[1]?.text.startsWith('\r\n'), true)
-  assert.equal(crlfChunks.map((chunk) => chunk.text).join(''), crlfSource)
-  assert.equal(emojiChunks[0]?.text.endsWith('\ud83d'), false)
-  assert.equal(emojiChunks[1]?.text.startsWith('😀'), true)
-  assert.equal(emojiChunks.map((chunk) => chunk.text).join(''), emojiSource)
 })
 
 test('Monaco bracket colorization is synchronized to the text model', () => {

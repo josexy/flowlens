@@ -8,11 +8,7 @@ import { SaveBodyToFile } from '#bindings/github.com/josexy/flowlens/backend/ser
 import { appEmptyStateSize, appEmptyStateUi } from '@/components/common/emptyState'
 import HexDumpViewer from '@/components/common/HexDumpViewer.vue'
 import MonacoBodyEditor from '@/components/common/MonacoBodyEditor.vue'
-import {
-  MONACO_LARGE_TEXT_THRESHOLD_CHARS,
-  getMonacoWrappedTextChunk,
-  requiresMonacoLargeTextOptimizations,
-} from '@/components/common/monacoLargeText'
+import { MONACO_LARGE_TEXT_THRESHOLD_CHARS } from '@/components/common/monacoLargeText'
 import { useNotify } from '@/composables/useNotify'
 import { getErrorMessage, isDialogCancelError } from '@/utils/dialog'
 import { estimateDecodedByteLength } from '@/utils/hexdump'
@@ -105,8 +101,6 @@ const hasImageVerticalScrollbar = ref(false)
 const hasImageHorizontalScrollbar = ref(false)
 const formattedWordWrap = ref(false)
 const rawWordWrap = ref(false)
-const largeTextWrapEnabled = ref(false)
-const wrappedChunkIndex = ref(0)
 
 let imageResizeObserver: ResizeObserver | null = null
 
@@ -345,40 +339,8 @@ const textEditorOptions = computed(() =>
       }
     : {},
 )
-const textEditorLargeTextMode = computed(() =>
-  requiresMonacoLargeTextOptimizations(textEditorBody.value),
-)
-const textEditorWrappedChunk = computed(() =>
-  getMonacoWrappedTextChunk(textEditorBody.value, wrappedChunkIndex.value),
-)
-const textEditorUsesWrappedChunk = computed(
-  () => textEditorLargeTextMode.value && largeTextWrapEnabled.value,
-)
-const textEditorValue = computed(() =>
-  textEditorUsesWrappedChunk.value
-    ? textEditorWrappedChunk.value.text
-    : textEditorBody.value,
-)
-const requestedTextEditorWordWrap = computed(() =>
+const textEditorWordWrap = computed(() =>
   activeTextTab.value === 'formatted' ? formattedWordWrap.value : rawWordWrap.value,
-)
-const textEditorWordWrap = computed(
-  () =>
-    textEditorLargeTextMode.value
-      ? largeTextWrapEnabled.value
-      : requestedTextEditorWordWrap.value,
-)
-const showWrappedChunkPagination = computed(
-  () =>
-    showTextPanel.value &&
-    textEditorUsesWrappedChunk.value &&
-    textEditorWrappedChunk.value.count > 1,
-)
-const wrappedChunkPageLabel = computed(() =>
-  t('detail.large_text_chunk_page', {
-    current: textEditorWrappedChunk.value.index + 1,
-    total: textEditorWrappedChunk.value.count,
-  }),
 )
 const {
   byteOffset: hexByteOffset,
@@ -599,12 +561,6 @@ const tabToolbarActions = computed((): ToolbarAction[] => {
 })
 
 function toggleCurrentEditorWordWrap() {
-  if (textEditorLargeTextMode.value) {
-    largeTextWrapEnabled.value = !largeTextWrapEnabled.value
-    wrappedChunkIndex.value = 0
-    return
-  }
-
   if (activeTab.value === 'raw') {
     rawWordWrap.value = !rawWordWrap.value
     return
@@ -613,22 +569,6 @@ function toggleCurrentEditorWordWrap() {
   if (activeTab.value === 'formatted') {
     formattedWordWrap.value = !formattedWordWrap.value
   }
-}
-
-function showPreviousWrappedChunk() {
-  wrappedChunkIndex.value = Math.max(textEditorWrappedChunk.value.index - 1, 0)
-}
-
-function showNextWrappedChunk() {
-  wrappedChunkIndex.value = Math.min(
-    textEditorWrappedChunk.value.index + 1,
-    textEditorWrappedChunk.value.count - 1,
-  )
-}
-
-function resetLargeTextWrap() {
-  largeTextWrapEnabled.value = false
-  wrappedChunkIndex.value = 0
 }
 
 async function copyBodyContent() {
@@ -692,32 +632,6 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', handleWindowMouseMove)
   window.removeEventListener('mouseup', handleWindowMouseUp)
   imageResizeObserver?.disconnect()
-})
-
-watch(activeTextTab, () => {
-  resetLargeTextWrap()
-})
-
-watch(textEditorBody, (nextValue, previousValue) => {
-  if (!requiresMonacoLargeTextOptimizations(nextValue)) {
-    resetLargeTextWrap()
-    return
-  }
-  if (!largeTextWrapEnabled.value) {
-    wrappedChunkIndex.value = 0
-    return
-  }
-  if (!nextValue.startsWith(previousValue)) {
-    resetLargeTextWrap()
-    return
-  }
-
-  const previousChunk = getMonacoWrappedTextChunk(previousValue, wrappedChunkIndex.value)
-  const nextChunk = getMonacoWrappedTextChunk(nextValue, wrappedChunkIndex.value)
-  wrappedChunkIndex.value =
-    previousChunk.index === previousChunk.count - 1
-      ? nextChunk.count - 1
-      : Math.min(previousChunk.index, nextChunk.count - 1)
 })
 
 watch(
@@ -805,44 +719,6 @@ function tabLabel(tab: TabKey): string {
               @click="toggleCurrentEditorWordWrap"
             />
           </UTooltip>
-          <template v-if="showWrappedChunkPagination">
-            <UTooltip :text="t('detail.large_text_previous_chunk')">
-              <span class="inline-flex">
-                <UButton
-                  icon="i-lucide-chevron-left"
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  square
-                  :disabled="textEditorWrappedChunk.index === 0"
-                  :aria-label="t('detail.large_text_previous_chunk')"
-                  @click="showPreviousWrappedChunk"
-                />
-              </span>
-            </UTooltip>
-            <span
-              class="min-w-10 shrink-0 px-0.5 text-center text-xs tabular-nums text-muted"
-              :aria-label="wrappedChunkPageLabel"
-              aria-live="polite"
-              role="status"
-            >
-              {{ wrappedChunkPageLabel }}
-            </span>
-            <UTooltip :text="t('detail.large_text_next_chunk')">
-              <span class="inline-flex">
-                <UButton
-                  icon="i-lucide-chevron-right"
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  square
-                  :disabled="textEditorWrappedChunk.index === textEditorWrappedChunk.count - 1"
-                  :aria-label="t('detail.large_text_next_chunk')"
-                  @click="showNextWrappedChunk"
-                />
-              </span>
-            </UTooltip>
-          </template>
           <UTooltip v-if="tabToolbarActions.includes('copy')" :text="t('detail.copy_body')">
             <UButton
               icon="i-lucide-copy"
@@ -872,12 +748,11 @@ function tabLabel(tab: TabKey): string {
       <div class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pt-1.5">
         <div v-show="showTextPanel" class="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden" role="tabpanel">
           <MonacoBodyEditor
-            :value="textEditorValue"
+            :value="textEditorBody"
             :language="textEditorLanguage"
             :options="textEditorOptions"
             readonly
             :word-wrap="textEditorWordWrap"
-            :allow-large-text-word-wrap="textEditorUsesWrappedChunk"
             :follow-tail-on-append="isServerSentEvents"
           />
         </div>
