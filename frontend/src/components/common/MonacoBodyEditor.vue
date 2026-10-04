@@ -37,7 +37,7 @@ const props = withDefaults(
   {
     language: 'plaintext',
     readonly: false,
-    wordWrap: true,
+    wordWrap: false,
     allowLargeTextWordWrap: false,
     followTailOnAppend: false,
     flowLensPythonApi: false,

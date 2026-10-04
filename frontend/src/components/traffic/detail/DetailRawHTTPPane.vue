@@ -28,7 +28,7 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const notify = useNotify()
-const wordWrap = ref(true)
+const wordWrap = ref(false)
 const largeTextWrapEnabled = ref(false)
 const wrappedChunkIndex = ref(0)
 const largeTextMode = computed(() => requiresMonacoLargeTextOptimizations(props.value))
