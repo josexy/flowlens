@@ -15,7 +15,7 @@ import (
 const (
 	APP_NAME       = "FlowLens"
 	APP_IDENTIFIER = "com.josexy.flowlens"
-	APP_VERSION    = "1.0.2"
+	APP_VERSION    = "1.0.3"
 
 	DEFAULT_WINDOW_WIDTH  = 1024
 	DEFAULT_WINDOW_HEIGHT = 768

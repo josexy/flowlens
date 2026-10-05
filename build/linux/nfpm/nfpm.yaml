@@ -6,7 +6,7 @@
 name: "flowlens"
 arch: ${GOARCH}
 platform: "linux"
-version: "1.0.2"
+version: "1.0.3"
 section: "utils"
 priority: "extra"
 maintainer: "joxrays <josephxrays@163.com>"
