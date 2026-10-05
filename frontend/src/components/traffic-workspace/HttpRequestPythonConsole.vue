@@ -409,7 +409,7 @@ onBeforeUnmount(() => {
               <UTooltip :text="t('workspace.http_request.console_wrap')"
                 ><UButton
                   icon="i-lucide-corner-down-left"
-                  color="neutral"
+                  :color="wordWrap ? 'primary' : 'neutral'"
                   variant="ghost"
                   size="sm"
                   square

@@ -711,6 +711,7 @@
   },
   "workspace": {
     "close": "关闭",
+    "word_wrap": "自动换行",
     "tab_bar": {
       "untitled": "未命名",
       "new": "新建",

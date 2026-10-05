@@ -721,7 +721,7 @@ function tabLabel(tab: TabKey): string {
           <UTooltip v-if="tabToolbarActions.includes('wrap')" :text="t('detail.wrap_body')">
             <UButton
               icon="i-lucide-corner-down-left"
-              color="neutral"
+              :color="textEditorWordWrap ? 'primary' : 'neutral'"
               variant="ghost"
               size="sm"
               square

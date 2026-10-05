@@ -141,10 +141,11 @@ async function exportMessage(selection?: string) {
               <template #trigger>
                 <UButton
                   size="sm"
-                  color="neutral"
+                  :color="wrapText ? 'primary' : 'neutral'"
                   variant="ghost"
                   icon="i-lucide-corner-down-left"
                   :aria-label="t('detail.wrap_body')"
+                  :aria-pressed="wrapText"
                   @click="toggleWrapText"
                 />
               </template>

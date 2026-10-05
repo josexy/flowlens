@@ -61,7 +61,7 @@ async function copyRawHTTPMessage() {
         <UTooltip :text="t('detail.wrap_body')">
           <UButton
             icon="i-lucide-corner-down-left"
-            color="neutral"
+            :color="wordWrap ? 'primary' : 'neutral'"
             variant="ghost"
             size="sm"
             square

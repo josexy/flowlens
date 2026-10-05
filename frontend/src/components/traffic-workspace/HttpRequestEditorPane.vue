@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { copyText as copyTextToClipboard } from '@/utils/clipboard'
-import { computed, onBeforeUnmount, reactive, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import type { TabsItem } from '@nuxt/ui'
@@ -81,6 +81,8 @@ const requestQueryRowsModel = computed({
 const { queryCount } = useRequestQuerySync(requestURLModel, requestQueryRowsModel)
 
 const mountedRequestTabs = reactive(new Set<HttpRequestEditorState['activeRequestTab']>())
+const bodyWordWrap = ref(false)
+const scriptWordWrap = ref(false)
 
 watch(
   () => state.value.activeRequestTab,
@@ -1297,6 +1299,19 @@ onBeforeUnmount(() => {
                           :items="bodyTypeOptions"
                         />
                       </div>
+                      <UTooltip v-if="showMonacoBody" :text="t('workspace.word_wrap')">
+                        <UButton
+                          icon="i-lucide-corner-down-left"
+                          :color="bodyWordWrap ? 'primary' : 'neutral'"
+                          variant="ghost"
+                          size="sm"
+                          square
+                          class="shrink-0"
+                          :aria-label="t('workspace.word_wrap')"
+                          :aria-pressed="bodyWordWrap"
+                          @click="bodyWordWrap = !bodyWordWrap"
+                        />
+                      </UTooltip>
                     </div>
 
                     <div class="flex min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
@@ -1305,6 +1320,7 @@ onBeforeUnmount(() => {
                         v-model:value="state.requestBodyText"
                         class="h-full min-h-0 min-w-0 flex-1"
                         :language="monacoLanguage"
+                        :word-wrap="bodyWordWrap"
                       />
 
                       <RequestFileBody
@@ -1340,7 +1356,7 @@ onBeforeUnmount(() => {
                   data-name="script"
                   role="tabpanel"
                 >
-                  <div class="flex shrink-0 items-center justify-start px-2.5 py-2">
+                  <div class="flex shrink-0 items-center justify-between gap-2 px-2.5 py-2">
                     <div class="flex shrink-0 items-center gap-2">
                       <span class="text-sm text-muted">
                         {{ t('workspace.http_request.inline_script_enable') }}
@@ -1352,6 +1368,19 @@ onBeforeUnmount(() => {
                         :aria-label="t('workspace.http_request.inline_script_enable')"
                       />
                     </div>
+                    <UTooltip :text="t('workspace.word_wrap')">
+                      <UButton
+                        icon="i-lucide-corner-down-left"
+                        :color="scriptWordWrap ? 'primary' : 'neutral'"
+                        variant="ghost"
+                        size="sm"
+                        square
+                        class="shrink-0"
+                        :aria-label="t('workspace.word_wrap')"
+                        :aria-pressed="scriptWordWrap"
+                        @click="scriptWordWrap = !scriptWordWrap"
+                      />
+                    </UTooltip>
                   </div>
                   <UAlert
                     v-if="!pythonPluginsEnabled"
@@ -1367,7 +1396,7 @@ onBeforeUnmount(() => {
                     language="python"
                     flow-lens-python-api
                     :readonly="isHttpOperationActive"
-                    :word-wrap="false"
+                    :word-wrap="scriptWordWrap"
                     :options="{ tabSize: 4, insertSpaces: true }"
                   />
                 </div>

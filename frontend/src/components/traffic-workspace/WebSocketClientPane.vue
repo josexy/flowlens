@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { copyText as copyTextToClipboard } from '@/utils/clipboard'
-import { computed, onBeforeUnmount, reactive, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import type { TabsItem } from '@nuxt/ui'
@@ -58,6 +58,7 @@ const requestQueryRowsModel = computed({
 const { queryCount } = useRequestQuerySync(requestURLModel, requestQueryRowsModel)
 
 const mountedLeftTabs = reactive(new Set<WebSocketClientState['activeLeftTab']>())
+const messageWordWrap = ref(false)
 
 watch(
   () => state.value.activeLeftTab,
@@ -530,6 +531,22 @@ onBeforeUnmount(() => {
                           :items="draftTypeOptions"
                         />
                       </div>
+                      <UTooltip
+                        v-if="state.draftType !== 'binary-file'"
+                        :text="t('workspace.word_wrap')"
+                      >
+                        <UButton
+                          icon="i-lucide-corner-down-left"
+                          :color="messageWordWrap ? 'primary' : 'neutral'"
+                          variant="ghost"
+                          size="sm"
+                          square
+                          class="shrink-0"
+                          :aria-label="t('workspace.word_wrap')"
+                          :aria-pressed="messageWordWrap"
+                          @click="messageWordWrap = !messageWordWrap"
+                        />
+                      </UTooltip>
                     </div>
 
                     <div class="relative flex min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
@@ -538,6 +555,7 @@ onBeforeUnmount(() => {
                         v-model:value="state.draftText"
                         class="h-full min-h-0 min-w-0 flex-1"
                         :language="monacoLanguage"
+                        :word-wrap="messageWordWrap"
                         :options="messageEditorOptions"
                       />
 

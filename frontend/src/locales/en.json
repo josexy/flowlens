@@ -711,6 +711,7 @@
   },
   "workspace": {
     "close": "Close",
+    "word_wrap": "Word wrap",
     "tab_bar": {
       "untitled": "Untitled",
       "new": "New",
