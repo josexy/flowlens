@@ -297,6 +297,14 @@ export interface ResendResult {
     "failed": number;
 }
 
+export interface RewriteExecution {
+    "ruleId": string;
+    "ruleName": string;
+    "action": string;
+    "outcome": string;
+    "reason": string;
+}
+
 export interface SaveBodyToFileRequest {
     "path": string;
     "body": string;
@@ -499,6 +507,8 @@ export interface TrafficEntry {
      * Revision orders the initial live snapshot and its later patch events. It
      * is runtime-only and intentionally omitted from HBIN encoding.
      */
+    "rewriteExecutions"?: RewriteExecution[] | null;
+    "responseMetricsSource"?: string;
     "revision"?: number;
 
     /**

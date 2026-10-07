@@ -29,6 +29,8 @@ export interface TrafficEntryPatchPayload {
   responseTrailers?: TrafficResponseTrailersPatchPayload | null
   metrics?: TrafficMetricsPatchPayload | null
   process?: proxyservice.ProcessInfo | null
+  rewriteExecutions?: proxyservice.RewriteExecution[] | null
+  responseMetricsSource?: string
   error?: proxyservice.TrafficError | null
 }
 
@@ -192,5 +194,7 @@ export function applyTrafficEntryPatch(
     request,
     response,
     error: patch.error ?? entry.error,
+    rewriteExecutions: patch.rewriteExecutions ?? entry.rewriteExecutions,
+    responseMetricsSource: patch.responseMetricsSource ?? entry.responseMetricsSource,
   }
 }

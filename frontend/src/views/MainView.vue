@@ -6,6 +6,7 @@ import AppSidebar from '@/components/common/AppSidebar.vue'
 import StatusBar from '@/components/common/StatusBar.vue'
 import ContentHost from '@/components/workbench/ContentHost.vue'
 import SecondarySidebarHost from '@/components/workbench/SecondarySidebarHost.vue'
+import RewriteDraftGuard from '@/components/rewrite-rules/RewriteDraftGuard.vue'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const workbenchStore = useWorkbenchStore()
@@ -70,5 +71,6 @@ watch(
       </div>
     </div>
     <StatusBar />
+    <RewriteDraftGuard />
   </div>
 </template>

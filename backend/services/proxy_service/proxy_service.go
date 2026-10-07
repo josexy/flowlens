@@ -31,6 +31,7 @@ import (
 	"github.com/josexy/flowlens/backend/pkg/orderedmap"
 	processattribution "github.com/josexy/flowlens/backend/pkg/process_attribution"
 	"github.com/josexy/flowlens/backend/pkg/systemproxy"
+	rewriteservice "github.com/josexy/flowlens/backend/services/rewrite_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/logx"
 	"github.com/josexy/mitmproxy-go/v2"
@@ -99,6 +100,7 @@ type ProxyService struct {
 	antiCache         atomic.Bool
 	antiComp          atomic.Bool
 	settingService    *settingservice.SettingService
+	rewriteService    *rewriteservice.RewriteService
 
 	trafficEntries          *TrafficEntryWithStatics
 	trafficBodies           sync.Map
@@ -355,6 +357,12 @@ func (s *ProxyService) Start() (ProxyStatus, error) {
 		return status, nil
 	}
 	s.mu.Unlock()
+
+	if s.rewriteService != nil {
+		if err := s.rewriteService.WaitReady(s.appContext()); err != nil {
+			return ProxyStatus{}, fmt.Errorf("rewrite rules unavailable: %w", err)
+		}
+	}
 
 	cfg, err := s.getProxyConfig()
 	if err != nil {
@@ -728,6 +736,19 @@ func (s *ProxyService) isCurrentTrafficEntryLocked(entry *TrafficEntry) bool {
 
 func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.HTTPInterceptor {
 	return func(ctx context.Context, req *http.Request, invoker mitmproxy.HTTPDelegatedInvoker) (*http.Response, error) {
+		matches := s.matchRewriteRequest(req)
+		var abortRewrite context.CancelFunc
+		if len(matches) > 0 {
+			networkContext, cancel := context.WithCancel(req.Context())
+			req = req.WithContext(networkContext)
+			abortRewrite = cancel
+		}
+		rewriteHandedOff := false
+		defer func() {
+			if abortRewrite != nil && !rewriteHandedOff {
+				abortRewrite()
+			}
+		}()
 		prepared := s.prepareLiveRequest(req)
 		req = prepared.request
 		entry := &TrafficEntry{
@@ -747,6 +768,23 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 		entry.Request.Metrics = newPendingHTTPMessageMetrics(-1)
 		entry = s.registerTrafficEntry(ctx, *entry)
 		exchange := newCaptureExchange(s, ctx, entry)
+		exchange.deferResponseTiming = hasResponseRewrite(matches)
+		if len(matches) > 0 {
+			var rewriteResult rewriteResult
+			var rewriteErr error
+			req, rewriteResult, rewriteErr = s.rewriteRequest(ctx, req, prepared, matches, abortRewrite)
+			exchange.installRewrittenRequest(req, rewriteResult)
+			if rewriteResult.changed {
+				req = mitmproxy.WithHTTPRequestSendHeaderObserver(req, exchange.observeRewrittenRequestHeaders)
+			}
+			if rewriteErr != nil {
+				abortRewrite()
+				_ = mitmproxy.AbortHTTPRequestRead(req, rewriteErr)
+				closeRewriteBody(req.Body)
+				exchange.fail(rewriteErr)
+				return nil, rewriteErr
+			}
+		}
 		requestBodyless := req.Body == nil || req.Body == http.NoBody
 		exchange.setRequestBodyless(requestBodyless)
 		if !mitmproxy.ObserveHTTPExchangeTiming(ctx, exchange.observeHTTPExchangeTiming) {
@@ -769,8 +807,37 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 			return resp, err
 		}
 
-		exchange.responseHeaders(resp)
+		if len(matches) > 0 {
+			result, rewriteErr := s.rewriteResponse(ctx, req, resp, matches, abortRewrite)
+			exchange.resolveRewriteResponseTiming(result.changed)
+			exchange.installRewrittenResponse(resp, result)
+			if rewriteErr != nil {
+				abortRewrite()
+				closeRewriteBody(resp.Body)
+				exchange.fail(rewriteErr)
+				return nil, rewriteErr
+			}
+			{
+				if err := mitmproxy.SetHTTPResponseSendObserver(resp, func(sent mitmproxy.HTTPResponseSendResult) {
+					if result.changed {
+						exchange.observeRewrittenResponseSent(sent)
+					}
+					abortRewrite()
+				}); err != nil {
+					abortRewrite()
+					closeRewriteBody(resp.Body)
+					exchange.fail(err)
+					return nil, fmt.Errorf("response send observer: %v: %w", err, mitmproxy.ErrDropHTTP)
+				}
+			}
+		} else {
+			exchange.responseHeaders(resp)
+		}
 		responseBodyless := responseHasNoEntityBody(req.Method, resp)
+		if abortRewrite != nil {
+			resp.Body = &rewriteCanceledBody{ReadCloser: resp.Body, cancel: abortRewrite, expected: resp.ContentLength, complete: responseBodyless}
+			rewriteHandedOff = true
+		}
 		if responseBodyless {
 			exchange.markBodylessResponseSize()
 			return resp, nil

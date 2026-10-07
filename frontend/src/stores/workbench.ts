@@ -5,14 +5,16 @@ export type WorkspaceSection =
   | 'capture'
   | 'category'
   | 'apiCollection'
+  | 'rewriteRules'
   | 'pythonPlugins'
   | 'memstats'
-export type ContentSurface = 'traffic' | 'pythonPlugins' | 'memstats'
+export type ContentSurface = 'traffic' | 'rewriteRules' | 'pythonPlugins' | 'memstats'
 
 type SectionSelections = {
   capture: string | null
   category: 'category:panel' | null
   apiCollection: 'api-collection:panel' | null
+  rewriteRules: 'rewrite-rules:panel' | null
   pythonPlugins: 'python-plugins:panel' | null
   memstats: 'memstats:panel' | null
 }
@@ -25,11 +27,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     capture: 'capture',
     category: 'category:panel',
     apiCollection: 'api-collection:panel',
+    rewriteRules: 'rewrite-rules:panel',
     pythonPlugins: 'python-plugins:panel',
     memstats: 'memstats:panel',
   })
 
   function getSectionContent(section: WorkspaceSection): ContentSurface {
+    if (section === 'rewriteRules') return 'rewriteRules'
     if (section === 'pythonPlugins') {
       return 'pythonPlugins'
     }
@@ -79,6 +83,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activeContent.value = 'traffic'
   }
 
+  function selectRewriteRulesItem() {
+    activeSection.value = 'rewriteRules'
+    secondarySidebarVisible.value = true
+    sectionSelections.value.rewriteRules = 'rewrite-rules:panel'
+    activeContent.value = 'rewriteRules'
+  }
+
   function selectPythonPluginsItem() {
     activeSection.value = 'pythonPlugins'
     secondarySidebarVisible.value = true
@@ -111,6 +122,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     selectCaptureItem,
     selectCategoryItem,
     selectApiCollectionItem,
+    selectRewriteRulesItem,
     selectPythonPluginsItem,
     selectMemStatsItem,
   }

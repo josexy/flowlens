@@ -43,7 +43,7 @@ export const shortcutCatalog = [
     editablePolicy: 'block',
     globalCapable: true,
   },
-  ...(['capture', 'category', 'apiCollection', 'pythonPlugins', 'memstats'] as const).map(
+  ...(['capture', 'category', 'apiCollection', 'rewriteRules', 'pythonPlugins', 'memstats'] as const).map(
     (section, index) =>
       ({
         id: `workbench.${section}`,
