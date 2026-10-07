@@ -26,12 +26,12 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/josexy/logx v0.0.0-20260618062928-f91144c33007 h1:53fOxCpLT4ZcWODKnTcyTe3iy9SxqPieGqTswDk3TGI=
 github.com/josexy/logx v0.0.0-20260618062928-f91144c33007/go.mod h1:dZakDU2uhWtbYSWuMkekb3ZfJMTEVvYWc1SsP0SYaIM=
-github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261007085200-a1b6b18ea44f h1:feU7lc/bVO7HRWJhA2dB6VNZIAEW9FN1AgDDMcnr6O4=
-github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261007085200-a1b6b18ea44f/go.mod h1:K90vTMN+fIHXuYaXrrUHc+aYvq4ghp8AiDMB7oP4ZlQ=
+github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261007094959-cbde0d089375 h1:nQgD4Y1aCbspVV2cSmYBksq/7NajQDICXLJXjuk8GfI=
+github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261007094959-cbde0d089375/go.mod h1:d2eZgE61GGV60DvEdNtv/WOa4WtH+oMWlqaigYnP78M=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891 h1:nPBBheHXDAwthl/Eatf8WXNzrqMnqIqFm5tU8uMT47o=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891/go.mod h1:e/m0+ie/tpugMyeeitiYrJTsa8gal1Xu7WNq6VMqqUQ=
-github.com/josexy/xhttp v0.0.0-20261007084618-97dee9ebf8fb h1:qLT2OWYNDa9K2plAgT40uJkG+0AQzSIxhjXC/ulimTk=
-github.com/josexy/xhttp v0.0.0-20261007084618-97dee9ebf8fb/go.mod h1:WvrOvQiyy0e/43Jl/hJPSCCHvBadTwtdaXxcaDVZKjI=
+github.com/josexy/xhttp v0.0.0-20261007094548-94578d5d936c h1:icMlp2/ledcLn/a+/vppAl19r3rlPEPDhOcspjf9Tmo=
+github.com/josexy/xhttp v0.0.0-20261007094548-94578d5d936c/go.mod h1:WvrOvQiyy0e/43Jl/hJPSCCHvBadTwtdaXxcaDVZKjI=
 github.com/klauspost/compress v1.19.0 h1:sXLILfc9jV2QYWkzFOPWStmcUVH2RHEB1JCdY2oVvCQ=
 github.com/klauspost/compress v1.19.0/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/matryer/is v1.4.1 h1:55ehd8zaGABKLXQUe2awZ99BD/PTc2ls+KV/dXphgEQ=

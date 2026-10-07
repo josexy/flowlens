@@ -82,6 +82,18 @@ Live execution summaries retain the latest **64 actions**, with reasons capped a
 | `AbortHTTPRequestRead` | Interrupt request-body reads; an aborted HTTP/1 body must not advance pipeline parsing |
 | `xhttp.FinishResponse` | Finish HTTP/2 body/trailer/END_STREAM writes before reporting completion; idempotent, with no peer-acknowledgement guarantee |
 
+Header ordering has two distinct contracts: `xhttp.HeaderOrder` orders name
+groups while normal serialization supplies values and protocol fields; exact
+`xhttp.HeaderBlock` sending supplies every field occurrence and performs strict
+validation. They share HTTP/1 field serialization and HTTP/2 HPACK field encoding.
+HTTP/1 framing fields are generated once by the transfer writer; ordered trailers
+are sorted as fields without a serialize/parse round trip.
+
+mitmproxy's block overrides are proxy-specific adapters: they reconcile requested
+occurrences with final sanitized values and regenerate protocol-owned fields.
+For HTTP/1 responses, name order and occurrence order use one parsed head and one
+serialization pass. Received metadata remains separate, and bodies stay streaming.
+
 `go.mod` and `go.sum` pin published transport commits. A local `go.work` can use sibling checkouts; standalone builds and tests use `GOWORK=off`.
 
 ## Verification
