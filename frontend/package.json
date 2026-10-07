@@ -40,7 +40,7 @@
     "monaco-editor": "^0.56.0",
     "pinia": "^3.0.4",
     "uplot": "^1.6.32",
-    "vue": "^3.5.39",
+    "vue": "^3.5.42",
     "vue-draggable-plus": "^0.6.1",
     "vue-i18n": "^11.4.6",
     "vue-router": "^5.1.0"
