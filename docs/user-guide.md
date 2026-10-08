@@ -25,24 +25,24 @@ The response-body toolbar copies or saves the entire SSE response. The message-d
 
 ## Live HTTP(S) Rewrite Rules
 
-Open **Rewrite Rules** in the sidebar to redirect URLs or modify request/response headers, query parameters, and UTF-8 bodies. Rules apply only to live HTTP/HTTPS proxy traffic, excluding Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP.
+Open **Rewrite Rules** in the sidebar to redirect URLs or edit headers, request query parameters, and UTF-8 bodies. Rules apply only to live HTTP/HTTPS proxy traffic; Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP are excluded.
 
 To redirect an endpoint:
 
-1. Create a rule, name it, and select `GET` or `ALL`.
-2. Set the URL pattern to `https://api.example.com/users/*?token=*` and the **Redirect** target to `https://test.example.com/accounts/${1}?token=${2}`.
+1. Create and name a rule; select `GET` or `ALL`.
+2. Set the URL pattern to `https://api.example.com/users/*?token=*` and **Redirect** target to `https://test.example.com/accounts/${1}?token=${2}`.
 3. Use **Match test** to check the result without sending a request.
 4. Save, enable the rule, and turn on the master switch. New rules start disabled.
 
-Patterns match the complete URL. Scheme/host are case-insensitive; path/query retain case and encoding. Each `*` captures text, `\*` matches a literal star, and `?` is literal. Redirect targets use `${1}`, `${2}`, etc.; `$$` inserts `$`. Targets must be absolute HTTP/HTTPS URLs and supply the full query. Redirects change proxy routing without returning a 302; **Keep current Host** preserves only the Host header, not the connection target.
+Patterns match the complete URL: scheme/host are case-insensitive; path/query retain case and encoding. Each `*` captures text, `\*` matches a literal star, and `?` is literal. Targets use `${1}`, `${2}`, etc. for captures and `$$` for `$`; they must be absolute HTTP/HTTPS URLs with the full query. Redirects change routing without returning a 302. **Keep current Host** preserves the Host header while routing to the new target.
 
-Header/query operations run in row order: **Add** appends, **Set** replaces the first match and removes duplicates (or adds if absent), and **Delete** removes all matches. Header names are case-insensitive; query names are case-sensitive. Response rules cannot edit query parameters.
+Header/query operations run in row order: **Add** appends; **Set** replaces the first match and removes duplicates, or adds if absent; **Delete** removes all matches. Header names are case-insensitive; query names are case-sensitive.
 
-- **Order:** drag rules or use the arrows to reorder. Rules run top to bottom in each phase, using the original request's match set. Saved changes affect new requests; in-flight requests keep their snapshot.
-- **Drafts:** save with **Save** or `Primary+S`; **Revert** restores saved content. Switching rules retains drafts; toggles and ordering persist immediately. Resolve conflicts before overwriting external changes. Deleting dirty rules, quitting, and update restart offer save/discard/cancel; save failures preserve drafts. Forced exit loses unsaved edits.
-- **Bodies:** replace finite UTF-8 text directly or with Go regex captures (`$1`, `$$`). Each processing stage is limited to **8 MiB** and each body phase to **10 seconds**; complex regexes have additional limits. Streaming, binary, non-UTF-8, and responses that cannot carry bodies (HEAD/204/304) reject body edits. **Rewrite failures interrupt the exchange.**
-- **Regex replacement test:** select **Regex replace**, then paste a sample body into the editor below **Match test**, preserving spaces and line breaks. Click **Preview** to see the match count and inline differences: red marks removed text, green marks added text. The pencil returns to the original sample with its undo history and editing position intact. While previewing, changes to the unsaved pattern or replacement update the result after a short pause. Copy copies the original sample when editing and the actual replacement result when previewing; copying results is disabled during updates or after errors. A match can leave the body unchanged, and replacements may produce an empty body. Large text shows the full result without diff highlighting or word wrap. Tests send no requests and do not save rules; sample text is not persisted.
-- **Startup:** rules load in the background. The rule page and proxy startup wait for readiness; loading errors block editing and proxy startup. Resolve the error and restart to retry. Unsupported saved rules remain visible but do not execute.
+- **Order:** drag rules or use the arrows. Each phase runs top to bottom against the original request's match set. Saved changes affect new requests; in-flight requests keep their snapshot.
+- **Drafts:** **Save** or `Primary+S` saves; **Revert** restores saved content. Switching rules retains drafts; toggles and ordering save immediately. Resolve external conflicts before overwriting. Deleting rules with unsaved edits, quitting, and update restart offer save/discard/cancel. Failed saves retain drafts; forced exit loses them.
+- **Bodies:** replace finite UTF-8 text directly or with Go regex captures (`$1`, `$$`). Limits are **8 MiB** per processing stage and **10 seconds** per body phase, with additional regex limits. Streaming, binary, non-UTF-8, and bodyless responses (HEAD/204/304) reject body edits. **Rewrite failures interrupt the exchange.**
+- **Regex replacement test:** select **Regex replace**, paste a sample below **Match test**, and click **Preview** for the match count and inline diff. Pattern/replacement edits refresh the preview; the pencil returns to the original sample. Copy uses the sample while editing and the result while previewing, and is disabled for pending or failed results. Large text shows the full result without diff highlighting or wrapping. Tests send no requests or save rules; samples are not persisted.
+- **Startup:** the rule page and proxy startup wait for rules to load. Loading errors block editing and proxy startup; resolve the error and restart. Unsupported saved rules remain visible but do not execute.
 
 Capture, history, and exports use the final rewritten content. See the [technical reference](technical/http-rewrite-rules.md) for protocol details and resource limits.
 
