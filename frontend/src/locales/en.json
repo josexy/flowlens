@@ -821,6 +821,7 @@
       "settings_placeholder": "Request settings",
       "protocol": "HTTP Protocol",
       "protocol_auto": "Auto",
+      "skip_verify_tls": "Skip TLS Verification",
       "tls_fingerprint": "TLS Fingerprint",
       "tls_fingerprint_golang": "Go (Default)",
       "tls_fingerprint_chrome": "Chrome",

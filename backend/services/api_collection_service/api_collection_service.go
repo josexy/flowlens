@@ -467,6 +467,7 @@ func cloneSavedHTTPRequest(request *SavedHTTPRequest) *SavedHTTPRequest {
 		Protocol:           protocol,
 		CustomProxy:        request.CustomProxy,
 		TimeoutMs:          request.TimeoutMs,
+		SkipVerifyTLS:      request.SkipVerifyTLS,
 		TLSClientHelloID:   clientHelloID,
 		HTTP2Fingerprint:   request.HTTP2Fingerprint,
 	}
@@ -490,6 +491,7 @@ func cloneSavedWebSocketRequest(request *SavedWebSocketRequest) *SavedWebSocketR
 		ProxyMode:        request.ProxyMode,
 		CustomProxy:      request.CustomProxy,
 		TimeoutMs:        request.TimeoutMs,
+		SkipVerifyTLS:    request.SkipVerifyTLS,
 		TLSClientHelloID: clientHelloID,
 	}
 }

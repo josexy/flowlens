@@ -488,7 +488,7 @@ func TestSendHTTPRequestHTTP2WritesExactHeaderBlock(t *testing.T) {
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: true})
 	response, err := svc.SendHTTPRequest(
 		context.Background(),
-		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2},
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2, SkipVerifyTLS: true},
 		http.MethodGet,
 		server.URL+"/h2?q=1",
 		[]HTTPHeaderField{
@@ -547,7 +547,7 @@ func TestSendHTTPRequestHTTP2RegeneratesBodyMetadata(t *testing.T) {
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: true})
 	_, err := svc.SendHTTPRequest(
 		context.Background(),
-		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2},
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2, SkipVerifyTLS: true},
 		http.MethodPost,
 		server.URL+"/body",
 		[]HTTPHeaderField{{Name: "Content-Length", Value: "999"}},
@@ -769,7 +769,7 @@ func TestSendHTTPRequestHTTP2DoesNotDowngradeToHTTP1(t *testing.T) {
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: true})
 	_, err := svc.SendHTTPRequest(
 		context.Background(),
-		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2},
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP2, SkipVerifyTLS: true},
 		http.MethodGet,
 		server.URL,
 		nil,

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	http "github.com/josexy/xhttp"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/idna"
@@ -47,15 +46,11 @@ type syntheticOriginRoundTripper interface {
 }
 
 func newSyntheticRoundTripper(
-	proxyConfig *settingservice.ProxyConfig,
+	skipVerify bool,
 	protocol SendRequestProtocol,
 	proxyURL *url.URL,
 	clientHelloID TLSClientHelloID,
 ) idleClosingRoundTripper {
-	skipVerify := false
-	if proxyConfig != nil {
-		skipVerify = proxyConfig.SkipVerifyTLS
-	}
 	profileID := resolveUTLSClientHelloID(clientHelloID)
 	plain := newSyntheticBaseTransport(protocol)
 	if proxyURL != nil {

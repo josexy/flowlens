@@ -452,6 +452,7 @@ type SendRequestConfig struct {
 	Protocol           SendRequestProtocol  `json:"protocol"`    // auto / http1 / http2
 	CustomProxy        string               `json:"customProxy"` // used when ProxyMode=custom
 	TimeoutMs          int64                `json:"timeoutMs"`   // <=0 means no timeout
+	SkipVerifyTLS      bool                 `json:"skipVerifyTls"`
 	TLSClientHelloID   TLSClientHelloID     `json:"tlsClientHelloId"`
 	HTTP2Fingerprint   string               `json:"http2Fingerprint"`
 	DisablePlugins     bool                 `json:"disablePlugins"`
@@ -494,6 +495,7 @@ type WebSocketConnectRequest struct {
 	ProxyMode        SendRequestProxyMode `json:"proxyMode"`
 	CustomProxy      string               `json:"customProxy"`
 	TimeoutMs        int64                `json:"timeoutMs"`
+	SkipVerifyTLS    bool                 `json:"skipVerifyTls"`
 	TLSClientHelloID TLSClientHelloID     `json:"tlsClientHelloId"`
 }
 

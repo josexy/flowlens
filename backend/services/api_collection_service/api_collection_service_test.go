@@ -633,12 +633,20 @@ func TestSaveAndUpdateWebSocketAPIInFolder(t *testing.T) {
 		DraftText:        `{"op":"subscribe"}`,
 		ProxyMode:        "none",
 		TLSClientHelloID: proxyservice.TLSClientHelloChromeAuto,
+		SkipVerifyTLS:    true,
 	})
 	if err != nil {
 		t.Fatalf("SaveWebSocketRequest: %v", err)
 	}
 	if request.Type != APICollectionNodeTypeWebSocket || request.WebSocket == nil {
 		t.Fatalf("expected websocket request, got %+v", request)
+	}
+	loaded, err := svc.GetRequest(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.WebSocket.SkipVerifyTLS || !cloneSavedWebSocketRequest(loaded.WebSocket).SkipVerifyTLS {
+		t.Fatal("saved or cloned WebSocket request lost skip TLS verification")
 	}
 
 	updated, err := svc.UpdateWebSocketRequest(request.ID, &SavedWebSocketRequest{
@@ -653,8 +661,23 @@ func TestSaveAndUpdateWebSocketAPIInFolder(t *testing.T) {
 	}
 	if updated.WebSocket.DraftType != "text" ||
 		updated.WebSocket.DraftText != "ping" ||
-		updated.WebSocket.TLSClientHelloID != proxyservice.TLSClientHelloFirefoxAuto {
+		updated.WebSocket.TLSClientHelloID != proxyservice.TLSClientHelloFirefoxAuto ||
+		updated.WebSocket.SkipVerifyTLS {
 		t.Fatalf("unexpected websocket payload: %+v", updated.WebSocket)
+	}
+	loaded, err = svc.GetRequest(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.WebSocket.SkipVerifyTLS {
+		t.Fatal("updated WebSocket request must verify TLS certificates")
+	}
+	legacy, err := requestFromPayload(APICollectionNodeTypeWebSocket, `{"url":"wss://legacy.test/","draftType":"text","proxyMode":"none"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.WebSocket.SkipVerifyTLS {
+		t.Fatal("legacy WebSocket request must verify TLS certificates by default")
 	}
 }
 
@@ -747,6 +770,7 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 		Protocol:         proxyservice.SendRequestProtocolHTTP2,
 		TLSClientHelloID: proxyservice.TLSClientHelloSafariAuto,
 		HTTP2Fingerprint: "1:65536;3:1000;4:6291456;6:262144|15663105|0|m,a,s,p",
+		SkipVerifyTLS:    true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -758,6 +782,9 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 	if loaded.HTTP == nil || loaded.HTTP.Protocol != proxyservice.SendRequestProtocolHTTP2 {
 		t.Fatalf("saved protocol = %+v, want http2", loaded.HTTP)
 	}
+	if !loaded.HTTP.SkipVerifyTLS {
+		t.Fatal("saved request lost skip TLS certificate verification")
+	}
 	if loaded.HTTP.TLSClientHelloID != proxyservice.TLSClientHelloSafariAuto {
 		t.Fatalf("saved TLS ClientHello = %q, want safari_auto", loaded.HTTP.TLSClientHelloID)
 	}
@@ -765,6 +792,9 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 		t.Fatalf("saved HTTP/2 fingerprint = %q", loaded.HTTP.HTTP2Fingerprint)
 	}
 	cloned := cloneSavedHTTPRequest(loaded.HTTP)
+	if !cloned.SkipVerifyTLS {
+		t.Fatal("cloned request lost skip TLS certificate verification")
+	}
 	if cloned.Protocol != proxyservice.SendRequestProtocolHTTP2 {
 		t.Fatalf("cloned protocol = %q, want http2", cloned.Protocol)
 	}
@@ -781,6 +811,9 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 	}
 	if legacy.HTTP == nil || legacy.HTTP.Protocol != proxyservice.SendRequestProtocolAuto {
 		t.Fatalf("legacy protocol = %+v, want auto", legacy.HTTP)
+	}
+	if legacy.HTTP.SkipVerifyTLS {
+		t.Fatal("legacy request must verify TLS certificates by default")
 	}
 	if legacy.HTTP.TLSClientHelloID != proxyservice.TLSClientHelloGolang {
 		t.Fatalf("legacy TLS ClientHello = %q, want golang", legacy.HTTP.TLSClientHelloID)

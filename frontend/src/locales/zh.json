@@ -792,6 +792,7 @@
       "settings_placeholder": "请求设置",
       "protocol": "HTTP 协议",
       "protocol_auto": "自动",
+      "skip_verify_tls": "跳过TLS校验",
       "tls_fingerprint": "TLS 指纹",
       "tls_fingerprint_golang": "Go（默认）",
       "tls_fingerprint_chrome": "Chrome",

@@ -694,6 +694,19 @@ onBeforeUnmount(() => {
 
                     <div class="contents">
                       <span class="whitespace-nowrap text-sm leading-[1.35] text-app-text-muted">
+                        {{ t('workspace.http_request.skip_verify_tls') }}
+                      </span>
+                      <UFormField name="skipVerifyTls">
+                        <USwitch
+                          v-model="state.settings.skipVerifyTls"
+                          size="sm"
+                          :aria-label="t('workspace.http_request.skip_verify_tls')"
+                        />
+                      </UFormField>
+                    </div>
+
+                    <div class="contents">
+                      <span class="whitespace-nowrap text-sm leading-[1.35] text-app-text-muted">
                         {{ t('workspace.http_request.tls_fingerprint') }}
                       </span>
                       <USelect

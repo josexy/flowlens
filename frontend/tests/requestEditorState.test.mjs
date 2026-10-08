@@ -52,6 +52,102 @@ test('traffic editing rejects missing request bodies while keeping actual empty 
   assert.equal(requestEditorState.toHttpRequestEditorState(args).requestBodyText, '')
 })
 
+test('HTTP Request Editor keeps TLS verification per tab and includes it in saved and dirty state', () => {
+  const state = requestEditorState.buildEmptyHttpRequestEditorState('new')
+  const otherState = requestEditorState.buildEmptyHttpRequestEditorState('new')
+  const tab = {
+    key: 'http-request:tls',
+    type: 'http-request',
+    title: '',
+    closable: true,
+    httpRequest: state,
+  }
+
+  assert.equal(state.settings.skipVerifyTls, false)
+  assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), false)
+  const initialSnapshot = requestEditorState.createSnapshotForTab(tab)
+  state.settings.skipVerifyTls = true
+  assert.equal(otherState.settings.skipVerifyTls, false)
+  assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), true)
+  assert.notEqual(requestEditorState.createSnapshotForTab(tab), initialSnapshot)
+
+  for (const skipVerifyTls of [true, false]) {
+    state.settings.skipVerifyTls = skipVerifyTls
+    const saved = requestEditorState.buildSavedHTTPRequestFromState(state)
+    assert.equal(saved.skipVerifyTls, skipVerifyTls)
+    const restored = requestEditorState.buildHttpRequestEditorStateFromSavedRequest(saved, 'Saved')
+    assert.equal(restored.settings.skipVerifyTls, skipVerifyTls)
+    otherState.settings.skipVerifyTls = !skipVerifyTls
+    requestEditorState.applySavedHTTPRequestToState(otherState, saved, 'Saved')
+    assert.equal(otherState.settings.skipVerifyTls, skipVerifyTls)
+  }
+  assert.equal(requestEditorState.createSnapshotForTab(tab), initialSnapshot)
+})
+
+test('HTTP Request Editor verifies TLS by default for legacy APIs and traffic drafts', () => {
+  const legacy = savedHTTPRequest()
+  const restored = requestEditorState.buildHttpRequestEditorStateFromSavedRequest(legacy, 'Legacy')
+  assert.equal(restored.settings.skipVerifyTls, false)
+  restored.settings.skipVerifyTls = true
+  requestEditorState.applySavedHTTPRequestToState(restored, legacy, 'Legacy')
+  assert.equal(restored.settings.skipVerifyTls, false)
+
+  const trafficDraft = requestEditorState.toHttpRequestEditorState({
+    source: 'capture-edit',
+    entry: { id: 1, method: 'GET', url: 'https://example.test/', request: { headerFields: [] } },
+    bodyView: null,
+  })
+  assert.equal(trafficDraft.settings.skipVerifyTls, false)
+})
+
+test('WebSocket Client keeps TLS verification per tab and includes it in saved and dirty state', () => {
+  const state = requestEditorState.buildEmptyWebSocketClientState('new')
+  const otherState = requestEditorState.buildEmptyWebSocketClientState('new')
+  const tab = {
+    key: 'websocket-client:tls',
+    type: 'websocket-client',
+    title: '',
+    closable: true,
+    webSocketClient: state,
+  }
+
+  assert.equal(state.settings.skipVerifyTls, false)
+  assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), false)
+  const initialSnapshot = requestEditorState.createSnapshotForTab(tab)
+  state.settings.skipVerifyTls = true
+  assert.equal(otherState.settings.skipVerifyTls, false)
+  assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), true)
+  assert.notEqual(requestEditorState.createSnapshotForTab(tab), initialSnapshot)
+
+  for (const skipVerifyTls of [true, false]) {
+    state.settings.skipVerifyTls = skipVerifyTls
+    const saved = requestEditorState.buildSavedWebSocketRequestFromState(state)
+    assert.equal(saved.skipVerifyTls, skipVerifyTls)
+    const restored = requestEditorState.buildWebSocketClientStateFromSavedRequest(saved, 'Saved')
+    assert.equal(restored.settings.skipVerifyTls, skipVerifyTls)
+    otherState.settings.skipVerifyTls = !skipVerifyTls
+    requestEditorState.applySavedWebSocketRequestToState(otherState, saved, 'Saved')
+    assert.equal(otherState.settings.skipVerifyTls, skipVerifyTls)
+  }
+  assert.equal(requestEditorState.createSnapshotForTab(tab), initialSnapshot)
+})
+
+test('WebSocket Client verifies TLS by default for legacy APIs and traffic drafts', () => {
+  const legacy = { url: 'wss://example.test/', draftType: 'text', proxyMode: 'none', timeoutMs: 0 }
+  const restored = requestEditorState.buildWebSocketClientStateFromSavedRequest(legacy, 'Legacy')
+  assert.equal(restored.settings.skipVerifyTls, false)
+  restored.settings.skipVerifyTls = true
+  requestEditorState.applySavedWebSocketRequestToState(restored, legacy, 'Legacy')
+  assert.equal(restored.settings.skipVerifyTls, false)
+
+  const trafficDraft = requestEditorState.toWebSocketClientState({
+    source: 'history-edit',
+    entry: { id: 1, url: 'wss://example.test/', request: { headerFields: [] } },
+    bodyView: null,
+  })
+  assert.equal(trafficDraft.settings.skipVerifyTls, false)
+})
+
 test('HTTP Request Editor saves and restores the current-request script source disabled', () => {
   const state = requestEditorState.buildEmptyHttpRequestEditorState('new')
   const tab = {

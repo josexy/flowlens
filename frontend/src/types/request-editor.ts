@@ -57,6 +57,7 @@ export interface HttpRequestSendSettings {
   protocol: HttpRequestProtocol
   customProxy: string
   timeoutMs: number
+  skipVerifyTls: boolean
   tlsClientHelloId: RequestTLSClientHelloID
   http2Fingerprint: string
 }
@@ -122,6 +123,7 @@ export interface WebSocketClientSettings {
   proxyMode: RequestProxyMode
   customProxy: string
   timeoutMs: number
+  skipVerifyTls: boolean
   tlsClientHelloId: RequestTLSClientHelloID
 }
 

@@ -77,6 +77,7 @@ export interface SavedHTTPRequest {
     "protocol"?: proxyservice$0.SendRequestProtocol;
     "customProxy"?: string;
     "timeoutMs": number;
+    "skipVerifyTls": boolean;
     "tlsClientHelloId"?: proxyservice$0.TLSClientHelloID;
     "http2Fingerprint"?: string;
 }
@@ -97,5 +98,6 @@ export interface SavedWebSocketRequest {
     "proxyMode": proxyservice$0.SendRequestProxyMode;
     "customProxy"?: string;
     "timeoutMs": number;
+    "skipVerifyTls": boolean;
     "tlsClientHelloId"?: proxyservice$0.TLSClientHelloID;
 }

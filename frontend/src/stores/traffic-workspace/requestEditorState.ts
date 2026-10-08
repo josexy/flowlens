@@ -155,6 +155,7 @@ function createDefaultHttpRequestSendSettings(): HttpRequestSendSettings {
     protocol: 'auto',
     customProxy: '',
     timeoutMs: 0,
+    skipVerifyTls: false,
     tlsClientHelloId: 'golang',
     http2Fingerprint: '',
   }
@@ -165,6 +166,7 @@ function createDefaultWebSocketClientSettings(): WebSocketClientSettings {
     proxyMode: 'none',
     customProxy: '',
     timeoutMs: 0,
+    skipVerifyTls: false,
     tlsClientHelloId: 'golang',
   }
 }
@@ -414,6 +416,7 @@ export function buildSavedHTTPRequestFromState(
     protocol: state.settings.protocol as proxyservice.SendRequestProtocol,
     customProxy: state.settings.customProxy,
     timeoutMs: state.settings.timeoutMs,
+    skipVerifyTls: state.settings.skipVerifyTls,
     tlsClientHelloId: state.settings.tlsClientHelloId as proxyservice.TLSClientHelloID,
     http2Fingerprint: state.settings.http2Fingerprint,
   }
@@ -432,6 +435,7 @@ export function buildSavedWebSocketRequestFromState(
     proxyMode: state.settings.proxyMode as proxyservice.SendRequestProxyMode,
     customProxy: state.settings.customProxy,
     timeoutMs: state.settings.timeoutMs,
+    skipVerifyTls: state.settings.skipVerifyTls,
     tlsClientHelloId: state.settings.tlsClientHelloId as proxyservice.TLSClientHelloID,
   }
 }
@@ -474,6 +478,7 @@ export function buildHttpRequestEditorStateFromSavedRequest(
       protocol,
       customProxy: request.customProxy ?? '',
       timeoutMs: request.timeoutMs ?? 0,
+      skipVerifyTls: request.skipVerifyTls ?? false,
       tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
       http2Fingerprint: request.http2Fingerprint ?? '',
     },
@@ -502,6 +507,7 @@ export function buildWebSocketClientStateFromSavedRequest(
       proxyMode: (request.proxyMode || 'none') as WebSocketClientSettings['proxyMode'],
       customProxy: request.customProxy ?? '',
       timeoutMs: request.timeoutMs ?? 0,
+      skipVerifyTls: request.skipVerifyTls ?? false,
       tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
     },
     sessionId: '',
@@ -543,6 +549,7 @@ export function applySavedHTTPRequestToState(
     protocol,
     customProxy: request.customProxy ?? '',
     timeoutMs: request.timeoutMs ?? 0,
+    skipVerifyTls: request.skipVerifyTls ?? false,
     tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
     http2Fingerprint: request.http2Fingerprint ?? '',
   }
@@ -562,6 +569,7 @@ export function applySavedWebSocketRequestToState(
     proxyMode: (request.proxyMode || 'none') as WebSocketClientSettings['proxyMode'],
     customProxy: request.customProxy ?? '',
     timeoutMs: request.timeoutMs ?? 0,
+    skipVerifyTls: request.skipVerifyTls ?? false,
     tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
   }
   state.draftType = (request.draftType || 'text') as WebSocketClientState['draftType']
@@ -623,6 +631,7 @@ function createSnapshotPayloadForTab(tab: WorkspaceTab) {
         protocol: state.settings.protocol,
         customProxy: state.settings.customProxy,
         timeoutMs: state.settings.timeoutMs,
+        skipVerifyTls: state.settings.skipVerifyTls,
         tlsClientHelloId: state.settings.tlsClientHelloId,
         http2Fingerprint: state.settings.http2Fingerprint,
       },
@@ -649,6 +658,7 @@ function createSnapshotPayloadForTab(tab: WorkspaceTab) {
         proxyMode: state.settings.proxyMode,
         customProxy: state.settings.customProxy,
         timeoutMs: state.settings.timeoutMs,
+        skipVerifyTls: state.settings.skipVerifyTls,
         tlsClientHelloId: state.settings.tlsClientHelloId,
       },
     }
@@ -683,6 +693,7 @@ export function hasMeaningfulRequestDraft(tab: WorkspaceTab) {
       payload.settings.protocol !== 'auto' ||
       payload.settings.customProxy ||
       payload.settings.timeoutMs > 0 ||
+      payload.settings.skipVerifyTls ||
       payload.settings.tlsClientHelloId !== 'golang' ||
       payload.settings.http2Fingerprint.trim(),
     )
@@ -697,6 +708,7 @@ export function hasMeaningfulRequestDraft(tab: WorkspaceTab) {
     payload.settings.proxyMode !== 'none' ||
     payload.settings.customProxy ||
     payload.settings.timeoutMs > 0 ||
+    payload.settings.skipVerifyTls ||
     payload.settings.tlsClientHelloId !== 'golang',
   )
 }

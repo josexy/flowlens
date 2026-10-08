@@ -840,6 +840,7 @@ export const useTrafficWorkspaceStore = defineStore('trafficWorkspace', () => {
       proxyMode: state.settings.proxyMode as proxyservice.SendRequestProxyMode,
       customProxy: state.settings.customProxy,
       timeoutMs: state.settings.timeoutMs > 0 ? state.settings.timeoutMs : 0,
+      skipVerifyTls: state.settings.skipVerifyTls,
       tlsClientHelloId: state.settings.tlsClientHelloId as proxyservice.TLSClientHelloID,
     })
     webSocketConnectGenerationByTabKey.set(

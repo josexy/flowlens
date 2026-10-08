@@ -909,6 +909,7 @@ async function handleSend() {
       customProxy:
         state.value.settings.proxyMode === 'custom' ? state.value.settings.customProxy : '',
       timeoutMs: state.value.settings.timeoutMs > 0 ? state.value.settings.timeoutMs : 0,
+      skipVerifyTls: state.value.settings.skipVerifyTls,
       tlsClientHelloId: state.value.settings.tlsClientHelloId as TLSClientHelloID,
       http2Fingerprint: state.value.settings.http2Fingerprint,
       disablePlugins: !state.value.pluginsEnabled,
@@ -1426,6 +1427,18 @@ onBeforeUnmount(() => {
                         {{ t('workspace.http_request.proxy_mode') }}
                       </span>
                       <USelect v-model="state.settings.proxyMode" :items="proxyModeOptions" />
+                    </div>
+                    <div class="contents">
+                      <span class="whitespace-nowrap text-sm leading-[1.35] text-app-text-muted">
+                        {{ t('workspace.http_request.skip_verify_tls') }}
+                      </span>
+                      <UFormField name="skipVerifyTls">
+                        <USwitch
+                          v-model="state.settings.skipVerifyTls"
+                          size="sm"
+                          :aria-label="t('workspace.http_request.skip_verify_tls')"
+                        />
+                      </UFormField>
                     </div>
                     <div class="contents">
                       <span class="whitespace-nowrap text-sm leading-[1.35] text-app-text-muted">

@@ -64,6 +64,7 @@ type SavedHTTPRequest struct {
 	Protocol           proxyservice.SendRequestProtocol  `json:"protocol,omitempty"`
 	CustomProxy        string                            `json:"customProxy,omitempty"`
 	TimeoutMs          int64                             `json:"timeoutMs"`
+	SkipVerifyTLS      bool                              `json:"skipVerifyTls"`
 	TLSClientHelloID   proxyservice.TLSClientHelloID     `json:"tlsClientHelloId,omitempty"`
 	HTTP2Fingerprint   string                            `json:"http2Fingerprint,omitempty"`
 }
@@ -78,6 +79,7 @@ type SavedWebSocketRequest struct {
 	ProxyMode        proxyservice.SendRequestProxyMode `json:"proxyMode"`
 	CustomProxy      string                            `json:"customProxy,omitempty"`
 	TimeoutMs        int64                             `json:"timeoutMs"`
+	SkipVerifyTLS    bool                              `json:"skipVerifyTls"`
 	TLSClientHelloID proxyservice.TLSClientHelloID     `json:"tlsClientHelloId,omitempty"`
 }
 

@@ -356,6 +356,7 @@ export interface SendRequestConfig {
      * <=0 means no timeout
      */
     "timeoutMs": number;
+    "skipVerifyTls": boolean;
     "tlsClientHelloId": TLSClientHelloID;
     "http2Fingerprint": string;
     "disablePlugins": boolean;
@@ -578,6 +579,7 @@ export interface WebSocketConnectRequest {
     "proxyMode": SendRequestProxyMode;
     "customProxy": string;
     "timeoutMs": number;
+    "skipVerifyTls": boolean;
     "tlsClientHelloId": TLSClientHelloID;
 }
 

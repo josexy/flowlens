@@ -1947,7 +1947,7 @@ func (s *ProxyService) ResendRequestWithTrafficEntry(ctx context.Context, cfg Re
 		proxyURL, _ = url.Parse(cfg.UpstreamProxy)
 	}
 
-	transport := newSyntheticRoundTripper(proxyConfig, protocol, proxyURL, TLSClientHelloGolang)
+	transport := newSyntheticRoundTripper(proxyConfig.SkipVerifyTLS, protocol, proxyURL, TLSClientHelloGolang)
 	defer transport.CloseIdleConnections()
 	if protocol == SendRequestProtocolHTTP2 && parsedURL.Scheme == "http" && proxyURL != nil && !isSOCKSProxyURL(proxyURL) {
 		return ResendResult{}, fmt.Errorf("HTTP/2 prior-knowledge requests over http:// do not support HTTP forward proxies")
@@ -2303,7 +2303,7 @@ func (s *ProxyService) SendHTTPRequest(
 		return SendRequestResponse{}, fmt.Errorf("HTTP/2 prior-knowledge requests over http:// do not support HTTP forward proxies")
 	}
 
-	transport := newSyntheticRoundTripper(proxyConfig, protocol, proxyURL, cfg.TLSClientHelloID)
+	transport := newSyntheticRoundTripper(cfg.SkipVerifyTLS, protocol, proxyURL, cfg.TLSClientHelloID)
 	streamingResponse := false
 	defer func() {
 		if !streamingResponse {
@@ -2946,7 +2946,7 @@ func (s *ProxyService) ConnectWebSocket(
 				profileID,
 				[]string{syntheticALPNHTTP1},
 				true,
-				proxyConfig.SkipVerifyTLS,
+				req.SkipVerifyTLS,
 			)
 			if dialErr != nil {
 				return nil, dialErr
@@ -2967,7 +2967,7 @@ func (s *ProxyService) ConnectWebSocket(
 				profileID,
 				[]string{syntheticALPNHTTP1},
 				true,
-				proxyConfig.SkipVerifyTLS,
+				req.SkipVerifyTLS,
 			)
 			if dialErr != nil {
 				return nil, dialErr

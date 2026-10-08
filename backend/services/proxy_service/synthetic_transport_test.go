@@ -160,7 +160,7 @@ func TestConfiguredClientHelloProfilesReachHTTPSWire(t *testing.T) {
 	for _, tt := range profiles {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := newSyntheticRoundTripper(
-				&settingservice.ProxyConfig{SkipVerifyTLS: true},
+				true,
 				SendRequestProtocolAuto,
 				nil,
 				tt.configured,
@@ -282,7 +282,7 @@ func TestSyntheticHTTPSProtocolNegotiation(t *testing.T) {
 			defer server.Close()
 
 			transport := newSyntheticRoundTripper(
-				&settingservice.ProxyConfig{SkipVerifyTLS: true},
+				true,
 				tt.protocol,
 				nil,
 				TLSClientHelloChromeAuto,
@@ -313,7 +313,7 @@ func TestSyntheticHTTPSCertificateVerification(t *testing.T) {
 	defer server.Close()
 
 	verified := newSyntheticRoundTripper(
-		&settingservice.ProxyConfig{},
+		false,
 		SendRequestProtocolAuto,
 		nil,
 		TLSClientHelloFirefoxAuto,
@@ -325,7 +325,7 @@ func TestSyntheticHTTPSCertificateVerification(t *testing.T) {
 	}
 
 	insecure := newSyntheticRoundTripper(
-		&settingservice.ProxyConfig{SkipVerifyTLS: true},
+		true,
 		SendRequestProtocolAuto,
 		nil,
 		TLSClientHelloFirefoxAuto,
@@ -336,6 +336,94 @@ func TestSyntheticHTTPSCertificateVerification(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	insecure.CloseIdleConnections()
+}
+
+func TestHTTPRequestTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	tests := []struct {
+		name        string
+		globalSkip  bool
+		requestSkip bool
+	}{
+		{name: "both verify"},
+		{name: "request skips", requestSkip: true},
+		{name: "global skips", globalSkip: true},
+		{name: "both skip", globalSkip: true, requestSkip: true},
+	}
+	for _, profile := range []TLSClientHelloID{TLSClientHelloGolang, TLSClientHelloFirefoxAuto} {
+		for _, protocol := range []SendRequestProtocol{SendRequestProtocolAuto, SendRequestProtocolHTTP1, SendRequestProtocolHTTP2} {
+			for _, tt := range tests {
+				t.Run(string(profile)+"/"+string(protocol)+"/"+tt.name, func(t *testing.T) {
+					svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: tt.globalSkip})
+					response, err := svc.SendHTTPRequest(
+						context.Background(),
+						SendRequestConfig{
+							Protocol:         protocol,
+							TLSClientHelloID: profile,
+							SkipVerifyTLS:    tt.requestSkip,
+						},
+						http.MethodGet,
+						server.URL,
+						nil,
+						SendRequestBody{BodyType: SendRequestBodyTypeNone},
+					)
+					if !tt.requestSkip {
+						var certError x509.UnknownAuthorityError
+						if !errors.As(err, &certError) {
+							t.Fatalf("untrusted certificate error = %v, want unknown authority", err)
+						}
+						return
+					}
+					if err != nil || response.StatusCode != http.StatusNoContent {
+						t.Fatalf("skip TLS verification: status=%d error=%v", response.StatusCode, err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestHTTPRequestHTTPSForwardProxyUsesRequestTLSVerification(t *testing.T) {
+	proxy := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer proxy.Close()
+
+	for _, globalSkip := range []bool{false, true} {
+		for _, requestSkip := range []bool{false, true} {
+			svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: globalSkip})
+			response, err := svc.SendHTTPRequest(
+				context.Background(),
+				SendRequestConfig{
+					ProxyMode:        SendRequestProxyModeCustom,
+					CustomProxy:      proxy.URL,
+					Protocol:         SendRequestProtocolHTTP1,
+					TLSClientHelloID: TLSClientHelloFirefoxAuto,
+					SkipVerifyTLS:    requestSkip,
+				},
+				http.MethodGet,
+				"http://example.invalid/request",
+				nil,
+				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			)
+			if !requestSkip {
+				var certError x509.UnknownAuthorityError
+				if !errors.As(err, &certError) {
+					t.Fatalf("globalSkip=%t requestSkip=%t: error=%v, want unknown authority", globalSkip, requestSkip, err)
+				}
+				continue
+			}
+			if err != nil || response.StatusCode != http.StatusNoContent {
+				t.Fatalf("globalSkip=%t requestSkip=%t: status=%d error=%v", globalSkip, requestSkip, response.StatusCode, err)
+			}
+		}
+	}
 }
 
 func TestSyntheticTLSHandshakeHonorsContextDeadline(t *testing.T) {
@@ -405,7 +493,7 @@ func TestSyntheticHTTPSProxyPathsPreserveSelectedClientHello(t *testing.T) {
 				}
 			}
 			transport := newSyntheticRoundTripper(
-				&settingservice.ProxyConfig{SkipVerifyTLS: true},
+				true,
 				SendRequestProtocolAuto,
 				proxyURL,
 				TLSClientHelloChromeAuto,
@@ -448,6 +536,7 @@ func TestHTTPRequestUsesConfiguredClientHello(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeNone,
 			Protocol:         SendRequestProtocolAuto,
 			TLSClientHelloID: TLSClientHelloFirefoxAuto,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		server.URL,
@@ -491,6 +580,7 @@ func TestHTTPRequestUsesConfiguredHTTP2Fingerprint(t *testing.T) {
 					ProxyMode:        SendRequestProxyModeNone,
 					Protocol:         protocol,
 					TLSClientHelloID: TLSClientHelloChromeAuto,
+					SkipVerifyTLS:    true,
 					HTTP2Fingerprint: encoded,
 				},
 				http.MethodGet,
@@ -573,6 +663,7 @@ func TestHTTPRequestHTTP2FingerprintRebuildsRedirectHeaderBlock(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeNone,
 			Protocol:         SendRequestProtocolHTTP2,
 			HTTP2Fingerprint: encoded,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		redirect.URL+"/redirect-source",
@@ -648,6 +739,7 @@ func TestHTTPRequestHTTP2FingerprintPreserves307RedirectBody(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeNone,
 			Protocol:         SendRequestProtocolHTTP2,
 			HTTP2Fingerprint: encoded,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodPost,
 		redirect.URL+"/redirect-source",
@@ -683,6 +775,7 @@ func TestHTTPRequestHTTP2FingerprintDoesNotForceHTTP2(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeNone,
 			Protocol:         SendRequestProtocolAuto,
 			HTTP2Fingerprint: encoded,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		server.URL,
@@ -724,6 +817,7 @@ func TestHTTPRequestUsesConfiguredHTTP2FingerprintThroughHTTPProxy(t *testing.T)
 			CustomProxy:      proxy.URL,
 			TLSClientHelloID: TLSClientHelloFirefoxAuto,
 			HTTP2Fingerprint: encoded,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		target.URL,
@@ -803,7 +897,7 @@ func TestHTTPRequestHTTP2FingerprintValidation(t *testing.T) {
 
 	response, err := svc.SendHTTPRequest(
 		context.Background(),
-		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, HTTP2Fingerprint: ""},
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, HTTP2Fingerprint: "", SkipVerifyTLS: true},
 		http.MethodGet,
 		server.URL,
 		nil,
@@ -837,6 +931,7 @@ func TestHTTPRequestHTTP2FingerprintValidation(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeNone,
 			Protocol:         SendRequestProtocolHTTP1,
 			HTTP2Fingerprint: "invalid",
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		server.URL,
@@ -879,6 +974,87 @@ func TestResendUsesDefaultClientHello(t *testing.T) {
 	assertClientHelloShape(t, got, want, false)
 }
 
+func TestWebSocketTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
+	disconnected := make(chan struct{}, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, req, nil)
+		if err != nil {
+			t.Errorf("upgrade WebSocket: %v", err)
+			return
+		}
+		defer conn.Close()
+		_, _, _ = conn.ReadMessage()
+		disconnected <- struct{}{}
+	})
+	wss := httptest.NewTLSServer(handler)
+	defer wss.Close()
+	ws := httptest.NewServer(handler)
+	defer ws.Close()
+	httpProxy := httptest.NewServer(connectTunnelHandler(t))
+	defer httpProxy.Close()
+	httpsProxy := httptest.NewTLSServer(connectTunnelHandler(t))
+	defer httpsProxy.Close()
+
+	paths := []struct {
+		name     string
+		url      string
+		proxyURL string
+	}{
+		{name: "direct WSS", url: strings.Replace(wss.URL, "https://", "wss://", 1)},
+		{name: "WSS over HTTP proxy", url: strings.Replace(wss.URL, "https://", "wss://", 1), proxyURL: httpProxy.URL},
+		{name: "WSS over HTTPS proxy", url: strings.Replace(wss.URL, "https://", "wss://", 1), proxyURL: httpsProxy.URL},
+		{name: "WS over HTTPS proxy", url: strings.Replace(ws.URL, "http://", "ws://", 1), proxyURL: httpsProxy.URL},
+	}
+	tests := []struct {
+		name        string
+		globalSkip  bool
+		requestSkip bool
+	}{
+		{name: "both verify"},
+		{name: "request skips", requestSkip: true},
+		{name: "global skips", globalSkip: true},
+		{name: "both skip", globalSkip: true, requestSkip: true},
+	}
+	for _, profile := range []TLSClientHelloID{TLSClientHelloGolang, TLSClientHelloFirefoxAuto} {
+		for _, path := range paths {
+			for _, tt := range tests {
+				t.Run(string(profile)+"/"+path.name+"/"+tt.name, func(t *testing.T) {
+					svc := newTestProxyService(t, &settingservice.ProxyConfig{SkipVerifyTLS: tt.globalSkip})
+					req := WebSocketConnectRequest{
+						URL:              path.url,
+						CustomProxy:      path.proxyURL,
+						TLSClientHelloID: profile,
+						SkipVerifyTLS:    tt.requestSkip,
+						TimeoutMs:        2000,
+					}
+					if path.proxyURL != "" {
+						req.ProxyMode = SendRequestProxyModeCustom
+					}
+					connected, err := svc.ConnectWebSocket(context.Background(), req)
+					if !tt.requestSkip {
+						var certError x509.UnknownAuthorityError
+						if !errors.As(err, &certError) {
+							t.Fatalf("untrusted certificate error = %v, want unknown authority", err)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("skip TLS verification: %v", err)
+					}
+					if err := svc.DisconnectWebSocket(connected.SessionID); err != nil {
+						t.Fatalf("DisconnectWebSocket: %v", err)
+					}
+					select {
+					case <-disconnected:
+					case <-time.After(2 * time.Second):
+						t.Fatal("timed out waiting for WebSocket server disconnect")
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestWebSocketSessionUsesConfiguredClientHelloAndHTTP1ALPN(t *testing.T) {
 	serverDone := make(chan struct{})
 	server, captured := newClientHelloCaptureServer(t, false, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -897,6 +1073,7 @@ func TestWebSocketSessionUsesConfiguredClientHelloAndHTTP1ALPN(t *testing.T) {
 	connected, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{
 		URL:              strings.Replace(server.URL, "https://", "wss://", 1),
 		TLSClientHelloID: TLSClientHelloIOSAuto,
+		SkipVerifyTLS:    true,
 	})
 	if err != nil {
 		t.Fatalf("ConnectWebSocket: %v", err)
@@ -963,6 +1140,7 @@ func TestMITMCaptureStillMirrorsDownstreamClientHello(t *testing.T) {
 			ProxyMode:        SendRequestProxyModeMITM,
 			Protocol:         SendRequestProtocolAuto,
 			TLSClientHelloID: TLSClientHelloChromeAuto,
+			SkipVerifyTLS:    true,
 		},
 		http.MethodGet,
 		targetAddress,
