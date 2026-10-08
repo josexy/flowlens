@@ -403,6 +403,7 @@
     "cert_sha1_fingerprint": "SHA1 Fingerprint",
     "cert_sha256_fingerprint": "SHA256 Fingerprint",
     "raw": "Raw",
+    "body_raw": "Raw",
     "raw_http_waiting": "Waiting for response headers...",
     "copy_raw_http": "Copy raw HTTP message",
     "raw_http_copied": "Raw HTTP message copied",

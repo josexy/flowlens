@@ -687,7 +687,7 @@ function tabLabel(tab: TabKey): string {
     case 'image':
       return t('detail.preview')
     case 'raw':
-      return t('detail.raw')
+      return t('detail.body_raw')
     case 'sse':
       return t('detail.sse.tab')
     case 'hex':
