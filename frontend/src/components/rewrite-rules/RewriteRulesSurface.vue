@@ -16,6 +16,19 @@ const deleteId = shallowRef('')
 const deleteName = shallowRef('')
 const deleteDirty = shallowRef(false)
 const deleteFieldError = computed(() => Object.values(store.fieldErrors(deleteId.value))[0])
+const saving = computed(
+  () => store.pendingMutation?.kind === 'save' && store.pendingMutation.id === store.selectedId,
+)
+const canRevert = computed(
+  () => !!store.selectedId && (store.isDirty(store.selectedId) || !!store.selectedDraft?.conflict),
+)
+const canSave = computed(
+  () =>
+    !!store.selectedId &&
+    store.isDirty(store.selectedId) &&
+    !store.selectedDraft?.conflict &&
+    !store.selectedRule?.unavailableReason,
+)
 function save() {
   return store.save()
 }
@@ -63,24 +76,17 @@ onBeforeUnmount(offSave)
         color="neutral"
         variant="ghost"
         :label="t('rewrite_rules.revert')"
-        :disabled="
-          store.busy ||
-          !store.selectedId ||
-          (!store.isDirty(store.selectedId) && !store.selectedDraft?.conflict)
-        "
+        :disabled="store.busy || !canRevert"
+        :ui="{ base: canRevert ? 'disabled:opacity-100' : undefined }"
         @click="store.revert()"
       />
       <UTooltip :text="t('rewrite_rules.save')" :kbds="saveKbds"
         ><UButton
           icon="i-lucide-save"
           :label="t('rewrite_rules.save')"
-          :loading="store.busy"
-          :disabled="
-            !store.selectedId ||
-            !store.isDirty(store.selectedId) ||
-            !!store.selectedDraft?.conflict ||
-            !!store.selectedRule?.unavailableReason
-          "
+          :loading="saving"
+          :disabled="store.busy || !canSave"
+          :ui="{ base: canSave ? 'disabled:opacity-100' : undefined }"
           @click="save"
       /></UTooltip>
       <UButton
@@ -89,6 +95,7 @@ onBeforeUnmount(offSave)
         variant="ghost"
         :aria-label="t('rewrite_rules.delete')"
         :disabled="store.busy || !store.selectedRule"
+        :ui="{ base: store.selectedRule ? 'disabled:opacity-100' : undefined }"
         @click="openDelete"
       />
     </div>
@@ -135,7 +142,7 @@ onBeforeUnmount(offSave)
         :rule="store.selectedRule"
         :errors="store.selectedFieldErrors"
         :validate="() => store.validate()"
-        :disabled="store.busy || !!store.selectedRule.unavailableReason"
+        :disabled="!!store.selectedRule.unavailableReason"
         @update="store.update"
       />
     </div>

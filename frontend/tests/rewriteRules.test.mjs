@@ -704,9 +704,9 @@ test('save-and-delete uses a new draft’s assigned ID independently of selectio
   assert.equal(surface.deleteOpen.value, false)
 })
 
-function renderedRuleFormKey(surface) {
+function renderView(name, context) {
   const source = readFileSync(
-    new URL('../src/components/rewrite-rules/RewriteRulesSurface.vue', import.meta.url),
+    new URL(`../src/components/rewrite-rules/${name}.vue`, import.meta.url),
     'utf8',
   )
   const template = compileTemplate({
@@ -724,19 +724,26 @@ function renderedRuleFormKey(surface) {
       throw new Error(`Unexpected template import: ${id}`)
     },
   })
-  const tree = exports.render(vue.proxyRefs(surface), [])
-  function find(node) {
-    if (!node || typeof node !== 'object') return undefined
-    if (node.type === 'RewriteRuleForm') return node.key
+  return exports.render(vue.proxyRefs(context), [])
+}
+
+function findNodes(tree, type) {
+  const nodes = []
+  function visit(node) {
+    if (!node || typeof node !== 'object') return
+    if (node.type === type) nodes.push(node)
     if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const key = find(child)
-        if (key !== undefined) return key
-      }
+      node.children.forEach(visit)
+    } else if (node.children?.default) {
+      node.children.default().forEach(visit)
     }
-    return undefined
   }
-  return find(tree)
+  visit(tree)
+  return nodes
+}
+
+function renderedRuleFormKey(surface) {
+  return findNodes(renderView('RewriteRulesSurface', surface), 'RewriteRuleForm')[0]?.key
 }
 
 test('saving a new body rule retains its editor component identity but switching rules changes it', async () => {
@@ -1069,3 +1076,197 @@ test('quit guard stays lightweight until the rewrite feature is mounted', async 
   guard.cleanup()
   assert.equal(ctx.listeners.size, 0)
 })
+
+test('toggle feedback stays on the active switch while the form and other controls stay visually stable', async () => {
+  const ctx = setup()
+  await ctx.store.initialize()
+  const surface = setupSurface(ctx.store)
+  const { sidebar, cleanup } = setupSidebar(ctx.store)
+  await vue.nextTick()
+  const editorKey = renderedRuleFormKey(surface)
+
+  for (const kind of ['enabled', 'ruleEnabled']) {
+    const wait = deferred()
+    const method = kind === 'enabled' ? 'SetEnabled' : 'SetRuleEnabled'
+    const write = ctx.bridge[method]
+    ctx.bridge[method] = async (...args) => {
+      await wait.promise
+      return write(...args)
+    }
+    const pending = kind === 'enabled' ? ctx.store.setEnabled(true) : ctx.store.setRuleEnabled('b', true)
+    await vue.nextTick()
+    assert.equal(ctx.store.busy, true)
+    const form = findNodes(renderView('RewriteRulesSurface', surface), 'RewriteRuleForm')[0]
+    assert.equal(form.key, editorKey)
+    assert.equal(form.props.disabled, false, 'inputs and Monaco must not enter a disabled state')
+    const save = findNodes(renderView('RewriteRulesSurface', surface), 'UButton')
+      .find((node) => node.props.icon === 'i-lucide-save')
+    assert.equal(save.props.loading, false, 'a toggle must not animate the save button')
+    const switches = findNodes(renderView('RewriteRulesSidebar', sidebar), 'USwitch')
+    assert.equal(switches.length, 3)
+    assert.deepEqual(switches.map((node) => !!node.props.loading),
+      kind === 'enabled' ? [true, false, false] : [false, false, true])
+    assert.ok(switches.every((node) => node.props.disabled), 'writes remain serialized')
+    assert.ok(switches.every((node) => node.props.ui.root === 'opacity-100'))
+    edit(ctx.store, `edited during ${kind}`)
+    wait.resolve()
+    assert.equal(await pending, true)
+    assert.equal(ctx.store.selectedRule.name, `edited during ${kind}`)
+    assert.equal(ctx.store.isDirty('a'), true)
+    assert.equal(ctx.store.pendingMutation, null)
+    ctx.bridge[method] = write
+  }
+  cleanup()
+  ctx.store.cleanup()
+})
+
+test('metadata snapshots and saving preserve unchanged rule and body identities', async () => {
+  const ctx = setup()
+  await ctx.store.initialize()
+  const first = ctx.store.selectedRule
+  ctx.store.select('b')
+  const second = ctx.store.selectedRule
+  ctx.store.select('a')
+  const body = first.action.body
+  let replacements = 0
+  const stop = vue.watch(() => ctx.store.selectedRule, () => replacements++)
+  await ctx.store.setEnabled(true)
+  await ctx.store.setRuleEnabled('a', true)
+  await ctx.store.reorder(['b', 'a'])
+  assert.equal(ctx.store.selectedRule, first)
+  assert.equal(ctx.store.selectedRule.action.body, body)
+  assert.equal(ctx.store.selectedRule.enabled, true)
+  assert.equal(replacements, 0, 'metadata changes must not reset match preview or editor props')
+  assert.equal(ctx.store.rows.find((row) => row.key === 'b').rule, second)
+  edit(ctx.store, 'saved name')
+  await vue.nextTick()
+  const edited = ctx.store.selectedRule
+  replacements = 0
+  const wait = deferred()
+  const save = ctx.bridge.SaveRule
+  ctx.bridge.SaveRule = async (...args) => {
+    await wait.promise
+    const next = await save(...args)
+    ctx.emit(next.revision)
+    await flush()
+    assert.equal(ctx.store.selectedDraft.conflict, false, 'our save event must not flash a conflict banner')
+    return next
+  }
+  const surface = setupSurface(ctx.store)
+  const pending = ctx.store.save()
+  assert.equal(findNodes(renderView('RewriteRulesSurface', surface), 'RewriteRuleForm')[0].props.disabled, false)
+  assert.equal(surface.saving.value, true)
+  wait.resolve()
+  assert.equal((await pending).saved, true)
+  assert.equal(ctx.store.selectedRule, edited)
+  assert.equal(replacements, 0)
+  assert.equal(ctx.store.hasDirtyDrafts, false)
+  stop()
+  ctx.store.cleanup()
+})
+
+test('background snapshot reads stay silent and a manual refresh can show their progress', async () => {
+  const ctx = setup()
+  await ctx.store.initialize()
+  const wait = deferred()
+  let reads = 0
+  ctx.bridge.GetState = () => {
+    reads++
+    return wait.promise
+  }
+  ctx.emit(2)
+  assert.equal(ctx.store.loading, false)
+  const manual = ctx.store.refresh()
+  assert.equal(ctx.store.loading, true)
+  assert.equal(reads, 1, 'manual refresh shares the background read')
+  wait.resolve({ ...ctx.server, revision: 2, enabled: true })
+  await manual
+  assert.equal(ctx.store.loading, false)
+  assert.equal(ctx.store.state.enabled, true)
+  ctx.store.cleanup()
+})
+
+for (const scenario of ['existing', 'new', 'reverted']) {
+  test(`edits made during rule save (${scenario}) survive an event before the response`, async () => {
+    const ctx = setup()
+    await ctx.store.initialize()
+    if (scenario === 'new') ctx.store.create('new rule')
+    edit(ctx.store, 'submitted')
+    const editorKey = ctx.store.selectedDraft.editorKey
+    const wait = deferred()
+    const save = ctx.bridge.SaveRule
+    ctx.bridge.SaveRule = async (...args) => {
+      await wait.promise
+      const next = await save(...args)
+      ctx.emit(next.revision)
+      await flush()
+      return next
+    }
+    const pending = ctx.store.save()
+    const laterName = scenario === 'reverted' ? 'a' : 'typed after saving started'
+    edit(ctx.store, laterName)
+    const later = ctx.store.selectedRule
+    wait.resolve()
+    const result = await pending
+    assert.equal(result.saved, true)
+    assert.equal(ctx.store.selectedRule, later)
+    assert.equal(ctx.store.selectedRule.name, laterName)
+    assert.equal(ctx.store.selectedDraft.editorKey, editorKey)
+    assert.equal(ctx.store.selectedDraft.conflict, false)
+    assert.equal(ctx.store.isDirty(result.ruleId), true)
+    assert.equal(ctx.server.rules.find((item) => item.id === result.ruleId).name, 'submitted')
+    assert.equal((await ctx.store.save()).saved, true)
+    assert.equal(ctx.server.rules.find((item) => item.id === result.ruleId).name, laterName)
+    assert.equal(ctx.store.hasDirtyDrafts, false)
+    ctx.store.cleanup()
+  })
+}
+
+test('failed save retains later edits, clears pending feedback and can be retried', async () => {
+  const ctx = setup()
+  await ctx.store.initialize()
+  edit(ctx.store, 'submitted')
+  const wait = deferred()
+  const save = ctx.bridge.SaveRule
+  ctx.bridge.SaveRule = () => wait.promise
+  const pending = ctx.store.save()
+  edit(ctx.store, 'later draft')
+  wait.reject(new Error('disk full'))
+  assert.equal((await pending).saved, false)
+  assert.equal(ctx.store.selectedRule.name, 'later draft')
+  assert.equal(ctx.store.pendingMutation, null)
+  assert.equal(ctx.store.busy, false)
+  assert.equal(ctx.store.hasDirtyDrafts, true)
+  assert.match(ctx.store.error, /disk full/)
+  ctx.bridge.SaveRule = save
+  assert.equal((await ctx.store.save()).saved, true)
+  ctx.store.cleanup()
+})
+
+for (const removed of [false, true]) {
+  test(`later edits survive a newer external ${removed ? 'deletion' : 'edit'} during save`, async () => {
+    const ctx = setup()
+    await ctx.store.initialize()
+    edit(ctx.store, 'submitted')
+    const wait = deferred()
+    const save = ctx.bridge.SaveRule
+    ctx.bridge.SaveRule = () => wait.promise
+    const pending = ctx.store.save()
+    edit(ctx.store, 'later draft')
+    ctx.setServer({ ...ctx.server, revision: 3, rules: removed ? [rule('b')] : [rule('a', 'remote'), rule('b')] })
+    ctx.emit(3)
+    await flush()
+    wait.resolve({ ...ctx.server, revision: 2, rules: [rule('a', 'submitted'), rule('b')] })
+    assert.equal((await pending).saved, true)
+    assert.equal(ctx.store.state.revision, 3)
+    assert.equal(ctx.store.selectedRule.name, 'later draft')
+    assert.equal(ctx.store.hasDirtyDrafts, true)
+    assert.equal(ctx.store.selectedDraft.conflict, true)
+    assert.equal((await ctx.store.save()).saved, false)
+    ctx.bridge.SaveRule = save
+    ctx.store.acceptConflict()
+    assert.equal((await ctx.store.save()).saved, true)
+    assert.equal(ctx.store.hasDirtyDrafts, false)
+    ctx.store.cleanup()
+  })
+}

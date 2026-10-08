@@ -62,6 +62,8 @@ Canceling a read caller does not cancel the shared loader. Database waits/querie
 
 The frontend fetches rules on first opening the feature. Drafts share immutable strings, cache comparisons per rule, and merge snapshots in one batch. Stale revisions are ignored; clean drafts refresh, dirty drafts survive and flag external conflicts. Saved changes apply to new requests, including on existing connections.
 
+Mutation feedback belongs to the active save button or switch. Writes remain serialized while the form stays editable; a save submits a captured draft, and subsequent edits stay unsaved against the returned baseline. Metadata-only snapshots preserve editable rule objects, editor state, and match previews. Event-driven refreshes run silently; initial and manual loads show progress.
+
 Deleting dirty rules, quitting, and update restart offer save/discard/cancel. Save failures keep drafts and block continuation; backend quit confirmation validates the main-window sender and request identity. Drafts are not crash recovery data. Event subscriptions use their returned disposers.
 
 ## Capture, Metrics, History, and Export

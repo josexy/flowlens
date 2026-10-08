@@ -67,7 +67,8 @@ function create() {
               :aria-label="t('rewrite_rules.refresh')"
               :loading="store.loading"
               :disabled="store.busy"
-              @click="store.refresh"
+              class="disabled:opacity-100"
+              @click="store.refresh()"
             />
           </UTooltip>
           <UButton
@@ -76,6 +77,7 @@ function create() {
             variant="ghost"
             :aria-label="t('rewrite_rules.new_rule')"
             :disabled="store.busy || store.state.revision < 0"
+            :ui="{ base: store.state.revision >= 0 ? 'disabled:opacity-100' : undefined }"
             @click="create"
           />
         </div>
@@ -83,6 +85,8 @@ function create() {
       <USwitch
         :model-value="store.state.enabled"
         :disabled="store.busy || store.state.revision < 0"
+        :loading="store.pendingMutation?.kind === 'enabled'"
+        :ui="{ root: store.state.revision >= 0 ? 'opacity-100' : undefined }"
         :label="t('rewrite_rules.enable_all')"
         @update:model-value="store.setEnabled"
       />
@@ -144,6 +148,11 @@ function create() {
               size="xs"
               :model-value="row.saved?.enabled ?? false"
               :disabled="!row.saved || !!row.saved.unavailableReason || store.busy"
+              :loading="
+                store.pendingMutation?.kind === 'ruleEnabled' &&
+                store.pendingMutation.id === row.key
+              "
+              :ui="{ root: row.saved && !row.saved.unavailableReason ? 'opacity-100' : undefined }"
               :aria-label="t('rewrite_rules.enable_rule', { name: row.rule.name })"
               @update:model-value="store.setRuleEnabled(row.key, $event)"
             />

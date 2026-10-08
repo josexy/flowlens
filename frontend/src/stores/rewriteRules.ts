@@ -16,6 +16,10 @@ import type {
 } from '#bindings/github.com/josexy/flowlens/backend/services/rewrite_service/models'
 
 type RuleSaveResult = { saved: true; ruleId: string } | { saved: false; ruleId: null }
+type PendingMutation =
+  | { kind: 'save'; id: string; candidate: Rule }
+  | { kind: 'delete' | 'ruleEnabled'; id: string }
+  | { kind: 'enabled' | 'reorder' }
 export type RuleFieldErrors = Partial<Record<'name' | 'urlPattern', string>>
 
 interface RuleDraft {
@@ -88,10 +92,11 @@ function sameContent(left: Rule, right: Rule): boolean {
   )
 }
 
+// The editable rule is owned by the draft; clone persisted snapshots before passing them in.
 function makeDraft(rule: Rule, baseline: Rule | null, editorKey: string): RuleDraft {
   const draft: RuleDraft = reactive({
     editorKey,
-    rule: cloneRule(rule),
+    rule,
     // Snapshots are immutable. Keep their strings without proxying the baseline.
     baseline: shallowRef(baseline),
     conflict: false,
@@ -107,7 +112,8 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
   const drafts = shallowRef<Record<string, RuleDraft>>({})
   const selectedId = shallowRef('')
   const loading = shallowRef(false)
-  const busy = shallowRef(false)
+  const pendingMutation = shallowRef<PendingMutation | null>(null)
+  const busy = computed(() => pendingMutation.value !== null)
   const error = shallowRef('')
   const selectedDraft = computed(() => drafts.value[selectedId.value] ?? null)
   const selectedRule = computed(() => selectedDraft.value?.rule ?? null)
@@ -156,8 +162,20 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     for (const [id, draft] of Object.entries(drafts.value)) {
       if (!draft.rule.id) continue
       const saved = savedRules.get(id)
-      if (!draft.dirty) {
-        if (saved) nextDrafts[id] = makeDraft(saved, saved, draft.editorKey)
+      const pending = pendingMutation.value
+      const saving = pending?.kind === 'save' && pending.id === id
+      // Our own changed event can arrive before SaveRule returns. Keep the
+      // editor stable and let the response acknowledge the submitted content.
+      if (saving && saved && sameContent(saved, pending.candidate)) {
+        syncMetadata(draft.rule, saved)
+        continue
+      }
+      if (!draft.dirty && !saving) {
+        if (saved && sameContent(draft.rule, saved)) {
+          syncMetadata(draft.rule, saved)
+          draft.baseline = saved
+          draft.conflict = false
+        } else if (saved) nextDrafts[id] = makeDraft(cloneRule(saved), saved, draft.editorKey)
         else delete nextDrafts[id]
       } else if (!saved || !draft.baseline || !sameContent(saved, draft.baseline)) {
         draft.conflict = true
@@ -172,6 +190,14 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     reconcileSelection()
   }
 
+  function syncMetadata(rule: Rule, saved: Rule) {
+    rule.id = saved.id
+    rule.enabled = saved.enabled
+    rule.createdAt = saved.createdAt
+    rule.updatedAt = saved.updatedAt
+    rule.unavailableReason = saved.unavailableReason
+  }
+
   function reconcileSelection() {
     if (
       !selectedId.value ||
@@ -182,10 +208,10 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     if (selectedId.value) select(selectedId.value)
   }
 
-  async function refresh() {
+  async function refresh(showLoading = true) {
+    if (showLoading) loading.value = true
     if (refreshPromise) return refreshPromise
     const token = generation
-    loading.value = true
     refreshPromise = (async () => {
       // Coalesce events, but fetch again when an event overtakes an in-flight read.
       do {
@@ -219,7 +245,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
         )
           return
         requestedRevision = Math.max(requestedRevision, revision)
-        void refresh()
+        void refresh(false)
       })
     }
     if (state.value.revision < 0) await refresh()
@@ -229,7 +255,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     if (!drafts.value[id]) {
       const saved = rules.value.find((rule) => rule.id === id)
       if (!saved) return
-      drafts.value = { ...drafts.value, [id]: makeDraft(saved, saved, id) }
+      drafts.value = { ...drafts.value, [id]: makeDraft(cloneRule(saved), saved, id) }
     }
     selectedId.value = id
   }
@@ -262,7 +288,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
 
   function update(rule: Rule) {
     const draft = selectedDraft.value
-    if (draft && !busy.value) {
+    if (draft && !draft.rule.unavailableReason) {
       draft.rule = cloneRule(rule)
       error.value = ''
     }
@@ -271,7 +297,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
   function revert(id = selectedId.value) {
     const saved = rules.value.find((rule) => rule.id === id)
     const nextDrafts = { ...drafts.value }
-    if (saved) nextDrafts[id] = makeDraft(saved, saved, drafts.value[id]?.editorKey ?? id)
+    if (saved) nextDrafts[id] = makeDraft(cloneRule(saved), saved, drafts.value[id]?.editorKey ?? id)
     else delete nextDrafts[id]
     drafts.value = nextDrafts
     reconcileSelection()
@@ -294,11 +320,12 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
   }
 
   async function mutate(
+    mutation: PendingMutation,
     operation: (revision: number) => Promise<State>,
     after?: (next: State) => void,
   ) {
     if (busy.value || state.value.revision < 0) return false
-    busy.value = true
+    pendingMutation.value = mutation
     error.value = ''
     try {
       const next = await operation(state.value.revision)
@@ -308,23 +335,24 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
       return true
     } catch (cause) {
       const message = String(cause)
-      await refresh()
+      await refresh(false)
       error.value = message
       return false
     } finally {
-      busy.value = false
+      pendingMutation.value = null
     }
   }
 
   async function save(id = selectedId.value): Promise<RuleSaveResult> {
     const draft = drafts.value[id]
-    if (!draft || draft.conflict) return { saved: false, ruleId: null }
+    if (busy.value || !draft || draft.conflict) return { saved: false, ruleId: null }
     if (!validate(id)) return { saved: false, ruleId: null }
     if (!isDirty(id)) return { saved: true, ruleId: draft.rule.id }
     const candidate = cloneRule(draft.rule)
     const priorIds = new Set(rules.value.map((rule) => rule.id))
     let savedId: string | null = null
     const persisted = await mutate(
+      { kind: 'save', id, candidate },
       (revision) => SaveRule(candidate, revision),
       (next) => {
         const saved = candidate.id
@@ -335,15 +363,31 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
         const nextDrafts = { ...drafts.value }
         delete nextDrafts[id]
         // A changed event can refresh a newer revision before this write returns.
-        // The completed save is clean; display the newest persisted version.
+        // Keep edits made while saving against the newest persisted baseline.
         const current =
           state.value.revision > next.revision
             ? rules.value.find((rule) => rule.id === saved.id)
             : saved
-        if (current) nextDrafts[current.id] = makeDraft(current, current, draft.editorKey)
+        const editedWhileSaving = !sameContent(draft.rule, candidate)
+        let nextId = current?.id
+        if (current) {
+          const editable =
+            editedWhileSaving || sameContent(draft.rule, current) ? draft.rule : cloneRule(current)
+          syncMetadata(editable, current)
+          const nextDraft = makeDraft(editable, current, draft.editorKey)
+          nextDraft.conflict = editedWhileSaving && !sameContent(current, saved)
+          nextDrafts[current.id] = nextDraft
+        } else if (editedWhileSaving) {
+          nextId = id
+          draft.rule.id = ''
+          draft.rule.enabled = false
+          const nextDraft = makeDraft(draft.rule, null, draft.editorKey)
+          nextDraft.conflict = true
+          nextDrafts[id] = nextDraft
+        }
         drafts.value = nextDrafts
         if (selectedId.value === id) {
-          selectedId.value = current?.id ?? rows.value[0]?.key ?? ''
+          selectedId.value = nextId ?? rows.value[0]?.key ?? ''
           if (selectedId.value) select(selectedId.value)
         }
       },
@@ -367,7 +411,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     const nextDrafts = { ...drafts.value }
     for (const id of dirtyIds.value) {
       const saved = savedRules.get(id)
-      if (saved) nextDrafts[id] = makeDraft(saved, saved, drafts.value[id]?.editorKey ?? id)
+      if (saved) nextDrafts[id] = makeDraft(cloneRule(saved), saved, drafts.value[id]?.editorKey ?? id)
       else delete nextDrafts[id]
     }
     drafts.value = nextDrafts
@@ -382,6 +426,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
       return true
     }
     return mutate(
+      { kind: 'delete', id },
       (revision) => DeleteRule(id, revision),
       () => {
         const nextDrafts = { ...drafts.value }
@@ -392,15 +437,15 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
   }
 
   function setEnabled(enabled: boolean) {
-    return mutate((revision) => SetEnabled(enabled, revision))
+    return mutate({ kind: 'enabled' }, (revision) => SetEnabled(enabled, revision))
   }
 
   function setRuleEnabled(id: string, enabled: boolean) {
-    return mutate((revision) => SetRuleEnabled(id, enabled, revision))
+    return mutate({ kind: 'ruleEnabled', id }, (revision) => SetRuleEnabled(id, enabled, revision))
   }
 
   function reorder(ids: string[]) {
-    return mutate((revision) => ReorderRules(ids, revision))
+    return mutate({ kind: 'reorder' }, (revision) => ReorderRules(ids, revision))
   }
 
   function cleanup() {
@@ -423,6 +468,7 @@ export const useRewriteRulesStore = defineStore('rewriteRules', () => {
     hasDirtyDrafts,
     loading,
     busy,
+    pendingMutation,
     error,
     isDirty,
     fieldErrors,
