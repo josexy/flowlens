@@ -117,6 +117,7 @@ function create() {
         <div
           v-for="row in sortableRows"
           :key="row.key"
+          data-clickable
           class="mb-1 rounded-md border p-2"
           :class="[
             row.saved && 'rewrite-rule-saved',
@@ -124,6 +125,7 @@ function create() {
               ? 'border-primary/40 bg-primary/10'
               : 'border-transparent hover:bg-elevated',
           ]"
+          @click="select(row.key)"
         >
           <div class="flex items-center gap-1.5">
             <UIcon
@@ -134,8 +136,14 @@ function create() {
                   ? 'rewrite-rule-drag-handle cursor-grab'
                   : ''
               "
+              @click.stop
             />
-            <button type="button" class="min-w-0 flex-1 text-left" @click="select(row.key)">
+            <button
+              type="button"
+              class="min-w-0 flex-1 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              :aria-current="store.selectedId === row.key ? 'true' : undefined"
+              @click.stop="select(row.key)"
+            >
               <span class="flex items-center gap-1.5 text-sm font-medium text-highlighted"
                 ><span class="truncate">{{ row.rule.name || t('rewrite_rules.new_name') }}</span
                 ><span
@@ -154,16 +162,13 @@ function create() {
               "
               :ui="{ root: row.saved && !row.saved.unavailableReason ? 'opacity-100' : undefined }"
               :aria-label="t('rewrite_rules.enable_rule', { name: row.rule.name })"
+              @click.stop
               @update:model-value="store.setRuleEnabled(row.key, $event)"
             />
           </div>
-          <button
-            type="button"
-            class="mt-1 block w-full truncate text-left font-mono text-xs text-muted"
-            @click="select(row.key)"
-          >
+          <p class="mt-1 truncate font-mono text-xs text-muted">
             {{ row.rule.urlPattern }}
-          </button>
+          </p>
           <div class="mt-1.5 flex flex-wrap items-center gap-1">
             <UBadge color="neutral" variant="subtle" size="sm">{{ row.rule.method }}</UBadge>
             <UBadge
