@@ -143,7 +143,7 @@ async function exportMessage(selection?: string) {
                   size="sm"
                   :color="wrapText ? 'primary' : 'neutral'"
                   variant="ghost"
-                  icon="i-lucide-corner-down-left"
+                  icon="i-lucide-wrap-text"
                   :aria-label="t('detail.wrap_body')"
                   :aria-pressed="wrapText"
                   @click="toggleWrapText"

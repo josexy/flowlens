@@ -8,6 +8,9 @@ import type { Events } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import type * as pythonpluginservice$0 from "../../../../josexy/flowlens/backend/services/python_plugin_service/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as rewriteservice$0 from "../../../../josexy/flowlens/backend/services/rewrite_service/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {
@@ -15,6 +18,7 @@ declare module "@wailsio/runtime" {
             "python-plugins:log": pythonpluginservice$0.PluginLogEntry;
             "python-plugins:registry": pythonpluginservice$0.RegistryEvent;
             "python-plugins:status": pythonpluginservice$0.StatusEvent;
+            "rewrite:changed": rewriteservice$0.Changed;
         }
     }
 }

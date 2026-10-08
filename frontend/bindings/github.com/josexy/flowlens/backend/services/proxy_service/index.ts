@@ -45,6 +45,7 @@ export type {
     RequestDraftFile,
     ResendConfig,
     ResendResult,
+    RewriteExecution,
     SaveBodyToFileRequest,
     SendRequestBody,
     SendRequestConfig,

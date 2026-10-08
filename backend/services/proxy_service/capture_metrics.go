@@ -15,12 +15,17 @@ import (
 // body lifecycle callbacks for one logical traffic entry. entry is a private
 // working copy; every publish stores a deep-cloned immutable snapshot.
 type captureExchange struct {
-	service         *ProxyService
-	entry           *TrafficEntry
-	ctx             context.Context
-	mu              sync.Mutex
-	requestBodyless bool
-	published       bool
+	responseBodyRewritten bool
+	service               *ProxyService
+	entry                 *TrafficEntry
+	ctx                   context.Context
+	mu                    sync.Mutex
+	requestBodyless       bool
+	published             bool
+	deferResponseTiming   bool
+	downstreamResponse    bool
+	deferredResponseStart *mitmproxy.HTTPExchangeTimingEvent
+	deferredResponseEnd   *mitmproxy.HTTPExchangeTimingEvent
 }
 
 func newCaptureExchange(service *ProxyService, ctx context.Context, entry *TrafficEntry) *captureExchange {
@@ -74,6 +79,24 @@ func (x *captureExchange) setRequestBodyless(bodyless bool) {
 }
 
 func (x *captureExchange) observeHTTPExchangeTiming(event mitmproxy.HTTPExchangeTimingEvent) {
+	if event.Phase == mitmproxy.HTTPExchangeResponseStarted || event.Phase == mitmproxy.HTTPExchangeResponseEnded {
+		x.mu.Lock()
+		if x.downstreamResponse {
+			x.mu.Unlock()
+			return
+		}
+		if x.deferResponseTiming {
+			if event.Phase == mitmproxy.HTTPExchangeResponseStarted {
+				x.deferredResponseStart = &event
+				x.deferredResponseEnd = nil
+			} else {
+				x.deferredResponseEnd = &event
+			}
+			x.mu.Unlock()
+			return
+		}
+		x.mu.Unlock()
+	}
 	switch event.Phase {
 	case mitmproxy.HTTPExchangeRequestStarted:
 		x.requestStarted(event.Timestamp, event.Attempt)
@@ -227,6 +250,9 @@ func (x *captureExchange) responseBodyFinished(size int64, complete bool, readEr
 func (x *captureExchange) bodyFinished(isRequest bool, size int64, _ bool, _ error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	if !isRequest && x.downstreamResponse {
+		return
+	}
 	message := x.entry.Response
 	if isRequest {
 		message = x.entry.Request
@@ -272,7 +298,7 @@ func (x *captureExchange) fail(err error) {
 func (x *captureExchange) fillResponseTrailers(response *http.Response) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	if response == nil || x.entry.Response == nil {
+	if response == nil || x.entry.Response == nil || x.responseBodyRewritten {
 		return
 	}
 	fields, truncated, orderUnavailable := completeResponseTrailerFields(
@@ -362,7 +388,7 @@ func (x *captureExchange) publishFailureLocked() {
 }
 
 func newTrafficPatch(entry *TrafficEntry) TrafficEntryPatch {
-	return TrafficEntryPatch{TrafficID: entry.ID, Revision: entry.Revision}
+	return TrafficEntryPatch{TrafficID: entry.ID, Revision: entry.Revision, RewriteExecutions: entry.RewriteExecutions, ResponseMetricsSource: entry.ResponseMetricsSource}
 }
 
 func newTrafficMetricsSection(entry *TrafficEntry) *TrafficMetricsPatch {

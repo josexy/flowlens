@@ -4,7 +4,7 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 
 ## Workspaces and Request Editing
 
-- Capture, history, categories, API collections, Python plugins, and memory statistics share the same workbench shell.
+- Capture, history, categories, API collections, rewrite rules, Python plugins, and memory statistics share the same workbench shell.
 - HTTP Request Editor and WebSocket Client tabs can be saved into API Collection folders from the tab context menu.
 - Saving an editor tab already linked to an API Collection entry updates that request directly.
 - HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.
@@ -23,6 +23,29 @@ SSE responses (`text/event-stream`) open the **SSE** body tab by default in HTTP
 
 The response-body toolbar copies or saves the entire SSE response. The message-detail dialog copies or saves only its selected view. The list is reconstructed from the available response body and does not add per-message timestamps or change saved traffic formats.
 
+## Live HTTP(S) Rewrite Rules
+
+Open **Rewrite Rules** in the sidebar to redirect URLs or edit headers, request query parameters, and UTF-8 bodies. Rules apply only to live HTTP/HTTPS proxy traffic; Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP are excluded.
+
+To redirect an endpoint:
+
+1. Create and name a rule; select `GET` or `ALL`.
+2. Set the URL pattern to `https://api.example.com/users/*?token=*` and **Redirect** target to `https://test.example.com/accounts/${1}?token=${2}`.
+3. Use **Match test** to check the result without sending a request.
+4. Save, enable the rule, and turn on the master switch. New rules start disabled.
+
+Patterns match the complete URL: scheme/host are case-insensitive; path/query retain case and encoding. Each `*` captures text, `\*` matches a literal star, and `?` is literal. Targets use `${1}`, `${2}`, etc. for captures and `$$` for `$`; they must be absolute HTTP/HTTPS URLs with the full query. Redirects change routing without returning a 302. **Keep current Host** preserves the Host header while routing to the new target.
+
+Header/query operations run in row order: **Add** appends; **Set** replaces the first match and removes duplicates, or adds if absent; **Delete** removes all matches. Header names are case-insensitive; query names are case-sensitive.
+
+- **Order:** drag rules or use the arrows. Each phase runs top to bottom against the original request's match set. Saved changes affect new requests; in-flight requests keep their snapshot.
+- **Drafts:** **Save** or `Primary+S` saves; **Revert** restores saved content. Switching rules retains drafts; toggles and ordering save immediately. Resolve external conflicts before overwriting. Deleting rules with unsaved edits, quitting, and update restart offer save/discard/cancel. Failed saves retain drafts; forced exit loses them.
+- **Bodies:** replace finite UTF-8 text directly or with Go regex captures (`$1`, `$$`). Limits are **8 MiB** per processing stage and **10 seconds** per body phase, with additional regex limits. Streaming, binary, non-UTF-8, and bodyless responses (HEAD/204/304) reject body edits. **Rewrite failures interrupt the exchange.**
+- **Regex replacement test:** select **Regex replace**, paste a sample below **Match test**, and click **Preview** for the match count and inline diff. Pattern/replacement edits refresh the preview; the pencil returns to the original sample. Copy uses the sample while editing and the result while previewing, and is disabled for pending or failed results. Large text shows the full result without diff highlighting or wrapping. Tests send no requests or save rules; samples are not persisted.
+- **Startup:** the rule page and proxy startup wait for rules to load. Loading errors block editing and proxy startup; resolve the error and restart. Unsupported saved rules remain visible but do not execute.
+
+Capture, history, and exports use the final rewritten content. See the [technical reference](technical/http-rewrite-rules.md) for protocol details and resource limits.
+
 ## Keyboard Shortcuts
 
 Open `Settings > Shortcuts` to search commands, record or clear a binding, and restore one or all known commands.
@@ -31,9 +54,9 @@ Open `Settings > Shortcuts` to search commands, record or clear a binding, and r
 
 | Command | Default binding |
 | --- | --- |
-| Save the active dirty request or settings | `Primary+S` |
+| Save the active dirty request, settings, Python file/parameters, or rewrite rule | `Primary+S` |
 | Open settings | `Primary+,` |
-| Switch workbench sections | `Primary+1` through `Primary+6` |
+| Capture / categories / API collections / rewrite rules / Python plugins / memory statistics | `Primary+1` through `Primary+6` |
 | New HTTP / WebSocket request | `Primary+N` / `Primary+Shift+N` |
 | Close the active closable tab | `Primary+W` |
 | Next / previous tab | `Control+Tab` / `Control+Shift+Tab` |
@@ -69,7 +92,7 @@ The original proxy snapshot is kept in process memory and is restored during a n
 
 ## Timing, Sizes, and HAR Import/Export
 
-FlowLens records request-attempt start, request-write end, and response first-byte/body-end events at the upstream transport boundary. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
+FlowLens records request-attempt start, request-write end, and unmodified-response first-byte/body-end events at the upstream transport boundary. Responses changed by rewrite rules instead use actual downstream send observations. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
 
 - Retries replace stale attempt data.
 - Failed, canceled, pending, or incomplete exchanges retain unknown values instead of synthetic completion data.

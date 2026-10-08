@@ -147,20 +147,22 @@ type TrafficEntry struct {
 	ID uint64 `json:"id"`
 	// Revision orders the initial live snapshot and its later patch events. It
 	// is runtime-only and intentionally omitted from HBIN encoding.
-	Revision   uint64            `json:"revision,omitempty"`
-	Type       string            `json:"type"` // "http", "https", "ws", "wss", "tcp"
-	StartedAt  time.Time         `json:"startedAt"`
-	Method     string            `json:"method"`
-	URL        string            `json:"url"`
-	Host       string            `json:"host"`
-	Path       string            `json:"path"`
-	StatusCode int               `json:"statusCode"`
-	Status     string            `json:"status"`
-	Metadata   *Metadata         `json:"metadata,omitempty"`
-	RawTCP     *RawTCPTunnelInfo `json:"rawTcp,omitempty"`
-	Request    *HTTPMessage      `json:"request,omitempty"`
-	Response   *HTTPMessage      `json:"response,omitempty"`
-	Error      *TrafficError     `json:"error,omitempty"`
+	RewriteExecutions     []RewriteExecution `json:"rewriteExecutions,omitempty"`
+	ResponseMetricsSource string             `json:"responseMetricsSource,omitempty"`
+	Revision              uint64             `json:"revision,omitempty"`
+	Type                  string             `json:"type"` // "http", "https", "ws", "wss", "tcp"
+	StartedAt             time.Time          `json:"startedAt"`
+	Method                string             `json:"method"`
+	URL                   string             `json:"url"`
+	Host                  string             `json:"host"`
+	Path                  string             `json:"path"`
+	StatusCode            int                `json:"statusCode"`
+	Status                string             `json:"status"`
+	Metadata              *Metadata          `json:"metadata,omitempty"`
+	RawTCP                *RawTCPTunnelInfo  `json:"rawTcp,omitempty"`
+	Request               *HTTPMessage       `json:"request,omitempty"`
+	Response              *HTTPMessage       `json:"response,omitempty"`
+	Error                 *TrafficError      `json:"error,omitempty"`
 
 	// captureGeneration is intentionally private: it isolates live interceptor
 	// work without changing the Wails model or persisted traffic format.
@@ -211,14 +213,16 @@ type HTTPMessageMetrics struct {
 // section atomically, for example response headers together with the timing
 // values known at that transport milestone.
 type TrafficEntryPatch struct {
-	TrafficID        uint64                        `json:"trafficId"`
-	Revision         uint64                        `json:"revision"`
-	StartedAt        *time.Time                    `json:"startedAt,omitempty"`
-	ResponseHeaders  *TrafficResponseHeadersPatch  `json:"responseHeaders,omitempty"`
-	ResponseTrailers *TrafficResponseTrailersPatch `json:"responseTrailers,omitempty"`
-	Metrics          *TrafficMetricsPatch          `json:"metrics,omitempty"`
-	Process          *ProcessInfo                  `json:"process,omitempty"`
-	Error            *TrafficError                 `json:"error,omitempty"`
+	RewriteExecutions     []RewriteExecution            `json:"rewriteExecutions,omitempty"`
+	ResponseMetricsSource string                        `json:"responseMetricsSource,omitempty"`
+	TrafficID             uint64                        `json:"trafficId"`
+	Revision              uint64                        `json:"revision"`
+	StartedAt             *time.Time                    `json:"startedAt,omitempty"`
+	ResponseHeaders       *TrafficResponseHeadersPatch  `json:"responseHeaders,omitempty"`
+	ResponseTrailers      *TrafficResponseTrailersPatch `json:"responseTrailers,omitempty"`
+	Metrics               *TrafficMetricsPatch          `json:"metrics,omitempty"`
+	Process               *ProcessInfo                  `json:"process,omitempty"`
+	Error                 *TrafficError                 `json:"error,omitempty"`
 }
 
 type TrafficResponseHeadersPatch struct {

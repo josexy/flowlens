@@ -5,6 +5,7 @@ import CategoryWorkspaceSidebar from '@/components/workbench/CategoryWorkspaceSi
 import ApiCollectionWorkspaceSidebar from '@/components/workbench/ApiCollectionWorkspaceSidebar.vue'
 import MemStatsWorkspaceSidebar from '@/components/workbench/MemStatsWorkspaceSidebar.vue'
 import PythonPluginWorkspaceSidebar from '@/components/python-plugins/PythonPluginWorkspaceSidebar.vue'
+import RewriteRulesSidebar from '@/components/rewrite-rules/RewriteRulesSidebar.vue'
 import { useWorkbenchStore } from '@/stores/workbench'
 import type { WorkspaceSection } from '@/stores/workbench'
 
@@ -15,6 +16,7 @@ const mountedSidebars = reactive<Record<WorkspaceSection, boolean>>({
   category: false,
   apiCollection: false,
   pythonPlugins: false,
+  rewriteRules: false,
   memstats: false,
 })
 
@@ -42,6 +44,11 @@ watch(
     <ApiCollectionWorkspaceSidebar
       v-if="mountedSidebars.apiCollection"
       v-show="workbenchStore.activeSection === 'apiCollection'"
+      class="h-full w-full"
+    />
+    <RewriteRulesSidebar
+      v-if="mountedSidebars.rewriteRules"
+      v-show="workbenchStore.activeSection === 'rewriteRules'"
       class="h-full w-full"
     />
     <PythonPluginWorkspaceSidebar

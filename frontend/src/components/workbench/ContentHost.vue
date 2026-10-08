@@ -10,9 +10,12 @@ const PythonPluginSurface = defineAsyncComponent(
   () => import('@/components/python-plugins/PythonPluginSurface.vue'),
 )
 
+const RewriteRulesSurface = defineAsyncComponent(() => import('@/components/rewrite-rules/RewriteRulesSurface.vue'))
+
 const mountedAuxiliaryViews = reactive({
   memstats: false,
   pythonPlugins: false,
+  rewriteRules: false,
 })
 
 watch(
@@ -20,7 +23,8 @@ watch(
   (activeContent) => {
     if (
       activeContent === 'memstats' ||
-      activeContent === 'pythonPlugins'
+      activeContent === 'pythonPlugins' ||
+      activeContent === 'rewriteRules'
     ) {
       mountedAuxiliaryViews[activeContent] = true
     }
@@ -41,6 +45,11 @@ const isPythonPluginsActive = computed(
     <MemStatsSurface
       v-if="mountedAuxiliaryViews.memstats"
       v-show="isMemStatsActive"
+      class="h-full w-full flex-1"
+    />
+    <RewriteRulesSurface
+      v-if="mountedAuxiliaryViews.rewriteRules"
+      v-show="workbenchStore.activeContent === 'rewriteRules'"
       class="h-full w-full flex-1"
     />
     <PythonPluginSurface

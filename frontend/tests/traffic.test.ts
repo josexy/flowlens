@@ -2150,3 +2150,22 @@ test('request protocol inheritance requires a complete wire-order block', () => 
   )
   assert.equal(inferRequestProtocolFromHTTPMessage({ proto: 'HTTP/1.1' }), 'auto')
 })
+
+test('rewrite patches preserve execution order, downstream metrics source, and reject stale updates', () => {
+  const entry = { id: 501, revision: 1 } as TrafficEntry
+  const executions = [
+    { ruleId: 'one', ruleName: 'First', action: 'request', outcome: 'success', reason: '' },
+    { ruleId: 'two', ruleName: 'Second', action: 'response', outcome: 'failed', reason: 'body limit' },
+  ]
+  const rewritten = applyTrafficEntryPatch(entry, {
+    trafficId: 501, revision: 2, rewriteExecutions: executions, responseMetricsSource: 'downstream',
+  })
+  assert.deepEqual(rewritten.rewriteExecutions, executions)
+  assert.equal(rewritten.responseMetricsSource, 'downstream')
+  assert.equal(entry.rewriteExecutions, undefined)
+  const unrelated = applyTrafficEntryPatch(rewritten, { trafficId: 501, revision: 3 })
+  assert.equal(unrelated.rewriteExecutions, executions)
+  assert.equal(unrelated.responseMetricsSource, 'downstream')
+  assert.equal(applyTrafficEntryPatch(unrelated, { trafficId: 501, revision: 2, rewriteExecutions: [] }), unrelated)
+  assert.deepEqual(applyTrafficEntryPatch(unrelated, { trafficId: 501, revision: 4, rewriteExecutions: [] }).rewriteExecutions, [])
+})

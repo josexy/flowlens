@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
                         :text="t('workspace.word_wrap')"
                       >
                         <UButton
-                          icon="i-lucide-corner-down-left"
+                          icon="i-lucide-wrap-text"
                           :color="messageWordWrap ? 'primary' : 'neutral'"
                           variant="ghost"
                           size="sm"

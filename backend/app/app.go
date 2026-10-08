@@ -19,6 +19,7 @@ import (
 	memstatsservice "github.com/josexy/flowlens/backend/services/mem_stats_service"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
+	rewriteservice "github.com/josexy/flowlens/backend/services/rewrite_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	shortcutservice "github.com/josexy/flowlens/backend/services/shortcut_service"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -230,7 +231,11 @@ func Run(assets Assets) {
 		}
 	}()
 	logger.G().Info("FlowLens startup initialized")
+	rewriteSvc := rewriteservice.New(db)
+	defer rewriteSvc.Shutdown()
+	rewriteservice.SetChangedHandler(rewriteSvc, func(event rewriteservice.Changed) { app.Event.Emit(rewriteservice.ChangedEvent, event) })
 	proxySvc := proxyservice.New(settingSvc)
+	proxyservice.SetRewriteService(proxySvc, rewriteSvc)
 	pythonPluginSvc, err = pythonpluginservice.New(db, settingSvc)
 	if err != nil {
 		reportStartupFailure("initialize Python plugin service", err)
@@ -294,8 +299,20 @@ func Run(assets Assets) {
 	app.RegisterService(application.NewService(memStatsSvc))
 	app.RegisterService(application.NewService(historySvc))
 	app.RegisterService(application.NewService(apiCollectionSvc))
+	// Start the background rule reader after synchronous database consumers;
+	// SQLite's single connection must not make them wait for rule compilation.
+	app.RegisterService(application.NewService(rewriteSvc))
 
 	var settingsWindowDirty atomic.Bool
+	rewriteDraftGuard := &rewriteQuitGuard{}
+	confirmRewriteQuit := func(reason string) bool {
+		blocked, request := rewriteDraftGuard.request(reason)
+		if request != nil {
+			showMainWindow()
+			app.Event.Emit(confirmRewriteQuitEventName, *request)
+		}
+		return blocked
+	}
 
 	if isMacOS {
 		appMenu := application.NewMenu()
@@ -423,6 +440,7 @@ func Run(assets Assets) {
 			if appSvc != nil {
 				appSvc.ShutdownUpdater()
 			}
+			appendShutdownError("stop rewrite rule loading", rewriteSvc.Shutdown())
 
 			if shortcutSvc != nil {
 				appendShutdownError("release global shortcuts", shortcutSvc.Shutdown())
@@ -463,6 +481,9 @@ func Run(assets Assets) {
 			}
 			settingsWindowDirty.Store(false)
 		}
+		if confirmRewriteQuit("quit") {
+			return
+		}
 		shutdownCoordinator.Request()
 	}
 	updateRestart := &updaterRestartHandler{
@@ -477,6 +498,9 @@ func Run(assets Assets) {
 					return false
 				}
 				settingsWindowDirty.Store(false)
+			}
+			if confirmRewriteQuit("update") {
+				return false
 			}
 			return true
 		},
@@ -529,6 +553,28 @@ func Run(assets Assets) {
 			return
 		}
 		settingsWindowDirty.Store(dirty)
+	})
+	app.Event.On(rewriteDraftsDirtyEventName, func(event *application.CustomEvent) {
+		if event.Sender != "main" {
+			return
+		}
+		if dirty, ok := boolFromEventData(event.Data); ok {
+			rewriteDraftGuard.setDirty(dirty)
+		}
+	})
+	app.Event.On(rewriteQuitConfirmedEventName, func(event *application.CustomEvent) {
+		if event.Sender != "main" {
+			return
+		}
+		reason, proceed := rewriteDraftGuard.confirm(event.Data)
+		if !proceed {
+			return
+		}
+		if reason == "update" {
+			app.Event.Emit(updater.EventUserRestart)
+		} else {
+			requestApplicationQuit()
+		}
 	})
 	app.Event.On(quitConfirmedEventName, func(event *application.CustomEvent) {
 		if event.Sender != settingsWindowName {

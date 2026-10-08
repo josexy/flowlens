@@ -203,22 +203,25 @@ onBeforeUnmount(() => {
         <div
           v-for="plugin in sortablePlugins"
           :key="plugin.id"
+          data-clickable
           class="group flex w-full min-w-0 items-center gap-1.5 border-l-3 px-2 py-2 text-left transition-colors"
           :class="
             store.selectedPluginId === plugin.id
               ? 'border-primary bg-primary/10'
               : 'border-transparent hover:bg-elevated'
           "
+          @click="selectPlugin(plugin.id)"
         >
           <UIcon
             name="i-lucide-grip-vertical"
             class="python-plugin-drag-handle size-3.5 shrink-0 cursor-grab text-dimmed opacity-0 group-hover:opacity-100"
             :class="search.trim() ? 'invisible' : ''"
+            @click.stop
           />
           <button
             type="button"
             class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-            @click="selectPlugin(plugin.id)"
+            @click.stop="selectPlugin(plugin.id)"
           >
             <span class="relative flex size-4 shrink-0 items-center justify-center">
               <UIcon name="i-lucide-file-code-2" class="size-4 text-muted" />

@@ -7,6 +7,24 @@ import (
 )
 
 const currentSchemaSQL = `
+CREATE TABLE IF NOT EXISTS rewrite_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    revision INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO rewrite_state(id, enabled, revision) VALUES(1, 0, 0);
+CREATE TABLE IF NOT EXISTS rewrite_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    sort_order INTEGER NOT NULL CHECK (sort_order >= 0),
+    method TEXT NOT NULL,
+    url_pattern TEXT NOT NULL,
+    action_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS api_nodes (
     id TEXT PRIMARY KEY,
     parent_id TEXT REFERENCES api_nodes(id) ON DELETE CASCADE,

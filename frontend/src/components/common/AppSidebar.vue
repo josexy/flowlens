@@ -21,6 +21,7 @@ const openSettingsShortcutKbds = useShortcutKbds('app.openSettings')
 const captureShortcutKbds = useShortcutKbds('workbench.capture')
 const categoryShortcutKbds = useShortcutKbds('workbench.category')
 const apiCollectionShortcutKbds = useShortcutKbds('workbench.apiCollection')
+const rewriteRulesShortcutKbds = useShortcutKbds('workbench.rewriteRules')
 const pythonPluginsShortcutKbds = useShortcutKbds('workbench.pythonPlugins')
 const memstatsShortcutKbds = useShortcutKbds('workbench.memstats')
 const sidebarShortcutKbds = computed(() => ({
@@ -28,6 +29,7 @@ const sidebarShortcutKbds = computed(() => ({
   capture: captureShortcutKbds.value,
   category: categoryShortcutKbds.value,
   apiCollection: apiCollectionShortcutKbds.value,
+  rewriteRules: rewriteRulesShortcutKbds.value,
   pythonPlugins: pythonPluginsShortcutKbds.value,
   memstats: memstatsShortcutKbds.value,
 }))
@@ -43,6 +45,11 @@ const menuItems = computed(() => [
     icon: 'i-lucide-git-branch',
     label: t('menu.api_collection'),
     name: 'apiCollection' as WorkspaceSection,
+  },
+  {
+    icon: 'i-lucide-repeat-2',
+    label: t('menu.rewrite_rules'),
+    name: 'rewriteRules' as WorkspaceSection,
   },
   {
     icon: 'i-lucide-file-code-2',
@@ -195,7 +202,7 @@ const offShortcutHandlers = [
     when: () => true,
     run: () => openSettings(),
   }),
-  ...(['capture', 'category', 'apiCollection', 'pythonPlugins', 'memstats'] as const).map((section) =>
+  ...(['capture', 'category', 'apiCollection', 'rewriteRules', 'pythonPlugins', 'memstats'] as const).map((section) =>
     registerShortcutHandler({
       commandId: `workbench.${section}`,
       when: () => true,

@@ -3,7 +3,7 @@
 
 @layer base {
   :root[data-pointer-cursor]
-    :is(button, [role='button']):not(:disabled, [aria-disabled='true'], [data-disabled]) {
+    :is(button, [role='button'], [data-clickable]):not(:disabled, [aria-disabled='true'], [data-disabled]) {
     cursor: pointer;
   }
 }
