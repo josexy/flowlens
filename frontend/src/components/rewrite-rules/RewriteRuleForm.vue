@@ -9,6 +9,7 @@ import type {
 import RewriteFieldOperations from './RewriteFieldOperations.vue'
 import RewriteBodyAction from './RewriteBodyAction.vue'
 import RewritePreview from './RewritePreview.vue'
+import RewriteBodyPreview from './RewriteBodyPreview.vue'
 
 const props = defineProps<{
   rule: Rule
@@ -54,7 +55,6 @@ function changeAction(type: string) {
 
 <template>
   <div class="mx-auto w-full max-w-4xl space-y-5 p-4">
-    <p class="text-xs text-muted">{{ t('rewrite_rules.scope_hint') }}</p>
     <div class="grid grid-cols-[1fr_8rem] gap-3">
       <UFormField
         name="name"
@@ -146,5 +146,9 @@ function changeAction(type: string) {
       />
     </template>
     <RewritePreview :rule="rule" :validate="validate" />
+    <RewriteBodyPreview
+      v-if="editsMessage && rule.action.body.mode === 'regex'"
+      :body="rule.action.body"
+    />
   </div>
 </template>

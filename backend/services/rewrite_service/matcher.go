@@ -315,22 +315,9 @@ func compileRule(r Rule) (compiledRule, error) {
 		if r.Action.Type == ActionResponse && len(r.Action.Query) != 0 {
 			return c, errors.New("response actions cannot modify query")
 		}
-		switch r.Action.Body.Mode {
-		case "none":
-		case "replace":
-			if len(r.Action.Body.Text) > MaxBodyBytes || !utf8.ValidString(r.Action.Body.Text) {
-				return c, errors.New("replacement body must be UTF-8 and at most 8 MiB")
-			}
-		case "regex":
-			if len(r.Action.Body.Pattern) > 16384 || len(r.Action.Body.Replacement) > MaxBodyBytes || !utf8.ValidString(r.Action.Body.Replacement) {
-				return c, errors.New("body regular expression or replacement is too large or replacement is not UTF-8")
-			}
-			c.body, err = compileBodyRegex(r.Action.Body.Pattern)
-			if err != nil {
-				return c, fmt.Errorf("body regular expression: %w", err)
-			}
-		default:
-			return c, errors.New("invalid body mode")
+		c.body, err = compileBodyAction(r.Action.Body)
+		if err != nil {
+			return c, err
 		}
 	default:
 		return c, errors.New("unsupported rewrite action")

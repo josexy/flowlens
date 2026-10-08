@@ -9,6 +9,7 @@ export {
 export type {
     Action,
     BodyAction,
+    BodyPreviewResult,
     Changed,
     FieldOperation,
     PreviewResult,

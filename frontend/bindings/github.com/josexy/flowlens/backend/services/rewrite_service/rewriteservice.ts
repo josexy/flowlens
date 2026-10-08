@@ -21,6 +21,14 @@ export function Preview(rule: $models.Rule, method: string, rawURL: string): $Ca
     return $Call.ByID(1003370621, rule, method, rawURL);
 }
 
+/**
+ * PreviewBody tests an unsaved regex against sample text without loading rules,
+ * changing persistent state, or sending traffic.
+ */
+export function PreviewBody(action: $models.BodyAction, input: string): $CancellablePromise<$models.BodyPreviewResult> {
+    return $Call.ByID(2622651149, action, input);
+}
+
 export function ReorderRules(ids: string[] | null, expectedRevision: number): $CancellablePromise<$models.State> {
     return $Call.ByID(2315669445, ids, expectedRevision);
 }

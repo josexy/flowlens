@@ -18,6 +18,11 @@ export interface BodyAction {
     "replacement": string;
 }
 
+export interface BodyPreviewResult {
+    "matchCount": number;
+    "output": string;
+}
+
 export interface Changed {
     "revision": number;
 }

@@ -1301,7 +1301,7 @@ onBeforeUnmount(() => {
                       </div>
                       <UTooltip v-if="showMonacoBody" :text="t('workspace.word_wrap')">
                         <UButton
-                          icon="i-lucide-corner-down-left"
+                          icon="i-lucide-wrap-text"
                           :color="bodyWordWrap ? 'primary' : 'neutral'"
                           variant="ghost"
                           size="sm"
@@ -1370,7 +1370,7 @@ onBeforeUnmount(() => {
                     </div>
                     <UTooltip :text="t('workspace.word_wrap')">
                       <UButton
-                        icon="i-lucide-corner-down-left"
+                        icon="i-lucide-wrap-text"
                         :color="scriptWordWrap ? 'primary' : 'neutral'"
                         variant="ghost"
                         size="sm"

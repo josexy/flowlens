@@ -55,3 +55,8 @@ type PreviewResult struct {
 	Captures  []string `json:"captures"`
 	TargetURL string   `json:"targetURL"`
 }
+
+type BodyPreviewResult struct {
+	MatchCount int    `json:"matchCount"`
+	Output     string `json:"output"`
+}

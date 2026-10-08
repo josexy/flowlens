@@ -1270,3 +1270,323 @@ for (const removed of [false, true]) {
     ctx.store.cleanup()
   })
 }
+
+function setupBodyPreview() {
+  const source = readFileSync(
+    new URL('../src/components/rewrite-rules/RewriteBodyPreview.vue', import.meta.url), 'utf8',
+  )
+  const script = compileScript(parse(source).descriptor, { id: 'body-preview-test' }).content
+  const js = ts.transpileModule(script, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const largeText = {}
+  runInNewContext(ts.transpileModule(
+    readFileSync(new URL('../src/components/common/monacoLargeText.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+  ).outputText, { exports: largeText })
+  const calls = []
+  const copies = []
+  const notices = []
+  const unmount = []
+  const timers = new Map()
+  const theme = vue.reactive({ isDark: false })
+  const setting = vue.reactive({ resolvedCodeFontSize: 13, resolvedCodeFontFamily: 'monospace' })
+  let now = 0
+  let timerID = 0
+  let copyError
+  const exports = {}
+  runInNewContext(js, {
+    exports, TextEncoder,
+    setTimeout(fn, delay) { const id = ++timerID; timers.set(id, { fn, due: now + delay }); return id },
+    clearTimeout(id) { timers.delete(id) },
+    require(id) {
+      if (id === 'vue') return { ...vue, onBeforeUnmount: (fn) => unmount.push(fn) }
+      if (id === 'vue-i18n')
+        return { useI18n: () => ({ t: (key, args) => args ? key + ':' + (args.count ?? args.error) : key }) }
+      if (id.endsWith('.vue') || id === '@guolao/vue-monaco-editor') return {}
+      if (id.endsWith('/monacoLargeText')) return largeText
+      if (id.endsWith('/monacoFontMeasurements')) return { remeasureMonacoFontsAfterLoad: async () => {} }
+      if (id.endsWith('/setting')) return { useSettingStore: () => setting }
+      if (id.endsWith('/theme')) return { useThemeStore: () => theme }
+      if (id.endsWith('/useNotify')) return {
+        useNotify: () => ({
+          success: (text) => notices.push({ success: text }),
+          error: (text) => notices.push({ error: text }),
+        }),
+      }
+      if (id.endsWith('/clipboard')) return { copyText: async (text) => {
+        if (copyError) throw copyError
+        copies.push(text)
+      } }
+      if (id.endsWith('/rewriteservice')) return {
+        PreviewBody(action, input) {
+          const call = { ...deferred(), action: clone(action), input, cancelled: false }
+          call.promise.cancel = async () => { call.cancelled = true }
+          calls.push(call)
+          return call.promise
+        },
+      }
+      throw new Error('Unexpected body preview import: ' + id)
+    },
+  })
+  const props = vue.reactive({
+    body: { mode: 'regex', text: 'unused replacement body', pattern: '(foo)', replacement: '1' },
+  })
+  const scope = vue.effectScope()
+  const preview = scope.run(() => exports.default.setup(props, { expose() {} }))
+  return {
+    props, preview, calls, copies, notices, timers, theme, setting,
+    setCopyError(error) { copyError = error },
+    async advance(ms) {
+      now += ms
+      for (const [id, task] of timers) {
+        if (task.due <= now) { timers.delete(id); task.fn() }
+      }
+      await flush()
+    },
+    render: () => renderView('RewriteBodyPreview', { ...preview, body: props.body }),
+    cleanup() {
+      unmount.forEach((fn) => fn())
+      scope.stop()
+    },
+  }
+}
+
+test('body preview shares one area, keeps the sample intact and copies actual output including empty text', async () => {
+  const ctx = setupBodyPreview()
+  const assertActivePane = (activeIndex) => {
+    const panes = findNodes(ctx.render(), 'div').filter(node => 'inert' in (node.props ?? {}))
+    assert.equal(panes.length, 2)
+    panes.forEach((pane, index) => {
+      const inactive = index !== activeIndex
+      assert.equal(pane.props.inert, inactive, 'inactive Monaco descendants must not receive keyboard focus')
+      assert.equal(pane.props['aria-hidden'], inactive)
+      assert.equal(pane.props.class.includes('opacity-0'), inactive, 'hide the whole layer even when Monaco children set visibility:visible')
+      assert.equal(pane.props.class.includes('pointer-events-none'), inactive, 'mouse clicks must reach the active editor')
+    })
+  }
+  ctx.preview.sample.value = 'foo'
+  await ctx.preview.copy()
+  assert.deepEqual(ctx.copies, ['foo'])
+  assert.equal(ctx.preview.mode.value, 'edit')
+  assertActivePane(0)
+  assert.equal(findNodes(ctx.render(), 'MonacoBodyEditor')[0].props.readonly, false)
+  for (const result of [
+    { matchCount: 2, output: 'bar\nbaz' },
+    { matchCount: 1, output: 'foo' },
+    { matchCount: 0, output: 'foo' },
+    { matchCount: 1, output: '' },
+  ]) {
+    const pending = ctx.preview.preview()
+    assert.equal(ctx.preview.busy.value, true)
+    assert.equal(ctx.preview.canCopy.value, false)
+    const call = ctx.calls.at(-1)
+    assert.deepEqual(call.action, { mode: 'regex', text: '', pattern: '(foo)', replacement: '1' })
+    assert.equal(call.input, 'foo')
+    call.resolve(result)
+    await pending
+    assert.equal(ctx.preview.mode.value, 'preview')
+    assertActivePane(1)
+    const badge = findNodes(ctx.render(), 'UBadge')[0]
+    const text = Array.isArray(badge.children)
+      ? badge.children.map((node) => node.children).join('') : badge.children
+    assert.match(text, result.matchCount ? /regex_test_matches:/ : /not_matched/)
+    const sampleEditor = findNodes(ctx.render(), 'MonacoBodyEditor')[0]
+    assert.equal(sampleEditor.props.value, 'foo', 'output never overwrites the sample')
+    assert.equal(sampleEditor.props.readonly, true)
+    const diff = findNodes(ctx.render(), 'VueMonacoDiffEditor')[0]
+    assert.equal(diff.props.original, 'foo')
+    assert.equal(diff.props.modified, result.output)
+    await ctx.preview.copy()
+    assert.equal(ctx.copies.at(-1), result.output)
+    ctx.preview.editSample()
+    assert.equal(ctx.preview.sample.value, 'foo')
+    assert.equal(ctx.preview.mode.value, 'edit')
+    assertActivePane(0)
+    assert.equal(ctx.preview.showDiff.value, false)
+    assert.equal(findNodes(ctx.render(), 'MonacoBodyEditor')[0].props.readonly, false)
+  }
+  ctx.cleanup()
+})
+
+test('body preview debounces only in preview, cancels obsolete work and preserves results on equivalent saves', async () => {
+  const ctx = setupBodyPreview()
+  ctx.preview.sample.value = 'foo'
+  ctx.props.body.replacement = 'bar'
+  await ctx.advance(300)
+  assert.equal(ctx.calls.length, 0, 'editing does not start a preview')
+  const initial = ctx.preview.preview()
+  ctx.calls[0].resolve({ matchCount: 1, output: 'bar' })
+  await initial
+  ctx.props.body = { ...ctx.props.body }
+  assert.equal(ctx.preview.result.value.output, 'bar')
+  assert.equal(ctx.timers.size, 0)
+
+  ctx.props.body.pattern = '(f)'
+  await ctx.advance(200)
+  ctx.props.body.replacement = 'new'
+  await ctx.advance(299)
+  assert.equal(ctx.calls.length, 1)
+  assert.equal(ctx.preview.busy.value, true)
+  await ctx.preview.copy()
+  assert.equal(ctx.copies.length, 0, 'stale results cannot be copied during debounce')
+  await ctx.advance(1)
+  assert.equal(ctx.calls.length, 2)
+  assert.equal(ctx.calls[1].input, 'foo', 'automatic updates start from the original')
+  ctx.props.body.pattern = 'bar'
+  assert.equal(ctx.calls[1].cancelled, true)
+  await ctx.advance(300)
+  ctx.calls[2].resolve({ matchCount: 0, output: 'foo' })
+  await flush()
+  ctx.calls[1].resolve({ matchCount: 1, output: 'stale' })
+  await flush()
+  assert.equal(ctx.preview.result.value.output, 'foo')
+
+  ctx.props.body.replacement = 'again'
+  await ctx.advance(300)
+  ctx.preview.editSample()
+  assert.equal(ctx.calls[3].cancelled, true)
+  ctx.calls[3].reject(new Error('late failure'))
+  await flush()
+  assert.equal(ctx.preview.error.value, '')
+  assert.equal(ctx.preview.mode.value, 'edit')
+  const unmounted = ctx.preview.preview()
+  ctx.cleanup()
+  assert.equal(ctx.calls[4].cancelled, true)
+  ctx.calls[4].resolve({ matchCount: 1, output: 'after unmount' })
+  await unmounted
+  assert.equal(ctx.preview.result.value, null)
+})
+
+test('returning to editing and unmounting cancel scheduled previews', async () => {
+  const ctx = setupBodyPreview()
+  const first = ctx.preview.preview()
+  ctx.calls[0].resolve({ matchCount: 0, output: '' })
+  await first
+  ctx.props.body.pattern = 'changed'
+  ctx.preview.editSample()
+  await ctx.advance(300)
+  assert.equal(ctx.calls.length, 1)
+  const second = ctx.preview.preview()
+  ctx.calls[1].resolve({ matchCount: 0, output: '' })
+  await second
+  ctx.props.body.replacement = 'changed'
+  ctx.cleanup()
+  await ctx.advance(300)
+  assert.equal(ctx.calls.length, 2)
+  assert.equal(ctx.timers.size, 0)
+})
+
+test('body preview replaces stale results with the sample on error and recovers automatically', async () => {
+  const ctx = setupBodyPreview()
+  const first = ctx.preview.preview()
+  ctx.calls[0].resolve({ matchCount: 1, output: 'empty' })
+  await first
+  ctx.props.body.pattern = '('
+  await ctx.advance(300)
+  ctx.calls[1].reject(new Error('body regular expression: missing closing )'))
+  await flush()
+  assert.match(ctx.preview.error.value, /missing closing/)
+  assert.equal(ctx.preview.hasPreview.value, false)
+  assert.equal(ctx.preview.result.value, null)
+  assert.equal(ctx.preview.canCopy.value, false)
+  assert.equal(findNodes(ctx.render(), 'UAlert').length, 1)
+  ctx.props.body.pattern = '^$'
+  await ctx.advance(300)
+  assert.equal(ctx.calls[2].input, '', 'empty samples are valid')
+  ctx.calls[2].resolve({ matchCount: 1, output: 'recovered' })
+  await flush()
+  assert.equal(ctx.preview.error.value, '')
+  assert.equal(ctx.preview.result.value.output, 'recovered')
+  ctx.preview.editSample()
+  ctx.preview.sample.value = '中'.repeat(Math.floor(8 * 1024 * 1024 / 3) + 1)
+  await ctx.preview.preview()
+  assert.equal(ctx.calls.length, 3)
+  assert.equal(ctx.preview.error.value, 'rewrite_rules.regex_test_too_large')
+  assert.equal(ctx.preview.busy.value, false)
+  ctx.cleanup()
+})
+
+test('large text skips diff and wrapping while keeping full results and shared font/theme options', async () => {
+  const ctx = setupBodyPreview()
+  for (const [input, output] of [
+    ['foo', 'x'.repeat(128 * 1024)],
+    ['x'.repeat(128 * 1024), 'small'],
+    [('x'.repeat(1023) + '\n').repeat(512), ''],
+  ]) {
+    ctx.preview.editSample()
+    ctx.preview.sample.value = input
+    const pending = ctx.preview.preview()
+    ctx.calls.at(-1).resolve({ matchCount: 1, output })
+    await pending
+    assert.equal(ctx.preview.largeResult.value, true)
+    assert.equal(ctx.preview.showDiff.value, false)
+    assert.equal(ctx.preview.diffMounted.value, false, 'do not create diff models for large bodies')
+    assert.equal(ctx.preview.effectiveWrap.value, false)
+    const editors = findNodes(ctx.render(), 'MonacoBodyEditor')
+    assert.equal(editors.length, 2)
+    assert.equal(editors[1].props.value, output)
+    await ctx.preview.copy()
+    assert.equal(ctx.copies.at(-1), output)
+  }
+  ctx.preview.editSample()
+  ctx.preview.sample.value = ' foo '
+  const pending = ctx.preview.preview()
+  ctx.calls.at(-1).resolve({ matchCount: 1, output: 'foo' })
+  await pending
+  assert.equal(ctx.preview.showDiff.value, true)
+  assert.equal(ctx.preview.effectiveWrap.value, true)
+  assert.equal(ctx.preview.diffOptions.value.ignoreTrimWhitespace, false)
+  assert.equal(ctx.preview.diffOptions.value.renderSideBySide, false)
+  assert.equal(ctx.preview.diffOptions.value.experimental.useTrueInlineView, true)
+  assert.equal(ctx.preview.diffOptions.value.maxComputationTime, 1000)
+  ctx.theme.isDark = true
+  ctx.setting.resolvedCodeFontSize = 16
+  assert.equal(ctx.preview.monacoTheme.value, 'vs-dark')
+  assert.equal(ctx.preview.diffOptions.value.fontSize, 16)
+  ctx.preview.wordWrap.value = false
+  assert.equal(ctx.preview.diffOptions.value.diffWordWrap, 'off')
+  ctx.setCopyError(new Error('clipboard unavailable'))
+  await ctx.preview.copy()
+  assert.match(ctx.notices.at(-1).error, /clipboard unavailable/)
+  assert.equal(ctx.preview.copying.value, false)
+  ctx.cleanup()
+})
+
+test('body preview detaches diff models before disposal when leaving the panel', () => {
+  const ctx = setupBodyPreview()
+  const steps = []
+  const model = {
+    original: { dispose: () => steps.push('original') },
+    modified: { dispose: () => steps.push('modified') },
+  }
+  ctx.preview.onDiffMount({
+    getModel: () => model,
+    setModel: (value) => { assert.equal(value, null); steps.push('detach') },
+  })
+  ctx.cleanup()
+  assert.deepEqual(steps, ['detach', 'original', 'modified'])
+})
+
+test('regex body test appears below URL matching only for request/response regex actions', () => {
+  const item = rule('a')
+  const context = {
+    rule: item, errors: {}, disabled: false, validate: () => true, t: (key) => key,
+    methods: [], actions: [], policies: [], update() {}, updateAction() {}, changeAction() {},
+  }
+  for (const type of ['request', 'response', 'redirect']) {
+    for (const mode of ['none', 'replace', 'regex']) {
+      item.action.type = type
+      item.action.body.mode = mode
+      context.editsMessage = type !== 'redirect'
+      const tree = renderView('RewriteRuleForm', context)
+      assert.equal(findNodes(tree, 'RewritePreview').length, 1)
+      const previews = findNodes(tree, 'RewriteBodyPreview')
+      assert.equal(previews.length, type !== 'redirect' && mode === 'regex' ? 1 : 0)
+      if (previews.length) {
+        assert.equal(previews[0].props.body, item.action.body)
+        assert.ok(tree.children.indexOf(previews[0]) > tree.children.findIndex((node) => node.type === 'RewritePreview'))
+      }
+    }
+  }
+})

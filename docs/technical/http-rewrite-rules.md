@@ -64,6 +64,10 @@ The frontend fetches rules on first opening the feature. Drafts share immutable 
 
 Mutation feedback belongs to the active save button or switch. Writes remain serialized while the form stays editable; a save submits a captured draft, and subsequent edits stay unsaved against the returned baseline. Metadata-only snapshots preserve editable rule objects, editor state, and match previews. Event-driven refreshes run silently; initial and manual loads show progress.
 
+`PreviewBody` tests an unsaved regex body action independently of URL matching and rule persistence. It shares body-action validation, compilation, bounded matching, and replacement expansion with live rewriting, returning the match count and output from one scan. Sample/output limits are 8 MiB with a 10-second deadline and caller cancellation. The frontend keeps sample text only in the mounted test panel, cancels obsolete calls, and ignores stale results; no network request, rule mutation, or traffic record is created.
+
+The test panel switches between an editable sample and a read-only Monaco inline diff in one fixed-height area. The sample editor remains mounted and laid out to preserve its undo and view state. Preview mode debounces pattern/replacement changes by 300 ms and always computes from the original sample. Updating results cannot be copied; failed previews reveal the original sample and an error. The diff includes whitespace changes, uses true inline rendering for supported single-line changes, and caps computation at 1 second. If either input or output meets the shared Monaco large-text threshold (512 Ki characters total or 128 Ki on one line), the panel shows the complete plain result without diff computation or wrapping. Fonts and light/dark appearance follow the existing stores.
+
 Deleting dirty rules, quitting, and update restart offer save/discard/cancel. Save failures keep drafts and block continuation; backend quit confirmation validates the main-window sender and request identity. Drafts are not crash recovery data. Event subscriptions use their returned disposers.
 
 ## Capture, Metrics, History, and Export

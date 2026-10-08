@@ -60,7 +60,7 @@ async function copyRawHTTPMessage() {
       <div class="flex min-h-8.5 shrink-0 items-center justify-end gap-1 px-2.5 pt-1">
         <UTooltip :text="t('detail.wrap_body')">
           <UButton
-            icon="i-lucide-corner-down-left"
+            icon="i-lucide-wrap-text"
             :color="wordWrap ? 'primary' : 'neutral'"
             variant="ghost"
             size="sm"

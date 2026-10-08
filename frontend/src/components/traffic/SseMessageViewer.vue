@@ -274,7 +274,7 @@ watch(detailVisible, (visible) => {
             <div class="flex shrink-0 items-center gap-1">
               <UTooltip :text="t('detail.wrap_body')">
                 <UButton
-                  icon="i-lucide-corner-down-left"
+                  icon="i-lucide-wrap-text"
                   :color="wordWrap ? 'primary' : 'neutral'"
                   variant="ghost"
                   size="sm"
