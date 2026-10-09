@@ -356,6 +356,11 @@ export interface SendRequestConfig {
      * <=0 means no timeout
      */
     "timeoutMs": number;
+
+    /**
+     * 0 disables redirects
+     */
+    "maxRedirects": number;
     "skipVerifyTls": boolean;
     "tlsClientHelloId": TLSClientHelloID;
     "http2Fingerprint": string;

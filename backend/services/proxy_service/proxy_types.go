@@ -448,10 +448,11 @@ type RequestBodyRecoveryResult struct {
 }
 
 type SendRequestConfig struct {
-	ProxyMode          SendRequestProxyMode `json:"proxyMode"`   // none / system / mitm / custom
-	Protocol           SendRequestProtocol  `json:"protocol"`    // auto / http1 / http2
-	CustomProxy        string               `json:"customProxy"` // used when ProxyMode=custom
-	TimeoutMs          int64                `json:"timeoutMs"`   // <=0 means no timeout
+	ProxyMode          SendRequestProxyMode `json:"proxyMode"`    // none / system / mitm / custom
+	Protocol           SendRequestProtocol  `json:"protocol"`     // auto / http1 / http2
+	CustomProxy        string               `json:"customProxy"`  // used when ProxyMode=custom
+	TimeoutMs          int64                `json:"timeoutMs"`    // <=0 means no timeout
+	MaxRedirects       int                  `json:"maxRedirects"` // 0 disables redirects
 	SkipVerifyTLS      bool                 `json:"skipVerifyTls"`
 	TLSClientHelloID   TLSClientHelloID     `json:"tlsClientHelloId"`
 	HTTP2Fingerprint   string               `json:"http2Fingerprint"`

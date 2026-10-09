@@ -45,6 +45,7 @@ import { useWorkbenchStore } from '@/stores/workbench'
 import {
   DEFAULT_HTTP_REQUEST_PLUGINS_ENABLED,
   DEFAULT_HTTP_REQUEST_PYTHON_SCRIPT,
+  normalizeHttpMaxRedirects,
 } from '@/stores/traffic-workspace/requestEditorState'
 import { registerShortcutHandler, useShortcutKbds } from '@/shortcuts'
 import {
@@ -912,6 +913,7 @@ async function handleSend() {
       skipVerifyTls: state.value.settings.skipVerifyTls,
       tlsClientHelloId: state.value.settings.tlsClientHelloId as TLSClientHelloID,
       http2Fingerprint: state.value.settings.http2Fingerprint,
+      maxRedirects: state.value.settings.maxRedirects,
       disablePlugins: !state.value.pluginsEnabled,
       pluginExecutionId,
       inlinePythonScript: state.value.inlineScriptEnabled
@@ -1405,7 +1407,7 @@ onBeforeUnmount(() => {
                 <div
                   v-if="mountedRequestTabs.has('settings')"
                   v-show="state.activeRequestTab === 'settings'"
-                  class="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+                  class="flex h-full min-h-0 flex-1 flex-col overflow-y-auto"
                   data-name="settings"
                   role="tabpanel"
                 >
@@ -1479,6 +1481,27 @@ onBeforeUnmount(() => {
                         :format-options="{ minimumFractionDigits: 0, maximumFractionDigits: 0 }"
                         :placeholder="t('workspace.http_request.request_timeout_placeholder')"
                       />
+                    </div>
+                    <div class="contents">
+                      <label
+                        :for="`${tabKey}-max-redirects`"
+                        class="whitespace-nowrap text-sm leading-[1.35] text-app-text-muted"
+                      >
+                        {{ t('workspace.http_request.max_redirects') }}
+                      </label>
+                      <UFormField name="maxRedirects">
+                        <UInputNumber
+                          :id="`${tabKey}-max-redirects`"
+                          :model-value="state.settings.maxRedirects"
+                          orientation="vertical"
+                          :min="0"
+                          :max="Number.MAX_SAFE_INTEGER"
+                          :step="1"
+                          :format-options="{ minimumFractionDigits: 0, maximumFractionDigits: 0 }"
+                          class="w-full"
+                          @update:model-value="state.settings.maxRedirects = normalizeHttpMaxRedirects($event)"
+                        />
+                      </UFormField>
                     </div>
                   </div>
                 </div>

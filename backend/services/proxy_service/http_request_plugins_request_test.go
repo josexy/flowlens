@@ -310,13 +310,13 @@ func TestSendHTTPRequestRunsRequestPluginsOnlyOnceAcrossRedirects(t *testing.T) 
 	service := newTestProxyService(t, &settingservice.ProxyConfig{})
 	service.SetHTTPRequestPluginRunner(runner)
 	response, err := service.SendHTTPRequest(
-		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
+		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, MaxRedirects: 1},
 		http.MethodGet, server.URL+"/redirect", nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
 	}
-	if response.Body != "done" || session.requestCount.Load() != 1 || runner.beginCount.Load() != 1 {
+	if response.Body != "done" || session.requestCount.Load() != 1 || runner.beginCount.Load() != 1 || session.responseCount.Load() != 1 {
 		t.Fatalf("response=%+v requestCount=%d beginCount=%d", response, session.requestCount.Load(), runner.beginCount.Load())
 	}
 }
@@ -380,7 +380,7 @@ func TestSendHTTPRequestStreamsPluginBodyFileAcrossRedirects(t *testing.T) {
 			service := newTestProxyService(t, &settingservice.ProxyConfig{})
 			service.SetHTTPRequestPluginRunner(&fakeHTTPRequestPluginRunner{session: session})
 			response, err := service.SendHTTPRequest(
-				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
+				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, MaxRedirects: 1},
 				http.MethodPost, server.URL+"/original", nil,
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
 			)

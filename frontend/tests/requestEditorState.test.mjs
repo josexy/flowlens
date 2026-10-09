@@ -100,6 +100,56 @@ test('HTTP Request Editor verifies TLS by default for legacy APIs and traffic dr
   assert.equal(trafficDraft.settings.skipVerifyTls, false)
 })
 
+test('HTTP redirect limits are per tab, saved, restored, and included in dirty state', () => {
+  const state = requestEditorState.buildEmptyHttpRequestEditorState('new')
+  const otherState = requestEditorState.buildEmptyHttpRequestEditorState('new')
+  const tab = { key: 'http-request:redirects', type: 'http-request', httpRequest: state }
+  const initialSnapshot = requestEditorState.createSnapshotForTab(tab)
+  assert.equal(state.settings.maxRedirects, 0)
+  assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), false)
+
+  for (const limit of [1, 12, 0]) {
+    state.settings.maxRedirects = limit
+    assert.equal(otherState.settings.maxRedirects, 0)
+    assert.equal(requestEditorState.hasMeaningfulRequestDraft(tab), limit > 0)
+    assert.equal(requestEditorState.createSnapshotForTab(tab) === initialSnapshot, limit === 0)
+    const saved = requestEditorState.buildSavedHTTPRequestFromState(state)
+    assert.equal(saved.maxRedirects, limit)
+    const restored = requestEditorState.buildHttpRequestEditorStateFromSavedRequest(saved, 'Saved')
+    assert.equal(restored.settings.maxRedirects, limit)
+    const copy = requestEditorState.buildHttpRequestEditorStateFromSavedRequest(saved, 'Copy')
+    copy.settings.maxRedirects = 5
+    assert.equal(restored.settings.maxRedirects, limit)
+    requestEditorState.applySavedHTTPRequestToState(copy, saved, 'Saved')
+    assert.equal(copy.settings.maxRedirects, limit)
+  }
+})
+
+test('legacy saved requests and traffic drafts disable redirects', () => {
+  const legacy = savedHTTPRequest()
+  const state = requestEditorState.buildHttpRequestEditorStateFromSavedRequest(legacy, 'Legacy')
+  assert.equal(state.settings.maxRedirects, 0)
+  state.settings.maxRedirects = 12
+  requestEditorState.applySavedHTTPRequestToState(state, legacy, 'Legacy')
+  assert.equal(state.settings.maxRedirects, 0)
+  for (const source of ['capture-edit', 'history-edit']) {
+    const draft = requestEditorState.toHttpRequestEditorState({
+      source,
+      entry: { id: 1, method: 'GET', url: 'https://example.test/', request: { headerFields: [] } },
+      bodyView: null,
+    })
+    assert.equal(draft.settings.maxRedirects, 0)
+  }
+})
+
+test('redirect input clears to zero and only retains nonnegative whole numbers', () => {
+  for (const value of [null, undefined, NaN, Infinity, -1, -Infinity]) {
+    assert.equal(requestEditorState.normalizeHttpMaxRedirects(value), 0)
+  }
+  assert.equal(requestEditorState.normalizeHttpMaxRedirects(1.8), 1)
+  assert.equal(requestEditorState.normalizeHttpMaxRedirects(12), 12)
+})
+
 test('WebSocket Client keeps TLS verification per tab and includes it in saved and dirty state', () => {
   const state = requestEditorState.buildEmptyWebSocketClientState('new')
   const otherState = requestEditorState.buildEmptyWebSocketClientState('new')

@@ -470,6 +470,7 @@ func cloneSavedHTTPRequest(request *SavedHTTPRequest) *SavedHTTPRequest {
 		SkipVerifyTLS:      request.SkipVerifyTLS,
 		TLSClientHelloID:   clientHelloID,
 		HTTP2Fingerprint:   request.HTTP2Fingerprint,
+		MaxRedirects:       request.MaxRedirects,
 	}
 }
 

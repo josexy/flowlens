@@ -895,6 +895,7 @@
       "custom_proxy": "自定义代理 URL",
       "custom_proxy_placeholder": "例如 http://127.0.0.1:8888",
       "request_timeout": "请求超时 (ms)",
+      "max_redirects": "重定向次数",
       "request_timeout_placeholder": "0 表示不设置超时",
       "invalid_url": "请输入有效的 URL",
       "invalid_url_scheme": "仅支持 HTTP/HTTPS URL",

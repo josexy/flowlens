@@ -149,12 +149,19 @@ function createEmptyKVRow(): EditableKeyValue {
   }
 }
 
+export function normalizeHttpMaxRedirects(value: number | null | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(value)))
+    : 0
+}
+
 function createDefaultHttpRequestSendSettings(): HttpRequestSendSettings {
   return {
     proxyMode: 'none',
     protocol: 'auto',
     customProxy: '',
     timeoutMs: 0,
+    maxRedirects: 0,
     skipVerifyTls: false,
     tlsClientHelloId: 'golang',
     http2Fingerprint: '',
@@ -419,6 +426,7 @@ export function buildSavedHTTPRequestFromState(
     skipVerifyTls: state.settings.skipVerifyTls,
     tlsClientHelloId: state.settings.tlsClientHelloId as proxyservice.TLSClientHelloID,
     http2Fingerprint: state.settings.http2Fingerprint,
+    maxRedirects: state.settings.maxRedirects,
   }
 }
 
@@ -481,6 +489,7 @@ export function buildHttpRequestEditorStateFromSavedRequest(
       skipVerifyTls: request.skipVerifyTls ?? false,
       tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
       http2Fingerprint: request.http2Fingerprint ?? '',
+      maxRedirects: normalizeHttpMaxRedirects(request.maxRedirects),
     },
     response: null,
   }
@@ -552,6 +561,7 @@ export function applySavedHTTPRequestToState(
     skipVerifyTls: request.skipVerifyTls ?? false,
     tlsClientHelloId: normalizeRequestTLSClientHelloID(request.tlsClientHelloId),
     http2Fingerprint: request.http2Fingerprint ?? '',
+    maxRedirects: normalizeHttpMaxRedirects(request.maxRedirects),
   }
 }
 
@@ -634,6 +644,7 @@ function createSnapshotPayloadForTab(tab: WorkspaceTab) {
         skipVerifyTls: state.settings.skipVerifyTls,
         tlsClientHelloId: state.settings.tlsClientHelloId,
         http2Fingerprint: state.settings.http2Fingerprint,
+        maxRedirects: state.settings.maxRedirects,
       },
     }
   }
@@ -693,6 +704,7 @@ export function hasMeaningfulRequestDraft(tab: WorkspaceTab) {
       payload.settings.protocol !== 'auto' ||
       payload.settings.customProxy ||
       payload.settings.timeoutMs > 0 ||
+      payload.settings.maxRedirects > 0 ||
       payload.settings.skipVerifyTls ||
       payload.settings.tlsClientHelloId !== 'golang' ||
       payload.settings.http2Fingerprint.trim(),

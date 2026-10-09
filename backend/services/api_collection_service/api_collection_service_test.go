@@ -771,6 +771,7 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 		TLSClientHelloID: proxyservice.TLSClientHelloSafariAuto,
 		HTTP2Fingerprint: "1:65536;3:1000;4:6291456;6:262144|15663105|0|m,a,s,p",
 		SkipVerifyTLS:    true,
+		MaxRedirects:     12,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -792,6 +793,9 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 		t.Fatalf("saved HTTP/2 fingerprint = %q", loaded.HTTP.HTTP2Fingerprint)
 	}
 	cloned := cloneSavedHTTPRequest(loaded.HTTP)
+	if loaded.HTTP.MaxRedirects != 12 || cloned.MaxRedirects != 12 {
+		t.Fatalf("saved/cloned redirect limits = %d/%d, want 12", loaded.HTTP.MaxRedirects, cloned.MaxRedirects)
+	}
 	if !cloned.SkipVerifyTLS {
 		t.Fatal("cloned request lost skip TLS certificate verification")
 	}
@@ -814,6 +818,26 @@ func TestSavedHTTPRequestSettingsPersistAndLegacyPayloadUsesDefaults(t *testing.
 	}
 	if legacy.HTTP.SkipVerifyTLS {
 		t.Fatal("legacy request must verify TLS certificates by default")
+	}
+	if legacy.HTTP.MaxRedirects != 0 {
+		t.Fatalf("legacy redirect limit = %d, want 0", legacy.HTTP.MaxRedirects)
+	}
+	for _, limit := range []int{1, 0} {
+		cloned.MaxRedirects = limit
+		if _, err := svc.UpdateHTTPRequest(saved.ID, cloned); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := New(svc.repository.db)
+		if err := reloaded.Load(); err != nil {
+			t.Fatal(err)
+		}
+		request, err := reloaded.GetRequest(saved.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if request.HTTP.MaxRedirects != limit {
+			t.Fatalf("reloaded redirect limit = %d, want %d", request.HTTP.MaxRedirects, limit)
+		}
 	}
 	if legacy.HTTP.TLSClientHelloID != proxyservice.TLSClientHelloGolang {
 		t.Fatalf("legacy TLS ClientHello = %q, want golang", legacy.HTTP.TLSClientHelloID)

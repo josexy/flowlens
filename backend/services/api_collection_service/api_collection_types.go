@@ -67,6 +67,7 @@ type SavedHTTPRequest struct {
 	SkipVerifyTLS      bool                              `json:"skipVerifyTls"`
 	TLSClientHelloID   proxyservice.TLSClientHelloID     `json:"tlsClientHelloId,omitempty"`
 	HTTP2Fingerprint   string                            `json:"http2Fingerprint,omitempty"`
+	MaxRedirects       int                               `json:"maxRedirects"`
 }
 
 type SavedWebSocketRequest struct {

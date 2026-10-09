@@ -80,6 +80,7 @@ export interface SavedHTTPRequest {
     "skipVerifyTls": boolean;
     "tlsClientHelloId"?: proxyservice$0.TLSClientHelloID;
     "http2Fingerprint"?: string;
+    "maxRedirects": number;
 }
 
 export interface SavedKeyValue {

@@ -586,7 +586,7 @@ func TestSendHTTPRequestExplicitProtocolFollowsRedirect(t *testing.T) {
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{})
 	response, err := svc.SendHTTPRequest(
 		context.Background(),
-		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP1},
+		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP1, MaxRedirects: 1},
 		http.MethodGet,
 		redirect.URL,
 		nil,

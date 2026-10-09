@@ -2146,6 +2146,9 @@ func (s *ProxyService) SendHTTPRequest(
 	headerFields []HTTPHeaderField,
 	body SendRequestBody,
 ) (SendRequestResponse, error) {
+	if cfg.MaxRedirects < 0 {
+		return SendRequestResponse{}, fmt.Errorf("max redirects must not be negative")
+	}
 	method, parsedURL, err := normalizeSyntheticMethodAndURL(method, targetURL)
 	if err != nil {
 		return SendRequestResponse{}, err
@@ -2313,12 +2316,19 @@ func (s *ProxyService) SendHTTPRequest(
 	client := &http.Client{
 		Transport: transport,
 	}
-	if http2Fingerprint != nil && protocol == SendRequestProtocolHTTP2 {
-		redirectTemplate := slices.Clone(headerFields)
-		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return errors.New("stopped after 10 redirects")
+	redirectTemplate := slices.Clone(headerFields)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		// via includes the initial request, so N redirects permit N+1 requests.
+		if len(via) > cfg.MaxRedirects {
+			// xhttp may have opened a replay body for a 307/308 before this callback.
+			// ErrUseLastResponse keeps the response body open, but does not close
+			// the unsent request body.
+			if req.Body != nil {
+				_ = req.Body.Close()
 			}
+			return http.ErrUseLastResponse
+		}
+		if http2Fingerprint != nil && protocol == SendRequestProtocolHTTP2 {
 			rebuilt, rebuildErr := rebuildSyntheticHTTP2FingerprintRedirectRequest(
 				req,
 				redirectTemplate,
@@ -2328,8 +2338,8 @@ func (s *ProxyService) SendHTTPRequest(
 				return fmt.Errorf("rebuild HTTP/2 fingerprint redirect headers: %w", rebuildErr)
 			}
 			*req = *rebuilt
-			return nil
 		}
+		return nil
 	}
 	if cfg.TimeoutMs > 0 {
 		client.Timeout = time.Duration(cfg.TimeoutMs) * time.Millisecond

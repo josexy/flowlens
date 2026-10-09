@@ -9,10 +9,11 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 - Saving an editor tab already linked to an API Collection entry updates that request directly.
 - HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.
 - HTTP requests can use automatic protocol negotiation or force `HTTP/1.1` / `HTTP/2`.
+- HTTP Request Editor's **Settings > Max Redirects** controls how many redirects to follow. It defaults to `0` (no redirects) for new requests, capture/history drafts, and older saved requests. The initial request does not count toward the limit: `1` allows A → B, then returns B's response even if it is another redirect. Reaching the limit returns the last response's status, headers, and body without an error. The request timeout covers the whole redirect chain.
 - HTTPS and WSS requests can select Go, Chrome, Firefox, Safari, Edge, iOS, Android 11 OkHttp, or randomized-ALPN ClientHello profiles.
 - HTTP Request Editor and WebSocket Client each have a per-tab **Skip TLS Verification** switch under **Settings**, independent of the capture toolbar. It controls the client's TLS connections, including HTTPS proxies, and defaults to off for new requests and older saved requests. When using a MITM proxy, that proxy's upstream certificate verification still follows its own settings.
 - HTTP requests can also use a canonical four-part HTTP/2 fingerprint in `SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_HEADER_ORDER` form. Explicit HTTP/1.1 requests ignore this field.
-- API Collection requests retain protocol, TLS certificate verification, TLS profile, fingerprint, ordered headers, body, and current-request script source where applicable. Script enable switches remain off when a request is reopened.
+- API Collection requests retain protocol, redirect limit, TLS certificate verification, TLS profile, fingerprint, ordered headers, body, and current-request script source where applicable. Script enable switches remain off when a request is reopened.
 
 Request header rows are sent in their displayed order. The URL remains the routing source of truth; the backend controls pseudo-headers, `Host`, body framing, generated content types, and the fallback `User-Agent`. Invalid layouts are rejected instead of being silently reordered.
 

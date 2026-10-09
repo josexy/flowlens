@@ -842,6 +842,7 @@
       "custom_proxy": "Custom Proxy URL",
       "custom_proxy_placeholder": "e.g. http://127.0.0.1:8888",
       "request_timeout": "Request Timeout (ms)",
+      "max_redirects": "Max Redirects",
       "request_timeout_placeholder": "0 means no timeout",
       "invalid_url": "Please enter a valid URL",
       "invalid_url_scheme": "Only HTTP/HTTPS URLs are supported",
