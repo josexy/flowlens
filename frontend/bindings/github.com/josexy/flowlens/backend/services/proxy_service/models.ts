@@ -5,6 +5,12 @@
 // @ts-ignore: Unused imports
 import * as settingservice$0 from "../setting_service/models.js";
 
+export interface DNSCacheStatus {
+    "enabled": boolean;
+    "ttlSeconds": number;
+    "entryCount": number;
+}
+
 export interface HARExportRequest {
     "captureGeneration"?: number | null;
     "path": string;

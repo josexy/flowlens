@@ -18,6 +18,7 @@ export {
 } from "./models.js";
 
 export type {
+    DNSCacheStatus,
     HARExportRequest,
     HARImportDiagnostic,
     HARImportResult,

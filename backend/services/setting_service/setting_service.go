@@ -60,21 +60,23 @@ const (
 )
 
 type SettingService struct {
-	mu                    sync.RWMutex
-	caMu                  sync.Mutex
-	caTrustStore          caCertificateTrustStore
-	loadMu                sync.Mutex
-	persistMu             sync.Mutex
-	settings              *Settings
-	activeWindowFrameMode WindowFrameMode
-	repository            *settingRepository
-	themeSavedColors      themeColors
-	themePreviewColors    *themeColors
-	themePreviewSession   uint64
-	themeSessionCounter   uint64
-	themePreviewSequence  uint64
-	themeColorRevision    uint64
-	themeColorsChanged    func(ThemeColorState)
+	mu                      sync.RWMutex
+	caMu                    sync.Mutex
+	caTrustStore            caCertificateTrustStore
+	loadMu                  sync.Mutex
+	persistMu               sync.Mutex
+	settings                *Settings
+	activeWindowFrameMode   WindowFrameMode
+	repository              *settingRepository
+	themeSavedColors        themeColors
+	dnsCacheSavedEnabled    bool
+	dnsCacheSavedTTLSeconds int
+	themePreviewColors      *themeColors
+	themePreviewSession     uint64
+	themeSessionCounter     uint64
+	themePreviewSequence    uint64
+	themeColorRevision      uint64
+	themeColorsChanged      func(ThemeColorState)
 
 	processAttributionEnabled atomic.Bool
 	processAttributionReady   atomic.Bool
@@ -364,6 +366,9 @@ func (s *SettingService) Update(settings *Settings) error {
 	if settings == nil {
 		return errors.New("settings cannot be nil")
 	}
+	if err := validateDNSCacheConfig(settings.ProxyConfig); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settings = settings
@@ -378,6 +383,9 @@ func (s *SettingService) Update(settings *Settings) error {
 func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 	if settings == nil {
 		return errors.New("settings cannot be nil")
+	}
+	if err := validateDNSCacheConfig(settings.ProxyConfig); err != nil {
+		return err
 	}
 	if err := s.ensureLoaded(); err != nil {
 		return err
@@ -651,10 +659,19 @@ func (s *SettingService) Save() error {
 			s.settings.CommonConfig.ThemePrimaryColor = saved.primary
 			s.settings.CommonConfig.ThemeNeutralColor = saved.neutral
 		}
+		if current := s.settings.ProxyConfig; current != nil && current.DNSCacheEnabled == snapshot.ProxyConfig.DNSCacheEnabled && current.DNSCacheTTLSeconds == snapshot.ProxyConfig.DNSCacheTTLSeconds {
+			current.DNSCacheEnabled = s.dnsCacheSavedEnabled
+			current.DNSCacheTTLSeconds = s.dnsCacheSavedTTLSeconds
+			if current.DNSCacheTTLSeconds == 0 {
+				current.DNSCacheTTLSeconds = DefaultDNSCacheTTLSeconds
+			}
+		}
 		s.mu.Unlock()
 		return err
 	}
 	s.themeSavedColors = colors
+	s.dnsCacheSavedEnabled = snapshot.ProxyConfig.DNSCacheEnabled
+	s.dnsCacheSavedTTLSeconds = snapshot.ProxyConfig.DNSCacheTTLSeconds
 	if s.themePreviewColors != nil && *s.themePreviewColors == colors {
 		s.themePreviewColors = nil
 	}
@@ -840,6 +857,8 @@ func (s *SettingService) loadLocked() error {
 	s.settings = settings
 	s.setupDefaultSettingsLocked()
 	s.themeSavedColors = commonThemeColors(s.settings.CommonConfig)
+	s.dnsCacheSavedEnabled = s.settings.ProxyConfig.DNSCacheEnabled
+	s.dnsCacheSavedTTLSeconds = s.settings.ProxyConfig.DNSCacheTTLSeconds
 	s.mu.Unlock()
 	return nil
 }
@@ -1289,6 +1308,9 @@ func setupDefaultProxyConfig(cfg *ProxyConfig) {
 	if cfg == nil {
 		return
 	}
+	if cfg.DNSCacheTTLSeconds < 1 || cfg.DNSCacheTTLSeconds > 3600 {
+		cfg.DNSCacheTTLSeconds = DefaultDNSCacheTTLSeconds
+	}
 	if cfg.Mode != ProxyModeHTTP && cfg.Mode != ProxyModeSOCKS5 {
 		cfg.Mode = ProxyModeHTTP
 	}
@@ -1309,6 +1331,16 @@ func setupDefaultProxyConfig(cfg *ProxyConfig) {
 	cfg.ExcludeHosts = sanitizeStringList(cfg.ExcludeHosts)
 	cfg.RootCAPaths = sanitizeStringList(cfg.RootCAPaths)
 	cfg.ClientCerts = sanitizeClientCerts(cfg.ClientCerts)
+}
+
+const DefaultDNSCacheTTLSeconds = 60
+
+func validateDNSCacheConfig(cfg *ProxyConfig) error {
+	// Zero represents an older settings payload without this field.
+	if cfg != nil && (cfg.DNSCacheTTLSeconds < 0 || cfg.DNSCacheTTLSeconds > 3600) {
+		return errors.New("DNS cache duration must be between 1 and 3600 seconds")
+	}
+	return nil
 }
 
 func sanitizeUpstreamProxyMode(mode UpstreamProxyMode, upstreamProxy string, disableProxy bool) UpstreamProxyMode {

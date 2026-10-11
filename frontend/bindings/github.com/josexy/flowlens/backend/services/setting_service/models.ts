@@ -122,6 +122,8 @@ export interface ProxyConfig {
     "skipVerifyTls": boolean;
     "antiCache": boolean;
     "antiComp": boolean;
+    "dnsCacheEnabled": boolean;
+    "dnsCacheTTLSeconds": number;
     "includeHosts": string[] | null;
     "excludeHosts": string[] | null;
     "rootCAPaths": string[] | null;

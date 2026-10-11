@@ -71,22 +71,24 @@ type CommonConfig struct {
 }
 
 type ProxyConfig struct {
-	Mode          ProxyMode          `json:"mode"`
-	Host          string             `json:"host"`
-	Port          int                `json:"port"`
-	CACertPath    string             `json:"caCertPath"`
-	CAKeyPath     string             `json:"caKeyPath"`
-	UpstreamMode  UpstreamProxyMode  `json:"upstreamProxyMode"`
-	UpstreamProxy string             `json:"upstreamProxy"`
-	DisableProxy  bool               `json:"disableProxy"`
-	DisableHTTP2  bool               `json:"disableHttp2"`
-	SkipVerifyTLS bool               `json:"skipVerifyTls"`
-	AntiCache     bool               `json:"antiCache"`
-	AntiComp      bool               `json:"antiComp"`
-	IncludeHosts  []string           `json:"includeHosts"`
-	ExcludeHosts  []string           `json:"excludeHosts"`
-	RootCAPaths   []string           `json:"rootCAPaths"`
-	ClientCerts   []ClientCertConfig `json:"clientCerts"`
+	Mode               ProxyMode          `json:"mode"`
+	Host               string             `json:"host"`
+	Port               int                `json:"port"`
+	CACertPath         string             `json:"caCertPath"`
+	CAKeyPath          string             `json:"caKeyPath"`
+	UpstreamMode       UpstreamProxyMode  `json:"upstreamProxyMode"`
+	UpstreamProxy      string             `json:"upstreamProxy"`
+	DisableProxy       bool               `json:"disableProxy"`
+	DisableHTTP2       bool               `json:"disableHttp2"`
+	SkipVerifyTLS      bool               `json:"skipVerifyTls"`
+	AntiCache          bool               `json:"antiCache"`
+	AntiComp           bool               `json:"antiComp"`
+	DNSCacheEnabled    bool               `json:"dnsCacheEnabled"`
+	DNSCacheTTLSeconds int                `json:"dnsCacheTTLSeconds"`
+	IncludeHosts       []string           `json:"includeHosts"`
+	ExcludeHosts       []string           `json:"excludeHosts"`
+	RootCAPaths        []string           `json:"rootCAPaths"`
+	ClientCerts        []ClientCertConfig `json:"clientCerts"`
 }
 
 type ClientCertConfig struct {

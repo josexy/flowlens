@@ -254,6 +254,8 @@ function ensureProxyConfig(settings: settingservice.Settings) {
       skipVerifyTls: false,
       antiCache: false,
       antiComp: false,
+      dnsCacheEnabled: false,
+      dnsCacheTTLSeconds: 60,
       includeHosts: [],
       excludeHosts: [],
       rootCAPaths: [],
@@ -267,6 +269,8 @@ function ensureProxyConfig(settings: settingservice.Settings) {
   settings.proxyConfig.clientCerts ??= []
   settings.proxyConfig.antiCache ??= false
   settings.proxyConfig.antiComp ??= false
+  settings.proxyConfig.dnsCacheEnabled ??= false
+  settings.proxyConfig.dnsCacheTTLSeconds ??= 60
   return settings.proxyConfig
 }
 
@@ -399,6 +403,8 @@ function cloneProxyConfig(config: settingservice.ProxyConfig): settingservice.Pr
     skipVerifyTls: config.skipVerifyTls,
     antiCache: config.antiCache,
     antiComp: config.antiComp,
+    dnsCacheEnabled: config.dnsCacheEnabled,
+    dnsCacheTTLSeconds: config.dnsCacheTTLSeconds,
     includeHosts: [...(config.includeHosts ?? [])],
     excludeHosts: [...(config.excludeHosts ?? [])],
     rootCAPaths: [...(config.rootCAPaths ?? [])],

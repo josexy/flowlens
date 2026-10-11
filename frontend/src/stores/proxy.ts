@@ -7,6 +7,8 @@ import {
   GetStatus,
   GetSystemProxyStatus,
   SetSystemProxyEnabled,
+  GetDNSCacheStatus,
+  ClearDNSCache,
 } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
 import { Events } from '@wailsio/runtime'
 
@@ -14,10 +16,12 @@ export const useProxyStore = defineStore('proxy', () => {
   const status = ref<proxyservice.ProxyStatus | null>(null)
   const systemProxyStatus = ref<proxyservice.SystemProxyStatus | null>(null)
   const lastError = ref<string | null>(null)
+  const dnsCacheStatus = ref<proxyservice.DNSCacheStatus | null>(null)
   const isRunning = computed(() => status.value?.running ?? false)
   let offProxyStatus: (() => void) | null = null
   let offProxyError: (() => void) | null = null
   let offSystemProxyStatus: (() => void) | null = null
+  let offDNSCacheStatus: (() => void) | null = null
 
   async function start() {
     try {
@@ -42,12 +46,14 @@ export const useProxyStore = defineStore('proxy', () => {
   }
 
   async function initialize() {
-    const [currentStatus, currentSystemProxyStatus] = await Promise.all([
+    const [currentStatus, currentSystemProxyStatus, currentDNSCacheStatus] = await Promise.all([
       GetStatus(),
       GetSystemProxyStatus(),
+      GetDNSCacheStatus(),
     ])
     status.value = currentStatus
     systemProxyStatus.value = currentSystemProxyStatus
+    dnsCacheStatus.value = currentDNSCacheStatus
 
     if (!offProxyStatus) {
       offProxyStatus = Events.On('proxy:status', (event) => {
@@ -66,6 +72,21 @@ export const useProxyStore = defineStore('proxy', () => {
         systemProxyStatus.value = event.data as proxyservice.SystemProxyStatus
       })
     }
+    if (!offDNSCacheStatus) {
+      offDNSCacheStatus = Events.On('proxy:dns-cache-status', (event) => {
+        dnsCacheStatus.value = event.data as proxyservice.DNSCacheStatus
+      })
+    }
+  }
+
+  async function refreshDNSCacheStatus() {
+    dnsCacheStatus.value = await GetDNSCacheStatus()
+    return dnsCacheStatus.value
+  }
+
+  async function clearDNSCache() {
+    dnsCacheStatus.value = await ClearDNSCache()
+    return dnsCacheStatus.value
   }
 
   async function setSystemProxyEnabled(enabled: boolean) {
@@ -81,11 +102,16 @@ export const useProxyStore = defineStore('proxy', () => {
     offProxyError = null
     offSystemProxyStatus?.()
     offSystemProxyStatus = null
+    offDNSCacheStatus?.()
+    offDNSCacheStatus = null
   }
 
   return {
     status,
     systemProxyStatus,
+    dnsCacheStatus,
+    refreshDNSCacheStatus,
+    clearDNSCache,
     isRunning,
     lastError,
     start,

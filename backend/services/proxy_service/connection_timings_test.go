@@ -5,13 +5,111 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net"
+	"net/url"
 	"reflect"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/mitmproxy-go/v2/metadata"
+	http "github.com/josexy/xhttp"
+	"github.com/josexy/xhttp/httptest"
 )
+
+func TestCaptureDNSConnectionTimingsWithCacheEnabledAndDisabled(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		name := "disabled"
+		if enabled {
+			name = "enabled"
+		}
+		t.Run(name, func(t *testing.T) {
+			setTestConfigDir(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			target, _ := url.Parse(server.URL)
+			target.Host = net.JoinHostPort("localhost", target.Port())
+			dir := t.TempDir()
+			svc := newTestProxyService(t, &settingservice.ProxyConfig{
+				Mode: settingservice.ProxyModeHTTP, Host: "127.0.0.1", Port: reserveTestTCPPort(t),
+				CACertPath: dir + "/ca.crt", CAKeyPath: dir + "/ca.key", DisableProxy: true,
+				DNSCacheEnabled: enabled, DNSCacheTTLSeconds: 60,
+			})
+			var lookups, cacheTime atomic.Int64
+			cache := newDNSCache(dnsResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+				lookups.Add(1)
+				return dnsTestIPs("127.0.0.1"), nil
+			}))
+			cache.now = func() time.Time { return time.Unix(cacheTime.Load(), 0) }
+			cache.configure(enabled, 60)
+			svc.dnsCache = cache
+			t.Cleanup(cache.close)
+			t.Cleanup(func() {
+				if err := svc.Shutdown(); err != nil {
+					t.Error(err)
+				}
+			})
+			if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			status, err := svc.Start()
+			if err != nil {
+				t.Fatal(err)
+			}
+			proxyURL, _ := url.Parse("http://" + status.Address)
+			transport := &http.Transport{Proxy: http.ProxyURL(proxyURL), DisableKeepAlives: true}
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
+			for i := range 4 {
+				if i == 2 {
+					cache.clear()
+				}
+				if i == 3 {
+					cacheTime.Store(60)
+				}
+				response, err := client.Get(target.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = response.Body.Close()
+			}
+			entries := svc.GetTraffic()
+			if len(entries) != 4 {
+				t.Fatalf("captured entries = %d, want 4", len(entries))
+			}
+			zeroLookups := 0
+			for _, entry := range entries {
+				if entry.Metadata == nil || entry.Metadata.ConnectionTimings == nil {
+					t.Fatal("connection timings missing from captured entry")
+				}
+				got := entry.Metadata.ConnectionTimings
+				if got.DNSStartedAtMicros < 0 || got.DNSEndedAtMicros < got.DNSStartedAtMicros ||
+					got.ConnectStartedAtMicros < got.DNSEndedAtMicros || got.ConnectEndedAtMicros < got.ConnectStartedAtMicros {
+					t.Fatalf("missing or reordered connection phases: %+v", got)
+				}
+				dnsMicros := got.DNSEndedAtMicros - got.DNSStartedAtMicros
+				if dnsMicros == 0 {
+					zeroLookups++
+				}
+				if runtime.GOOS == "windows" && !enabled && dnsMicros == 0 {
+					t.Fatal("Windows lookup lost its sub-tick duration")
+				}
+				t.Logf("DNS cache %s: lookup duration %d microseconds", name, dnsMicros)
+			}
+			if enabled && zeroLookups != 1 {
+				t.Fatalf("zero DNS durations = %d, want only the cache hit", zeroLookups)
+			}
+			if calls := lookups.Load(); (enabled && calls != 3) || (!enabled && calls != 0) {
+				t.Fatalf("application resolver calls = %d with cache %s", calls, name)
+			}
+		})
+	}
+}
 
 func TestConnectionTimingCaptureRefreshesImmutableSnapshots(t *testing.T) {
 	svc := newTestProxyService(t, nil)
@@ -77,6 +175,7 @@ func TestHARConnectionTimingBoundaries(t *testing.T) {
 		{"overlapping phases", HTTPConnectionTimings{1100, 1400, 1200, 1500, -1, -1}, -1, -1, -1, 1, -1, 3, 1000},
 		{"phase crosses request start", HTTPConnectionTimings{-1, -1, 900, 1300, -1, -1}, -1, .4, -1, .7, 0, 3.1, 900},
 		{"observed zero", HTTPConnectionTimings{1100, 1100, 1100, 1100, 1100, 1100}, 0, 0, 0, 1, -1, 3, 1000},
+		{"cached DNS before TCP", HTTPConnectionTimings{100, 100, 200, 400, 400, 600}, 0, .4, .2, 1, .5, 3.9, 100},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := HARExportEntry{Entry: &TrafficEntry{
@@ -132,6 +231,17 @@ func TestConnectionTimingsHistoryV2AndLegacyV1(t *testing.T) {
 			}
 			if !reflect.DeepEqual(decoded.Metadata.ConnectionTimings, entry.Metadata.ConnectionTimings) {
 				t.Fatal("timings changed in history")
+			}
+			cachedTimings := *entry.Metadata.ConnectionTimings
+			cachedTimings.DNSEndedAtMicros = cachedTimings.DNSStartedAtMicros
+			cachedEntry := &TrafficEntry{Type: kind, Metadata: &Metadata{ConnectionTimings: &cachedTimings}}
+			var cachedEncoded bytes.Buffer
+			if err := hbinWriteEntryHeader(&cachedEncoded, cachedEntry); err != nil {
+				t.Fatal(err)
+			}
+			cachedDecoded, err := DecodeTrafficEntryWithVersion(bytes.NewReader(cachedEncoded.Bytes()), 2)
+			if err != nil || !reflect.DeepEqual(cachedDecoded.Metadata.ConnectionTimings, cachedEntry.Metadata.ConnectionTimings) {
+				t.Fatalf("zero DNS duration changed in history: %v", err)
 			}
 			// V1 ends before the new optional block. Decode it with body bytes
 			// following, as history_service does, without consuming those bytes.

@@ -100,6 +100,9 @@ type ProxyService struct {
 	antiCache         atomic.Bool
 	antiComp          atomic.Bool
 	settingService    *settingservice.SettingService
+	dnsCacheMu        sync.Mutex
+	dnsCache          *dnsCache
+	dnsCacheClosed    bool
 	rewriteService    *rewriteservice.RewriteService
 
 	trafficEntries          *TrafficEntryWithStatics
@@ -257,6 +260,7 @@ func (s *ProxyService) httpRequestRunner() HTTPRequestPluginRunner {
 func (s *ProxyService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	s.baseCtx, s.baseCancel = context.WithCancel(ctx)
 	s.app = application.Get()
+	s.dnsCacheManager()
 	s.frontendEventBatcher = newWindowFrontendEventBatcher(
 		s.app,
 		mainWindowName,
@@ -289,6 +293,12 @@ func (s *ProxyService) shutdown() error {
 	if s.baseCancel != nil {
 		s.baseCancel()
 	}
+	s.dnsCacheMu.Lock()
+	s.dnsCacheClosed = true
+	if s.dnsCache != nil {
+		s.dnsCache.close()
+	}
+	s.dnsCacheMu.Unlock()
 	s.liveTrafficDetailID.Store(0)
 	s.closeAllHTTPRequestStreams()
 	s.closeAllWebSocketSessions()
@@ -529,6 +539,8 @@ func (s *ProxyService) buildHandlerLocked(ctx context.Context, cfg *settingservi
 		mitmproxy.WithCACertPath(cfg.CACertPath),
 		mitmproxy.WithCAKeyPath(cfg.CAKeyPath),
 		mitmproxy.WithUpstreamHTTPTrace(),
+		mitmproxy.WithIPResolver(s.dnsCacheManager()),
+		mitmproxy.WithContextDialer(s.networkDialer(&net.Dialer{Timeout: 15 * time.Second})),
 		mitmproxy.WithHTTPInterceptor(s.httpInterceptor(cfg)),
 		mitmproxy.WithWebsocketInterceptor(s.websocketInterceptor(cfg)),
 		mitmproxy.WithRawTCPInterceptor(s.rawTCPInterceptor()),
@@ -590,6 +602,9 @@ func (s *ProxyService) ApplyCurrentProxyConfig() (ProxyConfigApplyResult, error)
 		logger.G().Errorf("Failed to synchronize managed system proxy: %v", err)
 		return ProxyConfigApplyResult{}, err
 	}
+	cache := s.dnsCacheManager()
+	cache.configure(cfg.DNSCacheEnabled, cfg.DNSCacheTTLSeconds)
+	s.emitDNSCacheStatus(cache.status())
 
 	s.mu.Lock()
 	running := s.running
@@ -1947,7 +1962,7 @@ func (s *ProxyService) ResendRequestWithTrafficEntry(ctx context.Context, cfg Re
 		proxyURL, _ = url.Parse(cfg.UpstreamProxy)
 	}
 
-	transport := newSyntheticRoundTripper(proxyConfig.SkipVerifyTLS, protocol, proxyURL, TLSClientHelloGolang)
+	transport := newSyntheticRoundTripper(proxyConfig.SkipVerifyTLS, protocol, proxyURL, TLSClientHelloGolang, s.networkDialer(&net.Dialer{}))
 	defer transport.CloseIdleConnections()
 	if protocol == SendRequestProtocolHTTP2 && parsedURL.Scheme == "http" && proxyURL != nil && !isSOCKSProxyURL(proxyURL) {
 		return ResendResult{}, fmt.Errorf("HTTP/2 prior-knowledge requests over http:// do not support HTTP forward proxies")
@@ -2306,7 +2321,7 @@ func (s *ProxyService) SendHTTPRequest(
 		return SendRequestResponse{}, fmt.Errorf("HTTP/2 prior-knowledge requests over http:// do not support HTTP forward proxies")
 	}
 
-	transport := newSyntheticRoundTripper(cfg.SkipVerifyTLS, protocol, proxyURL, cfg.TLSClientHelloID)
+	transport := newSyntheticRoundTripper(cfg.SkipVerifyTLS, protocol, proxyURL, cfg.TLSClientHelloID, s.networkDialer(&net.Dialer{}))
 	streamingResponse := false
 	defer func() {
 		if !streamingResponse {
@@ -2924,7 +2939,7 @@ func (s *ProxyService) ConnectWebSocket(
 	defer cancelHandshakeTimeout()
 
 	var detachHandshakeCancellation func() bool
-	netDialer := &net.Dialer{}
+	netDialer := s.networkDialer(&net.Dialer{})
 	dialer.NetDialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		address, dialErr := syntheticASCIIAddress(address)
 		if dialErr != nil {
@@ -2957,6 +2972,7 @@ func (s *ProxyService) ConnectWebSocket(
 				[]string{syntheticALPNHTTP1},
 				true,
 				req.SkipVerifyTLS,
+				netDialer,
 			)
 			if dialErr != nil {
 				return nil, dialErr
@@ -2978,6 +2994,7 @@ func (s *ProxyService) ConnectWebSocket(
 				[]string{syntheticALPNHTTP1},
 				true,
 				req.SkipVerifyTLS,
+				netDialer,
 			)
 			if dialErr != nil {
 				return nil, dialErr

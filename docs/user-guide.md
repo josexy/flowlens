@@ -92,6 +92,16 @@ The toolbar system-proxy control can temporarily point supported operating-syste
 
 The original proxy snapshot is kept in process memory and is restored during a normal shutdown. A crash, forced termination, or power loss can leave the system proxy pointing at FlowLens. Restore it manually through the operating-system network settings; restarting FlowLens cannot recover a snapshot lost with the previous process.
 
+## DNS Cache
+
+The globe control beside the HTTP cache control opens application DNS cache settings. Enable the cache, choose a duration from 1 to 3600 seconds, then select **Apply**. The default is off with a 60-second duration. Settings persist across application restarts.
+
+Capture, Request Editor, resend, and WebSocket connections share up to 1024 cached domains. Only successful local lookups are cached; failures are not. The duration is an application expiration period, not the original DNS record TTL. Paths where an upstream proxy resolves the destination continue to use that proxy's resolver.
+
+**Clear cache** removes application records without interrupting existing HTTP, HTTP/2, or WebSocket connections. New connections resolve again; existing connections may keep using the previously resolved server. Disabling the cache or changing its duration also removes stored records. Stopping capture preserves the cache for Request Editor and other business requests; exiting FlowLens releases it.
+
+These controls do not clear operating-system or upstream DNS caches, and do not affect update checks.
+
 ## Timing, Sizes, and HAR Import/Export
 
 FlowLens records request-attempt start, request-write end, and unmodified-response first-byte/body-end events at the upstream transport boundary. Responses changed by rewrite rules instead use actual downstream send observations. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
@@ -104,6 +114,8 @@ FlowLens records request-attempt start, request-write end, and unmodified-respon
 Capture, history, and traffic context menus can export all or selected entries as HAR 1.2. HTTP/HTTPS exchanges and WebSocket upgrade handshakes are exportable; Raw TCP tunnels and WebSocket frames are skipped.
 
 The Timing panel also shows upstream DNS, TCP connect, and TLS handshake durations from mitmproxy-go's connection metadata. These describe the connection and are shared by requests that reuse it. Total Duration covers the current HTTP exchange; connection setup completed before the request starts is not added to it. Unavailable or incomplete connection phases display `—`.
+
+Application DNS cache hits report a DNS duration of `0`. First lookups, expired entries, and in-flight shared queries retain their measured duration. Cache lookup overhead remains part of the connection setup interval. On Windows, connection setup and upstream HTTP exchange timings use a shared high-resolution clock. Display and history retain microsecond timestamps.
 
 HAR timestamps retain microsecond precision; elapsed times use milliseconds with fractional digits. Each complete, disjoint DNS, TCP connect, and TLS phase is assigned once to the earliest recorded request carrying that connection metadata in the source capture/history. This assignment is independent of selection and export order: selecting only a later reused-connection request leaves its connection phases at `-1`. When setup precedes the HTTP exchange (as with HTTPS CONNECT), `startedDateTime` moves to the actual setup start and `time` includes it. `blocked` accounts for setup/forwarding gaps before the HTTP exchange; only the part of a connection phase overlapping the request interval is subtracted from `send`. HAR `connect` includes TLS, so `ssl` is not added again when summing `time`. For complete, non-overlapping exchanges, `time` equals the sum of known `blocked`, `dns`, `connect`, `send`, `wait`, and `receive` values. Remaining preparation and retry overhead stays in `send`, as documented in `timings.comment`. Unavailable or incomplete phases remain `-1`; a failed HTTP send does not erase a completed connection phase. Overlapping upload/response phases cannot be expressed as a serial waterfall, so `wait` and `time` remain `-1`. The original connection timestamps remain in `_connectionTimings`, and original request/response timestamps and terminal states also remain available in extension fields.
 
