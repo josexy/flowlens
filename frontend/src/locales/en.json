@@ -187,7 +187,6 @@
     "dns_cache_invalid_ttl": "Enter a whole number between 1 and 3600",
     "dns_cache_clear": "Clear cache",
     "dns_cache_apply": "Apply",
-    "dns_cache_applied": "Applied",
     "dns_cache_cleared": "Cleared",
     "dns_cache_failed": "Operation failed: {error}",
     "anti_comp": "Anti-compression",

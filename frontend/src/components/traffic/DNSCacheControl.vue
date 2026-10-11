@@ -62,7 +62,7 @@ async function applySettings() {
     const result = await settingStore.save({ dirtySections: ['proxy'] })
     if (!result?.complete) throw new Error('proxy settings were not saved')
     await proxyStore.refreshDNSCacheStatus()
-    notify.success(t('toolbar.dns_cache_applied'))
+    open.value = false
   } catch (cause) {
     // Retain the draft for retry; the icon represents the backend configuration.
     const status = await proxyStore.refreshDNSCacheStatus().catch(() => null)

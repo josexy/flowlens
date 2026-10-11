@@ -187,7 +187,6 @@
     "dns_cache_invalid_ttl": "请输入 1–3600 的整数",
     "dns_cache_clear": "清空缓存",
     "dns_cache_apply": "应用",
-    "dns_cache_applied": "已应用",
     "dns_cache_cleared": "已清空",
     "dns_cache_failed": "操作失败：{error}",
     "anti_comp": "禁用响应压缩",
