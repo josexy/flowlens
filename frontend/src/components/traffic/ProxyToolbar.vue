@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import HostFilterModal from '@/components/modal/HostFilterModal.vue'
-import PortConfigModal from '@/components/modal/PortConfigModal.vue'
+import PortConfigPopover from '@/components/traffic/PortConfigPopover.vue'
 import ProxyToolbarIcon from '@/components/traffic/ProxyToolbarIcon.vue'
 import DNSCacheControl from '@/components/traffic/DNSCacheControl.vue'
 import { useProxyStore } from '@/stores/proxy'
@@ -40,7 +40,7 @@ const clearTrafficShortcutKbds = useShortcutKbds('capture.clearTraffic')
 const applying = ref(false)
 const proxyToggleApplying = ref(false)
 const systemProxyApplying = ref(false)
-const portModalOpen = ref(false)
+const portPopoverOpen = ref(false)
 const hostFilterModalOpen = ref(false)
 const localIPOptions = ref<LocalIPAddress[]>([])
 
@@ -277,23 +277,20 @@ async function handleHostSelect(key: string | number) {
   })
 }
 
-function openPortModal() {
-  portModalOpen.value = true
-}
-
 async function handlePortSave(port: number | null) {
+  if (applying.value || settingStore.isSaving) return
   if (!port || port < 1 || port > 65535) {
     notify.error(t('toolbar.invalid_port'))
     return
   }
   if (port === currentPort.value) {
-    portModalOpen.value = false
+    portPopoverOpen.value = false
     return
   }
   await updateProxyConfig((cfg) => {
     cfg.port = port
   })
-  portModalOpen.value = false
+  portPopoverOpen.value = false
 }
 
 async function toggleBooleanSetting(
@@ -463,22 +460,12 @@ onBeforeUnmount(() => {
           </template>
         </UDropdownMenu>
 
-        <UTooltip
-          :text="t('toolbar.quick_port', { port: currentPort })"
-          :content="{ side: 'bottom' }"
-        >
-          <UButton
-            class="p-1"
-            color="neutral"
-            variant="ghost"
-            size="md"
-            square
-            :aria-label="t('toolbar.quick_port', { port: currentPort })"
-            @click="openPortModal"
-          >
-            <ProxyToolbarIcon name="port" />
-          </UButton>
-        </UTooltip>
+        <PortConfigPopover
+          v-model:open="portPopoverOpen"
+          :port="currentPort"
+          :saving="applying || settingStore.isSaving"
+          @save="handlePortSave"
+        />
 
         <UTooltip
           v-if="systemProxySupported"
@@ -651,14 +638,6 @@ onBeforeUnmount(() => {
       :saving="applying"
       @update:show="hostFilterModalOpen = $event"
       @save="handleHostFilterSave"
-    />
-
-    <PortConfigModal
-      :show="portModalOpen"
-      :port="currentPort"
-      :saving="applying"
-      @update:show="portModalOpen = $event"
-      @save="handlePortSave"
     />
   </div>
 </template>
