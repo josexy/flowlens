@@ -8,7 +8,7 @@ require (
 	github.com/fyne-io/oksvg v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
-	github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261008065647-aece1310af68
+	github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261011052302-5f29189128c0
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
 	github.com/josexy/xhttp v0.0.0-20261008063219-ca8ba626def8
 	github.com/klauspost/compress v1.19.0

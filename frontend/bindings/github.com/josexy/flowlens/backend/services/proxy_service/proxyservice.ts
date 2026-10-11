@@ -21,6 +21,10 @@ export function ClearCacheFiles(): $CancellablePromise<void> {
     return $Call.ByID(1084827885);
 }
 
+export function ClearDNSCache(): $CancellablePromise<$models.DNSCacheStatus> {
+    return $Call.ByID(1457604115);
+}
+
 /**
  * ClearTraffic removes all stored traffic and its persisted current snapshot.
  * The disk pair is deleted before the in-memory reset so a deletion failure
@@ -59,6 +63,10 @@ export function ExportHAR(request: $models.HARExportRequest): $CancellablePromis
 
 export function ExportTraffic(request: $models.TrafficExportRequest): $CancellablePromise<$models.TrafficExportResult> {
     return $Call.ByID(2095088910, request);
+}
+
+export function GetDNSCacheStatus(): $CancellablePromise<$models.DNSCacheStatus> {
+    return $Call.ByID(3138231276);
 }
 
 export function GetLocalDataSize(): $CancellablePromise<$models.LocalDataSize> {

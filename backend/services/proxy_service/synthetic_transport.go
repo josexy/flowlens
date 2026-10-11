@@ -31,13 +31,14 @@ type idleClosingRoundTripper interface {
 }
 
 type syntheticRoundTripper struct {
-	profileID  utls.ClientHelloID
-	protocol   SendRequestProtocol
-	proxyURL   *url.URL
-	skipVerify bool
-	plain      *http.Transport
-	originsMu  sync.Mutex
-	origins    map[string]syntheticOriginRoundTripper
+	profileID     utls.ClientHelloID
+	protocol      SendRequestProtocol
+	proxyURL      *url.URL
+	skipVerify    bool
+	plain         *http.Transport
+	networkDialer networkContextDialer
+	originsMu     sync.Mutex
+	origins       map[string]syntheticOriginRoundTripper
 }
 
 type syntheticOriginRoundTripper interface {
@@ -50,9 +51,12 @@ func newSyntheticRoundTripper(
 	protocol SendRequestProtocol,
 	proxyURL *url.URL,
 	clientHelloID TLSClientHelloID,
+	dialers ...networkContextDialer,
 ) idleClosingRoundTripper {
 	profileID := resolveUTLSClientHelloID(clientHelloID)
+	networkDialer := syntheticDialer(dialers)
 	plain := newSyntheticBaseTransport(protocol)
+	plain.DialContext = networkDialer.DialContext
 	if proxyURL != nil {
 		plain.Proxy = http.ProxyURL(proxyURL)
 		if normalizedProxyScheme(proxyURL) == "https" {
@@ -66,17 +70,19 @@ func newSyntheticRoundTripper(
 					[]string{syntheticALPNHTTP1},
 					true,
 					skipVerify,
+					networkDialer,
 				)
 			}
 		}
 	}
 	transport := &syntheticRoundTripper{
-		profileID:  profileID,
-		protocol:   protocol,
-		proxyURL:   cloneURL(proxyURL),
-		skipVerify: skipVerify,
-		plain:      plain,
-		origins:    make(map[string]syntheticOriginRoundTripper),
+		profileID:     profileID,
+		protocol:      protocol,
+		proxyURL:      cloneURL(proxyURL),
+		skipVerify:    skipVerify,
+		plain:         plain,
+		networkDialer: networkDialer,
+		origins:       make(map[string]syntheticOriginRoundTripper),
 	}
 	return transport
 }
@@ -188,6 +194,7 @@ func (t *syntheticRoundTripper) newOrigin(
 		alpn,
 		forceALPN,
 		t.skipVerify,
+		t.networkDialer,
 	)
 	if err != nil {
 		if t.protocol == SendRequestProtocolHTTP2 && strings.Contains(strings.ToLower(err.Error()), "no application protocol") {
@@ -272,6 +279,7 @@ func newSyntheticHTTP1Origin(
 			[]string{syntheticALPNHTTP1},
 			true,
 			parent.skipVerify,
+			parent.networkDialer,
 		)
 	}
 	origin.transport = transport
@@ -339,6 +347,7 @@ func (o *syntheticHTTP2Origin) RoundTrip(req *http.Request) (*http.Response, err
 			[]string{syntheticALPNHTTP2},
 			true,
 			o.parent.skipVerify,
+			o.parent.networkDialer,
 		)
 		if err != nil {
 			return nil, err
@@ -408,8 +417,9 @@ func dialSyntheticTLS(
 	alpn []string,
 	forceALPN bool,
 	skipVerify bool,
+	dialers ...networkContextDialer,
 ) (*syntheticTLSConn, error) {
-	conn, err := dialSyntheticPath(ctx, network, address, proxyURL, profileID, skipVerify)
+	conn, err := dialSyntheticPath(ctx, network, address, proxyURL, profileID, skipVerify, dialers...)
 	if err != nil {
 		return nil, err
 	}
@@ -425,6 +435,7 @@ func dialSyntheticTLSDirect(
 	alpn []string,
 	forceALPN bool,
 	skipVerify bool,
+	dialers ...networkContextDialer,
 ) (*syntheticTLSConn, error) {
 	return dialSyntheticTLS(
 		ctx,
@@ -436,6 +447,7 @@ func dialSyntheticTLSDirect(
 		alpn,
 		forceALPN,
 		skipVerify,
+		dialers...,
 	)
 }
 
@@ -446,6 +458,7 @@ func dialSyntheticPath(
 	proxyURL *url.URL,
 	profileID utls.ClientHelloID,
 	skipVerify bool,
+	dialers ...networkContextDialer,
 ) (net.Conn, error) {
 	var err error
 	address, err = syntheticASCIIAddress(address)
@@ -453,7 +466,7 @@ func dialSyntheticPath(
 		return nil, err
 	}
 	if proxyURL == nil {
-		return (&net.Dialer{}).DialContext(ctx, network, address)
+		return syntheticDialer(dialers).DialContext(ctx, network, address)
 	}
 	switch normalizedProxyScheme(proxyURL) {
 	case "http", "https":
@@ -464,9 +477,10 @@ func dialSyntheticPath(
 			proxyURL,
 			profileID,
 			skipVerify,
+			dialers...,
 		)
 	case "socks5", "socks5h":
-		dialer, err := netproxy.FromURL(proxyURL, &net.Dialer{})
+		dialer, err := netproxy.FromURL(proxyURL, syntheticForwardDialer{syntheticDialer(dialers)})
 		if err != nil {
 			return nil, err
 		}
@@ -487,12 +501,13 @@ func dialSyntheticHTTPProxyTunnel(
 	proxyURL *url.URL,
 	profileID utls.ClientHelloID,
 	skipVerify bool,
+	dialers ...networkContextDialer,
 ) (net.Conn, error) {
 	proxyAddress, err := syntheticProxyAddress(proxyURL)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := (&net.Dialer{}).DialContext(ctx, network, proxyAddress)
+	conn, err := syntheticDialer(dialers).DialContext(ctx, network, proxyAddress)
 	if err != nil {
 		return nil, err
 	}

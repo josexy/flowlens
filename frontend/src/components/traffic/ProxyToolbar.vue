@@ -2,6 +2,7 @@
 import HostFilterModal from '@/components/modal/HostFilterModal.vue'
 import PortConfigModal from '@/components/modal/PortConfigModal.vue'
 import ProxyToolbarIcon from '@/components/traffic/ProxyToolbarIcon.vue'
+import DNSCacheControl from '@/components/traffic/DNSCacheControl.vue'
 import { useProxyStore } from '@/stores/proxy'
 import { useSettingStore } from '@/stores/setting'
 import { useTrafficStore } from '@/stores/traffic'
@@ -170,6 +171,8 @@ function ensureProxyConfig(settings: NonNullable<typeof settingStore.settings>):
       skipVerifyTls: false,
       antiCache: false,
       antiComp: false,
+      dnsCacheEnabled: false,
+      dnsCacheTTLSeconds: 60,
       includeHosts: [],
       excludeHosts: [],
       rootCAPaths: [],
@@ -182,6 +185,8 @@ function ensureProxyConfig(settings: NonNullable<typeof settingStore.settings>):
   settings.proxyConfig.clientCerts ??= []
   settings.proxyConfig.antiCache ??= false
   settings.proxyConfig.antiComp ??= false
+  settings.proxyConfig.dnsCacheEnabled ??= false
+  settings.proxyConfig.dnsCacheTTLSeconds ??= 60
   return settings.proxyConfig
 }
 
@@ -548,6 +553,8 @@ onBeforeUnmount(() => {
             <ProxyToolbarIcon name="anti-cache" :active="antiCache" />
           </UButton>
         </UTooltip>
+
+        <DNSCacheControl v-model:applying="applying" />
 
         <UTooltip
           :text="antiComp ? t('toolbar.anti_comp_on') : t('toolbar.anti_comp_off')"
