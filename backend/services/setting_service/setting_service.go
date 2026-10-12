@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	bodycache "github.com/josexy/flowlens/backend/pkg/body_cache"
+	"github.com/josexy/flowlens/backend/pkg/fs"
 	"github.com/josexy/flowlens/backend/pkg/logger"
 	appservice "github.com/josexy/flowlens/backend/services/app_service"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -63,6 +64,7 @@ type SettingService struct {
 	mu                      sync.RWMutex
 	caMu                    sync.Mutex
 	caTrustStore            caCertificateTrustStore
+	savedCAConfig           *caConfiguration
 	loadMu                  sync.Mutex
 	persistMu               sync.Mutex
 	settings                *Settings
@@ -94,13 +96,20 @@ func SetActiveWindowFrameMode(service *SettingService, mode WindowFrameMode) {
 }
 
 func (s *SettingService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
-	s.mu.RLock()
-	loaded := s.settings != nil
-	s.mu.RUnlock()
-	if loaded {
-		return nil
+	if err := s.ensureLoaded(); err != nil {
+		return err
 	}
-	return s.Load()
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
+	config, err := s.currentCAConfiguration()
+	if err == nil && config.useBuiltinCA {
+		err = s.ensureBuiltinCALocked()
+	}
+	if err != nil {
+		// Keep settings accessible so the user can repair or change the CA.
+		logger.G().Warnf("Initialize builtin CA: %s", caTrustLogText(err.Error()))
+	}
+	return nil
 }
 
 func (s *SettingService) ServiceShutdown() error {
@@ -117,7 +126,11 @@ func (s *SettingService) GetProxyConfig() (*ProxyConfig, error) {
 	if s.settings == nil || s.settings.ProxyConfig == nil {
 		return nil, errors.New("proxy config not loaded")
 	}
-	return s.settings.ProxyConfig, nil
+	config := *s.settings.ProxyConfig
+	if s.savedCAConfig != nil {
+		s.savedCAConfig.apply(&config)
+	}
+	return &config, nil
 }
 
 func (s *SettingService) GetWindowConfig() (*WindowConfig, error) {
@@ -369,6 +382,8 @@ func (s *SettingService) Update(settings *Settings) error {
 	if err := validateDNSCacheConfig(settings.ProxyConfig); err != nil {
 		return err
 	}
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settings = settings
@@ -391,6 +406,8 @@ func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 		return err
 	}
 
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	s.mu.Lock()
 	shortcuts := cloneAndSanitizeShortcutConfig(s.settings.Shortcuts)
 	pythonPlugins := cloneAndSanitizePythonPluginConfig(s.settings.PythonPluginConfig)
@@ -533,22 +550,41 @@ func defaultLocalIPv4AddressOptions() []LocalIPAddress {
 }
 
 func (s *SettingService) GetCACertificateInfo() (*CACertificateInfo, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return nil, err
+	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
 	certPath, keyPath, err := s.currentCAPaths()
 	if err != nil {
 		return nil, err
 	}
-	return inspectCACertificate(certPath, keyPath), nil
+	return s.publicCAInfo(inspectCACertificate(certPath, keyPath)), nil
 }
 
 func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateRequest) (info *CACertificateInfo, err error) {
+	if err := s.ensureLoaded(); err != nil {
+		return nil, err
+	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	config, err := s.currentCAConfiguration()
+	if err != nil {
+		return nil, err
+	}
+	if !config.useBuiltinCA {
+		return nil, errors.New("ca_custom_generation_disabled")
+	}
+	defer func() { err = hideBuiltinCAError(err) }()
 	certPath, keyPath, err := s.currentCAPaths()
 	if err != nil {
 		return nil, err
 	}
+	info, err = s.generateCALocked(certPath, keyPath, req)
+	return s.publicCAInfo(info), err
+}
+
+func (s *SettingService) generateCALocked(certPath, keyPath string, req GenerateCACertificateRequest) (info *CACertificateInfo, err error) {
 	if strings.TrimSpace(certPath) == "" || strings.TrimSpace(keyPath) == "" {
 		return nil, errors.New("ca cert path and ca key path cannot be empty")
 	}
@@ -590,10 +626,10 @@ func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateR
 		return nil, err
 	}
 
-	if err = os.MkdirAll(filepath.Dir(certPath), 0755); err != nil {
+	if err = fs.EnsurePrivateDir(filepath.Dir(certPath)); err != nil {
 		return nil, err
 	}
-	if err = os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
+	if err = fs.EnsurePrivateDir(filepath.Dir(keyPath)); err != nil {
 		return nil, err
 	}
 
@@ -632,6 +668,8 @@ func (s *SettingService) Save() error {
 		return err
 	}
 
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
 
@@ -648,10 +686,18 @@ func (s *SettingService) Save() error {
 	}
 	sanitizeShortcutSettings(snapshot)
 	sanitizePythonPluginConfig(snapshot.PythonPluginConfig)
-	err = s.repository.save(context.Background(), snapshot)
+	if snapshot.ProxyConfig.UseBuiltinCA && (s.savedCAConfig == nil || !s.savedCAConfig.useBuiltinCA) {
+		err = hideBuiltinCAError(s.ensureBuiltinCALocked())
+	}
+	if err == nil {
+		err = s.repository.save(context.Background(), snapshot)
+	}
 	s.mu.Lock()
 	colors := commonThemeColors(snapshot.CommonConfig)
 	if err != nil {
+		if s.savedCAConfig != nil {
+			s.savedCAConfig.apply(s.settings.ProxyConfig)
+		}
 		// UpdatePreservingShortcuts stages the candidate before Save. A failed
 		// write must not let a later unrelated Save persist those colors.
 		if commonThemeColors(s.settings.CommonConfig) == colors {
@@ -670,6 +716,8 @@ func (s *SettingService) Save() error {
 		return err
 	}
 	s.themeSavedColors = colors
+	caConfig := caConfigurationFrom(snapshot.ProxyConfig)
+	s.savedCAConfig = &caConfig
 	s.dnsCacheSavedEnabled = snapshot.ProxyConfig.DNSCacheEnabled
 	s.dnsCacheSavedTTLSeconds = snapshot.ProxyConfig.DNSCacheTTLSeconds
 	if s.themePreviewColors != nil && *s.themePreviewColors == colors {
@@ -853,9 +901,13 @@ func (s *SettingService) loadLocked() error {
 	if err != nil {
 		return err
 	}
+	s.caMu.Lock()
+	defer s.caMu.Unlock()
 	s.mu.Lock()
 	s.settings = settings
 	s.setupDefaultSettingsLocked()
+	caConfig := caConfigurationFrom(s.settings.ProxyConfig)
+	s.savedCAConfig = &caConfig
 	s.themeSavedColors = commonThemeColors(s.settings.CommonConfig)
 	s.dnsCacheSavedEnabled = s.settings.ProxyConfig.DNSCacheEnabled
 	s.dnsCacheSavedTTLSeconds = s.settings.ProxyConfig.DNSCacheTTLSeconds
@@ -887,8 +939,7 @@ func (s *SettingService) setupDefaultSettingsLocked() {
 			Mode:          ProxyModeHTTP,
 			Host:          defaultProxyHost,
 			Port:          defaultProxyPort,
-			CACertPath:    defaultProxyCACertPath,
-			CAKeyPath:     defaultProxyCAKeyPath,
+			UseBuiltinCA:  true,
 			UpstreamMode:  UpstreamProxyModeSystem,
 			UpstreamProxy: "",
 			DisableProxy:  false,
@@ -1320,12 +1371,8 @@ func setupDefaultProxyConfig(cfg *ProxyConfig) {
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		cfg.Port = defaultProxyPort
 	}
-	if strings.TrimSpace(cfg.CACertPath) == "" {
-		cfg.CACertPath = defaultProxyCACertPath
-	}
-	if strings.TrimSpace(cfg.CAKeyPath) == "" {
-		cfg.CAKeyPath = defaultProxyCAKeyPath
-	}
+	cfg.CACertPath = strings.TrimSpace(cfg.CACertPath)
+	cfg.CAKeyPath = strings.TrimSpace(cfg.CAKeyPath)
 	cfg.UpstreamMode = sanitizeUpstreamProxyMode(cfg.UpstreamMode, cfg.UpstreamProxy, cfg.DisableProxy)
 	cfg.IncludeHosts = sanitizeStringList(cfg.IncludeHosts)
 	cfg.ExcludeHosts = sanitizeStringList(cfg.ExcludeHosts)
@@ -1406,16 +1453,16 @@ func isValidMainWindowCloseBehavior(behavior MainWindowCloseBehavior) bool {
 }
 
 func (s *SettingService) currentCAPaths() (string, string, error) {
-	if err := s.ensureLoaded(); err != nil {
+	config, err := s.currentCAConfiguration()
+	if err != nil {
 		return "", "", err
 	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.settings == nil || s.settings.ProxyConfig == nil {
-		return "", "", errors.New("proxy config not loaded")
+	if !config.useBuiltinCA {
+		// Inspection can describe missing custom files; proxy loading separately
+		// requires both configured paths through ResolveProxyCAPaths.
+		return config.certPath, config.keyPath, nil
 	}
-	return s.settings.ProxyConfig.CACertPath, s.settings.ProxyConfig.CAKeyPath, nil
+	return ResolveProxyCAPaths(&ProxyConfig{UseBuiltinCA: config.useBuiltinCA, CACertPath: config.certPath, CAKeyPath: config.keyPath})
 }
 
 func inspectCACertificate(certPath, keyPath string) *CACertificateInfo {
@@ -1454,6 +1501,10 @@ func inspectCACertificate(certPath, keyPath string) *CACertificateInfo {
 	info.NotAfterMicros = cert.NotAfter.UnixMicro()
 	fingerprint := sha256.Sum256(cert.Raw)
 	info.SHA256Fingerprint = colonHex(fingerprint[:])
+	now := time.Now()
+	if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+		info.Error = "ca certificate is not currently valid"
+	}
 	return info
 }
 

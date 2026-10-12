@@ -56,7 +56,7 @@ Verify downloads with `SHA256SUMS.txt`. Unsigned Windows/macOS packages may trig
 
 Use the status-bar update control to check releases. Eligible Windows/macOS installations can download, verify, and apply updates after restart; Linux, Windows installs under Program Files, and apps running from a mounted macOS DMG require manual updates.
 
-Start the proxy and configure your client to use `127.0.0.1:8080` by default. For HTTPS, generate and trust the CA in Settings; Windows/macOS offer a current-user install/uninstall control. See the [User Guide](docs/user-guide.md) for setup details.
+Start the proxy and configure your client to use `127.0.0.1:8080` by default. New installations automatically generate a built-in CA; trust it in Settings for HTTPS capture. You can also select custom CA certificate and key files, which FlowLens never regenerates. Windows/macOS offer a current-user install/uninstall control. See the [User Guide](docs/user-guide.md) for setup details.
 
 ## Quick Start from Source
 

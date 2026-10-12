@@ -245,8 +245,9 @@ function ensureProxyConfig(settings: settingservice.Settings) {
       mode: ProxyMode.ProxyModeHTTP,
       host: '127.0.0.1',
       port: 8080,
-      caCertPath: 'certs/ca.crt',
-      caKeyPath: 'certs/ca.key',
+      useBuiltinCA: true,
+      caCertPath: '',
+      caKeyPath: '',
       upstreamProxyMode: DEFAULT_UPSTREAM_PROXY_MODE,
       upstreamProxy: '',
       disableProxy: false,
@@ -394,6 +395,7 @@ function cloneProxyConfig(config: settingservice.ProxyConfig): settingservice.Pr
     mode: config.mode,
     host: config.host,
     port: config.port,
+    useBuiltinCA: config.useBuiltinCA,
     caCertPath: config.caCertPath,
     caKeyPath: config.caKeyPath,
     upstreamProxyMode: config.upstreamProxyMode,
@@ -1007,8 +1009,9 @@ export const useSettingStore = defineStore('setting', () => {
     cfg.mode = ProxyMode.ProxyModeHTTP
     cfg.host = '127.0.0.1'
     cfg.port = 8080
-    cfg.caCertPath = 'certs/ca.crt'
-    cfg.caKeyPath = 'certs/ca.key'
+    cfg.useBuiltinCA = true
+    cfg.caCertPath = ''
+    cfg.caKeyPath = ''
     cfg.upstreamProxyMode = DEFAULT_UPSTREAM_PROXY_MODE
     cfg.upstreamProxy = ''
     cfg.disableProxy = false

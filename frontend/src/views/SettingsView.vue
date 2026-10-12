@@ -396,7 +396,7 @@ async function loadCAInfo() {
 
 function caTrustErrorMessage(error: unknown) {
   const detail = formatError(error)
-  const code = detail.match(/\bca_trust_[a-z_]+\b/)?.[0]
+  const code = detail.match(/\bca_(?:trust|builtin|custom)_[a-z_]+\b/)?.[0]
   if (code && te(`settings.ca_trust_errors.${code}`)) {
     return t(`settings.ca_trust_errors.${code}`)
   }
@@ -447,6 +447,10 @@ async function loadLogStatus() {
 }
 
 async function handleGenerateCA(overwrite: boolean) {
+  if (!settingStore.settings?.proxyConfig?.useBuiltinCA) {
+    notify.warn(t('settings.ca_trust_errors.ca_custom_generation_disabled'))
+    return
+  }
   if (isGeneratingCA.value || isChangingCATrust.value || isLoadingCAInfo.value) return
   if (settingStore.isDirty) {
     notify.warn(t('settings.ca_save_first'))
@@ -706,7 +710,7 @@ async function handleSave() {
       await loadCAInfo()
     }
   } catch (error) {
-    notify.error(t('settings.save_failed', { error: formatError(error) }))
+    notify.error(t('settings.save_failed', { error: caTrustErrorMessage(error) }))
   } finally {
     isCommittingSettings.value = false
   }

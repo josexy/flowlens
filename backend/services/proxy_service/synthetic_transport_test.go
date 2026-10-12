@@ -1120,9 +1120,7 @@ func TestMITMCaptureStillMirrorsDownstreamClientHello(t *testing.T) {
 		SkipVerifyTLS: true,
 	})
 	t.Cleanup(svc.baseCancel)
-	if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
-		t.Fatalf("generate MITM CA: %v", err)
-	}
+	writeCustomTestCA(t, svc.settingService)
 	status, err := svc.Start()
 	if err != nil {
 		t.Fatalf("start MITM proxy: %v", err)

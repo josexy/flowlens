@@ -54,9 +54,7 @@ func TestCaptureDNSConnectionTimingsWithCacheEnabledAndDisabled(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
-				t.Fatal(err)
-			}
+			writeCustomTestCA(t, svc.settingService)
 			status, err := svc.Start()
 			if err != nil {
 				t.Fatal(err)

@@ -24,6 +24,7 @@ interface DetailItem {
 }
 
 const props = defineProps<{
+  useBuiltinCa: boolean
   caInfo: CACertificateInfo | null
   caTrustStatus: CACertificateTrustStatus | null
   caTrustLoading: boolean
@@ -68,6 +69,7 @@ const trustActionDisabled = computed(
 )
 const generationDisabled = computed(
   () =>
+    !props.useBuiltinCa || props.caSettingsDirty || props.isGenerating ||
     props.caTrustLoading || props.caTrustLoadFailed || props.isChangingCaTrust ||
     Boolean(
       props.caTrustStatus?.supported &&
@@ -75,6 +77,8 @@ const generationDisabled = computed(
     ),
 )
 const generationHint = computed(() => {
+  if (!props.useBuiltinCa) return t('settings.ca_trust_errors.ca_custom_generation_disabled')
+  if (props.caSettingsDirty) return t('settings.ca_save_first')
   if (props.caTrustLoading) return t('settings.ca_trust_loading')
   if (props.caTrustStatus?.supported && hasTrustEntry.value) {
     return t('settings.ca_trust_uninstall_first')
@@ -109,15 +113,23 @@ const summaryTone = computed<Tone>(() => {
 const statusSummary = computed(() => {
   const info = props.caInfo
   if (!info) return t('settings.ca_status_unavailable')
+  if (isReady.value) return t('settings.ca_status_ready')
+  if (props.useBuiltinCa) return t('settings.ca_trust_errors.ca_builtin_unavailable')
   if (!info.certExists || !info.keyExists) return t('settings.ca_files_missing')
   if (!info.error && !info.isCa) return t('settings.ca_not_ca')
-  return isReady.value ? t('settings.ca_status_ready') : t('settings.ca_status_incomplete')
+  return t('settings.ca_status_incomplete')
 })
 
 const statusDescription = computed(() => {
   const info = props.caInfo
-  return info?.certExists && info.keyExists ? info.error : ''
+  return !props.useBuiltinCa && info?.certExists && info.keyExists ? info.error : ''
 })
+
+function handleGenerate() {
+  if (generationDisabled.value) return
+  if (props.caHasExistingFiles) emit('requestRegenerate')
+  else emit('generateCa', false)
+}
 
 function makeStatusItem(label: string, passed: boolean | undefined): StatusItem {
   if (passed === undefined) {
@@ -214,7 +226,7 @@ const pillValueClass: Record<Tone, string> = {
           :disabled="generationDisabled"
           :icon="caHasExistingFiles ? 'i-lucide-refresh-cw' : 'i-lucide-file-plus-2'"
           :aria-label="t(caHasExistingFiles ? 'settings.regenerate_ca' : 'settings.generate_ca')"
-          @click="caHasExistingFiles ? emit('requestRegenerate') : emit('generateCa', false)"
+          @click="handleGenerate"
         />
       </UTooltip>
     </template>

@@ -334,9 +334,7 @@ func startRewriteCaptureProxy(t *testing.T, svc *ProxyService) *http.Client {
 	if err := svc.settingService.Update(&settingservice.Settings{ProxyConfig: cfg}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{CommonName: "Rewrite test CA", ValidDays: 1}); err != nil {
-		t.Fatal(err)
-	}
+	writeCustomTestCA(t, svc.settingService)
 	handler, err := mitmproxy.NewMitmProxyHandler(mitmproxy.WithCACertPath(cfg.CACertPath), mitmproxy.WithCAKeyPath(cfg.CAKeyPath), mitmproxy.WithHTTPInterceptor(svc.httpInterceptor(cfg)))
 	if err != nil {
 		t.Fatal(err)

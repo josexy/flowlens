@@ -225,12 +225,7 @@ func TestBuildHandlerRegistersRawTCPInterceptor(t *testing.T) {
 	if err := settings.Update(&settingservice.Settings{ProxyConfig: cfg}); err != nil {
 		t.Fatalf("configure CA paths: %v", err)
 	}
-	if _, err := settings.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{
-		CommonName: "FlowLens Raw TCP Test CA",
-		ValidDays:  1,
-	}); err != nil {
-		t.Fatalf("generate test CA: %v", err)
-	}
+	writeCustomTestCA(t, settings)
 
 	service := newRawTCPTestService()
 	emitted := make(chan *TrafficEntry, 1)

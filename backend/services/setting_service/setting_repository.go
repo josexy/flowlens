@@ -220,6 +220,20 @@ func decodeSettingSection(settings *Settings, section string, payload []byte) er
 			return settingSectionDecodeError(section, err)
 		}
 		settings.ProxyConfig = value
+		// A missing switch identifies a legacy proxy section. Preserve its
+		// custom paths, including the old fallback for absent path values.
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &fields); err != nil {
+			return settingSectionDecodeError(section, err)
+		}
+		if _, present := fields["useBuiltinCA"]; !present {
+			if value.CACertPath == "" {
+				value.CACertPath = defaultProxyCACertPath
+			}
+			if value.CAKeyPath == "" {
+				value.CAKeyPath = defaultProxyCAKeyPath
+			}
+		}
 	case settingsSectionWindow:
 		var value *WindowConfig
 		if err := json.Unmarshal(payload, &value); err != nil || value == nil {
