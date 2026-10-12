@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 
 	appdatabase "github.com/josexy/flowlens/backend/pkg/database"
 	"github.com/josexy/flowlens/backend/pkg/logger"
@@ -46,6 +50,10 @@ const (
 	quitConfirmedEventName       = "app:quit-confirmed"
 	shutdownRequestedEventName   = "app:shutdown-requested"
 	shutdownUIReadyEventName     = "app:shutdown-ui-ready"
+	resetRequestedEventName      = "app:reset-requested"
+	resetReadyEventName          = "app:reset-ready"
+	resetFailedEventName         = "app:reset-failed"
+	resetCompletedEventName      = "app:reset-completed"
 	shortcutsChangedEventName    = "app:shortcuts-changed"
 	shortcutInvokeEventName      = "app:shortcut-invoke"
 	globalShortcutDebounce       = 250 * time.Millisecond
@@ -54,7 +62,10 @@ const (
 )
 
 func Run(assets Assets) {
-
+	if os.Getenv(resetStartupEnvironment) != "" {
+		runResetStartupWindow(assets)
+		return
+	}
 	isMacOS := runtime.GOOS == "darwin"
 	logger.EnableBootstrapOutput(os.Stderr)
 
@@ -68,10 +79,14 @@ func Run(assets Assets) {
 	var mainFrontendReady atomic.Bool
 	var shutdownEventDispatched atomic.Bool
 	var shutdownCoordinator *gracefulShutdownCoordinator
+	var lifecycleMu sync.Mutex
+	var resetting atomic.Bool
+	var resetReady atomic.Bool
+	var startupProgress *resetStartupClient
 	var requestApplicationQuit func()
 	showMainWindow := func() {
 		mainWindow := mainWindowRef.Load()
-		if mainWindow == nil {
+		if mainWindow == nil || !windowStartupReady.Load() {
 			pendingShowMainWindow.Store(true)
 			return
 		}
@@ -131,6 +146,11 @@ func Run(assets Assets) {
 			return false
 		},
 		OnShutdown: func() {
+			if startupProgress != nil {
+				if err := startupProgress.Close(); err != nil {
+					logger.G().Warnf("Close reset startup window on shutdown: %v", err)
+				}
+			}
 			logger.G().Info("Application shutdown started")
 			if shutdownCoordinator != nil {
 				if err := shutdownCoordinator.PrepareAndWait(); err != nil && !shutdownCoordinator.CanQuit() {
@@ -142,7 +162,7 @@ func Run(assets Assets) {
 						logger.G().Warnf("Release global shortcuts on shutdown failed: %v", err)
 					}
 				}
-				if settingSvc != nil {
+				if settingSvc != nil && !resetting.Load() {
 					if err := settingSvc.Save(); err != nil {
 						logger.G().Errorf("Save settings on shutdown failed: %v", err)
 					}
@@ -161,6 +181,18 @@ func Run(assets Assets) {
 	}
 	var mainWindow *application.WebviewWindow
 	app := application.New(appOptions)
+	startupReset, startupProgress, resetErr := prepareResetStartup()
+	if startupProgress != nil {
+		defer func() { _ = startupProgress.Close() }()
+	}
+	if resetErr != nil {
+		if !errors.Is(resetErr, context.Canceled) {
+			// If the progress process or WebView cannot start, preserve the
+			// marker and exit without opening SQLite or ordinary services.
+			reportStartupFailure("restore initial state", resetErr)
+		}
+		return
+	}
 	app.Updater = updater.New(&updaterHost{
 		app: app,
 		quit: func() {
@@ -304,6 +336,7 @@ func Run(assets Assets) {
 	app.RegisterService(application.NewService(rewriteSvc))
 
 	var settingsWindowDirty atomic.Bool
+	var settingsWindowReady atomic.Bool
 	rewriteDraftGuard := &rewriteQuitGuard{}
 	confirmRewriteQuit := func(reason string) bool {
 		blocked, request := rewriteDraftGuard.request(reason)
@@ -362,6 +395,9 @@ func Run(assets Assets) {
 
 	showSettingsWindow := func() {
 		if settingsWindow, ok := app.Window.GetByName(settingsWindowName); ok && settingsWindow != nil {
+			if !settingsWindowReady.Load() {
+				return
+			}
 			if settingsWindow.IsMinimised() {
 				settingsWindow.UnMinimise()
 			}
@@ -370,6 +406,7 @@ func Run(assets Assets) {
 		}
 
 		settingsWindowDirty.Store(false)
+		settingsWindowReady.Store(false)
 		if err := settingservice.BeginThemeColorPreview(settingSvc); err != nil {
 			logger.G().Warnf("Start theme color preview: %v", err)
 		}
@@ -377,6 +414,7 @@ func Run(assets Assets) {
 		settingsWindow.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 			settingservice.EndThemeColorPreview(settingSvc)
 			settingsWindowDirty.Store(false)
+			settingsWindowReady.Store(false)
 		})
 	}
 	showUpdateWindow := func() {
@@ -445,7 +483,7 @@ func Run(assets Assets) {
 			if shortcutSvc != nil {
 				appendShutdownError("release global shortcuts", shortcutSvc.Shutdown())
 			}
-			if settingSvc != nil {
+			if settingSvc != nil && !resetting.Load() {
 				appendShutdownError("save settings", settingSvc.Save())
 			}
 			if memStatsSvc != nil {
@@ -469,8 +507,19 @@ func Run(assets Assets) {
 		quit: app.Quit,
 	})
 	requestApplicationQuit = func() {
+		if resetting.Load() && !resetReady.Load() {
+			return
+		}
+		lifecycleMu.Lock()
+		defer lifecycleMu.Unlock()
 		logger.G().Info("Application quit requested")
 		if shutdownCoordinator.InProgress() {
+			return
+		}
+		if resetting.Load() {
+			if resetReady.Load() {
+				shutdownCoordinator.Request()
+			}
 			return
 		}
 		if settingsWindowDirty.Load() {
@@ -512,10 +561,71 @@ func Run(assets Assets) {
 		},
 	}
 	app.Event.On(updater.EventUserRestart, func(event *application.CustomEvent) {
+		lifecycleMu.Lock()
+		defer lifecycleMu.Unlock()
+		if resetting.Load() {
+			return
+		}
 		if err := updateRestart.request(); err != nil {
 			logger.G().Warnf("Restart for update failed: %v", err)
 			app.Event.Emit(appservice.UpdateRestartFailedEventName, err.Error())
 		}
+	})
+	appservice.SetResetApplicationHandler(appSvc, func() (resetErr error) {
+		lifecycleMu.Lock()
+		defer lifecycleMu.Unlock()
+		if shutdownCoordinator.InProgress() || shutdownCoordinator.CanQuit() || !resetting.CompareAndSwap(false, true) {
+			return errors.New("application_reset_in_progress")
+		}
+		app.Event.Emit(resetRequestedEventName)
+		defer func() {
+			if resetErr != nil {
+				resetting.Store(false)
+				app.Event.Emit(resetFailedEventName)
+			}
+		}()
+		language := currentLanguage(settingSvc)
+		if language != "en" {
+			language = "zh"
+		}
+		guard, err := settingservice.BeginApplicationReset(settingSvc)
+		if err != nil {
+			return err
+		}
+		defer guard.Cancel()
+		appservice.CancelUpdateForReset(appSvc)
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		manifest := &resetManifest{
+			Version: 1, Phase: resetPrepared, Token: uuid.NewString(),
+			Language: language, ExecutableName: filepath.Base(executable),
+			UpdateStaging: resetUpdateStaging(app.Updater.DownloadedPath()),
+		}
+		if err := saveResetManifest(manifest); err != nil {
+			return err
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				_ = clearResetMarker()
+			}
+		}()
+		if err := guard.RemoveBuiltinCATrust(); err != nil {
+			return err
+		}
+		manifest.Phase = resetPending
+		if err := saveResetManifest(manifest); err != nil {
+			return err
+		}
+		guard.Commit()
+		committed = true
+		settingsWindowDirty.Store(false)
+		windowStartupReady.Store(false)
+		resetReady.Store(true)
+		app.Event.Emit(resetReadyEventName)
+		return nil
 	})
 	tray = app.SystemTray.New()
 	if isMacOS {
@@ -530,9 +640,15 @@ func Run(assets Assets) {
 	tray.SetTooltip(appservice.APP_NAME)
 	updateTrayMenu(tray, fallbackTrayLabels(currentLanguage(settingSvc)), showMainWindow, requestApplicationQuit)
 	app.Event.On(openSettingsWindowEventName, func(event *application.CustomEvent) {
+		if resetting.Load() {
+			return
+		}
 		showSettingsWindow()
 	})
 	app.Event.On(openUpdateWindowEventName, func(event *application.CustomEvent) {
+		if resetting.Load() {
+			return
+		}
 		showUpdateWindow()
 	})
 	app.Event.On(updateWindowReadyEventName, func(event *application.CustomEvent) {
@@ -618,22 +734,38 @@ func Run(assets Assets) {
 		}
 		proxySvc.EmitRequestEditorFileDrop(event.Context().DroppedFiles(), target)
 	})
-	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(event *application.WindowEvent) {
-		if shouldRestoreWindowStateOnRuntimeReady(initialWindowConfig) {
-			restoreSavedWindowState(initialWindowConfig, mainWindow, app.Screen.GetAll())
-			windowStartupReady.Store(true)
-			showPendingMainWindow()
+	offMainFrontendReady := app.Event.On("app:frontend-ready", func(event *application.CustomEvent) {
+		if event.Sender == settingsWindowName {
+			if settingsWindow, ok := app.Window.GetByName(settingsWindowName); ok && settingsWindow != nil && settingsWindowReady.CompareAndSwap(false, true) {
+				settingsWindow.Show().Focus()
+			}
+			return
 		}
-	})
-	app.Event.OnMultiple("app:frontend-ready", func(event *application.CustomEvent) {
-		mainFrontendReady.Store(true)
-		if shouldShowWindowAfterFrontendReady(initialWindowConfig) {
-			restoreSavedWindowState(initialWindowConfig, mainWindow, app.Screen.GetAll())
+		if event.Sender != "main" || !mainFrontendReady.CompareAndSwap(false, true) {
+			return
 		}
+		restoreSavedWindowState(initialWindowConfig, mainWindow, app.Screen.GetAll())
 		mainWindow.Show()
+		// Windows launchers can supply SW_HIDE for the first ShowWindow call.
+		// Vue is ready now; ensure that launch hint cannot keep it hidden.
+		if !mainWindow.IsVisible() {
+			mainWindow.Show()
+		}
+		if startupProgress != nil {
+			if err := startupProgress.Close(); err != nil {
+				logger.G().Warnf("Close reset startup window: %v", err)
+			}
+		}
 		windowStartupReady.Store(true)
 		showPendingMainWindow()
 		dispatchShutdownRequest()
+		if startupReset != nil && startupReset.Phase == resetCleaned {
+			if err := clearResetMarker(); err != nil {
+				logger.G().Warnf("Remove completed reset marker: %v", err)
+			} else {
+				mainWindow.DispatchWailsEvent(&application.CustomEvent{Name: resetCompletedEventName})
+			}
+		}
 		if result, startErr := shortcutSvc.Start(); startErr != nil {
 			logger.G().Errorf("Initialise global shortcuts failed: %v", startErr)
 		} else if result != nil && !result.Applied {
@@ -643,7 +775,8 @@ func Run(assets Assets) {
 				result.ErrorMessage,
 			)
 		}
-	}, 1)
+	})
+	defer offMainFrontendReady()
 	mainWindow.OnWindowEvent(events.Common.WindowDidMove, func(event *application.WindowEvent) {
 		updateWindowConfigFromRuntimeIfStartupReady(settingSvc, mainWindow, &windowStartupReady)
 	})
@@ -651,7 +784,12 @@ func Run(assets Assets) {
 		updateWindowConfigFromRuntimeIfStartupReady(settingSvc, mainWindow, &windowStartupReady)
 	})
 	mainWindow.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		if shutdownCoordinator.InProgress() {
+		if resetReady.Load() {
+			e.Cancel()
+			requestApplicationQuit()
+			return
+		}
+		if resetting.Load() || shutdownCoordinator.InProgress() {
 			logger.G().Info("Main window close ignored while application shutdown is in progress")
 			showMainWindow()
 			e.Cancel()
@@ -671,6 +809,20 @@ func Run(assets Assets) {
 		mainWindow.Hide()
 	})
 
+	if startupProgress != nil {
+		if startupProgress.ctx.Err() != nil {
+			return
+		}
+		go func() {
+			<-startupProgress.ctx.Done()
+			startupProgress.mu.Lock()
+			closing := startupProgress.closing
+			startupProgress.mu.Unlock()
+			if !closing {
+				requestApplicationQuit()
+			}
+		}()
+	}
 	runErr := app.Run()
 
 	if runErr != nil {

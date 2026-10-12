@@ -2,9 +2,10 @@
 import AppLoading from '@/components/common/AppLoading.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import AppShortcutHost from '@/shortcuts/AppShortcutHost.vue'
+import { useNotify } from '@/composables/useNotify'
 import { clearProcessIconCache } from '@/components/common/processIconLoader'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Events, Window as WailsWindow } from '@wailsio/runtime'
+import { Application, Events, Window as WailsWindow } from '@wailsio/runtime'
 import { useThemeStore } from './stores/theme'
 import { useSettingStore } from './stores/setting'
 import { useI18n } from 'vue-i18n'
@@ -14,6 +15,10 @@ import {
   SETTINGS_SAVED_EVENT,
   SHUTDOWN_REQUESTED_EVENT,
   SHUTDOWN_UI_READY_EVENT,
+  RESET_REQUESTED_EVENT,
+  RESET_READY_EVENT,
+  RESET_FAILED_EVENT,
+  RESET_COMPLETED_EVENT,
   SHORTCUTS_CHANGED_EVENT,
   parsePreferencesChangedPayload,
   parseShortcutsChangedPayload,
@@ -31,11 +36,16 @@ const settingStore = useSettingStore()
 const historyStore = useHistoryStore()
 const trafficWorkspaceStore = useTrafficWorkspaceStore()
 const { locale, t } = useI18n()
+const notify = useNotify()
 let offPreferencesChanged: (() => void) | null = null
 let offSettingsSaved: (() => void) | null = null
 let offShortcutsChanged: (() => void) | null = null
 let offShutdownRequested: (() => void) | null = null
 let offLocalDataCleared: (() => void) | null = null
+let offResetRequested: (() => void) | null = null
+let offResetReady: (() => void) | null = null
+let offResetFailed: (() => void) | null = null
+let offResetCompleted: (() => void) | null = null
 let currentWindowName = ''
 const shutdownVisible = ref(false)
 
@@ -173,6 +183,32 @@ function listenLocalDataCleared() {
   })
 }
 
+function listenApplicationReset() {
+  offResetRequested = Events.On(RESET_REQUESTED_EVENT, () => {
+    settingStore.isResetting = true
+    settingStore.isResetAwaitingRestart = false
+  })
+  offResetReady = Events.On(RESET_READY_EVENT, () => {
+    settingStore.isResetting = true
+    settingStore.isResetAwaitingRestart = true
+  })
+  offResetFailed = Events.On(RESET_FAILED_EVENT, () => {
+    settingStore.isResetting = false
+    settingStore.isResetAwaitingRestart = false
+  })
+  offResetCompleted = Events.On(RESET_COMPLETED_EVENT, () => {
+    notify.success(t('settings.reset_application_success'), undefined, 5000)
+  })
+}
+
+async function exitForReset() {
+  try {
+    await Application.Quit()
+  } catch (error) {
+    notify.error(t('settings.reset_application_exit_failed', { error: String(error) }))
+  }
+}
+
 watch(locale, emitTrayLabels, { immediate: true })
 
 onMounted(async () => {
@@ -182,6 +218,7 @@ onMounted(async () => {
   listenShortcutChanges()
   listenShutdownRequests()
   listenLocalDataCleared()
+  listenApplicationReset()
   try {
     await settingStore.load()
     locale.value = settingStore.language
@@ -192,6 +229,7 @@ onMounted(async () => {
     themeStore.initializeTheme()
   } finally {
     await nextTick()
+    await themeStore.syncNativeBackground()
     showWindowWhenReady()
   }
 })
@@ -208,25 +246,42 @@ onBeforeUnmount(() => {
   offShutdownRequested = null
   offLocalDataCleared?.()
   offLocalDataCleared = null
+  offResetRequested?.()
+  offResetRequested = null
+  offResetReady?.()
+  offResetReady = null
+  offResetFailed?.()
+  offResetFailed = null
+  offResetCompleted?.()
+  offResetCompleted = null
 })
 </script>
 
 <template>
   <UApp :toaster="{ position: 'top-center', progress: false }">
-    <AppShortcutHost>
+    <AppShortcutHost :disabled="settingStore.isResetting || shutdownVisible">
       <DefaultLayout />
     </AppShortcutHost>
 
     <UModal
-      :open="shutdownVisible"
+      :open="shutdownVisible || settingStore.isResetting"
       :close="false"
       :dismissible="false"
-      :title="t('app.shutdown_title')"
-      :description="t('app.shutdown_description')"
+      :title="t(shutdownVisible ? 'app.shutdown_title' : settingStore.isResetAwaitingRestart ? 'settings.reset_application_ready' : 'settings.reset_application_progress')"
+      :description="t(shutdownVisible ? 'app.shutdown_description' : settingStore.isResetAwaitingRestart ? 'settings.reset_application_ready_description' : 'settings.reset_application_progress_description')"
       :ui="{ content: 'max-w-sm' }"
     >
-      <template #body>
-        <AppLoading size="lg" :label="t('app.shutdown_title')" />
+      <template v-if="!settingStore.isResetAwaitingRestart || shutdownVisible" #body>
+        <AppLoading size="lg" :label="t(shutdownVisible ? 'app.shutdown_title' : 'settings.reset_application_progress')" />
+      </template>
+      <template v-if="settingStore.isResetAwaitingRestart && !shutdownVisible" #footer>
+        <div class="flex w-full justify-end">
+          <UButton
+            icon="i-lucide-log-out"
+            :label="t('settings.reset_application_exit')"
+            @click="exitForReset"
+          />
+        </div>
       </template>
     </UModal>
   </UApp>

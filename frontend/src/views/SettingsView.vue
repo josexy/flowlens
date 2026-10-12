@@ -13,6 +13,7 @@ import {
   ClearCacheFiles,
   ClearCacheAndHistory,
 } from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/proxyservice'
+import { ResetApplication } from '#bindings/github.com/josexy/flowlens/backend/services/app_service/appservice'
 import type * as proxyservice from '#bindings/github.com/josexy/flowlens/backend/services/proxy_service/models'
 import {
   ListSystemFonts,
@@ -486,7 +487,7 @@ async function handleGenerateCA(overwrite: boolean) {
 }
 
 async function handleClearCacheAndHistory() {
-  if (localDataClearPending.value) {
+  if (localDataClearPending.value || settingStore.isResetting) {
     return
   }
   localDataClearPending.value = true
@@ -507,7 +508,7 @@ async function handleClearCacheAndHistory() {
 }
 
 async function handleClearCacheFiles() {
-  if (localDataClearPending.value) {
+  if (localDataClearPending.value || settingStore.isResetting) {
     return
   }
   localDataClearPending.value = true
@@ -527,12 +528,25 @@ async function handleClearCacheFiles() {
   }
 }
 
+async function handleResetApplication() {
+  if (settingStore.isResetting || localDataClearPending.value || isCommittingSettings.value || settingStore.isSaving) return
+  settingStore.isResetting = true
+  try {
+    await ResetApplication()
+    settingStore.isResetAwaitingRestart = true
+  } catch (error) {
+    settingStore.isResetting = false
+    settingStore.isResetAwaitingRestart = false
+    notify.error(t('settings.reset_application_failed', { error: caTrustErrorMessage(error) }))
+  }
+}
+
 onMounted(async () => {
   listenConfirmQuitRequest()
   offSaveShortcut = registerShortcutHandler({
     commandId: 'app.save',
     when: () => settingStore.isDirty,
-    enabled: () => !settingStore.isSaving && !isCommittingSettings.value,
+    enabled: () => !settingStore.isSaving && !isCommittingSettings.value && !settingStore.isResetting,
     run: handleSave,
     priority: 10,
   })
@@ -690,7 +704,7 @@ watch(activeTab, (tab) => {
 })
 
 async function handleSave() {
-  if (isCommittingSettings.value || settingStore.isSaving) return
+  if (isCommittingSettings.value || settingStore.isSaving || settingStore.isResetting) return
   isCommittingSettings.value = true
   try {
     await themeStore.flushThemeColorPreview()
@@ -717,6 +731,7 @@ async function handleSave() {
 }
 
 function handleReset() {
+  if (settingStore.isResetting) return
   settingStore.resetToDefaults()
   dirtySections.add('common')
   dirtySections.add('proxy')
@@ -842,8 +857,11 @@ function handleConfirmQuit() {
             :clear-cache-success="clearCacheSuccess"
             :clear-cache-and-history-success="clearCacheAndHistorySuccess"
             :clear-pending="localDataClearPending"
+            :reset-pending="settingStore.isResetting"
+            :reset-disabled="isCommittingSettings || settingStore.isSaving || isChangingCATrust || isGeneratingCA"
             @clear-cache="handleClearCacheFiles"
             @clear-cache-and-history="handleClearCacheAndHistory"
+            @reset-application="handleResetApplication"
           />
         </div>
       </div>
@@ -912,13 +930,13 @@ function handleConfirmQuit() {
               icon="i-lucide-refresh-cw"
               class="min-w-22 shrink-0"
               :label="t('settings.reset')"
-              :disabled="isCommittingSettings"
+              :disabled="isCommittingSettings || settingStore.isResetting"
               @click="handleReset"
             />
             <UButton
               icon="i-lucide-save"
               class="min-w-22 shrink-0"
-              :disabled="!settingStore.isDirty"
+              :disabled="!settingStore.isDirty || settingStore.isResetting"
               :loading="settingStore.isSaving || isCommittingSettings"
               :label="t('settings.save')"
               @click="handleSave"

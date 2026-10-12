@@ -6,6 +6,8 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"sync"
+	"sync/atomic"
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -41,10 +43,36 @@ type AppService struct {
 	app             *application.App
 	updates         *updateController
 	updateEventOffs []func()
+	resetHandler    func() error
+	resetting       atomic.Bool
+	operationMu     sync.Mutex
 }
 
 func New() *AppService {
 	return &AppService{}
+}
+
+// SetResetApplicationHandler wires application-owned lifecycle coordination.
+func SetResetApplicationHandler(service *AppService, handler func() error) {
+	service.resetHandler = handler
+}
+
+// ResetApplication schedules a confirmed factory reset for the next launch.
+// The user exits and reopens the app; completion follows cleanup and startup.
+func (a *AppService) ResetApplication() error {
+	if a.resetHandler == nil {
+		return errors.New("application is not ready")
+	}
+	if !a.resetting.CompareAndSwap(false, true) {
+		return errors.New("application_reset_in_progress")
+	}
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	if err := a.resetHandler(); err != nil {
+		a.resetting.Store(false)
+		return err
+	}
+	return nil
 }
 
 func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
@@ -133,6 +161,11 @@ func (a *AppService) GetUpdateSnapshot() UpdateSnapshot {
 
 // CheckForUpdates starts a check without opening the framework updater UI.
 func (a *AppService) CheckForUpdates() error {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	if a.resetting.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if a.app == nil || a.updates == nil {
 		return errors.New("application is not ready")
 	}
@@ -142,6 +175,11 @@ func (a *AppService) CheckForUpdates() error {
 // DownloadUpdate downloads, verifies, and stages the release found by the
 // latest successful check.
 func (a *AppService) DownloadUpdate() error {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	if a.resetting.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if a.app == nil || a.updates == nil {
 		return errors.New("application is not ready")
 	}
@@ -159,6 +197,11 @@ func (a *AppService) CancelUpdate() error {
 // RestartForUpdate requests the application's guarded restart flow, including
 // the unsaved-settings confirmation, even if the update window was closed.
 func (a *AppService) RestartForUpdate() error {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	if a.resetting.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if a.app == nil || a.updates == nil {
 		return errors.New("application is not ready")
 	}

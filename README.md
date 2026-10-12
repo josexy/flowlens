@@ -127,6 +127,8 @@ Run the relevant `test:*` scripts from [frontend/package.json](frontend/package.
 
 Local data is stored under the operating-system user configuration directory. See [storage and cleanup](docs/user-guide.md#settings-and-local-storage) for paths and retention behavior.
 
+**Settings > Storage > Restore Initial State** removes the built-in CA's current-user trust and schedules a full reset after confirmation. FlowLens prompts you to exit and reopen it manually; the next launch shows a WebView progress page while clearing FlowLens-managed data and restoring defaults. Reset errors use the same page with **Retry / Exit**. External files and Python installations are kept. The new built-in CA is not automatically trusted; see the user guide for cleanup scope and failure recovery.
+
 - Use FlowLens only for traffic you own or are authorized to inspect.
 - Listening on `ALL` (`0.0.0.0`) exposes the proxy to reachable devices.
 - Keep the generated MITM CA private key private and remove the CA from trust stores when it is no longer needed.

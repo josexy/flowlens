@@ -117,6 +117,9 @@ func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint str
 	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	if s.applicationReset.Load() {
+		return nil, errors.New("application_reset_in_progress")
+	}
 	defer func() {
 		config, _ := s.currentCAConfiguration()
 		if config.useBuiltinCA {

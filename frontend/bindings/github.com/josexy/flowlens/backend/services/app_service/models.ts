@@ -13,6 +13,18 @@ export interface EnvironmentInfo {
     "goarch": string;
 }
 
+/**
+ * ResetStartupState belongs only to the isolated startup WebView.
+ */
+export interface ResetStartupState {
+    "language": string;
+    "stage": string;
+    "stages": string[] | null;
+    "error": string;
+    "busy": boolean;
+    "close": boolean;
+}
+
 export enum UpdateApplyMode {
     /**
      * The Go zero value for the underlying type of the enum.

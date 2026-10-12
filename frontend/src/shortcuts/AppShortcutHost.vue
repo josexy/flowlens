@@ -12,6 +12,7 @@ import {
 } from '@/runtime/appEvents'
 
 const settingStore = useSettingStore()
+const props = defineProps<{ disabled?: boolean }>()
 let offShortcutInvoke: (() => void) | null = null
 
 function hasOpenModal() {
@@ -37,6 +38,7 @@ function consumeEvent(event: KeyboardEvent) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  if (props.disabled) return
   if (event.repeat || event.isComposing || ['Dead', 'Process', 'Unidentified'].includes(event.key)) {
     return
   }
@@ -73,6 +75,7 @@ function handleKeydown(event: KeyboardEvent) {
 function listenShortcutInvocations() {
   if (offShortcutInvoke) return
   offShortcutInvoke = Events.On(SHORTCUT_INVOKE_EVENT, (event) => {
+    if (props.disabled) return
     const payload = parseShortcutInvokePayload(event.data)
     if (!payload) return
     const command = shortcutCatalog.find((item) => item.id === payload.commandId)

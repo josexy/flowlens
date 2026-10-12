@@ -384,6 +384,7 @@ onMounted(async () => {
     notify.error(t('updater.initialization_failed', { error: errorMessage(error) }))
   } finally {
     await nextTick()
+    await themeStore.syncNativeBackground()
     await Events.Emit(UPDATE_WINDOW_READY_EVENT)
   }
 })

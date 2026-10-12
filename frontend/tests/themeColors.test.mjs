@@ -86,6 +86,7 @@ function windowStore(t, service, environment = {}) {
           Window: {
             SetBackgroundColour: async (...rgba) => {
               nativeWrites.push(rgba)
+              await environment.onNativeBackgroundWrite?.(...rgba)
             },
           },
         }
@@ -233,6 +234,7 @@ test('native background and CSS consumers refresh after the Nuxt UI stylesheet p
   let frameID = 0
   let onMutation
   let cssColor = 'oklch(0.208 0.042 265.755)'
+  let writeBarrier = Promise.resolve()
   let fillStyle
   const context = {
     set fillStyle(value) {
@@ -250,6 +252,7 @@ test('native background and CSS consumers refresh after the Nuxt UI stylesheet p
   }
   const body = new Element()
   const app = windowStore(t, backend(), {
+    onNativeBackgroundWrite: () => writeBarrier,
     Element,
     document: {
       body,
@@ -288,6 +291,25 @@ test('native background and CSS consumers refresh after the Nuxt UI stylesheet p
   await render()
   assert.equal(fillStyle, cssColor)
   assert.ok(app.store.appearanceRevision > revision)
+
+  // Hidden WebViews may never deliver a RAF callback. Startup must apply the
+  // native backdrop without waiting for visibility, and await its completion.
+  app.store.setThemeMode('dark')
+  assert.ok(frames.size > 0)
+  let completeWrite
+  writeBarrier = new Promise((resolve) => { completeWrite = resolve })
+  app.nativeWrites.length = 0
+  cssColor = 'oklch(0.208 0.042 265.755)'
+  let synchronized = false
+  const synchronizing = app.store.syncNativeBackground().then(() => { synchronized = true })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(frames.size, 0, 'startup cancelled the throttled frame')
+  assert.equal(fillStyle, cssColor)
+  assert.deepEqual(app.nativeWrites.at(-1), [15, 23, 42, 255])
+  assert.equal(synchronized, false, 'startup must wait for the native background write')
+  completeWrite()
+  await synchronizing
+  assert.equal(synchronized, true)
 })
 
 function settingsStore(t, service, globals = {}) {

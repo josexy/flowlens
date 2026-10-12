@@ -33,6 +33,17 @@ func TestGetBaseStorageDirCreatesFlowLensDir(t *testing.T) {
 	}
 }
 
+func TestBaseStoragePathDoesNotCreateDirectory(t *testing.T) {
+	root := setUserConfigDir(t)
+	path, err := BaseStoragePath()
+	if err != nil || path != filepath.Join(root, baseStorageDirName) {
+		t.Fatalf("BaseStoragePath: %q %v", path, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("resolver created a directory: %v", err)
+	}
+}
+
 func TestGetBaseStorageDirTightensExistingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows does not implement Unix permission bits")
