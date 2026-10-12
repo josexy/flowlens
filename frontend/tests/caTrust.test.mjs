@@ -14,6 +14,7 @@ const code = ts.transpileModule(descriptor.scriptSetup.content, {
 
 function panelState(overrides = {}) {
   const props = vue.reactive({
+    useBuiltinCa: true,
     caInfo: { certExists: true, keyExists: true, validPair: true, isCa: true, error: '' },
     caTrustStatus: { supported: true, installed: false, sha256Fingerprint: 'fingerprint', error: '' },
     caHasExistingFiles: true,
@@ -34,6 +35,7 @@ function panelState(overrides = {}) {
     summary: trustSummary.value,
     summaryIcon: trustSummaryIcon.value,
     summaryTone: trustSummaryTone.value,
+    status: statusSummary.value,
   });`, {
     exports,
     defineProps: () => props,
@@ -114,11 +116,29 @@ test('unsupported platforms retain CA generation', () => {
   assert.equal(panelState({ caTrustStatus: { supported: false } }).state().generationDisabled, false)
 })
 
+test('custom mode and pending settings block generation with the appropriate hint', () => {
+  const panel = panelState({ useBuiltinCa: false })
+  assert.equal(panel.state().generationDisabled, true)
+  assert.equal(panel.state().generationHint, 'settings.ca_trust_errors.ca_custom_generation_disabled')
+  assert.equal(panel.state().actionDisabled, false)
+  panel.props.useBuiltinCa = true
+  panel.props.caSettingsDirty = true
+  assert.equal(panel.state().generationDisabled, true)
+  assert.equal(panel.state().generationHint, 'settings.ca_save_first')
+})
+
+test('missing certificate copy distinguishes built-in from custom CA files', () => {
+  const panel = panelState({ caInfo: { certExists: false, keyExists: false } })
+  assert.equal(panel.state().status, 'settings.ca_trust_errors.ca_builtin_unavailable')
+  panel.props.useBuiltinCa = false
+  assert.equal(panel.state().status, 'settings.ca_files_missing')
+})
+
 test('CA trust copy has matching bilingual keys and placeholders', () => {
   const locales = ['zh', 'en'].map((locale) =>
     JSON.parse(readFileSync(new URL(`../src/locales/${locale}.json`, import.meta.url), 'utf8').replace(/^\uFEFF/, '')).settings,
   )
-  const keys = (settings) => Object.keys(settings).filter((key) => key.startsWith('ca_trust_')).sort()
+  const keys = (settings) => Object.keys(settings).filter((key) => key.startsWith('ca_')).sort()
   assert.deepEqual(keys(locales[0]), keys(locales[1]))
   assert.deepEqual(Object.keys(locales[0].ca_trust_errors).sort(), Object.keys(locales[1].ca_trust_errors).sort())
   for (const key of keys(locales[0])) {
@@ -142,6 +162,57 @@ const changeFunction = viewSource.statements.find((node) => ts.isFunctionDeclara
 const changeCode = ts.transpileModule(changeFunction.getText(viewSource), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
+
+test('the generation handler rejects custom mode before calling the backend', async () => {
+  const generationFunction = viewSource.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'handleGenerateCA')
+  const generationCode = ts.transpileModule(generationFunction.getText(viewSource), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const warnings = []
+  const context = {
+    settingStore: { settings: { proxyConfig: { useBuiltinCA: false } } },
+    notify: { warn: (message) => warnings.push(message) },
+    t: (key) => key,
+    GenerateCurrentCACertificate: () => assert.fail('custom CA generation reached backend'),
+    exports: {},
+  }
+  runInNewContext(`${generationCode}\nexports.generate = handleGenerateCA;`, context)
+  await context.exports.generate(true)
+  assert.deepEqual(warnings, ['settings.ca_trust_errors.ca_custom_generation_disabled'])
+})
+
+test('regeneration callbacks revalidate mode and pending settings', () => {
+  const source = parse(readFileSync(new URL('../src/components/settings/ProxyCertificateSettings.vue', import.meta.url), 'utf8')).descriptor
+  const compiled = ts.transpileModule(source.scriptSetup.content, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const props = vue.reactive({ caSettingsDirty: false, isGenerating: false, isChangingCaTrust: false, caTrustLoading: false })
+  const config = vue.ref({ useBuiltinCA: true, caCertPath: 'user.crt', caKeyPath: 'user.key' })
+  const emitted = []
+  const context = {
+    defineProps: () => props,
+    defineModel: () => config,
+    defineEmits: () => (...args) => emitted.push(args),
+    require: (name) => name === 'vue' ? vue : name === 'vue-i18n' ? { useI18n: () => ({ t: String }) } : { default: {} },
+    exports: {},
+  }
+  runInNewContext(`${compiled}\nexports.request = handleRequestRegenerate; exports.confirm = handleRegenerateConfirm; exports.modal = regenerateModalVisible;`, context)
+  context.exports.request()
+  assert.equal(context.exports.modal.value, true)
+  config.value.useBuiltinCA = false
+  context.exports.confirm()
+  assert.equal(emitted.length, 0)
+  config.value.useBuiltinCA = true
+  props.caSettingsDirty = true
+  context.exports.confirm()
+  assert.equal(emitted.length, 0)
+  props.caSettingsDirty = false
+  context.exports.request()
+  context.exports.confirm()
+  assert.deepEqual(emitted, [['generateCa', true]])
+  assert.equal(config.value.caCertPath, 'user.crt')
+  assert.equal(config.value.caKeyPath, 'user.key')
+})
 
 test('the settings action cleans up an incomplete installation and refreshes after failure', async () => {
   const calls = []

@@ -113,6 +113,7 @@ export interface ProxyConfig {
     "mode": ProxyMode;
     "host": string;
     "port": number;
+    "useBuiltinCA": boolean;
     "caCertPath": string;
     "caKeyPath": string;
     "upstreamProxyMode": UpstreamProxyMode;

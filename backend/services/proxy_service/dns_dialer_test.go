@@ -223,9 +223,7 @@ func TestDNSCacheSharedByCaptureEditorResendAndWebSocket(t *testing.T) {
 	cache.configure(true, 60)
 	svc.dnsCache = cache
 	t.Cleanup(cache.close)
-	if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
-		t.Fatal(err)
-	}
+	writeCustomTestCA(t, svc.settingService)
 	status, err := svc.Start()
 	if err != nil {
 		t.Fatal(err)

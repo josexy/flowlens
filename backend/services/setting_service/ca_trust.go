@@ -50,6 +50,11 @@ func (s *SettingService) certificateTrustStore() caCertificateTrustStore {
 }
 
 func (s *SettingService) GetCurrentCACertificateTrustStatus() (*CACertificateTrustStatus, error) {
+	if s.certificateTrustStore().supported() {
+		if err := s.ensureLoaded(); err != nil {
+			return nil, err
+		}
+	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
 	logger.G().Debug("CA trust status request started")
@@ -68,6 +73,10 @@ func (s *SettingService) GetCurrentCACertificateTrustStatus() (*CACertificateTru
 		logger.G().Warnf("CA trust status request completed with unknown state: cert=%q fingerprint=%s error=%q", certPath, status.SHA256Fingerprint, caTrustLogText(status.Error))
 	} else {
 		logger.G().Debugf("CA trust status request completed: cert=%q fingerprint=%s present=%t installed=%t", certPath, status.SHA256Fingerprint, status.Present, status.Installed)
+	}
+	config, _ := s.currentCAConfiguration()
+	if config.useBuiltinCA && status.Error != "" {
+		status.Error = hideBuiltinCAError(errors.New(status.Error)).Error()
 	}
 	return status, nil
 }
@@ -101,8 +110,19 @@ func (s *SettingService) UninstallCurrentCACertificate(expectedSHA256Fingerprint
 }
 
 func (s *SettingService) changeCurrentCACertificateTrust(expectedFingerprint string, install bool) (status *CACertificateTrustStatus, err error) {
+	if s.certificateTrustStore().supported() {
+		if err := s.ensureLoaded(); err != nil {
+			return nil, err
+		}
+	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	defer func() {
+		config, _ := s.currentCAConfiguration()
+		if config.useBuiltinCA {
+			err = hideBuiltinCAError(err)
+		}
+	}()
 	action := "uninstall"
 	if install {
 		action = "install"

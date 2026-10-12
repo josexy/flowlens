@@ -23,9 +23,7 @@ func TestStartPublishesCompleteStateAndSerializesStop(t *testing.T) {
 		DisableProxy: true,
 	})
 	t.Cleanup(service.baseCancel)
-	if _, err := service.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
-		t.Fatalf("generate MITM CA: %v", err)
-	}
+	writeCustomTestCA(t, service.settingService)
 
 	published := make(chan struct{})
 	releaseStart := make(chan struct{})

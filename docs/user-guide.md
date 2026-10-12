@@ -163,7 +163,7 @@ Logs can contain target hosts, paths, API Collection names, and local file paths
 ## Settings and Local Storage
 
 - `Settings > General`: app/code fonts and title-bar mode.
-- `Settings > Proxy`: process attribution, upstream proxy, CA paths, extra trusted roots, and per-host client certificates.
+- `Settings > Proxy`: process attribution, upstream proxy, built-in or custom CA, extra trusted roots, and per-host client certificates.
 - `Settings > Python`: interpreter and global Python plugin behavior.
 - `Settings > Shortcuts`: application bindings and optional global shortcuts.
 - `Settings > Logs`: logging state and file actions.
@@ -181,7 +181,11 @@ New history files use HBIN v2, which adds upstream connection timestamps. Existi
 
 ## MITM Certificates
 
-HTTPS capture requires a locally trusted CA certificate. Generate or inspect the FlowLens CA under Settings, add it to the trust store used by the client application, then restart the proxy service when required.
+HTTPS capture requires a locally trusted CA certificate. Inspect the selected CA under Settings, add it to the trust store used by the client application, then restart the proxy service when required.
+
+New installations enable **Use built-in CA certificate** by default. FlowLens manages its certificate and private key internally without displaying their paths. It checks them on startup and when saving a switch to built-in mode, generating a pair only if both files are absent. Existing certificates are reused. Incomplete, invalid, expired or unreadable files are left intact for manual repair through **Generate CA / Regenerate CA**; initialization failures do not prevent opening Settings.
+
+Turn the switch off to select custom CA certificate and private key paths. Both paths are required to start the proxy. Generation and regeneration are disabled in this mode, including backend calls, so FlowLens cannot overwrite your certificate files. Switching modes preserves your custom paths and does not install, uninstall, move or replace certificates. Save to apply the selected mode and restart a running proxy when prompted. Existing installations retain their previous paths in custom mode after upgrading.
 
 On Windows and macOS, the shield icon beside **Generate CA / Regenerate CA** installs or uninstalls the saved MITM CA for the **current user**. Save pending settings before using the button. Installation requires a valid CA certificate and matching private key; only the public certificate is installed. The status reflects the current user's store and trust configuration; it does not guarantee that every application uses the operating system's trust.
 
@@ -200,8 +204,7 @@ Default proxy settings:
 | Port | `8080` |
 | Process attribution | Enabled |
 | Upstream proxy | System Proxy |
-| CA certificate | `certs/ca.crt` |
-| CA key | `certs/ca.key` |
+| Use built-in CA certificate | Enabled for new installations |
 
 Changing the listener, proxy mode, or CA may require rebinding or restarting the running proxy service.
 

@@ -531,13 +531,17 @@ func (s *ProxyService) currentStatusLocked() ProxyStatus {
 }
 
 func (s *ProxyService) buildHandlerLocked(ctx context.Context, cfg *settingservice.ProxyConfig) (mitmproxy.DynamicMitmProxyHandler, error) {
+	certPath, keyPath, err := settingservice.ResolveProxyCAPaths(cfg)
+	if err != nil {
+		return nil, err
+	}
 	opts := []mitmproxy.Option{
 		mitmproxy.WithStreamBaseContext(ctx),
 		mitmproxy.WithLogger(logger.WailsLogger()),
 		mitmproxy.WithIdleConnTimeout(time.Second * 60),
 		mitmproxy.WithCertCachePool(2048, 90, 60),
-		mitmproxy.WithCACertPath(cfg.CACertPath),
-		mitmproxy.WithCAKeyPath(cfg.CAKeyPath),
+		mitmproxy.WithCACertPath(certPath),
+		mitmproxy.WithCAKeyPath(keyPath),
 		mitmproxy.WithUpstreamHTTPTrace(),
 		mitmproxy.WithIPResolver(s.dnsCacheManager()),
 		mitmproxy.WithContextDialer(s.networkDialer(&net.Dialer{Timeout: 15 * time.Second})),
@@ -586,7 +590,13 @@ func (s *ProxyService) buildHandlerLocked(ctx context.Context, cfg *settingservi
 		}))
 	}
 
-	return mitmproxy.NewDynamicMitmProxyHandler(opts...)
+	handler, err := mitmproxy.NewDynamicMitmProxyHandler(opts...)
+	if err != nil && cfg.UseBuiltinCA &&
+		(strings.Contains(err.Error(), certPath) || strings.Contains(err.Error(), keyPath)) {
+		logger.G().Errorf("Load builtin CA: %s", err)
+		return nil, errors.New("ca_builtin_unavailable")
+	}
+	return handler, err
 }
 
 func (s *ProxyService) ApplyCurrentProxyConfig() (ProxyConfigApplyResult, error) {
@@ -680,7 +690,8 @@ func proxyRestartReasons(startCfg, currentCfg *settingservice.ProxyConfig) []str
 	if startCfg.Host != currentCfg.Host || startCfg.Port != currentCfg.Port {
 		reasons = append(reasons, "listen address changed")
 	}
-	if startCfg.CACertPath != currentCfg.CACertPath || startCfg.CAKeyPath != currentCfg.CAKeyPath {
+	if startCfg.UseBuiltinCA != currentCfg.UseBuiltinCA || (!currentCfg.UseBuiltinCA &&
+		(startCfg.CACertPath != currentCfg.CACertPath || startCfg.CAKeyPath != currentCfg.CAKeyPath)) {
 		reasons = append(reasons, "mitm ca changed")
 	}
 	return reasons

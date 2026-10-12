@@ -55,9 +55,7 @@ func TestProxyStartWaitsForSavedRewriteRules(t *testing.T) {
 		CACertPath: filepath.Join(dir, "ca.crt"), CAKeyPath: filepath.Join(dir, "ca.key"), DisableProxy: true,
 	})
 	defer svc.Shutdown()
-	if _, err := svc.settingService.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{}); err != nil {
-		t.Fatal(err)
-	}
+	writeCustomTestCA(t, svc.settingService)
 	rules := rewriteservice.New(db)
 	defer rules.Shutdown()
 	SetRewriteService(svc, rules)

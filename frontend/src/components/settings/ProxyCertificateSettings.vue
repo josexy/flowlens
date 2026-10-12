@@ -16,7 +16,7 @@ import type {
   ProxyConfig,
 } from '#bindings/github.com/josexy/flowlens/backend/services/setting_service/models'
 
-defineProps<{
+const props = defineProps<{
   caInfo: CACertificateInfo | null
   caTrustStatus: CACertificateTrustStatus | null
   caTrustLoading: boolean
@@ -69,14 +69,31 @@ const keyFilters = computed<FileFilter[]>(() => [
   },
 ])
 function handleRegenerateConfirm() {
-  emit('generateCa', true)
+  handleGenerateCA(true)
   regenerateModalVisible.value = false
 }
+
+function handleGenerateCA(overwrite: boolean) {
+  if (!proxyConfig.value.useBuiltinCA || props.caSettingsDirty || props.isGenerating ||
+    props.isChangingCaTrust || props.caTrustLoading) return
+  emit('generateCa', overwrite)
+}
+
+function handleRequestRegenerate() {
+  if (!proxyConfig.value.useBuiltinCA || props.caSettingsDirty || props.isGenerating ||
+    props.isChangingCaTrust || props.caTrustLoading) return
+  regenerateModalVisible.value = true
+}
+
+watch(() => proxyConfig.value.useBuiltinCA, () => {
+  regenerateModalVisible.value = false
+})
 </script>
 
 <template>
   <div class="flex min-w-0 flex-col gap-6 border-t border-app-border pt-6">
     <CACertificateInfoPanel
+      :use-builtin-ca="proxyConfig.useBuiltinCA"
       :ca-info="caInfo"
       :ca-trust-status="caTrustStatus"
       :ca-trust-loading="caTrustLoading"
@@ -86,11 +103,21 @@ function handleRegenerateConfirm() {
       :ca-has-existing-files="caHasExistingFiles"
       :is-generating="isGenerating"
       :cert-generated-success="certGeneratedSuccess"
-      @generate-ca="emit('generateCa', $event)"
-      @request-regenerate="regenerateModalVisible = true"
+      @generate-ca="handleGenerateCA"
+      @request-regenerate="handleRequestRegenerate"
       @change-ca-trust="emit('changeCaTrust')"
     >
-      <SettingsRow :label="t('toolbar.ca_cert_path')" wide>
+      <SettingsRow
+        :label="t('settings.ca_use_builtin')"
+        wide
+      >
+        <USwitch
+          v-model="proxyConfig.useBuiltinCA"
+          :aria-label="t('settings.ca_use_builtin')"
+          :disabled="isGenerating || isChangingCaTrust || caTrustLoading"
+        />
+      </SettingsRow>
+      <SettingsRow v-if="!proxyConfig.useBuiltinCA" :label="t('toolbar.ca_cert_path')" wide>
         <CertificateFileInput
           v-model="proxyConfig.caCertPath"
           :button-title="t('settings.select_ca_cert_file')"
@@ -100,7 +127,7 @@ function handleRegenerateConfirm() {
           class="w-full"
         />
       </SettingsRow>
-      <SettingsRow :label="t('toolbar.ca_key_path')" wide>
+      <SettingsRow v-if="!proxyConfig.useBuiltinCA" :label="t('toolbar.ca_key_path')" wide>
         <CertificateFileInput
           v-model="proxyConfig.caKeyPath"
           :button-title="t('settings.select_ca_key_file')"

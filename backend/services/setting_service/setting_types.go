@@ -74,6 +74,7 @@ type ProxyConfig struct {
 	Mode               ProxyMode          `json:"mode"`
 	Host               string             `json:"host"`
 	Port               int                `json:"port"`
+	UseBuiltinCA       bool               `json:"useBuiltinCA"`
 	CACertPath         string             `json:"caCertPath"`
 	CAKeyPath          string             `json:"caKeyPath"`
 	UpstreamMode       UpstreamProxyMode  `json:"upstreamProxyMode"`

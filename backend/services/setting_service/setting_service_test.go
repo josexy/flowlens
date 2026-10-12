@@ -307,8 +307,8 @@ func TestUpdateSanitizesProxyAdvancedDefaults(t *testing.T) {
 	if cfg.Mode != ProxyModeHTTP || cfg.Host != defaultProxyHost || cfg.Port != defaultProxyPort {
 		t.Fatalf("proxy defaults not sanitized: %+v", cfg)
 	}
-	if cfg.CACertPath != defaultProxyCACertPath || cfg.CAKeyPath != defaultProxyCAKeyPath {
-		t.Fatalf("ca path defaults not sanitized: cert=%q key=%q", cfg.CACertPath, cfg.CAKeyPath)
+	if cfg.CACertPath != "" || cfg.CAKeyPath != "" {
+		t.Fatalf("empty custom paths must remain empty: cert=%q key=%q", cfg.CACertPath, cfg.CAKeyPath)
 	}
 	if cfg.AntiCache || cfg.AntiComp {
 		t.Fatalf("anti-cache/compression defaults should be disabled: antiCache=%t antiComp=%t", cfg.AntiCache, cfg.AntiComp)
@@ -1186,11 +1186,15 @@ func TestGenerateCurrentCACertificateOverwriteBacksUpExistingFiles(t *testing.T)
 		t.Fatal("expected regenerated certificate fingerprint to change")
 	}
 
-	certBackups, err := filepath.Glob(first.CertPath + ".*.bak")
+	certPath, keyPath, err := svc.currentCAPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	certBackups, err := filepath.Glob(certPath + ".*.bak")
 	if err != nil {
 		t.Fatalf("glob cert backups: %v", err)
 	}
-	keyBackups, err := filepath.Glob(first.KeyPath + ".*.bak")
+	keyBackups, err := filepath.Glob(keyPath + ".*.bak")
 	if err != nil {
 		t.Fatalf("glob key backups: %v", err)
 	}
@@ -1201,25 +1205,21 @@ func TestGenerateCurrentCACertificateOverwriteBacksUpExistingFiles(t *testing.T)
 
 func newTestSettingServiceWithCAPaths(t *testing.T) *SettingService {
 	t.Helper()
-	dir := t.TempDir()
+	configureTestSettingsPath(t)
 	// CA generation tests must not query the user's real Root store or login
 	// keychain, which may be unavailable on headless macOS test runners.
 	svc := &SettingService{caTrustStore: &testCATrustStore{certs: make(map[string]bool)}}
 	err := svc.Update(&Settings{
 		ProxyConfig: &ProxyConfig{
-			Mode:       ProxyModeHTTP,
-			Host:       "127.0.0.1",
-			Port:       8080,
-			CACertPath: filepath.Join(dir, "ca.crt"),
-			CAKeyPath:  filepath.Join(dir, "ca.key"),
+			Mode:         ProxyModeHTTP,
+			Host:         "127.0.0.1",
+			Port:         8080,
+			UseBuiltinCA: true,
 		},
 	})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = os.RemoveAll(dir)
-	})
 	return svc
 }
 
