@@ -31,6 +31,7 @@ func settingsWindowOptions(useCustomWindowFrame bool, isMacOS bool, icon []byte)
 		MinWidth:                   settingsWindowMinWidth,
 		MinHeight:                  settingsWindowMinHeight,
 		StartState:                 application.WindowStateNormal,
+		Hidden:                     true,
 		Frameless:                  useCustomWindowFrame && !isMacOS,
 		BackgroundColour:           application.NewRGBA(36, 36, 41, 255),
 		BackgroundType:             application.BackgroundTypeSolid,
@@ -127,6 +128,12 @@ func macTitleBarForFrameMode(useCustomWindowFrame bool) application.MacTitleBar 
 }
 
 func applySavedWindowOptions(options *application.WebviewWindowOptions, windowConfig *settingservice.WindowConfig, screens []*application.Screen) {
+	// Every main-window state waits for Vue and its theme, including the first
+	// launch with no saved window configuration.
+	options.Hidden = true
+	// Wails applies StartState before InitialPosition on Windows. Restore the
+	// saved state after frontend readiness, once positioning is complete.
+	options.StartState = application.WindowStateNormal
 	if windowConfig == nil {
 		return
 	}
@@ -139,21 +146,6 @@ func applySavedWindowOptions(options *application.WebviewWindowOptions, windowCo
 	} else {
 		options.InitialPosition = application.WindowCentered
 	}
-
-	// Wails applies StartState before InitialPosition on Windows. Restoring maximized
-	// state after runtime ready avoids moving a maximized window back to saved X/Y.
-	options.StartState = application.WindowStateNormal
-	if shouldShowWindowAfterFrontendReady(windowConfig) {
-		options.Hidden = true
-	}
-}
-
-func shouldShowWindowAfterFrontendReady(windowConfig *settingservice.WindowConfig) bool {
-	return windowConfig != nil && (windowConfig.IsMaximized || windowConfig.IsFullScreen)
-}
-
-func shouldRestoreWindowStateOnRuntimeReady(windowConfig *settingservice.WindowConfig) bool {
-	return !shouldShowWindowAfterFrontendReady(windowConfig)
 }
 
 func updateWindowConfigFromRuntimeIfStartupReady(

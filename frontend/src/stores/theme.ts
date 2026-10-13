@@ -51,26 +51,36 @@ export const useThemeStore = defineStore('theme', () => {
     }
     cancelAnimationFrame(backgroundFrame)
     backgroundFrame = requestAnimationFrame(() => {
-      backgroundFrame = 0
-      const revision = ++appearanceRevision.value
-      const color = getComputedStyle(document.body).backgroundColor
-      const context = document
-        .createElement('canvas')
-        .getContext('2d', { willReadFrequently: true })
-      if (!context) return
-      // Canvas converts CSS colors, including Tailwind's OKLCH, to sRGB bytes.
-      context.fillStyle = color
-      context.fillRect(0, 0, 1, 1)
-      const rgba = context.getImageData(0, 0, 1, 1).data
-      nativeBackgroundWrite = nativeBackgroundWrite
-        .catch(() => {})
-        .then(async () => {
-          if (!disposed && revision === appearanceRevision.value) {
-            await Window.SetBackgroundColour(rgba[0]!, rgba[1]!, rgba[2]!, rgba[3]!)
-          }
-        })
-        .catch(() => {})
+      void syncNativeBackground()
     })
+  }
+
+  // A hidden WebView can throttle RAF indefinitely. Startup calls this directly
+  // after Vue's DOM flush, before allowing the backend to show the window.
+  async function syncNativeBackground() {
+    if (disposed) return
+    const revision = ++appearanceRevision.value
+    if (typeof document === 'undefined') return
+    cancelAnimationFrame(backgroundFrame)
+    backgroundFrame = 0
+    const color = getComputedStyle(document.body).backgroundColor
+    const context = document
+      .createElement('canvas')
+      .getContext('2d', { willReadFrequently: true })
+    if (!context) return
+    // Canvas converts CSS colors, including Tailwind's OKLCH, to sRGB bytes.
+    context.fillStyle = color
+    context.fillRect(0, 0, 1, 1)
+    const rgba = context.getImageData(0, 0, 1, 1).data
+    nativeBackgroundWrite = nativeBackgroundWrite
+      .catch(() => {})
+      .then(async () => {
+        if (!disposed && revision === appearanceRevision.value) {
+          await Window.SetBackgroundColour(rgba[0]!, rgba[1]!, rgba[2]!, rgba[3]!)
+        }
+      })
+      .catch(() => {})
+    await nativeBackgroundWrite
   }
 
   const applyThemeAppearance = () => {
@@ -231,6 +241,7 @@ export const useThemeStore = defineStore('theme', () => {
     cycleTheme,
     applyThemeColorState,
     loadThemeColors,
+    syncNativeBackground,
     previewThemeColors,
     flushThemeColorPreview,
     cleanup,

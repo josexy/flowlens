@@ -54,6 +54,14 @@ export function GetUpdateSnapshot(): $CancellablePromise<$models.UpdateSnapshot>
 }
 
 /**
+ * ResetApplication schedules a confirmed factory reset for the next launch.
+ * The user exits and reopens the app; completion follows cleanup and startup.
+ */
+export function ResetApplication(): $CancellablePromise<void> {
+    return $Call.ByID(1641374504);
+}
+
+/**
  * RestartForUpdate requests the application's guarded restart flow, including
  * the unsaved-settings confirmation, even if the update window was closed.
  */

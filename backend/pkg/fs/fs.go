@@ -81,15 +81,24 @@ func DirSize(path string) int64 {
 }
 
 func GetBaseStorageDir() (string, error) {
-	userConfigDir, err := os.UserConfigDir()
+	userConfigDir, err := BaseStoragePath()
 	if err != nil {
 		return "", err
 	}
-	userConfigDir = filepath.Join(userConfigDir, baseStorageDirName)
 	if err = CreateDirIfNotExists(userConfigDir); err != nil {
 		return "", err
 	}
 	return userConfigDir, nil
+}
+
+// BaseStoragePath resolves the managed directory without creating it. Reset
+// startup must not recreate directories while removing the old installation data.
+func BaseStoragePath() (string, error) {
+	userConfigDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(userConfigDir, baseStorageDirName), nil
 }
 
 func GetHBinFileName(key string) string {

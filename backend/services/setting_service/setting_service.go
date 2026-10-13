@@ -82,6 +82,7 @@ type SettingService struct {
 
 	processAttributionEnabled atomic.Bool
 	processAttributionReady   atomic.Bool
+	applicationReset          atomic.Bool
 }
 
 func New(db *sql.DB) *SettingService {
@@ -384,6 +385,9 @@ func (s *SettingService) Update(settings *Settings) error {
 	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settings = settings
@@ -408,6 +412,9 @@ func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	s.mu.Lock()
 	shortcuts := cloneAndSanitizeShortcutConfig(s.settings.Shortcuts)
 	pythonPlugins := cloneAndSanitizePythonPluginConfig(s.settings.PythonPluginConfig)
@@ -422,6 +429,9 @@ func (s *SettingService) UpdatePreservingShortcuts(settings *Settings) error {
 }
 
 func (s *SettingService) ensureLoaded() error {
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if s.isLoaded() {
 		return nil
 	}
@@ -568,6 +578,9 @@ func (s *SettingService) GenerateCurrentCACertificate(req GenerateCACertificateR
 	}
 	s.caMu.Lock()
 	defer s.caMu.Unlock()
+	if s.applicationReset.Load() {
+		return nil, errors.New("application_reset_in_progress")
+	}
 	config, err := s.currentCAConfiguration()
 	if err != nil {
 		return nil, err
@@ -672,6 +685,9 @@ func (s *SettingService) Save() error {
 	defer s.caMu.Unlock()
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 
 	s.mu.RLock()
 	s.publishProcessAttributionStateLocked()
@@ -750,6 +766,9 @@ func (s *SettingService) SaveTrafficTableConfig(config *TrafficTableConfig) erro
 	normalized := cloneAndSanitizeTrafficTableConfig(config)
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if err := s.repository.saveTrafficTableConfig(context.Background(), normalized); err != nil {
 		return err
 	}
@@ -776,6 +795,9 @@ func (s *SettingService) SaveTrafficDetailConfig(config *TrafficDetailConfig) er
 	normalized := cloneAndSanitizeTrafficDetailConfig(config)
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if err := s.repository.saveTrafficDetailConfig(context.Background(), normalized); err != nil {
 		return err
 	}
@@ -805,6 +827,9 @@ func (s *SettingService) SavePythonPluginConfig(config *PythonPluginConfig) erro
 	normalized := cloneAndSanitizePythonPluginConfig(config)
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if err := s.repository.savePythonPluginConfig(context.Background(), normalized); err != nil {
 		return err
 	}
@@ -851,6 +876,9 @@ func (s *SettingService) SaveShortcutConfig(config *ShortcutConfig) error {
 	normalized := cloneAndSanitizeShortcutConfig(config)
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if s.applicationReset.Load() {
+		return errors.New("application_reset_in_progress")
+	}
 	if err := s.repository.saveShortcutConfig(context.Background(), normalized); err != nil {
 		return err
 	}

@@ -17,6 +17,8 @@ const props = defineProps<{
   clearCacheSuccess: boolean
   clearCacheAndHistorySuccess: boolean
   clearPending: boolean
+  resetPending: boolean
+  resetDisabled: boolean
 }>()
 
 const cacheConfig = defineModel<CacheConfig>('cacheConfig', { required: true })
@@ -27,13 +29,16 @@ const historyRetentionConfig = defineModel<HistoryRetentionConfig>('historyReten
 const emit = defineEmits<{
   clearCache: []
   clearCacheAndHistory: []
+  resetApplication: []
 }>()
 
 const { t } = useI18n()
 const clearCacheModalVisible = ref(false)
 const clearCacheAndHistoryModalVisible = ref(false)
 const clearRequestPending = ref(false)
-const clearActionPending = computed(() => props.clearPending || clearRequestPending.value)
+const resetModalVisible = ref(false)
+const resetRequestPending = ref(false)
+const clearActionPending = computed(() => props.clearPending || clearRequestPending.value || props.resetPending || resetRequestPending.value)
 const historyRetentionUnitItems = computed(() => [
   {
     label: t('settings.history_retention_unit_hour'),
@@ -84,6 +89,21 @@ function setClearCacheAndHistoryModalVisible(visible: boolean) {
     clearCacheAndHistoryModalVisible.value = visible
   }
 }
+
+function setResetModalVisible(visible: boolean) {
+  if (!clearActionPending.value) resetModalVisible.value = visible
+}
+
+function handleResetConfirm() {
+  if (clearActionPending.value || props.resetDisabled) return
+  resetRequestPending.value = true
+  resetModalVisible.value = false
+  emit('resetApplication')
+}
+
+watch(() => props.resetPending, (pending) => {
+  if (!pending) resetRequestPending.value = false
+})
 
 watch(
   () => props.clearPending,
@@ -237,6 +257,22 @@ watch(
             @click="clearCacheAndHistoryModalVisible = true"
           />
         </div>
+        <div
+          class="flex items-center justify-between gap-4 rounded-md border border-[color-mix(in_srgb,var(--app-error-color)_35%,var(--app-border-color))] bg-[color-mix(in_srgb,var(--app-elevated-bg)_44%,transparent)] p-3 max-[720px]:flex-col max-[720px]:items-start"
+        >
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-app-text">{{ t('settings.reset_application') }}</div>
+            <div class="mt-1 text-sm leading-normal text-app-text-muted">{{ t('settings.reset_application_description') }}</div>
+          </div>
+          <UButton
+            color="error"
+            icon="i-lucide-rotate-ccw"
+            :label="t('settings.reset_application_action')"
+            :disabled="clearActionPending || resetDisabled"
+            :loading="resetPending || resetRequestPending"
+            @click="resetModalVisible = true"
+          />
+        </div>
       </div>
     </SettingsSection>
 
@@ -271,6 +307,22 @@ watch(
       @positive-click="handleClearCacheAndHistoryConfirm"
     >
       {{ t('settings.clear_all_data_confirm') }}
+    </ConfirmCardModal>
+    <ConfirmCardModal
+      :show="resetModalVisible"
+      :title="t('settings.reset_application')"
+      :positive-text="t('settings.reset_application_action')"
+      :negative-text="t('history.cancel')"
+      positive-type="error"
+      :positive-disabled="clearActionPending || resetDisabled"
+      :positive-loading="resetPending || resetRequestPending"
+      :negative-disabled="clearActionPending"
+      :closable="!clearActionPending"
+      :mask-closable="!clearActionPending"
+      @update:show="setResetModalVisible"
+      @positive-click="handleResetConfirm"
+    >
+      {{ t('settings.reset_application_confirm') }}
     </ConfirmCardModal>
   </div>
 </template>

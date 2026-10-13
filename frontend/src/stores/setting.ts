@@ -590,6 +590,8 @@ export const useSettingStore = defineStore('setting', () => {
   const settings = ref<settingservice.Settings | null>(null)
   const isDirty = ref(false)
   const isSaving = ref(false)
+  const isResetting = ref(false)
+  const isResetAwaitingRestart = ref(false)
   const isSavingTrafficTableConfig = ref(false)
   const isSavingTrafficDetailConfig = ref(false)
   const lastProxyApplyResult = ref<proxyservice.ProxyConfigApplyResult | null>(null)
@@ -787,6 +789,7 @@ export const useSettingStore = defineStore('setting', () => {
   }
 
   async function save(options?: SettingsSaveOptions): Promise<SettingsSaveResult | null> {
+    if (isResetting.value) return null
     if (!settings.value) return null
     isSaving.value = true
     const requestedSections = options?.dirtySections ?? ['proxy']
@@ -902,7 +905,7 @@ export const useSettingStore = defineStore('setting', () => {
   async function replaceTrafficTableHiddenColumns(
     nextValues: readonly string[],
   ): Promise<boolean> {
-    if (!settings.value || isSavingTrafficTableConfig.value) {
+    if (!settings.value || isSavingTrafficTableConfig.value || isResetting.value) {
       return false
     }
 
@@ -934,7 +937,7 @@ export const useSettingStore = defineStore('setting', () => {
   }
 
   async function toggleTrafficDetailLayout(): Promise<boolean> {
-    if (!settings.value || isSavingTrafficDetailConfig.value) return false
+    if (!settings.value || isSavingTrafficDetailConfig.value || isResetting.value) return false
 
     const previousLayout = trafficDetailLayout.value
     const nextLayout =
@@ -1156,6 +1159,8 @@ export const useSettingStore = defineStore('setting', () => {
     settings,
     isDirty,
     isSaving,
+    isResetting,
+    isResetAwaitingRestart,
     hiddenTrafficColumnKeys,
     isSavingTrafficTableConfig,
     trafficDetailLayout,
