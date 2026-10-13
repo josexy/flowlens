@@ -57,7 +57,7 @@ function create() {
     <div class="shrink-0 space-y-3 border-b border-default p-2.5">
       <div class="flex items-center justify-between gap-2">
         <span class="text-sm font-semibold text-highlighted">{{ t('rewrite_rules.title') }}</span>
-        <div class="flex items-center gap-1">
+        <div class="flex shrink-0 items-center gap-0.5">
           <UTooltip :text="t('rewrite_rules.refresh')">
             <UButton
               icon="i-lucide-refresh-cw"
@@ -71,15 +71,18 @@ function create() {
               @click="store.refresh()"
             />
           </UTooltip>
-          <UButton
-            icon="i-lucide-plus"
-            size="xs"
-            variant="ghost"
-            :aria-label="t('rewrite_rules.new_rule')"
-            :disabled="store.busy || store.state.revision < 0"
-            :ui="{ base: store.state.revision >= 0 ? 'disabled:opacity-100' : undefined }"
-            @click="create"
-          />
+          <UTooltip :text="t('rewrite_rules.new_rule')">
+            <UButton
+              icon="i-lucide-plus"
+              color="primary"
+              variant="soft"
+              size="xs"
+              :aria-label="t('rewrite_rules.new_rule')"
+              :disabled="store.busy || store.state.revision < 0"
+              :ui="{ base: store.state.revision >= 0 ? 'disabled:opacity-100' : undefined }"
+              @click="create"
+            />
+          </UTooltip>
         </div>
       </div>
       <USwitch
@@ -93,11 +96,11 @@ function create() {
       <UInput
         v-model="search"
         icon="i-lucide-search"
+        size="sm"
         :placeholder="t('rewrite_rules.search')"
         :aria-label="t('rewrite_rules.search')"
         class="w-full"
       />
-      <p class="text-xs text-muted">{{ t('rewrite_rules.order_hint') }}</p>
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
       <VueDraggable
@@ -187,9 +190,19 @@ function create() {
           </div>
         </div>
       </VueDraggable>
-      <p v-if="!filteredRows.length" class="p-3 text-center text-xs text-muted">
-        {{ t(store.loading ? 'rewrite_rules.loading' : 'rewrite_rules.no_rules') }}
-      </p>
+      <div
+        v-if="!filteredRows.length && store.loading"
+        class="flex h-24 items-center justify-center text-sm text-muted"
+      >
+        {{ t('rewrite_rules.loading') }}
+      </div>
+      <UEmpty
+        v-else-if="!filteredRows.length"
+        icon="i-lucide-repeat-2"
+        :title="search ? t('rewrite_rules.no_search_results') : t('rewrite_rules.no_rules')"
+        variant="naked"
+        class="py-8"
+      />
     </div>
   </div>
 </template>
