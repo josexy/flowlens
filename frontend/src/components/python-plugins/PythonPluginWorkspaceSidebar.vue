@@ -187,6 +187,7 @@ onBeforeUnmount(() => {
         v-else-if="sortablePlugins.length === 0"
         icon="i-lucide-file-code-2"
         :title="search ? t('python_plugins.no_search_results') : t('python_plugins.empty')"
+        variant="naked"
         class="py-8"
       />
       <VueDraggable
