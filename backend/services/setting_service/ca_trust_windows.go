@@ -61,10 +61,9 @@ func (windowsCACertificateTrustStore) status(der []byte) (caTrustState, error) {
 }
 
 func (windowsCACertificateTrustStore) install(der []byte) error {
-	// Use the standard Root provider for insertion, preserving Windows root
-	// protection and any native security confirmation. Do not bypass it with
-	// CERT_SYSTEM_STORE_UNPROTECTED_FLAG or direct registry writes.
-	store, err := openCurrentUserRootStore(windows.CERT_STORE_PROV_SYSTEM, 0)
+	// Use the standard Root provider for current-user insertion without the
+	// native confirmation. Certificate validation remains in the service.
+	store, err := openCurrentUserRootStore(windows.CERT_STORE_PROV_SYSTEM, windows.CERT_SYSTEM_STORE_UNPROTECTED_FLAG)
 	if err != nil {
 		return fmt.Errorf("open current-user Root store for installation: %w", err)
 	}
@@ -73,7 +72,10 @@ func (windowsCACertificateTrustStore) install(der []byte) error {
 }
 
 func (windowsCACertificateTrustStore) uninstall(der []byte) error {
-	store, err := openCurrentUserRootStore(windows.CERT_STORE_PROV_SYSTEM_REGISTRY, windows.CERT_STORE_OPEN_EXISTING_FLAG)
+	// Suppress the native Root-store confirmation for removal. The
+	// physical current-user store and exact DER matching still limit the scope.
+	store, err := openCurrentUserRootStore(windows.CERT_STORE_PROV_SYSTEM_REGISTRY,
+		windows.CERT_STORE_OPEN_EXISTING_FLAG|windows.CERT_SYSTEM_STORE_UNPROTECTED_FLAG)
 	if missingWindowsCertificate(err) {
 		return nil
 	}

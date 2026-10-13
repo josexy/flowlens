@@ -193,7 +193,7 @@ Turn the switch off to select custom CA certificate and private key paths. Both 
 
 On Windows and macOS, the shield icon beside **Generate CA / Regenerate CA** installs or uninstalls the saved MITM CA for the **current user**. Save pending settings before using the button. Installation requires a valid CA certificate and matching private key; only the public certificate is installed. The status reflects the current user's store and trust configuration; it does not guarantee that every application uses the operating system's trust.
 
-Windows installs into the current user's **Trusted Root Certification Authorities** store. Certificates inherited from the local computer are excluded from the displayed status and uninstall operation.
+Windows installs into the current user's **Trusted Root Certification Authorities** store. Installation and uninstall do not show a Windows certificate confirmation dialog; uninstall during **Restore Initial State** also follows this behavior. Certificates inherited from the local computer are excluded from the displayed status and uninstall operation.
 
 macOS uses `/usr/bin/security` to add the certificate to the current user's **login keychain** and configure user trust for the `ssl` and `basic` policies. macOS may request authentication. The operation does not use `sudo` or change the System keychain or administrator trust settings. Canceling authentication can leave a certificate imported without trust; FlowLens displays **installation incomplete** with a warning icon. Use the uninstall button to clean up before retrying. An orphaned user trust record is also removable even if its login-keychain certificate is already absent.
 
