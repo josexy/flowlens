@@ -6,6 +6,7 @@ import (
 	"io"
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -66,12 +67,7 @@ func needsBodyRegexContext(expression *syntax.Regexp) bool {
 	case syntax.OpBeginText, syntax.OpBeginLine, syntax.OpWordBoundary, syntax.OpNoWordBoundary:
 		return true
 	}
-	for _, sub := range expression.Sub {
-		if needsBodyRegexContext(sub) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(expression.Sub, needsBodyRegexContext)
 }
 
 type bodyRegexReader struct {

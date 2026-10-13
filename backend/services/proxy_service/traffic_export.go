@@ -140,7 +140,7 @@ func WriteTrafficExport(
 	if request.TargetType == "directory" {
 		spoolDirectory = temporary
 	}
-	for index := 0; index < count; index++ {
+	for index := range count {
 		if err = ctx.Err(); err != nil {
 			return result, err
 		}

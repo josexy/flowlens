@@ -49,7 +49,7 @@ type interpreterProbePayload struct {
 func (s *PythonPluginService) DiscoverInterpreters(configuredPath string) ([]InterpreterCandidate, error) {
 	parent := s.operationContext()
 	if err := parent.Err(); err != nil {
-		return nil, fmt.Errorf("Python interpreter discovery is unavailable: %w", err)
+		return nil, fmt.Errorf("python interpreter discovery is unavailable: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(parent, interpreterDiscoveryTimeout)
 	defer cancel()
@@ -57,7 +57,7 @@ func (s *PythonPluginService) DiscoverInterpreters(configuredPath string) ([]Int
 	paths := enumerateInterpreterPathCandidates(ctx, configuredPath)
 	candidates := probeInterpreterPathCandidates(ctx, paths, probeInterpreter)
 	if err := parent.Err(); err != nil {
-		return nil, fmt.Errorf("Python interpreter discovery was canceled: %w", err)
+		return nil, fmt.Errorf("python interpreter discovery was canceled: %w", err)
 	}
 	return candidates, nil
 }
@@ -239,7 +239,7 @@ func probeInterpreter(ctx context.Context, path string) (InterpreterCandidate, e
 		return InterpreterCandidate{}, fmt.Errorf("decode Python interpreter probe: %w", err)
 	}
 	if len(payload.Version) < 3 {
-		return InterpreterCandidate{}, fmt.Errorf("Python interpreter probe returned an incomplete version")
+		return InterpreterCandidate{}, fmt.Errorf("python interpreter probe returned an incomplete version")
 	}
 	actualPath, err := validateInterpreterPath(payload.Executable)
 	if err != nil {

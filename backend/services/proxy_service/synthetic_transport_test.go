@@ -374,8 +374,7 @@ func TestHTTPRequestTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
 						SendRequestBody{BodyType: SendRequestBodyTypeNone},
 					)
 					if !tt.requestSkip {
-						var certError x509.UnknownAuthorityError
-						if !errors.As(err, &certError) {
+						if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
 							t.Fatalf("untrusted certificate error = %v, want unknown authority", err)
 						}
 						return
@@ -413,8 +412,7 @@ func TestHTTPRequestHTTPSForwardProxyUsesRequestTLSVerification(t *testing.T) {
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
 			)
 			if !requestSkip {
-				var certError x509.UnknownAuthorityError
-				if !errors.As(err, &certError) {
+				if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
 					t.Fatalf("globalSkip=%t requestSkip=%t: error=%v, want unknown authority", globalSkip, requestSkip, err)
 				}
 				continue
@@ -1034,8 +1032,7 @@ func TestWebSocketTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
 					}
 					connected, err := svc.ConnectWebSocket(context.Background(), req)
 					if !tt.requestSkip {
-						var certError x509.UnknownAuthorityError
-						if !errors.As(err, &certError) {
+						if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
 							t.Fatalf("untrusted certificate error = %v, want unknown authority", err)
 						}
 						return

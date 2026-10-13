@@ -406,15 +406,6 @@ func cloneHTTPRequestPluginRequest(request HTTPRequestPluginRequest) HTTPRequest
 	}
 }
 
-func cloneHTTPRequestPluginResponse(response HTTPRequestPluginResponse) HTTPRequestPluginResponse {
-	response.HeaderFields = append([]HTTPHeaderField(nil), response.HeaderFields...)
-	response.TrailerFields = append([]HTTPHeaderField(nil), response.TrailerFields...)
-	response.Body = append([]byte(nil), response.Body...)
-	response.BodyFile = cloneHTTPRequestPluginBodyFile(response.BodyFile)
-	response.Request = cloneHTTPRequestPluginRequest(response.Request)
-	return response
-}
-
 func cloneHTTPRequestPluginBodyFile(file *HTTPRequestPluginBodyFile) *HTTPRequestPluginBodyFile {
 	if file == nil {
 		return nil
@@ -459,11 +450,11 @@ func normalizeHTTPRequestPluginExecutionID(value string) (string, error) {
 		return "", nil
 	}
 	if len(value) > 128 || !utf8.ValidString(value) {
-		return "", errors.New("Python plugin execution ID is invalid")
+		return "", errors.New("python plugin execution ID is invalid")
 	}
 	for _, character := range value {
 		if unicode.IsControl(character) {
-			return "", errors.New("Python plugin execution ID contains control characters")
+			return "", errors.New("python plugin execution ID contains control characters")
 		}
 	}
 	return value, nil

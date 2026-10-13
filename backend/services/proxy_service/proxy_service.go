@@ -2227,7 +2227,7 @@ func (s *ProxyService) SendHTTPRequest(
 				return httpRequestPluginStartFailure(executionID, err), nil
 			}
 		} else if inlineScriptEnabled {
-			return httpRequestPluginStartFailure(executionID, errors.New("Python plugin runner is unavailable")), nil
+			return httpRequestPluginStartFailure(executionID, errors.New("python plugin runner is unavailable")), nil
 		}
 	}
 	if pluginSession != nil {

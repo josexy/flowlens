@@ -70,34 +70,34 @@ func parseDarwinTCPPCBList(
 	layout darwinPCBLayout,
 ) ([]darwinSocketOwnerRow, error) {
 	if layout.itemSize < darwinXsocketOffset+darwinXsocketPIDEnd {
-		return nil, errors.New("Darwin PCB item size is too small")
+		return nil, errors.New("darwin PCB item size is too small")
 	}
 	if len(data) < darwinXinpgenSize {
-		return nil, errors.New("Darwin PCB list is missing its leading xinpgen")
+		return nil, errors.New("darwin PCB list is missing its leading xinpgen")
 	}
 	if err := validateDarwinXinpgen(data[:darwinXinpgenSize]); err != nil {
-		return nil, fmt.Errorf("Darwin PCB leading xinpgen: %w", err)
+		return nil, fmt.Errorf("darwin PCB leading xinpgen: %w", err)
 	}
 
 	announcedCount := binary.NativeEndian.Uint32(data[4:8])
 	if len(data) == darwinXinpgenSize {
 		if announcedCount != 0 {
-			return nil, errors.New("Darwin PCB list announced rows without record data")
+			return nil, errors.New("darwin PCB list announced rows without record data")
 		}
 		return nil, nil
 	}
 	if len(data) < 2*darwinXinpgenSize {
-		return nil, errors.New("Darwin PCB list is missing its trailing xinpgen")
+		return nil, errors.New("darwin PCB list is missing its trailing xinpgen")
 	}
 
 	trailerOffset := len(data) - darwinXinpgenSize
 	if err := validateDarwinXinpgen(data[trailerOffset:]); err != nil {
-		return nil, fmt.Errorf("Darwin PCB trailing xinpgen: %w", err)
+		return nil, fmt.Errorf("darwin PCB trailing xinpgen: %w", err)
 	}
 	bodySize := trailerOffset - darwinXinpgenSize
 	if bodySize%layout.itemSize != 0 {
 		return nil, fmt.Errorf(
-			"Darwin PCB record bytes %d are not divisible by item size %d",
+			"darwin PCB record bytes %d are not divisible by item size %d",
 			bodySize,
 			layout.itemSize,
 		)
@@ -110,7 +110,7 @@ func parseDarwinTCPPCBList(
 		record := data[recordOffset : recordOffset+layout.itemSize]
 		row, include, err := parseDarwinTCPPCBRecord(record)
 		if err != nil {
-			return nil, fmt.Errorf("Darwin PCB record %d: %w", index, err)
+			return nil, fmt.Errorf("darwin PCB record %d: %w", index, err)
 		}
 		if include {
 			rows = append(rows, row)

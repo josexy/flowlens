@@ -94,9 +94,10 @@ func convertHARImportEntry(raw []byte, id uint64) (*TrafficEntry, trafficBodyVie
 		}
 		entry.Response = importHTTPMessage(input.Response.HTTPVersion, input.Response.Headers, input.Response.BodySize)
 		if entry.StatusCode == 101 && strings.EqualFold(firstHeaderFieldValue(entry.Response.HeaderFields, "Upgrade"), "websocket") {
-			if u.Scheme == "https" {
+			switch u.Scheme {
+			case "https":
 				entry.Type = "wss"
-			} else if u.Scheme == "http" {
+			case "http":
 				entry.Type = "ws"
 			}
 		}
@@ -138,7 +139,7 @@ func importHTTPMessage(proto string, fields []harNameValue, size *int64) *HTTPMe
 	if fields != nil {
 		message.HeaderFields = make([]HTTPHeaderField, len(fields))
 		for i, field := range fields {
-			message.HeaderFields[i] = HTTPHeaderField{Name: field.Name, Value: field.Value}
+			message.HeaderFields[i] = HTTPHeaderField(field)
 		}
 	}
 	return message

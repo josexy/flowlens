@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josexy/flowlens/backend/pkg/body_cache"
+	bodycache "github.com/josexy/flowlens/backend/pkg/body_cache"
 	"github.com/josexy/flowlens/backend/pkg/fs"
 )
 

@@ -115,7 +115,7 @@ func (r *httpRequestRunner) BeginRequest(
 	request proxyservice.HTTPRequestPluginBeginRequest,
 ) (proxyservice.HTTPRequestPluginSession, error) {
 	if r == nil || r.repository == nil || r.packages == nil || r.runtime == nil {
-		return nil, errors.New("Python plugin runner is unavailable")
+		return nil, errors.New("python plugin runner is unavailable")
 	}
 	config, err := settingservice.GetPythonPluginConfig(r.settings)
 	if err != nil {
@@ -124,7 +124,7 @@ func (r *httpRequestRunner) BeginRequest(
 	inlineEnabled := request.InlinePythonScript != nil && request.InlinePythonScript.Enabled
 	if !config.Enabled {
 		if inlineEnabled {
-			return nil, errors.New("Python plugin runtime is disabled")
+			return nil, errors.New("python plugin runtime is disabled")
 		}
 		return nil, nil
 	}
@@ -634,7 +634,7 @@ func httpRequestBodyToWire(
 	case proxyservice.SendRequestBodyTypeFile:
 		file := bodyFileWireFromSendRequestFile(body.File)
 		if file == nil {
-			return requestBodyWire{}, errors.New("Request file body requires a descriptor")
+			return requestBodyWire{}, errors.New("request file body requires a descriptor")
 		}
 		return requestBodyWire{
 			Kind: "file", Storage: "file", File: file, Size: file.Size,
@@ -679,7 +679,7 @@ func httpRequestFromWire(
 	bodyChanged bool,
 ) (proxyservice.HTTPRequestPluginRequest, error) {
 	if len(value) == 0 {
-		return proxyservice.HTTPRequestPluginRequest{}, errors.New("Python request hook returned no request")
+		return proxyservice.HTTPRequestPluginRequest{}, errors.New("python request hook returned no request")
 	}
 	var wire requestWire
 	if err := json.Unmarshal(value, &wire); err != nil {
@@ -731,7 +731,7 @@ func httpRequestBodyFromWire(
 	case "text":
 		var value string
 		if err := json.Unmarshal(wire.Value, &value); err != nil {
-			return proxyservice.SendRequestBody{}, nil, errors.New("Python text body value must be a string")
+			return proxyservice.SendRequestBody{}, nil, errors.New("python text body value must be a string")
 		}
 		bodyType := proxyservice.SendRequestBodyTypeText
 		if original.BodyType == proxyservice.SendRequestBodyTypeXML {
@@ -741,12 +741,12 @@ func httpRequestBodyFromWire(
 	case "xml":
 		var value string
 		if err := json.Unmarshal(wire.Value, &value); err != nil {
-			return proxyservice.SendRequestBody{}, nil, errors.New("Python XML body value must be a string")
+			return proxyservice.SendRequestBody{}, nil, errors.New("python XML body value must be a string")
 		}
 		return proxyservice.SendRequestBody{BodyType: proxyservice.SendRequestBodyTypeXML, Text: value}, nil, nil
 	case "json":
 		if len(wire.Value) == 0 || !json.Valid(wire.Value) {
-			return proxyservice.SendRequestBody{}, nil, errors.New("Python JSON body value is invalid")
+			return proxyservice.SendRequestBody{}, nil, errors.New("python JSON body value is invalid")
 		}
 		compact := new(bytes.Buffer)
 		if err := json.Compact(compact, wire.Value); err != nil {
@@ -759,7 +759,7 @@ func httpRequestBodyFromWire(
 		}
 		return proxyservice.SendRequestBody{BodyType: proxyservice.SendRequestBodyTypeBinary, Text: wire.Base64}, nil, nil
 	case "file":
-		return proxyservice.SendRequestBody{}, nil, errors.New("Python file body requires file storage")
+		return proxyservice.SendRequestBody{}, nil, errors.New("python file body requires file storage")
 	case "urlencoded":
 		var items []*proxyservice.SendRequestURLEncodedItem
 		if len(wire.Items) > 0 {
@@ -855,7 +855,7 @@ func httpResponseFromWire(
 	bodyChanged bool,
 ) (proxyservice.HTTPRequestPluginResponse, error) {
 	if len(value) == 0 {
-		return proxyservice.HTTPRequestPluginResponse{}, errors.New("Python response hook returned no response")
+		return proxyservice.HTTPRequestPluginResponse{}, errors.New("python response hook returned no response")
 	}
 	var wire responseWire
 	if err := json.Unmarshal(value, &wire); err != nil {
@@ -902,12 +902,12 @@ func httpResponseBodyFromWire(
 	case "text", "xml":
 		var value string
 		if err := json.Unmarshal(wire.Value, &value); err != nil {
-			return nil, nil, "", fmt.Errorf("Python response %s body value must be a string", wire.Kind)
+			return nil, nil, "", fmt.Errorf("python response %s body value must be a string", wire.Kind)
 		}
 		return []byte(value), nil, wire.Kind, nil
 	case "json":
 		if len(wire.Value) == 0 || !json.Valid(wire.Value) {
-			return nil, nil, "", errors.New("Python response JSON body value is invalid")
+			return nil, nil, "", errors.New("python response JSON body value is invalid")
 		}
 		compact := new(bytes.Buffer)
 		if err := json.Compact(compact, wire.Value); err != nil {
@@ -921,7 +921,7 @@ func httpResponseBodyFromWire(
 		}
 		return value, nil, "binary", nil
 	case "unavailable":
-		return nil, nil, "", errors.New("Python response body cannot become unavailable")
+		return nil, nil, "", errors.New("python response body cannot become unavailable")
 	default:
 		return nil, nil, "", fmt.Errorf("unsupported Python response body kind %q", wire.Kind)
 	}
@@ -984,7 +984,7 @@ func normalizedBodyWireStorage(wire requestBodyWire) (string, error) {
 	switch storage {
 	case "inline":
 		if wire.File != nil {
-			return "", errors.New("Python body cannot contain a file descriptor with inline storage")
+			return "", errors.New("python body cannot contain a file descriptor with inline storage")
 		}
 	case "file":
 		if wire.File == nil {

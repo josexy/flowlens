@@ -212,13 +212,13 @@ func readWindowsExtendedTCPTable(query func([]byte, *uint32) syscall.Errno) ([]b
 
 	for range windowsTCPTableReadAttempts {
 		if size < 4 {
-			return nil, errors.New("Windows TCP table returned an invalid size")
+			return nil, errors.New("windows TCP table returned an invalid size")
 		}
 		data := make([]byte, size)
 		result = query(data, &size)
 		if result == 0 {
 			if uint64(size) > uint64(len(data)) {
-				return nil, errors.New("Windows TCP table returned a size larger than its buffer")
+				return nil, errors.New("windows TCP table returned a size larger than its buffer")
 			}
 			return data[:size], nil
 		}
@@ -231,11 +231,11 @@ func readWindowsExtendedTCPTable(query func([]byte, *uint32) syscall.Errno) ([]b
 
 func parseWindowsIPv4OwnerRows(data []byte) ([]windowsSocketOwnerRow, error) {
 	if len(data) < 4 {
-		return nil, errors.New("Windows IPv4 TCP table is truncated")
+		return nil, errors.New("windows IPv4 TCP table is truncated")
 	}
 	count := int(binary.LittleEndian.Uint32(data[:4]))
 	if count > (len(data)-4)/windowsIPv4OwnerRowSize {
-		return nil, errors.New("Windows IPv4 TCP row count exceeds table size")
+		return nil, errors.New("windows IPv4 TCP row count exceeds table size")
 	}
 	rows := make([]windowsSocketOwnerRow, 0, count)
 	for index := range count {
@@ -255,11 +255,11 @@ func parseWindowsIPv4OwnerRows(data []byte) ([]windowsSocketOwnerRow, error) {
 
 func parseWindowsIPv6OwnerRows(data []byte) ([]windowsSocketOwnerRow, error) {
 	if len(data) < 4 {
-		return nil, errors.New("Windows IPv6 TCP table is truncated")
+		return nil, errors.New("windows IPv6 TCP table is truncated")
 	}
 	count := int(binary.LittleEndian.Uint32(data[:4]))
 	if count > (len(data)-4)/windowsIPv6OwnerRowSize {
-		return nil, errors.New("Windows IPv6 TCP row count exceeds table size")
+		return nil, errors.New("windows IPv6 TCP row count exceeds table size")
 	}
 	rows := make([]windowsSocketOwnerRow, 0, count)
 	for index := range count {

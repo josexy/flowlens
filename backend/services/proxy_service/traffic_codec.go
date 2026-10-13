@@ -730,9 +730,10 @@ func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
 		err = fmt.Errorf("hbin: invalid request body encoding %d", reqEnc)
 		return
 	}
-	if reqEnc == 1 {
+	switch reqEnc {
+	case 1:
 		bv.RequestBodyEncoding = "base64"
-	} else if reqEnc == 2 {
+	case 2:
 		bv.RequestBodyUnavailable = true
 	}
 	reqBodyReader, reqBodySize, err := hbinReadBytesAsReader(dec)
@@ -754,9 +755,10 @@ func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
 		err = fmt.Errorf("hbin: invalid response body encoding %d", rspEnc)
 		return
 	}
-	if rspEnc == 1 {
+	switch rspEnc {
+	case 1:
 		bv.ResponseBodyEncoding = "base64"
-	} else if rspEnc == 2 {
+	case 2:
 		bv.ResponseBodyUnavailable = true
 	}
 	rspBodyReader, rspBodySize, err := hbinReadBytesAsReader(dec)

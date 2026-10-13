@@ -681,7 +681,6 @@ func standardTLSConnectionState(state utls.ConnectionState) tls.ConnectionState 
 		DidResume:                   state.DidResume,
 		CipherSuite:                 state.CipherSuite,
 		NegotiatedProtocol:          state.NegotiatedProtocol,
-		NegotiatedProtocolIsMutual:  state.NegotiatedProtocolIsMutual,
 		ServerName:                  state.ServerName,
 		PeerCertificates:            state.PeerCertificates,
 		VerifiedChains:              state.VerifiedChains,

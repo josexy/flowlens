@@ -462,7 +462,7 @@ func (m *packageManager) snapshotCandidateLocked(ctx context.Context, pluginID, 
 
 func (m *packageManager) validateRevision(ctx context.Context, pluginID, revision, revisionPath string) error {
 	if m.validator == nil {
-		return errors.New("Python revision validator is unavailable")
+		return errors.New("python revision validator is unavailable")
 	}
 	if err := m.validator.ValidateRevision(ctx, RevisionValidationRequest{
 		PluginID: pluginID, Revision: revision, Path: revisionPath,

@@ -112,7 +112,7 @@ func hideBuiltinCAError(err error) error {
 		return nil
 	}
 	message := "ca_builtin_unavailable"
-	for _, word := range strings.Fields(err.Error()) {
+	for word := range strings.FieldsSeq(err.Error()) {
 		if strings.HasPrefix(word, "ca_trust_") {
 			message = strings.TrimRight(word, ":,.")
 			break

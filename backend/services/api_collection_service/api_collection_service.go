@@ -8,8 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"sync"
+
+	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"

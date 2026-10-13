@@ -272,7 +272,7 @@ func TestHARImportReadFailureAndMidFileCancellationRollBack(t *testing.T) {
 			ctx, stop := context.WithCancel(context.Background())
 			defer stop()
 			want := errors.New("injected read failure")
-			var tail io.Reader = iotest.ErrReader(want)
+			var tail = iotest.ErrReader(want)
 			if cancel {
 				want, tail = context.Canceled, harImportCancelReader{stop}
 			}

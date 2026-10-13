@@ -26,7 +26,7 @@ func validateInterpreterFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("inspect Python interpreter: %w", err)
 	}
-	return errors.New("Python interpreter path must reference a regular file or Windows app execution alias")
+	return errors.New("python interpreter path must reference a regular file or Windows app execution alias")
 }
 
 func isWindowsAppExecutionAlias(path string) bool {

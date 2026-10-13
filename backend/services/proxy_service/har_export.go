@@ -1113,7 +1113,7 @@ func harHeaders(message *HTTPMessage) []harNameValue {
 	fields := messageFields(message)
 	headers := make([]harNameValue, len(fields))
 	for i, field := range fields {
-		headers[i] = harNameValue{Name: field.Name, Value: field.Value}
+		headers[i] = harNameValue(field)
 	}
 	return headers
 }

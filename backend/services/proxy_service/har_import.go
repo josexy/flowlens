@@ -219,8 +219,8 @@ func readHARImport(ctx context.Context, source io.Reader, limits harImportLimits
 		_, _ = buffer.Discard(3)
 	}
 	r := &harImportReader{ctx: ctx, source: buffer, fileLimit: limits.fileBytes + 1}
-	s := harImportStream{reader: r, limits: limits}
-	s.decoder = jsontext.NewDecoder(r)
+	s := harImportStream{reader: r, limits: limits,
+		decoder: jsontext.NewDecoder(r)}
 	seenLog, seenEntries := false, false
 	err := s.object(func(key string) error {
 		if key != "log" {

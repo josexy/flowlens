@@ -374,9 +374,10 @@ func TestWebSocketHTTPRequestSessionLifecycle(t *testing.T) {
 				event.EventType == "message" &&
 				event.Message != nil
 		})
-		if event.Message.Direction == "send" {
+		switch event.Message.Direction {
+		case "send":
 			sendEvent = event
-		} else if event.Message.Direction == "receive" {
+		case "receive":
 			receiveEvent = event
 		}
 	}

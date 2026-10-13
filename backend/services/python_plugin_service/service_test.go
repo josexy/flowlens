@@ -23,7 +23,6 @@ func TestNewStoresPythonPluginRuntimeUnderBaseStorage(t *testing.T) {
 	case "darwin":
 		homeDir := t.TempDir()
 		t.Setenv("HOME", homeDir)
-		configRoot = filepath.Join(homeDir, "Library", "Application Support")
 	default:
 		t.Setenv("XDG_CONFIG_HOME", configRoot)
 	}

@@ -10,7 +10,7 @@ import (
 
 const maxProtocolFrameBytes = 64 * 1024 * 1024
 
-var errProtocolFrameTooLarge = errors.New("Python worker protocol frame exceeds the 64 MiB limit")
+var errProtocolFrameTooLarge = errors.New("python worker protocol frame exceeds the 64 MiB limit")
 
 type workerMessage struct {
 	Type            string          `json:"type"`
@@ -74,7 +74,7 @@ func readProtocolFrame(reader io.Reader) (workerMessage, error) {
 		return workerMessage{}, fmt.Errorf("decode Python worker protocol frame: %w", err)
 	}
 	if message.Type == "" {
-		return workerMessage{}, errors.New("Python worker protocol frame is missing type")
+		return workerMessage{}, errors.New("python worker protocol frame is missing type")
 	}
 	return message, nil
 }

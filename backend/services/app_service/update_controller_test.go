@@ -3,6 +3,7 @@ package appservice
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -130,13 +131,7 @@ func TestUpdateControllerDownloadTracksFrameworkPhases(t *testing.T) {
 
 	eventsMu.Lock()
 	defer eventsMu.Unlock()
-	foundProgress := false
-	for _, event := range events {
-		if event == UpdateProgressEventName {
-			foundProgress = true
-			break
-		}
-	}
+	foundProgress := slices.Contains(events, UpdateProgressEventName)
 	if !foundProgress {
 		t.Fatalf("events did not include %q: %v", UpdateProgressEventName, events)
 	}

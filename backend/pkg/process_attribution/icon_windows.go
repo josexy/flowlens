@@ -229,7 +229,7 @@ func renderWindowsIcon(icon windows.Handle, background byte) ([]byte, error) {
 
 func normalizeWindowsCallError(err error) error {
 	if err == nil || errors.Is(err, windows.ERROR_SUCCESS) {
-		return errors.New("Windows API call failed")
+		return errors.New("windows API call failed")
 	}
 	return err
 }

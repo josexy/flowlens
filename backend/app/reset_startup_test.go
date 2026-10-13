@@ -28,8 +28,8 @@ func TestResetStartupSessionCanReportCorruptMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := resetStartupSnapshot{
-		ResetStartupState: appservice.ResetStartupState{Language: "zh", Stage: "starting", Error: "invalid reset marker"},
-		Token:             filepath.Base(directory), UpdatedAt: time.Now().UnixMilli(),
+		Language: "zh", Stage: "starting", Error: "invalid reset marker",
+		Token: filepath.Base(directory), UpdatedAt: time.Now().UnixMilli(),
 	}
 	if err := writeResetStartupJSON(directory, "state.json", snapshot); err != nil {
 		t.Fatal(err)

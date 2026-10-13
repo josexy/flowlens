@@ -133,10 +133,10 @@ func newWithPaths(
 	emit serviceEventEmitter,
 ) (*PythonPluginService, error) {
 	if db == nil {
-		return nil, errors.New("Python plugin database is not available")
+		return nil, errors.New("python plugin database is not available")
 	}
 	if settings == nil {
-		return nil, errors.New("Python plugin setting service is not available")
+		return nil, errors.New("python plugin setting service is not available")
 	}
 	repository := newRepository(db)
 	service := &PythonPluginService{
@@ -156,7 +156,7 @@ func newWithPaths(
 
 func (s *PythonPluginService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	if s == nil {
-		return errors.New("Python plugin service is not available")
+		return errors.New("python plugin service is not available")
 	}
 	s.baseMu.Lock()
 	s.baseCtx, s.baseCancel = context.WithCancel(ctx)
@@ -212,7 +212,7 @@ func (s *PythonPluginService) BeginRequest(
 	request proxyservice.HTTPRequestPluginBeginRequest,
 ) (proxyservice.HTTPRequestPluginSession, error) {
 	if s == nil || s.runner == nil {
-		return nil, errors.New("Python plugin runner is unavailable")
+		return nil, errors.New("python plugin runner is unavailable")
 	}
 	return s.runner.BeginRequest(ctx, request)
 }
@@ -351,8 +351,7 @@ func (s *PythonPluginService) SetPluginEnabled(pluginID string, enabled bool) (*
 		}
 		return plugin, err
 	}
-	plugin, err := s.packages.activateCurrent(ctx, pluginID)
-	if err != nil {
+	if _, err := s.packages.activateCurrent(ctx, pluginID); err != nil {
 		_ = s.repository.setPluginEnabled(ctx, pluginID, false)
 		s.emitRegistry("validation_failed", pluginID)
 		return nil, err
@@ -360,7 +359,7 @@ func (s *PythonPluginService) SetPluginEnabled(pluginID string, enabled bool) (*
 	if err := s.repository.setPluginEnabled(ctx, pluginID, true); err != nil {
 		return nil, err
 	}
-	plugin, err = s.repository.getPlugin(ctx, pluginID)
+	plugin, err := s.repository.getPlugin(ctx, pluginID)
 	if err == nil {
 		s.emitRegistry("enabled", pluginID)
 	}
@@ -393,7 +392,7 @@ func (s *PythonPluginService) ReadPluginFile(pluginID, relativePath string) (*Ma
 		return nil, err
 	}
 	if !utf8.Valid(value) {
-		return nil, errors.New("Python plugin editor only supports UTF-8 text files")
+		return nil, errors.New("python plugin editor only supports UTF-8 text files")
 	}
 	return &ManagedPluginFile{Path: filepath.ToSlash(relativePath), Content: string(value)}, nil
 }
@@ -496,7 +495,7 @@ func (s *PythonPluginService) ConfigureRuntime(config settingservice.PythonPlugi
 		}
 		config.InterpreterPath = resolved
 	} else if config.Enabled {
-		return nil, errors.New("Python interpreter path is required before enabling plugins")
+		return nil, errors.New("python interpreter path is required before enabling plugins")
 	}
 	oldConfig, err := settingservice.GetPythonPluginConfig(s.settings)
 	if err != nil {
@@ -510,7 +509,7 @@ func (s *PythonPluginService) ConfigureRuntime(config settingservice.PythonPlugi
 		closed := s.closed
 		s.runtimeMu.Unlock()
 		if closed {
-			return nil, errors.New("Python plugin service is shutting down")
+			return nil, errors.New("python plugin service is shutting down")
 		}
 		candidatePool, err = newWorkerPool(workerPoolConfig{
 			InterpreterPath: config.InterpreterPath,
@@ -558,7 +557,7 @@ func (s *PythonPluginService) ConfigureRuntime(config settingservice.PythonPlugi
 			_ = candidatePool.Shutdown(shutdownCtx)
 			shutdownCancel()
 			_ = s.settings.SavePythonPluginConfig(&oldConfig)
-			return nil, errors.New("Python plugin service is shutting down")
+			return nil, errors.New("python plugin service is shutting down")
 		}
 		oldPool := s.pool
 		s.pool = candidatePool
@@ -680,14 +679,14 @@ func (s *PythonPluginService) currentPool(ctx context.Context) (*workerPool, err
 	}
 	path := strings.TrimSpace(config.InterpreterPath)
 	if path == "" {
-		err := errors.New("Python interpreter path is not configured")
+		err := errors.New("python interpreter path is not configured")
 		s.markRuntimeError(err)
 		return nil, err
 	}
 	s.runtimeMu.Lock()
 	defer s.runtimeMu.Unlock()
 	if s.closed {
-		return nil, errors.New("Python plugin service is shutting down")
+		return nil, errors.New("python plugin service is shutting down")
 	}
 	if s.pool != nil && s.poolPath == path {
 		return s.pool, nil

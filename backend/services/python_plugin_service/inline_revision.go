@@ -40,23 +40,23 @@ func (m *packageManager) createInlineRevision(
 	source string,
 ) (string, *RevisionLease, error) {
 	if m == nil {
-		return "", nil, errors.New("Python package manager is unavailable")
+		return "", nil, errors.New("python package manager is unavailable")
 	}
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
 	}
 	executionID = strings.TrimSpace(executionID)
 	if executionID == "" {
-		return "", nil, errors.New("Current request Python execution ID cannot be empty")
+		return "", nil, errors.New("current request Python execution ID cannot be empty")
 	}
 	if strings.TrimSpace(source) == "" {
-		return "", nil, errors.New("Current request Python script cannot be empty")
+		return "", nil, errors.New("current request Python script cannot be empty")
 	}
 	if len([]byte(source)) > maxInlinePythonScriptBytes {
-		return "", nil, fmt.Errorf("Current request Python script exceeds the %d byte limit", maxInlinePythonScriptBytes)
+		return "", nil, fmt.Errorf("current request Python script exceeds the %d byte limit", maxInlinePythonScriptBytes)
 	}
 	if m.validator == nil {
-		return "", nil, errors.New("Python revision validator is unavailable")
+		return "", nil, errors.New("python revision validator is unavailable")
 	}
 
 	digest := sha256.New()

@@ -169,10 +169,10 @@ func newWorkerPool(config workerPoolConfig) (*workerPool, error) {
 func validateInterpreterPath(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "", errors.New("Python interpreter path cannot be empty")
+		return "", errors.New("python interpreter path cannot be empty")
 	}
 	if !filepath.IsAbs(value) {
-		return "", errors.New("Python interpreter path must be absolute")
+		return "", errors.New("python interpreter path must be absolute")
 	}
 	resolved, err := filepath.Abs(value)
 	if err != nil {
@@ -198,7 +198,7 @@ func (p *workerPool) ValidateRevision(ctx context.Context, request RevisionValid
 		return err
 	}
 	if !result.Validated {
-		return errors.New("Python worker did not validate the plugin revision")
+		return errors.New("python worker did not validate the plugin revision")
 	}
 	return nil
 }
@@ -302,7 +302,7 @@ func (p *workerPool) acquire(ctx context.Context) (*pythonWorker, func(bool), er
 		if p.closed {
 			p.mu.Unlock()
 			releaseSlot()
-			return nil, nil, errors.New("Python worker pool is closed")
+			return nil, nil, errors.New("python worker pool is closed")
 		}
 		if len(p.workers)+p.starting < p.config.Size {
 			p.starting++
@@ -322,7 +322,7 @@ func (p *workerPool) acquire(ctx context.Context) (*pythonWorker, func(bool), er
 			if closed {
 				worker.terminate()
 				releaseSlot()
-				return nil, nil, errors.New("Python worker pool is closed")
+				return nil, nil, errors.New("python worker pool is closed")
 			}
 			return worker, func(healthy bool) {
 				p.releaseWorker(worker, healthy)
@@ -466,13 +466,13 @@ func startPythonWorker(ctx context.Context, interpreterPath string, runtimeFiles
 		return nil, ctx.Err()
 	case <-worker.waitDone:
 		worker.terminate()
-		return nil, worker.startError(errors.New("Python worker exited before handshake"))
+		return nil, worker.startError(errors.New("python worker exited before handshake"))
 	}
 }
 
 func validateWorkerHello(message workerMessage) (WorkerHello, error) {
 	if message.Type != "hello" {
-		return WorkerHello{}, fmt.Errorf("Python worker sent %q before hello", message.Type)
+		return WorkerHello{}, fmt.Errorf("python worker sent %q before hello", message.Type)
 	}
 	if message.ProtocolVersion != workerProtocolVersion {
 		return WorkerHello{}, fmt.Errorf("unsupported Python worker protocol version %d", message.ProtocolVersion)
@@ -481,7 +481,7 @@ func validateWorkerHello(message workerMessage) (WorkerHello, error) {
 		return WorkerHello{}, fmt.Errorf("unsupported FlowLens Python SDK API version %d", message.SDKAPIVersion)
 	}
 	if len(message.PythonVersion) < 2 {
-		return WorkerHello{}, errors.New("Python worker hello is missing version information")
+		return WorkerHello{}, errors.New("python worker hello is missing version information")
 	}
 	implementation := strings.ToLower(strings.TrimSpace(message.Implementation))
 	if implementation != "cpython" {
@@ -492,7 +492,7 @@ func validateWorkerHello(message workerMessage) (WorkerHello, error) {
 		patch = message.PythonVersion[2]
 	}
 	if major != 3 || minor < 11 {
-		return WorkerHello{}, fmt.Errorf("Python 3.11 or newer is required; worker reported %d.%d.%d", major, minor, patch)
+		return WorkerHello{}, fmt.Errorf("python 3.11 or newer is required; worker reported %d.%d.%d", major, minor, patch)
 	}
 	return WorkerHello{
 		ProtocolVersion: message.ProtocolVersion,
@@ -529,14 +529,14 @@ func (w *pythonWorker) do(ctx context.Context, requestID string, request any) wo
 				}
 			case "result":
 				if message.RequestID != requestID {
-					resultChannel <- workerRoundTrip{err: fmt.Errorf("Python worker response ID %q does not match request %q", message.RequestID, requestID), fatal: true}
+					resultChannel <- workerRoundTrip{err: fmt.Errorf("python worker response ID %q does not match request %q", message.RequestID, requestID), fatal: true}
 					return
 				}
 				resultChannel <- workerRoundTrip{message: message}
 				return
 			case "error":
 				if message.RequestID != requestID {
-					resultChannel <- workerRoundTrip{err: fmt.Errorf("Python worker error ID %q does not match request %q", message.RequestID, requestID), fatal: true}
+					resultChannel <- workerRoundTrip{err: fmt.Errorf("python worker error ID %q does not match request %q", message.RequestID, requestID), fatal: true}
 					return
 				}
 				fatal := message.Code == "protocol_error"
@@ -557,7 +557,7 @@ func (w *pythonWorker) do(ctx context.Context, requestID string, request any) wo
 		w.terminate()
 		return workerRoundTrip{err: ctx.Err(), fatal: true}
 	case <-w.waitDone:
-		return workerRoundTrip{err: w.startError(errors.New("Python worker exited during request")), fatal: true}
+		return workerRoundTrip{err: w.startError(errors.New("python worker exited during request")), fatal: true}
 	}
 }
 
@@ -608,14 +608,14 @@ func protocolRequestID(request any) (string, error) {
 		return "", fmt.Errorf("decode Python worker request envelope: %w", err)
 	}
 	if strings.TrimSpace(envelope.RequestID) == "" {
-		return "", errors.New("Python worker request ID cannot be empty")
+		return "", errors.New("python worker request ID cannot be empty")
 	}
 	return envelope.RequestID, nil
 }
 
 func validateSharedValue(contextValue map[string]any) error {
 	if contextValue == nil {
-		return errors.New("Python hook context cannot be nil")
+		return errors.New("python hook context cannot be nil")
 	}
 	shared, ok := contextValue["shared"]
 	if !ok || shared == nil {
