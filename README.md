@@ -62,7 +62,7 @@ Start the proxy and configure your client to use `127.0.0.1:8080` by default. Ne
 
 ### Requirements
 
-- Go 1.27 or newer
+- Go 1.27.2 or newer
 - Node.js 24 LTS (24.21+; the version used by CI is pinned in `.node-version`)
 - npm (bundled with Node.js), Wails v3 CLI (`wails3`), and preferably Task (`task`)
 
