@@ -1276,7 +1276,6 @@
     "reset_application_progress_description": "Please wait.",
     "reset_startup_title": "Restoring Initial State",
     "reset_startup_storage": "Clear app data",
-    "reset_startup_webview": "Clear browser data",
     "reset_startup_temporary": "Clear temporary files",
     "reset_startup_initializing": "Initialise app",
     "reset_application_ready": "Restart FlowLens",

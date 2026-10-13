@@ -1276,7 +1276,6 @@
     "reset_application_progress_description": "请稍候。",
     "reset_startup_title": "正在恢复初始状态",
     "reset_startup_storage": "清理应用数据",
-    "reset_startup_webview": "清理浏览器数据",
     "reset_startup_temporary": "清理临时文件",
     "reset_startup_initializing": "初始化应用",
     "reset_application_ready": "请重启 FlowLens",

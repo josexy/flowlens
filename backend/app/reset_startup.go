@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,8 +21,8 @@ import (
 
 const resetStartupEnvironment = "FLOWLENS_RESET_STARTUP_DIR"
 
-// The UI has its own process and WebView profile. The application process keeps
-// the single-instance lock and opens no database until cleanup has succeeded.
+// The UI has its own process. The application process keeps the single-instance
+// lock and opens no database until cleanup has succeeded.
 type resetStartupSnapshot struct {
 	appservice.ResetStartupState
 	Token     string `json:"token"`
@@ -88,7 +87,7 @@ func readResetStartupJSON(directory, name string, value any) error {
 	return decoder.Decode(value)
 }
 
-// Reset errors use the same isolated WebView as cleanup. Nothing after this
+// Reset errors use the same startup window as cleanup. Nothing after this
 // function may open the database until a valid pending reset has been cleaned.
 func prepareResetStartup() (*resetManifest, *resetStartupClient, error) {
 	for {
@@ -239,9 +238,6 @@ func resetStartupStages(manifest *resetManifest) []string {
 		return nil
 	}
 	stages := []string{"storage"}
-	if runtime.GOOS == "windows" {
-		stages = append(stages, "webview")
-	}
 	if len(manifest.UpdateStaging) > 0 {
 		stages = append(stages, "temporary")
 	}

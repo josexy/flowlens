@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -174,9 +173,6 @@ func TestResetStartupRevalidatesMarkerAfterUIStartup(t *testing.T) {
 func TestResetStartupStagesIncludeOnlyApplicableCleanup(t *testing.T) {
 	manifest := resetTestManifest()
 	expected := []string{"storage"}
-	if runtime.GOOS == "windows" {
-		expected = append(expected, "webview")
-	}
 	if got := resetStartupStages(manifest); !reflect.DeepEqual(got, append(append([]string{}, expected...), "initializing")) {
 		t.Fatalf("stages without temporary files: %v", got)
 	}
@@ -261,6 +257,7 @@ func TestResetCancellationInterruptsBackoff(t *testing.T) {
 func TestResetProgressStagesBeforeRemoval(t *testing.T) {
 	resetTestStorage(t)
 	manifest := resetTestManifest()
+	manifest.UpdateStaging = []string{filepath.Join(os.TempDir(), "wails-update-progress")}
 	paths, err := resetCleanupPaths(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +271,7 @@ func TestResetProgressStagesBeforeRemoval(t *testing.T) {
 		removed = append(removed, path)
 		return nil
 	}, 1, 0, func(stage string) { stages = append(stages, stage) })
-	if err != nil || !reflect.DeepEqual(removed, paths) || stages[0] != "storage" {
+	if err != nil || !reflect.DeepEqual(removed, paths) || !reflect.DeepEqual(stages, []string{"storage", "temporary"}) {
 		t.Fatalf("progress cleanup: %v %v %v", removed, stages, err)
 	}
 }

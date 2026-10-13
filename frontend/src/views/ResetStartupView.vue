@@ -14,7 +14,7 @@ let timer: ReturnType<typeof setTimeout> | null = null
 let disposed = false
 const stageKey = computed(() => {
   const stage = state.value?.stage
-  return stage === 'storage' || stage === 'webview' || stage === 'temporary' || stage === 'initializing'
+  return stage === 'storage' || stage === 'temporary' || stage === 'initializing'
     ? `settings.reset_startup_${stage}`
     : 'settings.reset_application_progress_description'
 })
@@ -78,7 +78,7 @@ onMounted(async () => {
   if (!disposed) {
     try {
       await Show()
-      // RAF is throttled while the WebView is hidden. Show first, then allow
+      // RAF is throttled while the window is hidden. Show first, then allow
       // a painted frame before authorising the parent to delete any data.
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
       if (disposed) return

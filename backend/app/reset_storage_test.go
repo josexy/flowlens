@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"syscall"
 	"testing"
 
@@ -32,7 +31,7 @@ func resetTestStorage(t *testing.T) string {
 }
 
 func resetTestManifest() *resetManifest {
-	return &resetManifest{Version: 1, Phase: resetPending, Token: uuid.NewString(), Language: "zh", ExecutableName: "flowlens.exe"}
+	return &resetManifest{Version: 1, Phase: resetPending, Token: uuid.NewString(), Language: "zh"}
 }
 
 func writeResetTestFile(t *testing.T, path string) {
@@ -97,9 +96,6 @@ func TestResetClearsManagedDataAndRecreatesFirstRunDefaults(t *testing.T) {
 	external := filepath.Join(filepath.Dir(base), "external", "certificate.crt")
 	writeResetTestFile(t, external)
 	manifest := resetTestManifest()
-	if runtime.GOOS == "windows" {
-		writeResetTestFile(t, filepath.Join(filepath.Dir(base), manifest.ExecutableName, "profile-data"))
-	}
 	if err := saveResetManifest(manifest); err != nil {
 		t.Fatal(err)
 	}
@@ -195,10 +191,65 @@ func TestUncommittedResetNeverDeletesFiles(t *testing.T) {
 	}
 }
 
+func TestResetIgnoresUnusedMarkerMetadata(t *testing.T) {
+	base := resetTestStorage(t)
+	writeResetTestFile(t, filepath.Join(base, "flowlens.db"))
+	external := filepath.Join(filepath.Dir(base), "external", "data.txt")
+	writeResetTestFile(t, external)
+	manifest := resetTestManifest()
+	if err := saveResetManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	root, err := resetDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	fields["unusedMetadata"] = filepath.Dir(external)
+	data, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := loadResetManifest()
+	if err != nil || !reflect.DeepEqual(pending, manifest) {
+		t.Fatalf("unused metadata changed the reset: %+v %v", pending, err)
+	}
+	if err := cleanResetData(pending, os.RemoveAll, 1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(base); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("managed storage remains: %v", err)
+	}
+	if _, err := os.Stat(external); err != nil {
+		t.Fatalf("unused metadata authorised deleting external data: %v", err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields = nil
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["unusedMetadata"]; ok {
+		t.Fatal("unused metadata was persisted after cleanup")
+	}
+}
+
 func TestResetRejectsUnsafeMarkerPaths(t *testing.T) {
 	resetTestStorage(t)
 	for _, mutate := range []func(*resetManifest){
-		func(m *resetManifest) { m.ExecutableName = "../external" },
 		func(m *resetManifest) { m.UpdateStaging = []string{os.TempDir()} },
 		func(m *resetManifest) { m.UpdateStaging = []string{filepath.Join(t.TempDir(), "wails-update-fake")} },
 		func(m *resetManifest) { m.Token = "../../external" },

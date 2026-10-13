@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -187,7 +186,7 @@ func Run(assets Assets) {
 	}
 	if resetErr != nil {
 		if !errors.Is(resetErr, context.Canceled) {
-			// If the progress process or WebView cannot start, preserve the
+			// If the progress process or window cannot start, preserve the
 			// marker and exit without opening SQLite or ordinary services.
 			reportStartupFailure("restore initial state", resetErr)
 		}
@@ -594,13 +593,9 @@ func Run(assets Assets) {
 		}
 		defer guard.Cancel()
 		appservice.CancelUpdateForReset(appSvc)
-		executable, err := os.Executable()
-		if err != nil {
-			return err
-		}
 		manifest := &resetManifest{
 			Version: 1, Phase: resetPrepared, Token: uuid.NewString(),
-			Language: language, ExecutableName: filepath.Base(executable),
+			Language:      language,
 			UpdateStaging: resetUpdateStaging(app.Updater.DownloadedPath()),
 		}
 		if err := saveResetManifest(manifest); err != nil {

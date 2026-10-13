@@ -41,7 +41,6 @@ func runResetStartupWindow(assets Assets) {
 		Name: "FlowLens", Icon: assets.AppIcon,
 		Assets: application.AssetOptions{Handler: application.BundledAssetFileServer(assets.Frontend)},
 		Windows: application.WindowsOptions{
-			WebviewUserDataPath:           filepath.Join(directory, "webview"),
 			DisableQuitOnLastWindowClosed: true,
 		},
 		Mac:   application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},

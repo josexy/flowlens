@@ -26,12 +26,11 @@ const (
 // The marker lives outside the data directory so partial deletion cannot erase
 // the user's confirmed intent. It contains no arbitrary data-directory override.
 type resetManifest struct {
-	Version        int      `json:"version"`
-	Phase          string   `json:"phase"`
-	Token          string   `json:"token"`
-	Language       string   `json:"language"`
-	ExecutableName string   `json:"executableName"`
-	UpdateStaging  []string `json:"updateStaging,omitempty"`
+	Version       int      `json:"version"`
+	Phase         string   `json:"phase"`
+	Token         string   `json:"token"`
+	Language      string   `json:"language"`
+	UpdateStaging []string `json:"updateStaging,omitempty"`
 }
 
 func resetDirectory() (string, error) {
@@ -51,12 +50,6 @@ func validateResetManifest(manifest *resetManifest) error {
 	}
 	if manifest.Language != "zh" && manifest.Language != "en" {
 		return errors.New("invalid application reset language")
-	}
-	if !filepath.IsLocal(manifest.ExecutableName) || filepath.Base(manifest.ExecutableName) != manifest.ExecutableName || strings.ContainsAny(manifest.ExecutableName, `/\:`) {
-		return errors.New("invalid application reset executable name")
-	}
-	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.Ext(manifest.ExecutableName), ".exe") {
-		return errors.New("invalid application reset Windows executable name")
 	}
 	for _, path := range manifest.UpdateStaging {
 		if !isOwnedUpdateStaging(path) {
@@ -157,7 +150,6 @@ func loadResetManifest() (*resetManifest, error) {
 	defer file.Close()
 	manifest := new(resetManifest)
 	decoder := json.NewDecoder(io.LimitReader(file, 64<<10))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(manifest); err != nil {
 		return nil, err
 	}
@@ -205,11 +197,6 @@ func resetCleanupPaths(manifest *resetManifest) ([]string, error) {
 		return nil, errors.New("invalid application reset storage root")
 	}
 	paths := []string{base}
-	if runtime.GOOS == "windows" {
-		// This is Wails beta.26's default WebView2 profile. It is distinct
-		// from FlowLens's managed storage and is released after process exit.
-		paths = append(paths, filepath.Join(filepath.Dir(base), manifest.ExecutableName))
-	}
 	paths = append(paths, manifest.UpdateStaging...)
 	return paths, nil
 }
@@ -245,8 +232,6 @@ func cleanResetDataWithProgress(ctx context.Context, manifest *resetManifest, re
 			stage := "temporary"
 			if index == 0 {
 				stage = "storage"
-			} else if runtime.GOOS == "windows" && index == 1 {
-				stage = "webview"
 			}
 			progress(stage)
 		}

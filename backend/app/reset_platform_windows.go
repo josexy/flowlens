@@ -11,7 +11,7 @@ import (
 
 func configureResetStartupCommand(command *exec.Cmd) {
 	// HideWindow supplies SW_HIDE through STARTUPINFO, overriding the helper's
-	// first ShowWindow call. Suppress only the console, not the progress WebView.
+	// first ShowWindow call. Suppress only the console, not the progress window.
 	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
