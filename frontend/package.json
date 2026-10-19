@@ -34,7 +34,7 @@
     "@guolao/vue-monaco-editor": "^1.6.0",
     "@nuxt/ui": "^4.11.1",
     "@tanstack/vue-virtual": "^3.13.31",
-    "@wailsio/runtime": "^3.0.0-beta.26",
+    "@wailsio/runtime": "3.0.0-beta.32",
     "dompurify": "^3.4.16",
     "marked": "^17.0.6",
     "monaco-editor": "^0.56.0",

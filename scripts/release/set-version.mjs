@@ -156,7 +156,7 @@ function updateWindowsInfo(relativePath) {
   const text = readText(relativePath);
   const json = JSON.parse(text);
 
-  if (!json.fixed || !json.info || !json.info["0000"]) {
+  if (!json.fixed || !json.info || !json.info["0409"]) {
     throw new Error(
       `${relativePath}: expected fixed/info metadata was not found`,
     );
@@ -178,13 +178,13 @@ function updateWindowsInfo(relativePath) {
     assertEqual(
       relativePath,
       "FileVersion",
-      json.info["0000"].FileVersion,
+      json.info["0409"].FileVersion,
       displayVersion,
     );
     assertEqual(
       relativePath,
       "ProductVersion",
-      json.info["0000"].ProductVersion,
+      json.info["0409"].ProductVersion,
       displayVersion,
     );
     logOk(relativePath, "Windows version metadata");
@@ -193,8 +193,8 @@ function updateWindowsInfo(relativePath) {
 
   json.fixed.file_version = windowsFixedVersion;
   json.fixed.product_version = windowsFixedVersion;
-  json.info["0000"].FileVersion = displayVersion;
-  json.info["0000"].ProductVersion = displayVersion;
+  json.info["0409"].FileVersion = displayVersion;
+  json.info["0409"].ProductVersion = displayVersion;
   writeJson(relativePath, json, text);
   logUpdated(relativePath, "Windows version metadata");
 }

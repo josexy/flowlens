@@ -19,9 +19,9 @@ func canSelfUpdatePath(goos, executable, programFiles, programFilesX86 string) b
 		// the release manually instead.
 		return !pathWithinAny(goos, executable, "/Volumes")
 	case "linux":
-		// Wails beta.26 replaces os.Executable(), which is inside the read-only
-		// mount for AppImages. The release also has no raw Linux binary suitable
-		// for replacing an unpackaged executable. Keep both on manual updates.
+		// Keep Linux on manual updates until AppImage target eligibility and
+		// replacement recovery are validated. Other Linux installations have no
+		// raw binary release artifact suitable for replacing their executable.
 		return false
 	default:
 		return true
