@@ -92,7 +92,7 @@ The embedded frontend dev server uses port `9245` by default. Override it with `
 
 - [User Guide](docs/user-guide.md) — request editing, rewrite rules, shortcuts, system proxy, DNS cache, HAR, process attribution, logs, storage, and certificates
 - [HTTP Rewrite Rules](docs/technical/http-rewrite-rules.md) — execution, limits, and lifecycle
-- [Python Plugin Guide](docs/technical/python-plugins.md) · [简体中文](docs/technical/python-plugins.zh-CN.md)
+- [Python Plugin Guide](docs/technical/python-plugins.md) · [简体中文](docs/technical/python-plugins.zh-CN.md) — open API Help from the Python Plugins sidebar or Request Editor Script toolbar to search APIs and copy a complete system prompt for either scripting scope.
 - [Python Plugin Examples](docs/examples/python-plugins)
 - [Platform Build and Packaging](build/README.md)
 - [Contributing Guide](CONTRIBUTING.md)

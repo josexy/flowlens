@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { PythonHelpScope } from '@/utils/pythonPluginApiCatalog'
 
 export type WorkspaceSection =
   | 'capture'
@@ -23,6 +24,15 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const activeSection = ref<WorkspaceSection>('capture')
   const secondarySidebarVisible = ref(true)
   const activeContent = ref<ContentSurface>('traffic')
+  const pythonHelpScope = ref<PythonHelpScope | null>(null)
+
+  function openPythonHelp(scope: PythonHelpScope) {
+    pythonHelpScope.value = scope
+  }
+
+  function closePythonHelp() {
+    pythonHelpScope.value = null
+  }
   const sectionSelections = ref<SectionSelections>({
     capture: 'capture',
     category: 'category:panel',
@@ -115,6 +125,9 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activeSection,
     secondarySidebarVisible,
     activeContent,
+    pythonHelpScope,
+    openPythonHelp,
+    closePythonHelp,
     sectionSelections,
     activateSection,
     hideSecondarySidebar,

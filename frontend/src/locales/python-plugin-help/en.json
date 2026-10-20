@@ -1,0 +1,341 @@
+{
+  "title": "Python API Help",
+  "version": "SDK API v1 · Python 3.11+",
+  "quickstart": "Quick start",
+  "reference": "API reference",
+  "copy_context": "Copy system prompt",
+  "copy_template": "Copy template",
+  "copied_context": "System prompt copied",
+  "copied_template": "Code copied",
+  "copy_failed": "Could not copy: {error}",
+  "search": "Search APIs or descriptions",
+  "no_results": "No matching APIs",
+  "no_results_hint": "Try a type, method or another keyword.",
+  "readonly": "Read-only",
+  "writable": "Writable",
+  "method": "Method",
+  "constructor": "Constructor",
+  "hook": "Hook",
+  "importable": "SDK import",
+  "provided": "Runtime-provided",
+  "provided_hint": "Access these views through the provided objects; do not import or construct them. Context can be imported for annotations; its instance is supplied by the runtime. ReadonlyMapping and JsonObject label read-only mappings and ordinary dicts; they are not flowlens types.",
+  "minimal_template": "Minimal script",
+  "global": "Global plugin",
+  "inline": "Current-request script",
+  "scope_global": "Edit main.py in Python Plugins, save and validate it, then enable the plugin and at least one matching rule. Enable Python in Settings and global plugins in Request Editor. Params is a JSON object read through context.params. Multiple matching rules still run a plugin only once.",
+  "scope_inline": "Open Script in HTTP Request Editor, edit the script and enable its switch. Configure Python in Settings first. There are no matching rules or configurable params; context.params is empty. API Collection saves source, but reopening leaves the script disabled. Each send has isolated module state.",
+  "usage_notes": "Usage notes",
+  "import_notes": "Types and imports",
+  "runtime_details": "Runtime rules and limits",
+  "runtime_summary": {
+    "scope": "Runs only in HTTP Request Editor, with your user permissions.",
+    "state": "Parameters and transport settings are read-only. context.shared lasts for one plugin and send.",
+    "body": "Replace request.body or response.body; reassign JSON after editing it. Prefer files for large bodies.",
+    "sse": "SSE allows only status code and header edits.",
+    "runtime": "The SDK is built in. Install extra dependencies in the selected Python. Synchronous hooks have a time limit."
+  },
+  "start": {
+    "ai_hint": "Click “Copy system prompt”, paste it into an AI tool and add your requirement to generate a script.",
+    "runtime": {
+      "title": "Set up Python",
+      "text": "Select Python 3.11+ in Settings and enable it."
+    },
+    "global": {
+      "edit": {
+        "title": "Write main.py",
+        "text": "Edit the file in Python Plugins, then save and validate."
+      },
+      "enable": {
+        "title": "Enable and send",
+        "text": "Enable the plugin and a matching rule, then turn on global plugins in Request Editor."
+      }
+    },
+    "inline": {
+      "edit": {
+        "title": "Write your script",
+        "text": "Paste the code into the current request's Script tab."
+      },
+      "enable": {
+        "title": "Enable and send",
+        "text": "Turn on the script switch and send. Enable it again when reopening the request."
+      }
+    },
+    "essentials_title": "Before you write",
+    "essentials": {
+      "hooks": "Keep both hooks. Modify and return the provided object; return None to block.",
+      "order": "Requests: global plugins → current script → network. Responses run in reverse.",
+      "failures": "Request hook errors stop sending. Response hook errors keep the original response.",
+      "console": "Use print() or context.log and view the output in Console."
+    }
+  },
+  "group_summaries": {
+    "Hooks": "Request and response entry points",
+    "Context": "Parameters, shared state and logs",
+    "Request": "Edit the request",
+    "Response": "Edit the response",
+    "Headers": "Ordered request and response headers",
+    "Queries": "URL query parameters",
+    "Body": "Read and replace the body",
+    "ContextLogger": "Write log messages",
+    "RequestSnapshot": "Read-only request behind a response",
+    "BodySnapshot": "Read-only body",
+    "FrozenHeaders": "Read-only headers",
+    "FrozenQueries": "Read-only query parameters",
+    "HeaderField": "One header field",
+    "QueryField": "One query parameter",
+    "FileDescriptor": "File source",
+    "FileSnapshot": "Read-only file details",
+    "URLEncodedField": "URL-encoded form field",
+    "URLEncodedFieldSnapshot": "Read-only URL-encoded form field",
+    "MultipartPart": "Text and file form parts",
+    "MultipartPartSnapshot": "Read-only multipart form part",
+    "ReadonlyMapping": "Read-only parameter mapping",
+    "JsonObject": "Shared state dictionary"
+  },
+  "reference_notes": {
+    "Hooks": "Define both synchronous hooks. Modify and return the provided object, or return None to block.",
+    "Context": "params and transport are deeply read-only. shared connects this plugin's two hooks for one send.",
+    "ContextLogger": "View output in this send's Console. Use context.log or print(); do not write directly to process stdout.",
+    "Request": "url, path and queries stay in sync; methods must be uppercase. The backend manages Host; a non-empty Body sets Content-Type.",
+    "Response": "Edits affect editor presentation only. SSE allows code and headers edits, but no body or trailer edits.",
+    "Headers": "Preserves order, duplicates, casing and empty values; lookup ignores case. Indexing and iteration yield HeaderField.",
+    "Queries": "Preserves order, duplicates and empty values; names are case-sensitive. Name lookup returns the first value. Edits encode spaces as +.",
+    "Body": "kind and value are read-only; replace request.body or response.body. Reassign edited JSON; prefer write_file() for large bodies.",
+    "FileDescriptor": "Use from_file(absolute_path) with a regular, non-symlink file after closing its writer. A path string alone becomes text.",
+    "MultipartPart": "Request-only. Keep file sources until the hook returns; filename can differ from the source name.",
+    "RequestSnapshot": "response.request may be None. The snapshot and all nested values are read-only.",
+    "BodySnapshot": "The body and nested values are read-only. Export with write_file(absolute_path); unavailable bodies cannot be read.",
+    "FrozenHeaders": "Read-only; preserves order, duplicates, casing and empty values. Lookup ignores case; iteration yields (name, value).",
+    "FrozenQueries": "Read-only; preserves order, duplicates and empty values. Names are case-sensitive; name lookup returns the first value. Iteration yields (name, value).",
+    "ReadonlyMapping": "Deeply read-only, including nested values. JSON arrays become tuples.",
+    "JsonObject": "Use a JSON-serializable dict, shared only within this plugin and send."
+  },
+  "prompt_intro": "Write a Python 3.11+ script for FlowLens HTTP Request Editor using SDK API v1. Use only the documented FlowLens API below.",
+  "prompt_rules": "Runtime contract",
+  "prompt_api": "Complete API reference",
+  "prompt_template": "Minimal script",
+  "prompt_output": "Output requirements",
+  "prompt_output_text": "Return a complete runnable script with both synchronous hooks, using the existing request/response objects. Prefer the Python standard library. If an external dependency is necessary, list it and explain installation into the selected interpreter. Do not invent APIs, install flowlens, or rely on internal Worker/storage interfaces. Briefly explain how to enable the script and any required configuration.",
+  "prompt_requirement": "My requirement",
+  "prompt_placeholder": "Describe the matching conditions, request/response changes, inputs and expected outputs here.",
+  "rules": {
+    "hooks": {
+      "title": "Hook contract",
+      "text": "Both synchronous hooks are required: onRequest(context, request) and onResponse(context, response). Modify and return the same SDK object received, or return None to block. Do not use async def or return a new Request or Response."
+    },
+    "order": {
+      "title": "Scope and execution order",
+      "text": "Hooks run only in HTTP Request Editor, excluding ordinary MITM capture, resend and WebSocket Client. Request order is global plugins → current-request script → network; responses run in reverse. Global plugins are matched once against the original method and full URL, in plugin-list order."
+    },
+    "failures": {
+      "title": "Blocking and failures",
+      "text": "Returning None from onRequest blocks before transport; returning None from onResponse suppresses the response presentation, and for SSE blocks before streaming. Request errors fail closed. Response errors fail open and return the untouched wire response with diagnostics. Response edits change editor presentation, not captured wire data or transport metrics."
+    },
+    "state": {
+      "title": "Parameters and shared state",
+      "text": "context.params and context.transport are deeply read-only mappings; JSON arrays become tuples. transport contains protocol, proxy_mode, tls_client_hello_profile and http2_fingerprint, without proxy credentials. context.shared must remain a JSON object, isolated to one plugin and send; use it across request/response hooks, not module globals. Params and shared each have a 1 MiB encoded limit."
+    },
+    "headers": {
+      "title": "Headers and queries",
+      "text": "Headers preserves order, duplicate names, original casing and empty values; lookup is case-insensitive. Queries preserves order, duplicates and empty values; names are case-sensitive. Both support iteration and len(). Mutable iteration yields HeaderField or QueryField; frozen views yield (name, value) tuples. A changed query uses standard URL encoding; spaces become +. Headers[index] reads a field. Queries[index] reads a field; Queries[name] reads the first value and Queries[name] = value calls set(). FrozenQueries[index] returns a tuple and FrozenQueries[name] returns the first value."
+    },
+    "routing": {
+      "title": "URL and generated headers",
+      "text": "request.url controls routing. Assigning url reparses path and queries; changing path or queries rebuilds url. Methods must stay uppercase. Host, pseudo-headers, framing and generated request headers remain backend-owned. content_type is read-only. A non-empty request Body determines outgoing Content-Type; clearing the Body does not remove an existing Content-Type. Modify response Content-Type through response.headers."
+    },
+    "body": {
+      "title": "Body kinds and replacement",
+      "text": "Body.kind and Body.value cannot be reassigned. Kinds: none → None; text/xml → str; json → decoded JSON; binary → bytes; file → FileDescriptor; urlencoded → list[URLEncodedField]; multipart → list[MultipartPart]; unavailable → reads raise ValueError. Replace request.body or response.body directly: None clears it, str is UTF-8 text, bytes/bytearray/memoryview is binary, dict/list is JSON, or use Body(kind, value). Other direct values raise TypeError. Modify JSON then assign it back. Structured form items remain mutable."
+    },
+    "files": {
+      "title": "Files and memory",
+      "text": "Reading body.value may load the entire Body into memory. body.write_file(absolute_path) copies raw ordinary/file bytes without materializing them; urlencoded and multipart are unsupported. Use Body(kind, FileDescriptor.from_file(absolute_path)) for file-based replacement; paths must be non-symlink regular files with writers closed. Descriptor kinds are text/json/xml/binary and request-only file. A path string alone is text. Owner assignment copies the source immediately; new multipart file sources must survive until the hook returns. file and multipart are request-only. Multipart filename is independent of the source name."
+    },
+    "snapshots": {
+      "title": "Read-only request snapshots",
+      "text": "response.request is the semantic request handed to transport, or None. RequestSnapshot, BodySnapshot, FrozenHeaders, FrozenQueries, FileSnapshot and form snapshots are runtime-provided views, not SDK imports. Snapshot values are deeply immutable. FileSnapshot exposes name and size, without a path. Use snapshot.body.write_file(absolute_path) to copy a readable Body."
+    },
+    "sse": {
+      "title": "SSE",
+      "text": "SSE hooks run after status and headers arrive, before events start. response.body.kind is unavailable. Only response.code and response.headers may be changed; Body and trailer edits are rejected. SSE chunks never pass through Python."
+    },
+    "limits": {
+      "title": "Runtime and dependencies",
+      "text": "Python 3.11+ is required. FlowLens supplies the flowlens SDK; do not pip install it. Third-party dependencies must be installed in the selected interpreter, manually. Hooks are synchronous; blocking I/O counts toward the configured 100–60,000 ms deadline. Current-request source is limited to 1 MiB. A managed source file is limited to 32 MiB and a plugin package to 64 MiB. Worker frames are bounded at 64 MiB; timeout, cancellation, crash or protocol corruption replaces the Worker."
+    },
+    "console": {
+      "title": "Output and trust",
+      "text": "Use context.log.debug/info/warning/error or print(). Output appears in the current send’s Console, correlated by execution ID. Do not write directly to process stdout or let child processes inherit stdout: this corrupts the Worker protocol. Plugins are trusted local code with normal user permissions; isolated Python mode is not a sandbox. Avoid logging credentials or bodies."
+    }
+  },
+  "members": {
+    "Context": {
+      "id": "Execution ID.",
+      "timestamp": "Send start time in Unix microseconds.",
+      "original_url": "Original URL before the hook chain.",
+      "original_method": "Original method before the hook chain.",
+      "plugin_id": "Current plugin ID.",
+      "plugin_name": "Current plugin name.",
+      "params": "Deeply read-only parameters for the current plugin.",
+      "transport": "Read-only transport settings for this script execution.",
+      "shared": "JSON object shared between request and response hooks of this plugin.",
+      "log": "Structured logger for the current execution console."
+    },
+    "ContextLogger": {
+      "debug": "Log a debug message.",
+      "info": "Log an informational message.",
+      "warning": "Log a warning message.",
+      "error": "Log an error message."
+    },
+    "Request": {
+      "method": "Mutable request method.",
+      "url": "Mutable request URL.",
+      "scheme": "Read-only request URL scheme.",
+      "host": "Read-only request URL host.",
+      "port": "Read-only request URL port.",
+      "path": "Mutable request URL path.",
+      "queries": "Mutable query parameters preserving order and duplicates.",
+      "content_type": "Read-only Content-Type view; the outgoing value is generated from the final request body kind.",
+      "headers": "Mutable ordered request headers.",
+      "body": "Request body; direct replacement is supported."
+    },
+    "RequestSnapshot": {
+      "method": "Read-only request method associated with the response.",
+      "url": "Read-only request URL associated with the response.",
+      "scheme": "Read-only request URL scheme.",
+      "host": "Read-only request URL host.",
+      "port": "Read-only request URL port.",
+      "path": "Read-only request URL path.",
+      "queries": "Read-only query parameters preserving order and duplicates.",
+      "content_type": "Content-Type of the associated request.",
+      "headers": "Read-only request headers associated with the response.",
+      "body": "Semantic read-only request body snapshot associated with the response."
+    },
+    "Response": {
+      "code": "Mutable response status code.",
+      "protocol": "Read-only protocol actually used by the upstream response.",
+      "status_text": "Read-only status text including the code; updated when code changes.",
+      "content_type": "Read-only Content-Type view; modify response headers explicitly when needed.",
+      "headers": "Mutable ordered response headers.",
+      "trailers": "Mutable ordered response trailers.",
+      "body": "Response body; unavailable for SSE responses.",
+      "request": "Read-only snapshot of the request that produced this response."
+    },
+    "Headers": {
+      "get": "Return the first header with this name.",
+      "get_all": "Return all matching headers in wire order.",
+      "set": "Replace all matching headers while preserving the first position.",
+      "add": "Append a header field.",
+      "remove": "Remove all matching headers.",
+      "clear": "Remove all headers."
+    },
+    "FrozenHeaders": {
+      "get": "Return the first header with this name.",
+      "get_all": "Return all matching headers in wire order."
+    },
+    "Queries": {
+      "get": "Return the first query value with this name.",
+      "get_all": "Return all matching query values in order.",
+      "set": "Replace all matching query values while preserving the first position.",
+      "add": "Append a query field.",
+      "remove": "Remove all matching query fields.",
+      "clear": "Remove all query fields.",
+      "to_string": "Encode as a URL query string."
+    },
+    "FrozenQueries": {
+      "get": "Return the first query value with this name.",
+      "get_all": "Return all matching query values in order.",
+      "to_string": "Return the original URL query string."
+    },
+    "Body": {
+      "kind": "Kinds: none (empty), text, json, xml, binary; request-only: file, urlencoded, multipart; SSE responses: unavailable (body cannot be read or changed).",
+      "value": "Read-only materialized body value.",
+      "write_file": "Stream a regular body to an absolute path."
+    },
+    "BodySnapshot": {
+      "kind": "Read-only semantic body kind.",
+      "value": "Read-only semantic body value; file values do not expose internal paths.",
+      "write_file": "Stream a regular body snapshot to an absolute path."
+    },
+    "QueryField": {
+      "name": "Query field name.",
+      "value": "Query field value."
+    },
+    "HeaderField": {
+      "name": "Header name.",
+      "value": "Header value."
+    },
+    "FileDescriptor": {
+      "path": "Absolute file path.",
+      "name": "File name.",
+      "size": "File size in bytes.",
+      "read_only": "Whether the file is read-only."
+    },
+    "FileSnapshot": {
+      "name": "Read-only original file name.",
+      "size": "Read-only file size in bytes."
+    },
+    "FileDescriptorClass": {
+      "from_file": "Create a safe file descriptor from an absolute path."
+    },
+    "URLEncodedField": {
+      "enabled": "Whether the field is enabled.",
+      "name": "Field name.",
+      "value": "Field value."
+    },
+    "URLEncodedFieldSnapshot": {
+      "enabled": "Whether the field is enabled.",
+      "name": "Read-only field name.",
+      "value": "Read-only field value."
+    },
+    "MultipartPart": {
+      "enabled": "Whether the part is enabled.",
+      "name": "Part name.",
+      "value": "Text part value.",
+      "file": "Descriptor for a file part.",
+      "filename": "Independent filename used by Content-Disposition."
+    },
+    "MultipartPartSnapshot": {
+      "enabled": "Whether the part is enabled.",
+      "name": "Read-only part name.",
+      "value": "Read-only text part value.",
+      "file": "File snapshot without an exposed internal path.",
+      "filename": "Read-only part filename."
+    },
+    "ReadonlyMapping": {
+      "get": "Read a value by key.",
+      "keys": "Return all keys.",
+      "items": "Return all key-value pairs.",
+      "values": "Return all values."
+    },
+    "JsonObject": {
+      "get": "Read a shared value.",
+      "keys": "Return all shared keys.",
+      "items": "Return all shared key-value pairs.",
+      "values": "Return all shared values.",
+      "setdefault": "Read a key or insert its default value.",
+      "update": "Update shared values.",
+      "pop": "Remove and return a shared value; without a default, a missing key raises KeyError.",
+      "clear": "Remove all shared values."
+    }
+  },
+  "constructors": {
+    "Body": "Create a body with an explicit semantic kind.",
+    "FileDescriptor": "Describe a FlowLens-managed file; prefer from_file() for user files.",
+    "HeaderField": "Create an ordered header field.",
+    "Queries": "Create query parameters that preserve order and duplicates.",
+    "QueryField": "Create a query field.",
+    "Headers": "Create headers that preserve order and duplicates.",
+    "MultipartPart": "Create a multipart text or file part.",
+    "Request": "Create a request object. Hooks normally modify the provided request.",
+    "Response": "Create a response object. Hooks normally modify the provided response.",
+    "URLEncodedField": "Create a URL-encoded body field."
+  },
+  "hooks": {
+    "onRequest": "Modify the provided request and return it, or return None to block before transport.",
+    "onResponse": "Modify the provided response and return it, or return None to block its presentation."
+  },
+  "parameters": "Parameters",
+  "returns": "Returns",
+  "close": "Close help"
+}

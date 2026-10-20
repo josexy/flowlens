@@ -1,0 +1,341 @@
+{
+  "title": "Python API 帮助",
+  "version": "SDK API v1 · Python 3.11+",
+  "quickstart": "快速上手",
+  "reference": "API 参考",
+  "copy_context": "复制系统提示词",
+  "copy_template": "复制模板",
+  "copied_context": "系统提示词已复制",
+  "copied_template": "代码已复制",
+  "copy_failed": "复制失败：{error}",
+  "search": "搜索 API 名称或说明",
+  "no_results": "没有匹配的 API",
+  "no_results_hint": "试试类型、方法名或其他关键词。",
+  "readonly": "只读",
+  "writable": "可写",
+  "method": "方法",
+  "constructor": "构造器",
+  "hook": "Hook",
+  "importable": "可从 SDK 导入",
+  "provided": "运行时提供",
+  "provided_hint": "通过传入的对象访问这些视图，不要导入或自行构造。 Context 可导入用于类型标注，但实例由运行时传入。ReadonlyMapping 与 JsonObject 是只读映射和普通 dict 的说明标签，不是 flowlens 类型。",
+  "minimal_template": "最小脚本",
+  "global": "全局插件",
+  "inline": "当前请求脚本",
+  "scope_global": "在 Python 插件中编辑 main.py，保存并校验后，启用插件及至少一条匹配规则。在设置中启用 Python，并在请求编辑器中启用全局插件。Params 是通过 context.params 读取的 JSON 对象；多条规则匹配同一插件也只执行一次。",
+  "scope_inline": "在 HTTP 请求编辑器的 Script 页编辑脚本并打开开关，先在设置中配置 Python。此作用域没有匹配规则或可配置参数，context.params 为空。API 集合可以保存源代码，但重新打开时脚本默认关闭。每次发送的模块状态独立。",
+  "usage_notes": "使用说明",
+  "import_notes": "类型与导入说明",
+  "runtime_details": "运行规则与限制",
+  "runtime_summary": {
+    "scope": "仅在 HTTP 请求编辑器运行，具有当前用户权限。",
+    "state": "参数与传输设置只读；context.shared 仅在同一插件的本次发送内共享。",
+    "body": "替换 request.body 或 response.body；修改 JSON 后需重新赋回。大型 Body 优先用文件处理。",
+    "sse": "SSE 只能修改状态码和响应头。",
+    "runtime": "SDK 已内置，额外依赖装入所选 Python。同步 Hook 受超时限制。"
+  },
+  "start": {
+    "ai_hint": "点击“复制系统提示词”，粘贴到 AI 工具并补充需求，即可生成脚本。",
+    "runtime": {
+      "title": "配置 Python",
+      "text": "在设置中选择 Python 3.11+ 并启用。"
+    },
+    "global": {
+      "edit": {
+        "title": "编写 main.py",
+        "text": "在 Python 插件中编辑，保存并校验。"
+      },
+      "enable": {
+        "title": "启用并发送",
+        "text": "启用插件及匹配规则，再打开请求编辑器的“全局插件”开关。"
+      }
+    },
+    "inline": {
+      "edit": {
+        "title": "编写脚本",
+        "text": "在当前请求的 Script 页粘贴代码。"
+      },
+      "enable": {
+        "title": "启用并发送",
+        "text": "打开脚本开关后发送请求；重新打开请求时需再次启用。"
+      }
+    },
+    "essentials_title": "编写须知",
+    "essentials": {
+      "hooks": "两个 Hook 都要保留；修改并返回传入对象，返回 None 可阻止处理。",
+      "order": "请求：全局插件 → 当前脚本 → 网络；响应按相反顺序执行。",
+      "failures": "请求 Hook 出错不发送；响应 Hook 出错保留原始响应。",
+      "console": "用 print() 或 context.log 输出，在 Console 查看。"
+    }
+  },
+  "group_summaries": {
+    "Hooks": "请求与响应入口",
+    "Context": "参数、共享状态与日志",
+    "Request": "修改请求",
+    "Response": "修改响应",
+    "Headers": "有序请求头与响应头",
+    "Queries": "URL 查询参数",
+    "Body": "读取与替换 Body",
+    "ContextLogger": "输出日志",
+    "RequestSnapshot": "响应关联的只读请求",
+    "BodySnapshot": "只读 Body",
+    "FrozenHeaders": "只读头字段",
+    "FrozenQueries": "只读查询参数",
+    "HeaderField": "单个头字段",
+    "QueryField": "单个查询参数",
+    "FileDescriptor": "文件来源",
+    "FileSnapshot": "只读文件信息",
+    "URLEncodedField": "URL 编码表单项",
+    "URLEncodedFieldSnapshot": "只读 URL 编码表单项",
+    "MultipartPart": "文本与文件表单项",
+    "MultipartPartSnapshot": "只读 multipart 表单项",
+    "ReadonlyMapping": "只读参数映射",
+    "JsonObject": "共享状态字典"
+  },
+  "reference_notes": {
+    "Hooks": "两个 Hook 均须同步定义，修改并返回传入对象；返回 None 可阻止处理。",
+    "Context": "params 与 transport 深层只读；shared 仅供同一插件、本次发送的两个 Hook 共享。",
+    "ContextLogger": "输出在本次发送的 Console 查看。使用 context.log 或 print()，不要直接写进程 stdout。",
+    "Request": "url、path 与 queries 自动联动；方法须大写。Host 由后端管理，非空 Body 决定 Content-Type。",
+    "Response": "修改仅影响编辑器展示。SSE 只能改 code 和 headers，不能改 Body 或 trailers。",
+    "Headers": "保留顺序、重复项、原始大小写和空值；查找不区分大小写。索引与迭代得到 HeaderField。",
+    "Queries": "保留顺序、重复项和空值，名称区分大小写。按名称取首值；修改后自动编码，空格变为 +。",
+    "Body": "kind、value 只读；替换 request.body 或 response.body。修改 JSON 后需回赋；大型 Body 优先用 write_file() 导出。",
+    "FileDescriptor": "用 from_file(绝对路径) 引用已关闭写入的普通文件（非符号链接）。直接赋路径字符串会作为文本。",
+    "MultipartPart": "仅用于请求。文件源需保留到 Hook 返回；filename 可独立于源文件名。",
+    "RequestSnapshot": "response.request 可能为 None；快照及嵌套值均只读。",
+    "BodySnapshot": "Body 及嵌套值只读；用 write_file(绝对路径) 导出。unavailable 类型不可读取。",
+    "FrozenHeaders": "只读，保留顺序、重复项、大小写和空值；查找不区分大小写。迭代得到 (name, value)。",
+    "FrozenQueries": "只读，名称区分大小写，保留顺序、重复项和空值。按名称取首值；迭代得到 (name, value)。",
+    "ReadonlyMapping": "深层只读，嵌套值不可修改；JSON 数组表现为元组。",
+    "JsonObject": "使用普通 dict，内容须可序列化为 JSON；仅在同一插件的本次发送内共享。"
+  },
+  "prompt_intro": "请为 FlowLens HTTP 请求编辑器编写 Python 3.11+ 脚本，使用 SDK API v1。只使用下面列出的 FlowLens API。",
+  "prompt_rules": "运行约定",
+  "prompt_api": "完整 API 参考",
+  "prompt_template": "最小脚本",
+  "prompt_output": "输出要求",
+  "prompt_output_text": "输出包含两个同步 Hook 的完整可运行脚本，使用传入的请求与响应对象。优先使用 Python 标准库；确需第三方依赖时列明依赖，并说明安装到所选解释器的方法。不要编造 API、安装 flowlens 或依赖 Worker 和存储内部接口。简要说明如何启用脚本及必要配置。",
+  "prompt_requirement": "我的需求",
+  "prompt_placeholder": "请在这里描述匹配条件、请求或响应的修改、输入与预期输出。",
+  "rules": {
+    "hooks": {
+      "title": "Hook 约定",
+      "text": "必须同时定义两个同步 Hook：onRequest(context, request) 和 onResponse(context, response)。修改并返回传入的同一个 SDK 对象，或返回 None 阻止处理。不要使用 async def，也不要返回新建的 Request 或 Response。"
+    },
+    "order": {
+      "title": "作用域与执行顺序",
+      "text": "Hook 仅在 HTTP 请求编辑器中执行，不参与普通 MITM 抓包、重发和 WebSocket 客户端。请求顺序为全局插件 → 当前请求脚本 → 网络，响应按相反顺序执行。全局插件按列表顺序，基于原始方法与完整 URL 匹配一次。"
+    },
+    "failures": {
+      "title": "阻止与失败行为",
+      "text": "onRequest 返回 None 会在发送前阻止请求；onResponse 返回 None 会阻止响应展示，SSE 则在开始流式传输前阻止。请求 Hook 出错时不发送请求；响应 Hook 出错时返回未修改的线上响应并附诊断。响应修改仅影响编辑器展示，不改写抓包数据或传输指标。"
+    },
+    "state": {
+      "title": "参数与共享状态",
+      "text": "context.params 和 context.transport 为深层只读映射，JSON 数组表现为元组。transport 包含 protocol、proxy_mode、tls_client_hello_profile、http2_fingerprint，不含代理凭据。context.shared 必须保持为 JSON 对象，仅供同一插件、同一次发送的两个 Hook 共享；跨阶段状态应使用它，不依赖模块全局变量。Params 和 shared 编码后各不超过 1 MiB。"
+    },
+    "headers": {
+      "title": "请求头与查询参数",
+      "text": "Headers 保留顺序、重复名称、原始大小写和空值，查找不区分大小写。Queries 保留顺序、重复项和空值，名称区分大小写。两者支持迭代和 len()；可变对象迭代得到 HeaderField 或 QueryField，只读视图迭代得到 (name, value) 元组。查询修改后使用标准 URL 编码，空格编码为 +。 Headers[index] 读取字段；Queries[index] 读取字段，Queries[name] 读取首个值，Queries[name] = value 等同于 set()。FrozenQueries[index] 返回元组，FrozenQueries[name] 返回首个值。"
+    },
+    "routing": {
+      "title": "URL 与自动生成的请求头",
+      "text": "request.url 决定路由。给 url 赋值会重新解析 path 和 queries；修改 path 或 queries 会重建 url。请求方法必须保持大写。Host、伪头、消息分帧和自动请求头由后端管理。content_type 为只读；非空请求 Body 决定发送的 Content-Type，清空 Body 不会自动移除已有 Content-Type。响应的 Content-Type 通过 response.headers 修改。"
+    },
+    "body": {
+      "title": "Body 类型与替换",
+      "text": "Body.kind 和 Body.value 不可重新赋值。类型为 none → None；text/xml → str；json → 解码后的 JSON；binary → bytes；file → FileDescriptor；urlencoded → list[URLEncodedField]；multipart → list[MultipartPart]；unavailable → 读取抛出 ValueError。替换 request.body 或 response.body：None 清空，str 为 UTF-8 文本，bytes/bytearray/memoryview 为二进制，dict/list 为 JSON，或显式使用 Body(kind, value)。其他直接赋值类型抛出 TypeError。修改 JSON 后应重新赋回 Body；结构化表单项仍可修改。"
+    },
+    "files": {
+      "title": "文件与内存",
+      "text": "读取 body.value 可能将整个 Body 载入内存。body.write_file(绝对路径) 可以不先载入内存而复制普通或文件 Body 的原始字节，不支持 urlencoded 和 multipart。使用 Body(kind, FileDescriptor.from_file(绝对路径)) 从文件替换内容，源文件须为关闭写入器后的非符号链接普通文件。描述符支持 text/json/xml/binary 和仅请求支持的 file。直接赋路径字符串会得到文本。给 Body 所属对象赋值时立即复制源文件；新增 multipart 文件项的源文件必须保留到 Hook 返回。file 和 multipart 仅用于请求，multipart 的 filename 独立于源文件名。"
+    },
+    "snapshots": {
+      "title": "只读请求快照",
+      "text": "response.request 是交给传输层的请求语义快照，也可能为 None。RequestSnapshot、BodySnapshot、FrozenHeaders、FrozenQueries、FileSnapshot 和表单快照是运行时提供的视图，不作为 SDK 导入。快照的值深层不可变。FileSnapshot 仅提供 name 和 size，不提供路径；通过 snapshot.body.write_file(绝对路径) 复制可读取的 Body。"
+    },
+    "sse": {
+      "title": "SSE",
+      "text": "SSE Hook 在收到状态码和响应头之后、开始转发事件之前执行，response.body.kind 为 unavailable。只允许修改 response.code 和 response.headers；修改 Body 或 trailers 会被拒绝。SSE 事件块不会经过 Python。"
+    },
+    "limits": {
+      "title": "运行环境与依赖",
+      "text": "需要 Python 3.11+。flowlens SDK 由应用提供，不要通过 pip 安装它。第三方依赖须手动安装到所选解释器中。Hook 为同步执行，阻塞 I/O 计入设置中的 100–60,000 ms 超时。当前请求脚本源代码上限为 1 MiB，托管源文件上限为 32 MiB，插件包为 64 MiB。Worker 帧上限为 64 MiB；超时、取消、崩溃或协议损坏会导致 Worker 被替换。"
+    },
+    "console": {
+      "title": "输出与信任",
+      "text": "使用 context.log.debug/info/warning/error 或 print()，输出按执行 ID 显示在本次发送的 Console 中。不要直接写进程 stdout，也不要让子进程继承 stdout，以免破坏 Worker 协议。插件是具有当前用户权限的可信本地代码，Python 隔离模式不是安全沙箱。避免打印凭据或请求体。"
+    }
+  },
+  "members": {
+    "Context": {
+      "id": "请求执行 ID。",
+      "timestamp": "发送开始时间，Unix 微秒时间戳。",
+      "original_url": "进入 Hook 链之前的原始 URL。",
+      "original_method": "进入 Hook 链之前的原始方法。",
+      "plugin_id": "当前插件 ID。",
+      "plugin_name": "当前插件名称。",
+      "params": "当前插件的深层只读参数；JSON 数组表现为元组。",
+      "transport": "深层只读传输设置，不包含代理凭据。",
+      "shared": "同一插件、同一次发送中两个 Hook 共享的 JSON 对象。",
+      "log": "写入当前请求执行 Console 的结构化日志。"
+    },
+    "ContextLogger": {
+      "debug": "记录调试消息。",
+      "info": "记录信息消息。",
+      "warning": "记录警告消息。",
+      "error": "记录错误消息。"
+    },
+    "Request": {
+      "method": "请求方法，必须保持大写。",
+      "url": "完整 URL；可变请求中赋值会重新解析 path 和 queries。",
+      "scheme": "URL 协议，只读。",
+      "host": "URL 主机名，只读。",
+      "port": "URL 端口，只读。",
+      "path": "URL 路径；可变请求中修改后会重建 URL。",
+      "queries": "保留顺序、重复项和空值的查询参数。",
+      "content_type": "Content-Type 的只读视图。非空请求的发送值由最终 Body 类型生成；响应通过 headers 修改。",
+      "headers": "保留顺序、重复项、大小写和空值的请求头。",
+      "body": "语义 Body；通过修改所属 request.body 或 response.body 替换内容。"
+    },
+    "RequestSnapshot": {
+      "method": "关联响应的请求方法，只读。",
+      "url": "关联响应的完整请求 URL，只读。",
+      "scheme": "URL 协议，只读。",
+      "host": "URL 主机名，只读。",
+      "port": "URL 端口，只读。",
+      "path": "关联请求的 URL 路径，只读。",
+      "queries": "保留顺序、重复项和空值的查询参数。",
+      "content_type": "关联请求的 Content-Type，只读。",
+      "headers": "关联请求的只读有序请求头。",
+      "body": "关联请求的深层只读语义 Body 快照。"
+    },
+    "Response": {
+      "code": "响应状态码。",
+      "protocol": "上游响应实际使用的协议，只读。",
+      "status_text": "包含状态码的只读状态文本，修改 code 后自动更新。",
+      "content_type": "Content-Type 的只读视图。非空请求的发送值由最终 Body 类型生成；响应通过 headers 修改。",
+      "headers": "保留顺序、重复项、大小写和空值的请求头。",
+      "trailers": "有序响应尾部字段，SSE 中不可修改。",
+      "body": "语义 Body；通过修改所属 request.body 或 response.body 替换内容。",
+      "request": "产生当前响应的请求只读快照，可能为 None。"
+    },
+    "Headers": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "get_all": "按顺序返回全部同名值。",
+      "set": "替换全部同名值并保留首次匹配的位置，无匹配时追加。",
+      "add": "追加字段，允许重复名称。",
+      "remove": "删除全部匹配名称的字段。",
+      "clear": "清空全部字段或共享状态。"
+    },
+    "FrozenHeaders": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "get_all": "按顺序返回全部同名值。"
+    },
+    "Queries": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "get_all": "按顺序返回全部同名值。",
+      "set": "替换全部同名值并保留首次匹配的位置，无匹配时追加。",
+      "add": "追加字段，允许重复名称。",
+      "remove": "删除全部匹配名称的字段。",
+      "clear": "清空全部字段或共享状态。",
+      "to_string": "返回不含问号的查询字符串；未修改的查询保留原始编码。"
+    },
+    "FrozenQueries": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "get_all": "按顺序返回全部同名值。",
+      "to_string": "返回不含问号的查询字符串；未修改的查询保留原始编码。"
+    },
+    "Body": {
+      "kind": "类型：none（空）、text、json、xml、binary；仅请求：file、urlencoded、multipart；仅 SSE 响应：unavailable（Body 不可读写）。",
+      "value": "语义值，属性不可重新赋值；读取可能载入完整内容，结构化表单项仍可修改。",
+      "write_file": "将可读取的普通或文件 Body 原始字节流式复制到绝对路径，不支持表单 Body。"
+    },
+    "BodySnapshot": {
+      "kind": "Body 的语义类型，只读。",
+      "value": "深层只读语义值；文件只暴露名称和大小。读取大型普通 Body 可能载入完整内容。",
+      "write_file": "将可读取的普通或文件 Body 原始字节流式复制到绝对路径，不支持表单 Body。"
+    },
+    "QueryField": {
+      "name": "查询参数名。",
+      "value": "查询参数值。"
+    },
+    "HeaderField": {
+      "name": "请求头字段名。",
+      "value": "请求头字段值。"
+    },
+    "FileDescriptor": {
+      "path": "文件的绝对路径。",
+      "name": "文件名。",
+      "size": "文件大小，单位为字节。",
+      "read_only": "文件是否只读。"
+    },
+    "FileSnapshot": {
+      "name": "原始文件名，只读。",
+      "size": "文件大小，单位为字节。"
+    },
+    "FileDescriptorClass": {
+      "from_file": "从绝对路径创建文件描述符，必须是关闭写入器后的非符号链接普通文件。"
+    },
+    "URLEncodedField": {
+      "enabled": "字段或表单项是否启用。",
+      "name": "URL 编码表单字段名。",
+      "value": "URL 编码表单字段值。"
+    },
+    "URLEncodedFieldSnapshot": {
+      "enabled": "字段或表单项是否启用。",
+      "name": "URL 编码表单字段名，只读。",
+      "value": "URL 编码表单字段值，只读。"
+    },
+    "MultipartPart": {
+      "enabled": "字段或表单项是否启用。",
+      "name": "multipart 表单项名称。",
+      "value": "文本表单项的值。",
+      "file": "文件表单项的文件描述符；快照不提供路径。",
+      "filename": "Content-Disposition 使用的独立文件名。"
+    },
+    "MultipartPartSnapshot": {
+      "enabled": "字段或表单项是否启用。",
+      "name": "multipart 表单项名称，只读。",
+      "value": "文本表单项的值，只读。",
+      "file": "文件表单项的文件描述符；快照不提供路径。",
+      "filename": "Content-Disposition 使用的独立文件名。"
+    },
+    "ReadonlyMapping": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "keys": "返回全部键。",
+      "items": "返回全部键值对。",
+      "values": "返回全部值。"
+    },
+    "JsonObject": {
+      "get": "返回首个匹配的值，不存在时返回 default。",
+      "keys": "返回全部键。",
+      "items": "返回全部键值对。",
+      "values": "返回全部值。",
+      "setdefault": "读取键，不存在时写入并返回默认值。",
+      "update": "批量更新共享状态。",
+      "pop": "删除并返回共享值；未传入默认值时，缺失的键会引发 KeyError。",
+      "clear": "清空全部字段或共享状态。"
+    }
+  },
+  "constructors": {
+    "Body": "创建指定语义类型的 Body。",
+    "FileDescriptor": "创建文件描述符；用户文件优先使用 from_file()。",
+    "HeaderField": "创建有序请求头字段。",
+    "Queries": "创建保留顺序和重复项的查询参数。",
+    "QueryField": "创建查询字段。",
+    "Headers": "创建保留顺序和重复项的请求头。",
+    "MultipartPart": "创建 multipart 文本或文件表单项。",
+    "Request": "创建请求对象；Hook 必须修改并返回传入的对象。",
+    "Response": "创建响应对象；Hook 必须修改并返回传入的对象。",
+    "URLEncodedField": "创建 URL 编码的表单字段。"
+  },
+  "hooks": {
+    "onRequest": "修改并返回传入的 request，或返回 None 在发送前阻止请求。",
+    "onResponse": "修改并返回传入的 response，或返回 None 阻止响应展示。"
+  },
+  "parameters": "参数",
+  "returns": "返回值",
+  "close": "关闭帮助"
+}

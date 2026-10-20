@@ -1371,19 +1371,31 @@ onBeforeUnmount(() => {
                         :aria-label="t('workspace.http_request.inline_script_enable')"
                       />
                     </div>
-                    <UTooltip :text="t('workspace.word_wrap')">
-                      <UButton
-                        icon="i-lucide-wrap-text"
-                        :color="scriptWordWrap ? 'primary' : 'neutral'"
-                        variant="ghost"
-                        size="sm"
-                        square
-                        class="shrink-0"
-                        :aria-label="t('workspace.word_wrap')"
-                        :aria-pressed="scriptWordWrap"
-                        @click="scriptWordWrap = !scriptWordWrap"
-                      />
-                    </UTooltip>
+                    <div class="flex items-center gap-1">
+                      <UTooltip :text="t('python_plugin_help.title')">
+                        <UButton
+                          icon="i-lucide-book-open"
+                          color="neutral"
+                          variant="ghost"
+                          size="sm"
+                          :aria-label="t('python_plugin_help.title')"
+                          @click="workbenchStore.openPythonHelp('inline')"
+                        />
+                      </UTooltip>
+                      <UTooltip :text="t('workspace.word_wrap')">
+                        <UButton
+                          icon="i-lucide-wrap-text"
+                          :color="scriptWordWrap ? 'primary' : 'neutral'"
+                          variant="ghost"
+                          size="sm"
+                          square
+                          class="shrink-0"
+                          :aria-label="t('workspace.word_wrap')"
+                          :aria-pressed="scriptWordWrap"
+                          @click="scriptWordWrap = !scriptWordWrap"
+                        />
+                      </UTooltip>
+                    </div>
                   </div>
                   <UAlert
                     v-if="!pythonPluginsEnabled"

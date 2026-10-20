@@ -17,6 +17,14 @@ Python plugin support is optional and disabled by default.
 
 Both scopes use the same synchronous `onRequest` and `onResponse` API. If you only want to try scripting, start with a current-request script. Use a global plugin when the behavior should be reusable or selected automatically by method and URL.
 
+## In-app API help and system prompt
+
+Open **Python API Help** with the book icon in the **Python Plugins** sidebar heading or the HTTP Request Editor **Script** toolbar. Help is available even before Python is configured or a plugin is created. It appears beside the workspace when its content area is at least 1100 px wide, with a resizable 420 px panel by default; narrower workspaces use a right-side drawer. Leaving the workbench or switching request tabs closes help without changing the script.
+
+**Quick start** shows three setup steps and the essential hook behavior; expand the minimal script or runtime rules when needed. The searchable **API reference** groups interfaces by type and expands matching groups as you search. Signatures include parameters and return types; usage notes and import guidance can be expanded separately.
+
+**Copy system prompt** copies the complete API v1 contract, runtime constraints, a minimal script with both hooks, and a requirement placeholder in the current interface language. The opening entry determines whether the prompt explains global `main.py`, Params and matching rules, or the current-request script. Search and the selected help tab do not limit the copied prompt. Paste it into an AI tool and replace the requirement placeholder with your task; review the generated script before enabling it. The copied prompt contains product documentation and a template, without your plugin source, request data or parameter values.
+
 ## Security model
 
 Run only code you trust. Plugins are normal local Python code and run with the same operating-system user permissions as FlowLens. They can read and write local files, access the network, start processes, import installed packages, and expose data through logs. The Worker's isolated Python mode (`-I`) makes imports more predictable; it is not a security sandbox.
