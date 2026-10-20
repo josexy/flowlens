@@ -263,6 +263,8 @@ def main():
         raise RuntimeError("expected SDK root argument")
     sdk_root = os.path.abspath(sys.argv[1])
     sys.path.insert(0, sdk_root)
+    import flowlens
+
     _write_frame(
         {
             "type": "hello",
@@ -272,8 +274,6 @@ def main():
             "implementation": sys.implementation.name,
         }
     )
-    import flowlens
-
     while True:
         message = _read_frame()
         if message is None:

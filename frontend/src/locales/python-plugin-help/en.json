@@ -1,6 +1,6 @@
 {
   "title": "Python API Help",
-  "version": "SDK API v1 · Python 3.11+",
+  "version": "SDK API v1",
   "quickstart": "Quick start",
   "reference": "API reference",
   "copy_context": "Copy system prompt",
@@ -38,7 +38,7 @@
     "ai_hint": "Click “Copy system prompt”, paste it into an AI tool and add your requirement to generate a script.",
     "runtime": {
       "title": "Set up Python",
-      "text": "Select Python 3.11+ in Settings and enable it."
+      "text": "Select Python 3 in Settings and enable it."
     },
     "global": {
       "edit": {
@@ -110,7 +110,7 @@
     "ReadonlyMapping": "Deeply read-only, including nested values. JSON arrays become tuples.",
     "JsonObject": "Use a JSON-serializable dict, shared only within this plugin and send."
   },
-  "prompt_intro": "Write a Python 3.11+ script for FlowLens HTTP Request Editor using SDK API v1. Use only the documented FlowLens API below.",
+  "prompt_intro": "Write a Python 3 script for FlowLens HTTP Request Editor using SDK API v1. Use only the documented FlowLens API below.",
   "prompt_rules": "Runtime contract",
   "prompt_api": "Complete API reference",
   "prompt_template": "Minimal script",
@@ -161,7 +161,7 @@
     },
     "limits": {
       "title": "Runtime and dependencies",
-      "text": "Python 3.11+ is required. FlowLens supplies the flowlens SDK; do not pip install it. Third-party dependencies must be installed in the selected interpreter, manually. Hooks are synchronous; blocking I/O counts toward the configured 100–60,000 ms deadline. Current-request source is limited to 1 MiB. A managed source file is limited to 32 MiB and a plugin package to 64 MiB. Worker frames are bounded at 64 MiB; timeout, cancellation, crash or protocol corruption replaces the Worker."
+      "text": "Python 3 is required. FlowLens supplies the flowlens SDK; do not pip install it. Third-party dependencies must be installed in the selected interpreter, manually. Hooks are synchronous; blocking I/O counts toward the configured 100–60,000 ms deadline. Current-request source is limited to 1 MiB. A managed source file is limited to 32 MiB and a plugin package to 64 MiB. Worker frames are bounded at 64 MiB; timeout, cancellation, crash or protocol corruption replaces the Worker."
     },
     "console": {
       "title": "Output and trust",

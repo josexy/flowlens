@@ -36,7 +36,7 @@ FlowLens captures proxy traffic, identifies local processes, and lets you inspec
 - Request editing/resend, WebSocket Client, proxy selection, uTLS profiles, and HTTP/2 fingerprints
 - Optional shared DNS cache with configurable expiration and connection-preserving clearing
 - Live HTTP(S) rewrite rules: redirects, header/query edits, and UTF-8 body replacement
-- API Collections, local history, categorization, and optional Python 3.11+ request hooks with a live console
+- API Collections, local history, categorization, and optional Python 3 request hooks with a live console
 - HAR import by file picker or drag-and-drop; capture/history export to CSV and HAR
 - Traffic-row export of requests, responses, headers, bodies, and combined exchanges
 - Process attribution and icons on Windows, macOS, and Linux; managed system proxy and current-user CA trust controls on Windows/macOS
@@ -66,7 +66,7 @@ Start the proxy and configure your client to use `127.0.0.1:8080` by default. Ne
 - Node.js 24 LTS (24.21+; the version used by CI is pinned in `.node-version`)
 - npm (bundled with Node.js), Wails v3 CLI (`wails3`) matching `go.mod` (currently `v3.0.0-beta.32`), and preferably Task (`task`)
 
-Python 3.11+ is needed only for Python request hooks; FlowLens detects existing interpreters but does not install them. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python) and [platform build requirements](build/README.md).
+Python 3 is needed only for Python request hooks; FlowLens detects existing interpreters but does not install them. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python) and [platform build requirements](build/README.md).
 
 ### Run the Desktop App
 

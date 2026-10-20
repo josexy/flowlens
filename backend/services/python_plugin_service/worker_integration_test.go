@@ -1981,7 +1981,7 @@ def onResponse(context, response):
 }
 
 func TestWorkerImportsDependencyFromSelectedVirtualEnvironment(t *testing.T) {
-	basePython := requirePython311(t)
+	basePython := requirePython3(t)
 	venvRoot := filepath.Join(t.TempDir(), "venv")
 	command := exec.Command(basePython, "-m", "venv", "--without-pip", venvRoot)
 	if output, err := command.CombinedOutput(); err != nil {
@@ -2024,8 +2024,28 @@ def onResponse(context, response):
 	}
 }
 
+func TestWorkerDoesNotReportReadyWhenSDKCannotLoad(t *testing.T) {
+	pythonPath := requirePython3(t)
+	runtimeFiles, err := extractWorkerRuntime(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeFiles.Root, "flowlens", "__init__.py"), []byte("raise RuntimeError('SDK cannot load')\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	worker, err := startPythonWorker(ctx, pythonPath, runtimeFiles, nil)
+	if worker != nil {
+		worker.terminate()
+	}
+	if err == nil {
+		t.Fatal("worker reported ready before loading the SDK")
+	}
+}
+
 func TestWorkerPoolShutdownTerminatesChildren(t *testing.T) {
-	pythonPath := requirePython311(t)
+	pythonPath := requirePython3(t)
 	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
 	pool, err := newWorkerPool(workerPoolConfig{InterpreterPath: pythonPath, RuntimeRoot: runtimeRoot, Size: 1})
 	if err != nil {
@@ -2075,7 +2095,7 @@ func TestInterpreterPathMustBeAbsoluteRegularExecutable(t *testing.T) {
 
 func newPythonWorkerHarness(t *testing.T, size int, sink WorkerLogSink) (*workerPool, *packageManager, *Plugin) {
 	t.Helper()
-	return newPythonWorkerHarnessWithInterpreter(t, requirePython311(t), size, sink)
+	return newPythonWorkerHarnessWithInterpreter(t, requirePython3(t), size, sink)
 }
 
 func newPythonWorkerHarnessWithInterpreter(t *testing.T, interpreter string, size int, sink WorkerLogSink) (*workerPool, *packageManager, *Plugin) {
@@ -2116,7 +2136,7 @@ func writeAndActivatePlugin(t *testing.T, manager *packageManager, pluginID, sou
 	return plugin
 }
 
-func requirePython311(t *testing.T) string {
+func requirePython3(t *testing.T) string {
 	t.Helper()
 	path, err := exec.LookPath("python")
 	if err != nil {
@@ -2128,15 +2148,15 @@ func requirePython311(t *testing.T) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, path, "-I", "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')")
+	command := exec.CommandContext(ctx, path, "-I", "-c", "import sys; print(sys.version_info[0])")
 	configureWorkerCommand(command)
 	output, err := command.Output()
 	if err != nil {
 		t.Skipf("query Python version: %v", err)
 	}
-	var major, minor int
-	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d.%d", &major, &minor); err != nil || major != 3 || minor < 11 {
-		t.Skipf("Python 3.11+ is required; got %s", output)
+	var major int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &major); err != nil || major < 3 {
+		t.Skipf("Python 3 or newer is required; got %s", output)
 	}
 	return path
 }

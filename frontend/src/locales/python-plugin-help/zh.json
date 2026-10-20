@@ -1,6 +1,6 @@
 {
   "title": "Python API 帮助",
-  "version": "SDK API v1 · Python 3.11+",
+  "version": "SDK API v1",
   "quickstart": "快速上手",
   "reference": "API 参考",
   "copy_context": "复制系统提示词",
@@ -38,7 +38,7 @@
     "ai_hint": "点击“复制系统提示词”，粘贴到 AI 工具并补充需求，即可生成脚本。",
     "runtime": {
       "title": "配置 Python",
-      "text": "在设置中选择 Python 3.11+ 并启用。"
+      "text": "在设置中选择 Python 3 并启用。"
     },
     "global": {
       "edit": {
@@ -110,7 +110,7 @@
     "ReadonlyMapping": "深层只读，嵌套值不可修改；JSON 数组表现为元组。",
     "JsonObject": "使用普通 dict，内容须可序列化为 JSON；仅在同一插件的本次发送内共享。"
   },
-  "prompt_intro": "请为 FlowLens HTTP 请求编辑器编写 Python 3.11+ 脚本，使用 SDK API v1。只使用下面列出的 FlowLens API。",
+  "prompt_intro": "请为 FlowLens HTTP 请求编辑器编写 Python 3 脚本，使用 SDK API v1。只使用下面列出的 FlowLens API。",
   "prompt_rules": "运行约定",
   "prompt_api": "完整 API 参考",
   "prompt_template": "最小脚本",
@@ -161,7 +161,7 @@
     },
     "limits": {
       "title": "运行环境与依赖",
-      "text": "需要 Python 3.11+。flowlens SDK 由应用提供，不要通过 pip 安装它。第三方依赖须手动安装到所选解释器中。Hook 为同步执行，阻塞 I/O 计入设置中的 100–60,000 ms 超时。当前请求脚本源代码上限为 1 MiB，托管源文件上限为 32 MiB，插件包为 64 MiB。Worker 帧上限为 64 MiB；超时、取消、崩溃或协议损坏会导致 Worker 被替换。"
+      "text": "需要 Python 3。flowlens SDK 由应用提供，不要通过 pip 安装它。第三方依赖须手动安装到所选解释器中。Hook 为同步执行，阻塞 I/O 计入设置中的 100–60,000 ms 超时。当前请求脚本源代码上限为 1 MiB，托管源文件上限为 32 MiB，插件包为 64 MiB。Worker 帧上限为 64 MiB；超时、取消、崩溃或协议损坏会导致 Worker 被替换。"
     },
     "console": {
       "title": "输出与信任",

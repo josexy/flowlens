@@ -4,7 +4,7 @@ Engineering guidelines for FlowLens. Product usage belongs in [README.md](README
 
 ## Workflow
 
-FlowLens uses Wails v3, Go 1.27.2+, SQLite, `mitmproxy-go`, `xhttp`, Vue 3, TypeScript, Pinia, Nuxt UI v4, and Tailwind CSS v4. Python hooks use external CPython 3.11+, without an embedded interpreter or Python CGO dependency.
+FlowLens uses Wails v3, Go 1.27.2+, SQLite, `mitmproxy-go`, `xhttp`, Vue 3, TypeScript, Pinia, Nuxt UI v4, and Tailwind CSS v4. Python hooks use external CPython 3, without an embedded interpreter or Python CGO dependency.
 
 - Before multi-step work, define the change, verification, and completion criteria. Check effects on persistence/files, networking/models, Python Workers, process attribution, events/shortcuts, windows, bindings, copy, and docs.
 - If more than two plausible interpretations would materially change the result, explain them first; otherwise follow existing behavior and proceed.
@@ -92,7 +92,7 @@ Create the Wails application before opening SQLite so the single-instance guard 
 
 ## Verification
 
-Use Go and Node.js versions from `go.mod`/`.node-version` (Node 24 LTS, 24.21+), local npm, and a matching Wails v3 CLI. Task is recommended; Python 3.11+ is optional outside hook tests.
+Use Go and Node.js versions from `go.mod`/`.node-version` (Node 24 LTS, 24.21+), local npm, and a matching Wails v3 CLI. Task is recommended; Python 3 is optional outside hook tests.
 
 Run the smallest checks matching the risk. Default backend verification is `go test ./...`; use `task lint:go` for Go lint/format checks. Root tasks: `task dev`, `task build`, `task package`, `task run`.
 
@@ -108,7 +108,7 @@ Without Task, run `wails3 dev -config ./build/config.yml`. The frontend defaults
 | CA trust/appearance/layout | `./backend/services/setting_service` |
 | Updates/windows/shutdown | `./backend/app ./backend/services/app_service` |
 
-Prefix package lists with `go test`. For concurrency/lifecycle changes, also run `go test -race ./backend/pkg/process_attribution ./backend/services/proxy_service` when supported. Worker/SDK/interpreter/package changes must actually run Python 3.11+ integration tests, without skips.
+Prefix package lists with `go test`. For concurrency/lifecycle changes, also run `go test -race ./backend/pkg/process_attribution ./backend/services/proxy_service` when supported. Worker/SDK/interpreter/package changes must actually run Python 3 integration tests, without skips.
 
 Frontend checks run inside `frontend`:
 

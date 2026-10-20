@@ -33,19 +33,19 @@ Review both the plugin source and every third-party dependency before enabling t
 
 ## Set up Python
 
-Install CPython 3.11 or newer, or create a dedicated virtual environment. A dedicated environment keeps plugin dependencies separate from other Python applications.
+Install CPython 3 or newer, or create a dedicated virtual environment. A dedicated environment keeps plugin dependencies separate from other Python applications.
 
 Windows:
 
 ```powershell
-py -3.11 -m venv C:\venvs\flowlens-plugins
+py -3 -m venv C:\venvs\flowlens-plugins
 C:\venvs\flowlens-plugins\Scripts\python.exe -m pip install requests
 ```
 
 macOS or Linux:
 
 ```shell
-python3.11 -m venv "$HOME/.venvs/flowlens-plugins"
+python3 -m venv "$HOME/.venvs/flowlens-plugins"
 "$HOME/.venvs/flowlens-plugins/bin/python" -m pip install requests
 ```
 
@@ -61,7 +61,9 @@ Detection is bounded and does not scan the entire disk. Select a virtual environ
 
 On Windows, detection also searches Microsoft Store Python packages registered for the current user and existing runtimes listed by Python Install Manager. Store Python uses a package-specific execution alias such as `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`; FlowLens accepts this alias for detection, testing, and plugin execution. Prefer the detected alias over a versioned installation path under `C:\Program Files\WindowsApps`, which may change after a Store update. No WindowsApps permission changes are needed.
 
-Only successfully probed CPython 3.11+ runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
+Only successfully probed CPython 3 runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
+
+FlowLens does not enforce a Python minor version. Use **Test** to verify that the bundled Worker and SDK can start in the selected interpreter. Plugin syntax and third-party dependencies must also be compatible with that interpreter.
 
 If runtime validation fails, FlowLens does not save the enabled state. FlowLens starts normally when Python is missing or the feature is disabled.
 
@@ -658,7 +660,7 @@ Hook outcomes, matched revisions, per-phase durations, transformations, and sani
 
 ## Troubleshooting
 
-- **Enabling Python plugins fails:** select an absolute path to a Python 3.11+ executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
+- **Enabling Python plugins fails:** select an absolute path to a Python 3 executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
 - **Validation reports an import error:** install the dependency with `selected-python -m pip install ...`. For files inside the plugin package, use a relative import such as `from .helpers import value`.
 - **The plugin does not run:** check the Python plugin master switch in Settings, the global-plugin switch in the HTTP Request Editor tab, the plugin switch, the validation marker, and at least one enabled rule. Matching uses the original full URL.
 - **Params have no effect:** save a top-level JSON object, then read it through `context.params` in the plugin. Params are configuration and are never added to the HTTP request automatically.
