@@ -144,6 +144,16 @@ onBeforeUnmount(() => {
           </UBadge>
         </div>
         <div class="flex shrink-0 items-center gap-0.5">
+          <UTooltip :text="t('python_plugin_help.title')">
+            <UButton
+              icon="i-lucide-book-open"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :aria-label="t('python_plugin_help.title')"
+              @click="workbenchStore.openPythonHelp('global')"
+            />
+          </UTooltip>
           <UTooltip :text="t('python_plugins.open_root_directory')">
             <UButton
               icon="i-lucide-folder-open"

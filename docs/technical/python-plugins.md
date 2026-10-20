@@ -17,6 +17,14 @@ Python plugin support is optional and disabled by default.
 
 Both scopes use the same synchronous `onRequest` and `onResponse` API. If you only want to try scripting, start with a current-request script. Use a global plugin when the behavior should be reusable or selected automatically by method and URL.
 
+## In-app API help and system prompt
+
+Open **Python API Help** with the book icon in the **Python Plugins** sidebar heading or the HTTP Request Editor **Script** toolbar. Help is available even before Python is configured or a plugin is created. It appears beside the workspace when its content area is at least 1100 px wide, with a resizable 420 px panel by default; narrower workspaces use a right-side drawer. Leaving the workbench or switching request tabs closes help without changing the script.
+
+**Quick start** shows three setup steps and the essential hook behavior; expand the minimal script or runtime rules when needed. The searchable **API reference** groups interfaces by type and expands matching groups as you search. Signatures include parameters and return types; usage notes and import guidance can be expanded separately.
+
+**Copy system prompt** copies the complete API v1 contract, runtime constraints, a minimal script with both hooks, and a requirement placeholder in the current interface language. The opening entry determines whether the prompt explains global `main.py`, Params and matching rules, or the current-request script. Search and the selected help tab do not limit the copied prompt. Paste it into an AI tool and replace the requirement placeholder with your task; review the generated script before enabling it. The copied prompt contains product documentation and a template, without your plugin source, request data or parameter values.
+
 ## Security model
 
 Run only code you trust. Plugins are normal local Python code and run with the same operating-system user permissions as FlowLens. They can read and write local files, access the network, start processes, import installed packages, and expose data through logs. The Worker's isolated Python mode (`-I`) makes imports more predictable; it is not a security sandbox.
@@ -25,19 +33,19 @@ Review both the plugin source and every third-party dependency before enabling t
 
 ## Set up Python
 
-Install CPython 3.11 or newer, or create a dedicated virtual environment. A dedicated environment keeps plugin dependencies separate from other Python applications.
+Install CPython 3 or newer, or create a dedicated virtual environment. A dedicated environment keeps plugin dependencies separate from other Python applications.
 
 Windows:
 
 ```powershell
-py -3.11 -m venv C:\venvs\flowlens-plugins
+py -3 -m venv C:\venvs\flowlens-plugins
 C:\venvs\flowlens-plugins\Scripts\python.exe -m pip install requests
 ```
 
 macOS or Linux:
 
 ```shell
-python3.11 -m venv "$HOME/.venvs/flowlens-plugins"
+python3 -m venv "$HOME/.venvs/flowlens-plugins"
 "$HOME/.venvs/flowlens-plugins/bin/python" -m pip install requests
 ```
 
@@ -53,7 +61,9 @@ Detection is bounded and does not scan the entire disk. Select a virtual environ
 
 On Windows, detection also searches Microsoft Store Python packages registered for the current user and existing runtimes listed by Python Install Manager. Store Python uses a package-specific execution alias such as `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`; FlowLens accepts this alias for detection, testing, and plugin execution. Prefer the detected alias over a versioned installation path under `C:\Program Files\WindowsApps`, which may change after a Store update. No WindowsApps permission changes are needed.
 
-Only successfully probed CPython 3.11+ runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
+Only successfully probed CPython 3 runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
+
+FlowLens does not enforce a Python minor version. Use **Test** to verify that the bundled Worker and SDK can start in the selected interpreter. Plugin syntax and third-party dependencies must also be compatible with that interpreter.
 
 If runtime validation fails, FlowLens does not save the enabled state. FlowLens starts normally when Python is missing or the feature is disabled.
 
@@ -650,7 +660,7 @@ Hook outcomes, matched revisions, per-phase durations, transformations, and sani
 
 ## Troubleshooting
 
-- **Enabling Python plugins fails:** select an absolute path to a Python 3.11+ executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
+- **Enabling Python plugins fails:** select an absolute path to a Python 3 executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
 - **Validation reports an import error:** install the dependency with `selected-python -m pip install ...`. For files inside the plugin package, use a relative import such as `from .helpers import value`.
 - **The plugin does not run:** check the Python plugin master switch in Settings, the global-plugin switch in the HTTP Request Editor tab, the plugin switch, the validation marker, and at least one enabled rule. Matching uses the original full URL.
 - **Params have no effect:** save a top-level JSON object, then read it through `context.params` in the plugin. Params are configuration and are never added to the HTTP request automatically.

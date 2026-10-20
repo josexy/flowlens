@@ -10,7 +10,7 @@ def _set_digest_header(headers, body):
     value = body.value
     if isinstance(value, FileDescriptor):
         with open(value.path, "rb") as source:
-            while chunk := source.read(1024 * 1024):
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
                 digest.update(chunk)
     else:
         if isinstance(value, str):

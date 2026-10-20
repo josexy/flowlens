@@ -116,7 +116,7 @@ func TestWindowsInterpreterValidationPreservesFileAndSymlinkRules(t *testing.T) 
 
 func TestWindowsInterpreterCommandsDisableAutomaticInstall(t *testing.T) {
 	t.Setenv("PYTHON_MANAGER_AUTOMATIC_INSTALL", "true")
-	python := requirePython311(t)
+	python := requirePython3(t)
 	output, stderr, err := runInterpreterDiscoveryCommand(context.Background(), 2*time.Second, python,
 		"-I", "-c", `import os; print(os.environ.get("PYTHON_MANAGER_AUTOMATIC_INSTALL"))`)
 	if err != nil || strings.TrimSpace(output) != "false" {
@@ -141,8 +141,7 @@ func TestWindowsStorePythonDiscoveryTestEnableAndInvoke(t *testing.T) {
 	var alias string
 	for _, directory := range directories {
 		family := filepath.Base(directory)
-		minor, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(family, "PythonSoftwareFoundation.Python.3."), "_qbz5n2kfra8p0"))
-		if minor >= 11 && isStorePythonFamily(family) && isWindowsPackageRegistered(family) {
+		if isStorePythonFamily(family) && isWindowsPackageRegistered(family) {
 			alias = filepath.Join(directory, "python.exe")
 			break
 		}
@@ -232,7 +231,7 @@ func TestWindowsPythonManagerListsInstalledInterpreters(t *testing.T) {
 }
 
 func TestWindowsInterpreterDiscoveryCancellationTerminatesChildren(t *testing.T) {
-	python := requirePython311(t)
+	python := requirePython3(t)
 	source := `import subprocess, sys, time
 p = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(30)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print(p.pid, flush=True)

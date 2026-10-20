@@ -25,7 +25,7 @@ def onRequest(context, request):
             request.body.write_file(source_path)
             digest = hashlib.sha256()
             with open(source_path, "rb") as source:
-                while chunk := source.read(CHUNK_SIZE):
+                for chunk in iter(lambda: source.read(CHUNK_SIZE), b""):
                     digest.update(chunk)
             request.headers.set("X-Body-SHA256", digest.hexdigest())
         finally:
@@ -51,7 +51,7 @@ def onResponse(context, response):
         # Close both files before assigning the replacement so this also works on Windows.
         with open(source_path, "rb") as source, open(replacement_path, "wb") as output:
             output.write(b"processed by FlowLens\n")
-            while chunk := source.read(CHUNK_SIZE):
+            for chunk in iter(lambda: source.read(CHUNK_SIZE), b""):
                 output.write(chunk)
 
         # Owner assignment copies the source into FlowLens's session directory,

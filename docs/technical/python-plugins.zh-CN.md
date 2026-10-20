@@ -17,6 +17,14 @@ Python 插件是可选功能，默认关闭。
 
 两种作用域使用相同的同步 `onRequest` 和 `onResponse` API。如果只是体验脚本功能，建议先使用当前请求脚本；需要复用处理逻辑，或希望按照方法和 URL 自动选择脚本时，再使用全局插件。
 
+## 应用内 API 帮助与系统提示词
+
+点击 **Python 插件**侧栏标题处或 HTTP 请求编辑器 **Script** 工具栏的书本图标，即可打开 **Python API 帮助**。尚未配置 Python 或创建插件时也可查阅。工作区内容区域宽度达到 1100 px 时，帮助在右侧并排显示，默认宽度 420 px，可通过分隔条调整；更窄时改用右侧抽屉。离开工作台或切换请求标签会关闭帮助，脚本内容保持不变。
+
+**快速上手**展示三步操作和必要的 Hook 说明，最小脚本与运行规则可按需展开。**API 参考**按类型分组，搜索时自动展开匹配分组；签名包含参数与返回类型，使用说明和类型导入说明可单独展开。
+
+**复制系统提示词**会按当前界面语言复制完整 API v1 规范、运行约束、包含两个 Hook 的最小模板及需求占位。入口决定提示词说明全局插件的 `main.py`、Params、匹配规则，还是当前请求脚本。搜索条件和当前帮助分组不影响复制的完整性。粘贴到 AI 工具后，将需求占位替换成具体任务，检查生成的脚本后再启用。复制内容仅包含产品说明和模板，不包含你的插件源代码、请求数据或参数值。
+
 ## 安全模型
 
 只运行你信任的代码。插件就是普通的本地 Python 代码，拥有与 FlowLens 当前操作系统用户相同的权限，可以读写本地文件、访问网络、启动进程、导入已安装的软件包，也可能通过日志暴露数据。Worker 使用 Python 隔离模式（`-I`）让导入行为更可预测，但这并不是安全沙箱。
@@ -25,19 +33,19 @@ Python 插件是可选功能，默认关闭。
 
 ## 配置 Python
 
-安装 CPython 3.11 或更高版本，或者创建一个专用虚拟环境。独立环境可以避免插件依赖与其他 Python 应用相互影响。
+安装 CPython 3 或更高版本，或者创建一个专用虚拟环境。独立环境可以避免插件依赖与其他 Python 应用相互影响。
 
 Windows：
 
 ```powershell
-py -3.11 -m venv C:\venvs\flowlens-plugins
+py -3 -m venv C:\venvs\flowlens-plugins
 C:\venvs\flowlens-plugins\Scripts\python.exe -m pip install requests
 ```
 
 macOS 或 Linux：
 
 ```shell
-python3.11 -m venv "$HOME/.venvs/flowlens-plugins"
+python3 -m venv "$HOME/.venvs/flowlens-plugins"
 "$HOME/.venvs/flowlens-plugins/bin/python" -m pip install requests
 ```
 
@@ -53,7 +61,9 @@ python3.11 -m venv "$HOME/.venvs/flowlens-plugins"
 
 Windows 下还会检测当前用户已注册的 Microsoft Store Python 包，以及 Python Install Manager 列出的已安装运行时。Store Python 使用包专属执行别名，例如 `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`；FlowLens 支持通过该别名检测、测试和执行插件。建议使用检测得到的别名，避免保存 `C:\Program Files\WindowsApps` 下带安装版本号的路径，后者可能随商店更新而变化。无需修改 WindowsApps 目录权限。
 
-只有实际探测成功的 CPython 3.11+ 才会出现在结果中。全局商店安装快捷方式和 Python Install Manager 本身不会作为自动检测的解释器候选。检测和插件执行期间，FlowLens 会禁用管理器的自动运行时安装；如果只安装了管理器，请自行安装 Python 运行时后重新检测。
+只有实际探测成功的 CPython 3 才会出现在结果中。全局商店安装快捷方式和 Python Install Manager 本身不会作为自动检测的解释器候选。检测和插件执行期间，FlowLens 会禁用管理器的自动运行时安装；如果只安装了管理器，请自行安装 Python 运行时后重新检测。
+
+FlowLens 不限制 Python 小版本。请点击 **测试**，确认内置 Worker 和 SDK 能在所选解释器中启动。插件语法和第三方依赖也需要兼容该解释器。
 
 如果运行时校验失败，FlowLens 不会保存启用状态。没有安装 Python 或该功能保持关闭时，FlowLens 仍能正常启动。
 
@@ -652,7 +662,7 @@ Hook 结果、匹配到的 revision、各阶段耗时、内容转换和脱敏后
 
 ## 故障排查
 
-- **无法启用 Python 插件：** 请选择 Python 3.11+ 可执行文件或 Windows Store Python 执行别名的绝对路径并点击 **测试**。使用虚拟环境时，应选择该环境中的解释器，而不是目录。如果 Store Python 已卸载或别名不可用，请重新安装或选择其他解释器，再次检测。
+- **无法启用 Python 插件：** 请选择 Python 3 可执行文件或 Windows Store Python 执行别名的绝对路径并点击 **测试**。使用虚拟环境时，应选择该环境中的解释器，而不是目录。如果 Store Python 已卸载或别名不可用，请重新安装或选择其他解释器，再次检测。
 - **校验提示导入失败：** 使用 `selected-python -m pip install ...` 安装依赖。导入插件包内文件时，使用 `from .helpers import value` 这类相对导入。
 - **插件没有执行：** 检查设置中的 Python 插件总开关、HTTP 请求编辑器标签页的全局插件开关、插件自身开关、校验标记，以及是否至少有一条已启用规则。规则使用原始完整 URL 进行匹配。
 - **参数没有生效：** 保存一个顶层 JSON 对象，然后在插件中通过 `context.params` 读取。参数只是配置，不会自动加入 HTTP 请求。

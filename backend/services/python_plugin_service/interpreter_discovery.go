@@ -129,7 +129,7 @@ func environmentInterpreterPaths() []string {
 
 func pathEnvironmentInterpreters() []string {
 	names := []string{"python3", "python"}
-	for minor := 11; minor <= 30; minor++ {
+	for minor := 0; minor <= 30; minor++ {
 		names = append(names, fmt.Sprintf("python3.%d", minor))
 	}
 	if runtime.GOOS == "windows" {
@@ -294,7 +294,7 @@ func runInterpreterDiscoveryCommand(ctx context.Context, timeout time.Duration, 
 
 func isSupportedInterpreter(candidate InterpreterCandidate) bool {
 	return strings.EqualFold(candidate.Implementation, "cpython") &&
-		candidate.PythonMajor == 3 && candidate.PythonMinor >= 11
+		candidate.PythonMajor >= 3
 }
 
 func interpreterPathKey(path string) string {

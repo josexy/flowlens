@@ -160,7 +160,7 @@ func TestServiceEnableValidationFailureLeavesPluginDisabled(t *testing.T) {
 }
 
 func TestServiceRuntimeConfigurationProbeAndShutdown(t *testing.T) {
-	pythonPath := requirePython311(t)
+	pythonPath := requirePython3(t)
 	service, events := newServiceHarness(t)
 	status, err := service.ConfigureRuntime(settingservice.PythonPluginConfig{
 		Enabled: false, InterpreterPath: pythonPath, HookTimeoutMs: 1234,
@@ -175,11 +175,11 @@ func TestServiceRuntimeConfigurationProbeAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReloadRuntime: %v", err)
 	}
-	if !status.Ready || status.PythonMajor != 3 || status.PythonMinor < 11 || status.ProtocolVersion != workerProtocolVersion || status.SDKAPIVersion != workerSDKAPIVersion {
+	if !status.Ready || status.PythonMajor < 3 || status.ProtocolVersion != workerProtocolVersion || status.SDKAPIVersion != workerSDKAPIVersion {
 		t.Fatalf("ready runtime status = %+v", status)
 	}
 	probed, err := service.TestInterpreter(pythonPath)
-	if err != nil || !probed.Ready || probed.PythonMajor != 3 {
+	if err != nil || !probed.Ready || probed.PythonMajor < 3 {
 		t.Fatalf("TestInterpreter = %+v, %v", probed, err)
 	}
 	if err := service.Shutdown(); err != nil {

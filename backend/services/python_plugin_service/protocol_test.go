@@ -55,7 +55,7 @@ func TestProtocolFrameRejectsOversizedLengthBeforeAllocation(t *testing.T) {
 func TestValidateWorkerHelloRejectsVersionMismatches(t *testing.T) {
 	valid := workerMessage{
 		Type: "hello", ProtocolVersion: 1, SDKAPIVersion: 1,
-		PythonVersion: []int{3, 11, 0}, Implementation: "cpython",
+		PythonVersion: []int{3, 10, 9}, Implementation: "cpython",
 	}
 	if _, err := validateWorkerHello(valid); err != nil {
 		t.Fatalf("valid hello: %v", err)
@@ -64,7 +64,8 @@ func TestValidateWorkerHelloRejectsVersionMismatches(t *testing.T) {
 		"message type":     func(value *workerMessage) { value.Type = "result" },
 		"protocol version": func(value *workerMessage) { value.ProtocolVersion = 2 },
 		"SDK version":      func(value *workerMessage) { value.SDKAPIVersion = 2 },
-		"Python version":   func(value *workerMessage) { value.PythonVersion = []int{3, 10, 9} },
+		"Python version":   func(value *workerMessage) { value.PythonVersion = []int{2, 7, 18} },
+		"missing version":  func(value *workerMessage) { value.PythonVersion = nil },
 		"implementation":   func(value *workerMessage) { value.Implementation = "pypy" },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -74,6 +75,27 @@ func TestValidateWorkerHelloRejectsVersionMismatches(t *testing.T) {
 				t.Fatal("invalid hello was accepted")
 			}
 		})
+	}
+}
+
+func TestPythonVersionChecksAcceptPython3WithoutMinorVersionLimit(t *testing.T) {
+	for _, version := range [][]int{{3, 0, 0}, {3, 7, 17}, {3, 8, 20}, {3, 10, 9}, {3, 13, 0}, {4, 0, 0}} {
+		message := workerMessage{
+			Type: "hello", ProtocolVersion: workerProtocolVersion, SDKAPIVersion: workerSDKAPIVersion,
+			PythonVersion: version, Implementation: "cpython",
+		}
+		hello, err := validateWorkerHello(message)
+		if err != nil {
+			t.Fatalf("Python %v hello: %v", version, err)
+		}
+		if hello.PythonMajor != version[0] || hello.PythonMinor != version[1] || hello.PythonPatch != version[2] {
+			t.Fatalf("Python %v hello = %+v", version, hello)
+		}
+		if !isSupportedInterpreter(InterpreterCandidate{
+			PythonMajor: version[0], PythonMinor: version[1], PythonPatch: version[2], Implementation: "cpython",
+		}) {
+			t.Fatalf("Python %v was excluded from discovery", version)
+		}
 	}
 }
 

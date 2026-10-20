@@ -491,8 +491,8 @@ func validateWorkerHello(message workerMessage) (WorkerHello, error) {
 	if len(message.PythonVersion) > 2 {
 		patch = message.PythonVersion[2]
 	}
-	if major != 3 || minor < 11 {
-		return WorkerHello{}, fmt.Errorf("python 3.11 or newer is required; worker reported %d.%d.%d", major, minor, patch)
+	if major < 3 {
+		return WorkerHello{}, fmt.Errorf("python 3 or newer is required; worker reported %d.%d.%d", major, minor, patch)
 	}
 	return WorkerHello{
 		ProtocolVersion: message.ProtocolVersion,
