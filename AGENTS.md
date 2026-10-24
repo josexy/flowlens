@@ -4,7 +4,7 @@ Engineering guidelines for FlowLens. Product usage belongs in [README.md](README
 
 ## Workflow
 
-FlowLens uses Wails v3, Go 1.27.2+, SQLite, `mitmproxy-go`, `xhttp`, Vue 3, TypeScript, Pinia, Nuxt UI v4, and Tailwind CSS v4. Python hooks use external CPython 3, without an embedded interpreter or Python CGO dependency.
+FlowLens uses Wails v3, Go 1.27.3+, SQLite, `mitmproxy-go`, `xhttp`, Vue 3, TypeScript, Pinia, Nuxt UI v4, and Tailwind CSS v4. Python hooks use external CPython 3, without an embedded interpreter or Python CGO dependency.
 
 - Before multi-step work, define the change, verification, and completion criteria. Check effects on persistence/files, networking/models, Python Workers, process attribution, events/shortcuts, windows, bindings, copy, and docs.
 - If more than two plausible interpretations would materially change the result, explain them first; otherwise follow existing behavior and proceed.

@@ -1,6 +1,6 @@
 module github.com/josexy/flowlens
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/adrg/xdg v0.5.3
@@ -8,9 +8,9 @@ require (
 	github.com/fyne-io/oksvg v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
-	github.com/josexy/mitmproxy-go/v2 v2.0.1-0.20261013115930-1abccbab8d53
+	github.com/josexy/mitmproxy-go/v2 v2.0.2-0.20261024062624-9a3b2cf7565d
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
-	github.com/josexy/xhttp v0.0.0-20261013115735-180c3ba43222
+	github.com/josexy/xhttp v0.0.0-20261024062155-5f478641bbf0
 	github.com/klauspost/compress v1.19.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
