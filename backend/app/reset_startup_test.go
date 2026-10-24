@@ -14,6 +14,23 @@ import (
 	appservice "github.com/josexy/flowlens/backend/services/app_service"
 )
 
+func startResetStartupTestMonitor(t *testing.T, client *resetStartupClient) {
+	t.Helper()
+	stopped := make(chan struct{})
+	t.Cleanup(func() {
+		client.cancel()
+		select {
+		case <-stopped:
+		case <-time.After(3 * time.Second):
+			t.Error("reset startup monitor did not stop after cancellation")
+		}
+	})
+	go func() {
+		defer close(stopped)
+		client.monitor()
+	}()
+}
+
 func TestResetStartupSessionCanReportCorruptMarker(t *testing.T) {
 	resetTestStorage(t)
 	root, _ := resetDirectory()
@@ -311,7 +328,7 @@ func TestResetStartupMonitorGuardsRetryAndHonoursExit(t *testing.T) {
 	if err := client.publish(); err != nil {
 		t.Fatal(err)
 	}
-	go client.monitor()
+	startResetStartupTestMonitor(t, client)
 	send := func(sequence uint64, action string) {
 		t.Helper()
 		if err := writeResetStartupJSON(client.directory, "action.json", resetStartupAction{Sequence: sequence, Action: action}); err != nil {
@@ -358,7 +375,7 @@ func TestResetStartupExitBeforeReadyDoesNotAcceptCleanup(t *testing.T) {
 	if err := writeResetStartupJSON(client.directory, "action.json", resetStartupAction{Sequence: 1, Action: "exit"}); err != nil {
 		t.Fatal(err)
 	}
-	go client.monitor()
+	startResetStartupTestMonitor(t, client)
 	select {
 	case <-ctx.Done():
 	case <-time.After(3 * time.Second):
@@ -385,7 +402,7 @@ func TestResetStartupQuickRetryRetainsReadyHandshake(t *testing.T) {
 	if err := writeResetStartupJSON(client.directory, "action.json", resetStartupAction{Sequence: 2, Action: "retry", Ready: true}); err != nil {
 		t.Fatal(err)
 	}
-	go client.monitor()
+	startResetStartupTestMonitor(t, client)
 	select {
 	case <-client.ready:
 	case <-time.After(3 * time.Second):
