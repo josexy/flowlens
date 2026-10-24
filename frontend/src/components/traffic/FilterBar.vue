@@ -23,6 +23,7 @@ const filterTabs = computed<TabsItem[]>(() => [
   { value: 'http', label: t('filter.http') },
   { value: 'https', label: t('filter.https') },
   { value: 'websocket', label: t('filter.websocket') },
+  { value: 'sse', label: t('filter.sse') },
   { value: 'tcp', label: t('filter.tcp') },
   { value: 'http1', label: t('filter.http1') },
   { value: 'http2', label: t('filter.http2') },

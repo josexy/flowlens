@@ -59,6 +59,7 @@ export const useHistoryFilterStore = defineStore('historyFilter', () => {
   function matchesContentType(entry: proxyservice.TrafficEntry, contentType: string): boolean {
     const ct = firstHeaderFieldValue(entry.response?.headerFields, 'Content-Type')?.toLowerCase() || ''
     switch (contentType) {
+      case 'sse':    return isHTTPTraffic(entry) && ct.split(';')[0]?.trim() === 'text/event-stream'
       case 'json':   return ct.includes('json')
       case 'xml':    return ct.includes('xml')
       case 'text':   return ct.includes('text/plain')
@@ -96,7 +97,7 @@ export const useHistoryFilterStore = defineStore('historyFilter', () => {
       if (tab !== 'all') {
         if (['http', 'https', 'websocket', 'tcp', 'http1', 'http2'].includes(tab)) {
           if (!matchesProtocol(entry, tab)) return false
-        } else if (['json', 'xml', 'text', 'html', 'js', 'image', 'media', 'binary'].includes(tab)) {
+        } else if (['sse', 'json', 'xml', 'text', 'html', 'js', 'image', 'media', 'binary'].includes(tab)) {
           if (!matchesContentType(entry, tab)) return false
         } else if (['1xx', '2xx', '3xx', '4xx', '5xx'].includes(tab)) {
           if (entry.statusCode > 0) {

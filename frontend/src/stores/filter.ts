@@ -66,6 +66,8 @@ export const useFilterStore = defineStore('filter', () => {
     const ct = firstHeaderFieldValue(entry.response?.headerFields, 'Content-Type')?.toLowerCase() || ''
 
     switch (contentType) {
+      case 'sse':
+        return isHTTPTraffic(entry) && ct.split(';')[0]?.trim() === 'text/event-stream'
       case 'json':
         return ct.includes('json')
       case 'xml':
@@ -153,7 +155,7 @@ export const useFilterStore = defineStore('filter', () => {
           }
         }
         // Content type filters
-        else if (['json', 'xml', 'text', 'html', 'js', 'image', 'media', 'binary'].includes(tab)) {
+        else if (['sse', 'json', 'xml', 'text', 'html', 'js', 'image', 'media', 'binary'].includes(tab)) {
           if (!matchesContentType(entry, tab)) {
             return false
           }

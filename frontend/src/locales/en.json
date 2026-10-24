@@ -213,6 +213,7 @@
     "http": "HTTP",
     "https": "HTTPS",
     "websocket": "Websocket",
+    "sse": "SSE",
     "tcp": "TCP",
     "http1": "HTTP1",
     "http2": "HTTP2",
