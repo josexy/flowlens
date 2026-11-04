@@ -8,6 +8,12 @@ The structure is:
 * darwin - macOS specific files
 * windows - Windows specific files
 
+## Wails version and build backend
+
+FlowLens uses Wails `v3.1.0`. Keep `go.mod`, the `wails3` CLI, `@wailsio/runtime` in `frontend/package.json` and its lockfile, and `WAILS_VERSION` in `.github/workflows/release.yml` aligned. After upgrading, run `wails3 generate bindings -ts -i` and rebuild the frontend.
+
+The existing Taskfiles remain the supported build path. Wails 3.1 introduces experimental [CGO-free backends and Wake YAML builds](https://wails.io/blog/wails-v3-1-released/); FlowLens keeps CGO enabled on macOS and Linux. On macOS, disabling CGO also disables FlowLens process attribution and managed system-proxy integration. Wake migration requires a separate review of the custom packaging and signing tasks.
+
 ## Linux
 
 `wails3 build` produces a standalone ELF binary in `bin/`. Linux ELF files do not embed an application icon. GTK4 desktop environments resolve the icon from the installed `.desktop` entry and icon theme using the application ID.

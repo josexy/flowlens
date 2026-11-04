@@ -21,7 +21,7 @@ concurrency:
 env:
   APP_NAME: flowlens
   TASK_VERSION: v3.50.0
-  WAILS_VERSION: v3.0.0-beta.32
+  WAILS_VERSION: v3.1.0
 
 jobs:
   metadata:
@@ -80,13 +80,18 @@ jobs:
       - name: Verify release version metadata
         run: node scripts/release/set-version.mjs --version "${{ needs.metadata.outputs.version }}" --check
 
-      - name: Verify Wails CLI version
+      - name: Verify Wails CLI and frontend runtime versions
         shell: bash
         run: |
           set -euo pipefail
           module_version="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
           if [ "${module_version}" != "${WAILS_VERSION}" ]; then
             echo "Wails CLI version ${WAILS_VERSION} does not match go.mod version ${module_version}." >&2
+            exit 1
+          fi
+          runtime_version="$(node -p "require('./frontend/package.json').dependencies['@wailsio/runtime']")"
+          if [ "v${runtime_version}" != "${module_version}" ]; then
+            echo "Wails frontend runtime version ${runtime_version} does not match go.mod version ${module_version}." >&2
             exit 1
           fi
 
