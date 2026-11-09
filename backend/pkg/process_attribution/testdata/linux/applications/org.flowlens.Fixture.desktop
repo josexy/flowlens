@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=FlowLens Flatpak Fixture
+Exec=/usr/bin/flatpak run --branch=stable --arch=x86_64 org.flowlens.Fixture %U
+Icon=org.flowlens.Fixture
+X-Flatpak=org.flowlens.Fixture

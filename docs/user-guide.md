@@ -1,0 +1,223 @@
+# FlowLens User Guide
+
+This guide covers day-to-day FlowLens behavior and operational details. For installation and development setup, start with the project [README](../README.md).
+
+## Workspaces and Request Editing
+
+- Capture, history, categories, API collections, rewrite rules, Python plugins, and memory statistics share the same workbench shell.
+- HTTP Request Editor and WebSocket Client tabs can be saved into API Collection folders from the tab context menu.
+- Saving an editor tab already linked to an API Collection entry updates that request directly.
+- HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.
+- HTTP requests can use automatic protocol negotiation or force `HTTP/1.1` / `HTTP/2`.
+- HTTP Request Editor's **Settings > Max Redirects** controls how many redirects to follow. It defaults to `0` (no redirects) for new requests, capture/history drafts, and older saved requests. The initial request does not count toward the limit: `1` allows A → B, then returns B's response even if it is another redirect. Reaching the limit returns the last response's status, headers, and body without an error. The request timeout covers the whole redirect chain.
+- HTTPS and WSS requests can select Go, Chrome, Firefox, Safari, Edge, iOS, Android 11 OkHttp, or randomized-ALPN ClientHello profiles.
+- HTTP Request Editor and WebSocket Client each have a per-tab **Skip TLS Verification** switch under **Settings**, independent of the capture toolbar. It controls the client's TLS connections, including HTTPS proxies, and defaults to off for new requests and older saved requests. When using a MITM proxy, that proxy's upstream certificate verification still follows its own settings.
+- HTTP requests can also use a canonical four-part HTTP/2 fingerprint in `SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_HEADER_ORDER` form. Explicit HTTP/1.1 requests ignore this field.
+- API Collection requests retain protocol, redirect limit, TLS certificate verification, TLS profile, fingerprint, ordered headers, body, and current-request script source where applicable. Script enable switches remain off when a request is reopened.
+
+Request header rows are sent in their displayed order. The URL remains the routing source of truth; the backend controls pseudo-headers, `Host`, body framing, generated content types, and the fallback `User-Agent`. Invalid layouts are rejected instead of being silently reordered.
+
+Text body and Raw HTTP viewers display the complete available content without pagination. Editor search and selection cover the full text; toolbar copy and save also use the complete content. Automatic wrapping can be toggled at any text size. Documents of at least 512K characters or lines of at least 128K characters use plain text without syntax highlighting or bracket matching to reduce rendering work. Hex viewing retains its existing paging and rendering limits.
+
+HTTP Request Editor can run global and current-request Python hooks. Configure Python under `Settings > Python` and see the [Python plugin guide](technical/python-plugins.md) for setup, API details, limits, and examples.
+
+SSE responses (`text/event-stream`) open the **SSE** body tab by default in HTTP Request Editor, capture details, and history details. The virtualized list shows complete data events in order, with their event type, effective ID, and a short data preview. Click a row to inspect its full data or original event block; small valid JSON messages also offer a formatted view. Scrolling up pauses following new messages; **Jump to latest message** resumes it. Heartbeats and control-only blocks remain available in the **Raw** tab. Events without a terminating blank line are incomplete and are not counted as messages, including after the stream stops. Encoded binary bodies cannot be parsed in the SSE view and remain available for saving and hex viewing.
+
+The response-body toolbar copies or saves the entire SSE response. The message-detail dialog copies or saves only its selected view. The list is reconstructed from the available response body and does not add per-message timestamps or change saved traffic formats.
+
+## Live HTTP(S) Rewrite Rules
+
+Open **Rewrite Rules** in the sidebar to redirect URLs or edit headers, request query parameters, and UTF-8 bodies. Rules apply only to live HTTP/HTTPS proxy traffic; Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP are excluded.
+
+To redirect an endpoint:
+
+1. Create and name a rule; select `GET` or `ALL`.
+2. Set the URL pattern to `https://api.example.com/users/*?token=*` and **Redirect** target to `https://test.example.com/accounts/${1}?token=${2}`.
+3. Use **Match test** to check the result without sending a request.
+4. Save, enable the rule, and turn on the master switch. New rules start disabled.
+
+Patterns match the complete URL: scheme/host are case-insensitive; path/query retain case and encoding. Each `*` captures text, `\*` matches a literal star, and `?` is literal. Targets use `${1}`, `${2}`, etc. for captures and `$$` for `$`; they must be absolute HTTP/HTTPS URLs with the full query. Redirects change routing without returning a 302. **Keep current Host** preserves the Host header while routing to the new target.
+
+Header/query operations run in row order: **Add** appends; **Set** replaces the first match and removes duplicates, or adds if absent; **Delete** removes all matches. Header names are case-insensitive; query names are case-sensitive.
+
+- **Order:** drag rules or use the arrows. Each phase runs top to bottom against the original request's match set. Saved changes affect new requests; in-flight requests keep their snapshot.
+- **Drafts:** **Save** or `Primary+S` saves; **Revert** restores saved content. Switching rules retains drafts; toggles and ordering save immediately. Resolve external conflicts before overwriting. Deleting rules with unsaved edits, quitting, and update restart offer save/discard/cancel. Failed saves retain drafts; forced exit loses them.
+- **Bodies:** replace finite UTF-8 text directly or with Go regex captures (`$1`, `$$`). Limits are **8 MiB** per processing stage and **10 seconds** per body phase, with additional regex limits. Streaming, binary, non-UTF-8, and bodyless responses (HEAD/204/304) reject body edits. **Rewrite failures interrupt the exchange.**
+- **Regex replacement test:** select **Regex replace**, paste a sample below **Match test**, and click **Preview** for the match count and inline diff. Pattern/replacement edits refresh the preview; the pencil returns to the original sample. Copy uses the sample while editing and the result while previewing, and is disabled for pending or failed results. Large text shows the full result without diff highlighting or wrapping. Tests send no requests or save rules; samples are not persisted.
+- **Startup:** the rule page and proxy startup wait for rules to load. Loading errors block editing and proxy startup; resolve the error and restart. Unsupported saved rules remain visible but do not execute.
+
+Capture, history, and exports use the final rewritten content. See the [technical reference](technical/http-rewrite-rules.md) for protocol details and resource limits.
+
+## Keyboard Shortcuts
+
+Open `Settings > Shortcuts` to search commands, record or clear a binding, and restore one or all known commands.
+
+`Primary` means Command on macOS and Ctrl on Windows/Linux. Menus and tooltips resolve labels from the active saved configuration.
+
+| Command | Default binding |
+| --- | --- |
+| Save the active dirty request, settings, Python file/parameters, or rewrite rule | `Primary+S` |
+| Open settings | `Primary+,` |
+| Capture / categories / API collections / rewrite rules / Python plugins / memory statistics | `Primary+1` through `Primary+6` |
+| New HTTP / WebSocket request | `Primary+N` / `Primary+Shift+N` |
+| Close the active closable tab | `Primary+W` |
+| Next / previous tab | `Control+Tab` / `Control+Shift+Tab` |
+| Send the active request | `Primary+Enter` |
+| Focus the active capture/history filter | `Primary+F` |
+
+Application shortcuts work only while a FlowLens window has focus and an enabled handler exists for the current page, tab, modal, and editable control. Text fields and code editors keep their normal keyboard behavior when no command can run.
+
+Optional system-wide shortcuts use the operating system's global shortcut service. They are disabled by default and limited to showing the main window and toggling the proxy. Registration may require operating-system approval or conflict resolution; Wayland portals may choose the final accelerator.
+
+Version 1 supports one single-step binding per command. Multi-step chords and alternate bindings are not supported.
+
+## System Tray and Windows
+
+- Closing the main window hides FlowLens to the system tray instead of quitting.
+- Use the tray menu to restore the main window or fully close the application.
+- FlowLens runs as one instance per build mode; starting it again restores and focuses the existing main window.
+- Window size, position, and maximized state are persisted when possible.
+- Settings use a dedicated window and confirm unsaved changes before closing.
+- Switching between the custom and native title bar requires an application restart.
+
+## Managed System Proxy
+
+The toolbar system-proxy control can temporarily point supported operating-system proxy settings at the active FlowLens listener.
+
+- Windows supports managed HTTP/HTTPS proxy settings. SOCKS5 is disabled because modern WinINet clients do not reliably support a SOCKS system proxy.
+- macOS supports managed HTTP/HTTPS and SOCKS5 settings.
+- Linux does not currently expose the managed system-proxy control.
+- Listener host `ALL` (`0.0.0.0`) maps to `127.0.0.1` for local system-proxy settings.
+- If another application or the user changes the proxy while FlowLens manages it, FlowLens does not overwrite that newer configuration during restoration.
+
+The original proxy snapshot is kept in process memory and is restored during a normal shutdown. A crash, forced termination, or power loss can leave the system proxy pointing at FlowLens. Restore it manually through the operating-system network settings; restarting FlowLens cannot recover a snapshot lost with the previous process.
+
+## DNS Cache
+
+The globe control beside the HTTP cache control opens application DNS cache settings. Enable the cache, choose a duration from 1 to 3600 seconds, then select **Apply**. The default is off with a 60-second duration. Settings persist across application restarts.
+
+Capture, Request Editor, resend, and WebSocket connections share up to 1024 cached domains. Only successful local lookups are cached; failures are not. The duration is an application expiration period, not the original DNS record TTL. Paths where an upstream proxy resolves the destination continue to use that proxy's resolver.
+
+**Clear cache** removes application records without interrupting existing HTTP, HTTP/2, or WebSocket connections. New connections resolve again; existing connections may keep using the previously resolved server. Disabling the cache or changing its duration also removes stored records. Stopping capture preserves the cache for Request Editor and other business requests; exiting FlowLens releases it.
+
+These controls do not clear operating-system or upstream DNS caches, and do not affect update checks.
+
+## Timing, Sizes, and HAR Import/Export
+
+FlowLens records request-attempt start, request-write end, and unmodified-response first-byte/body-end events at the upstream transport boundary. Responses changed by rewrite rules instead use actual downstream send observations. Live traffic and HBIN history retain microsecond Unix timestamps, terminal states, logical text header sizes, and encoded Body sizes.
+
+- Retries replace stale attempt data.
+- Failed, canceled, pending, or incomplete exchanges retain unknown values instead of synthetic completion data.
+- The backend computes `metrics.headerSize` once as the UTF-8 byte size of the complete head shown in the Raw panel: start line plus CRLF, displayed header field lines plus CRLF, and the final CRLF. Detail views, traffic totals, and HAR `headersSize` read this metric directly.
+- HTTP/2 uses synthesized lines such as `GET /path HTTP/2.0` and `HTTP/2.0 200`. Its pseudo-headers follow the Raw panel: `:authority` becomes `host`, `:scheme` is omitted, and method/path/status are consumed by the start line. These are logical text sizes, excluding TCP/TLS bytes, HPACK compression, and frame overhead.
+
+Capture, history, and traffic context menus can export all or selected entries as HAR 1.2. HTTP/HTTPS exchanges and WebSocket upgrade handshakes are exportable; Raw TCP tunnels and WebSocket frames are skipped.
+
+The Timing panel also shows upstream DNS, TCP connect, and TLS handshake durations from mitmproxy-go's connection metadata. These describe the connection and are shared by requests that reuse it. Total Duration covers the current HTTP exchange; connection setup completed before the request starts is not added to it. Unavailable or incomplete connection phases display `—`.
+
+Application DNS cache hits report a DNS duration of `0`. First lookups, expired entries, and in-flight shared queries retain their measured duration. Cache lookup overhead remains part of the connection setup interval. On Windows, connection setup and upstream HTTP exchange timings use a shared high-resolution clock. Display and history retain microsecond timestamps.
+
+HAR timestamps retain microsecond precision; elapsed times use milliseconds with fractional digits. Each complete, disjoint DNS, TCP connect, and TLS phase is assigned once to the earliest recorded request carrying that connection metadata in the source capture/history. This assignment is independent of selection and export order: selecting only a later reused-connection request leaves its connection phases at `-1`. When setup precedes the HTTP exchange (as with HTTPS CONNECT), `startedDateTime` moves to the actual setup start and `time` includes it. `blocked` accounts for setup/forwarding gaps before the HTTP exchange; only the part of a connection phase overlapping the request interval is subtracted from `send`. HAR `connect` includes TLS, so `ssl` is not added again when summing `time`. For complete, non-overlapping exchanges, `time` equals the sum of known `blocked`, `dns`, `connect`, `send`, `wait`, and `receive` values. Remaining preparation and retry overhead stays in `send`, as documented in `timings.comment`. Unavailable or incomplete phases remain `-1`; a failed HTTP send does not erase a completed connection phase. Overlapping upload/response phases cannot be expressed as a serial waterfall, so `wait` and `time` remain `-1`. The original connection timestamps remain in `_connectionTimings`, and original request/response timestamps and terminal states also remain available in extension fields.
+
+HAR `headersSize` follows this display-size convention for every protocol; HTTP/2 therefore has a logical size even though its compressed wire size is not captured. Missing metrics, truncated headers, or unavailable start-line data use `-1`. Normalized fallback fields can still have a known display size. HTTP/1 uses origin-form paths, with authority-form targets for CONNECT and `*` for OPTIONS. HBIN stores the same metric directly; earlier development values are not converted.
+
+Completed URL-encoded and multipart request bodies up to 4 MiB and 1,000 parameters are exported as `postData.params`, preserving parameter order, duplicates, empty values, filenames and part content types. Binary multipart values use Base64 with a per-parameter `_encoding` extension. Structured forms omit `postData.text`, as required by HAR. Larger forms, incomplete or malformed bodies, and unsupported form representations retain the raw `postData.text`; binary raw bodies use `_encoding: "base64"`. Readers that ignore `_encoding` cannot reconstruct those binary values. Multipart boundaries are represented structurally rather than preserved as raw text.
+
+HAR output is streamed to a temporary file in the destination directory and atomically replaces the target after completion. Missing Body-cache payloads are counted without dropping otherwise exportable entries.
+
+Use **Import HAR** beside the History refresh button, or drop `.har` files onto the capture/history traffic table, including its empty state. Multiple files are imported sequentially. Each successful file becomes a separate HBIN v2 history named after the file; importing it again creates another history. The first successful result opens in the existing history tab. The result reports imported files/entries, skipped entries, unavailable bodies and file failures. Canceling the file picker does nothing.
+
+Imported histories survive restart and follow the same deletion and retention rules as other histories. Their history creation date is the import date, while request timestamps retain the archive's original dates. The source file is not modified or retained as a separate copy. Invalid JSON, cancellation or write failure rolls back the affected file; invalid individual entries are skipped. Limits are 512 MiB per file, 32 MiB per JSON value/entry and 100,000 entries per file.
+
+HAR 1.2 and the common fields of 1.1 are supported, including a UTF-8 BOM. Header arrays retain their order, duplicates, case and empty values, with wire order marked unavailable. Text and Base64 bodies are supported; decoded content is not decompressed again. URL-encoded parameters can reconstruct a request body, while multipart parameters without raw body text cannot preserve the original multipart bytes and are marked unavailable. Missing payloads stay distinct from genuinely empty bodies: unavailable request bodies cannot be resent, opened for editing or copied as a complete request.
+
+Import maps measurements into the existing fields without adding source labels or changing HBIN versions. Valid FlowLens timestamp/state extensions take precedence. Other HAR timings are converted from milliseconds to microseconds, preserving total duration and known stages; pre-send waiting/connection costs are included in the request interval, and TLS is not counted twice. Missing, inconsistent and failed timings remain unknown. Header size is recalculated using the Raw display convention; encoded body sizes come from HAR `bodySize`, not decoded text length. Pages, cache details, standalone cookie attributes, WebSocket frames and unsupported extensions are not retained. Re-export therefore does not reproduce every original HAR field, and `blocked` may become part of `send`.
+
+HAR files are not automatically redacted. They can contain authorization headers, cookies, request/response bodies, and process paths; review them before sharing.
+
+## Process Attribution and Icons
+
+Process attribution is enabled by default under `Settings > Proxy` and applies only to direct local connections accepted by FlowLens. Remote clients are marked as remote and skip operating-system lookup.
+
+- Lookup is asynchronous and never blocks connection acceptance.
+- The traffic list displays the app icon and display name when available.
+- Details include process name, PID, app ID, executable path, and lookup status.
+- Text metadata may arrive before the icon.
+- Process metadata is stored with history; icons are loaded separately.
+- Missing permissions or metadata fall back to a placeholder without interrupting capture.
+
+The backend caches identities by PID plus process start token so PID reuse does not inherit stale metadata. Extracted PNG files are stored under `cache/process-icons`. The interface keeps an LRU cache of up to 256 decoded icons and merges concurrent requests for the same icon.
+
+Storage cleanup invalidates backend files and the interface's cached icons. If a PNG is deleted externally, the backend can recreate it on the next read while the process identity is still available. An icon already in the interface's cache does not contact the backend, so recovery waits until the entry is cleared or evicted.
+
+## Runtime Logging
+
+- Logging starts enabled at `info` level.
+- The current file is `flowlens.log` under the application configuration `logs` directory.
+- Files rotate at 10 MB and retain up to five backups.
+- Development/debug builds also log to the console; production builds use files by default.
+- `Settings > Logs` controls enablement, level, clearing, refresh, and opening the log directory.
+
+Logs can contain target hosts, paths, API Collection names, and local file paths. Review or redact them before sharing.
+
+## Settings and Local Storage
+
+- `Settings > General`: app/code fonts and title-bar mode.
+- `Settings > Proxy`: process attribution, upstream proxy, built-in or custom CA, extra trusted roots, and per-host client certificates.
+- `Settings > Python`: interpreter and global Python plugin behavior.
+- `Settings > Shortcuts`: application bindings and optional global shortcuts.
+- `Settings > Logs`: logging state and file actions.
+- `Settings > Storage`: Body-cache threshold, WebSocket retention, history retention, cache cleanup, and local data statistics.
+
+`No Proxy` sends traffic directly, `System Proxy` resolves the operating-system or environment proxy, and `Custom Proxy` uses the configured URL.
+
+FlowLens stores `flowlens.db`, API Collection managed files, history, logs, and caches under the user configuration directory resolved by the backend. API Collection Body files are stored under `api_collections/files`; process icons are stored under `cache/process-icons`.
+
+On Unix-like systems, managed directories are tightened to owner-only access (`0700`) and database, history, log, and Body-cache files to `0600`. Windows relies on the access controls of the current user's configuration directory.
+
+Storage cleanup can remove caches alone or caches together with the current capture and readable saved history. Cache-only cleanup first archives a non-empty current capture, then clears the live list. Unsupported or unindexed history files are preserved to avoid destructive format loss. Cleanup does not delete `flowlens.db`, API Collections, preferences, certificates, or logs.
+
+**Restore Initial State** is a separate operation under `Settings > Storage > Danger Zone`. After confirmation it schedules a reset and prompts you to fully exit FlowLens and reopen it manually. While waiting, all windows block further operations and settings saves. Use **Exit Application** or the tray's quit action; normal shutdown stops running tasks and restores the managed system proxy under the existing rules. Unsaved content is discarded. On the next launch, before opening the database, FlowLens permanently deletes all managed data: settings and window/layout preferences, API Collections and their managed Body files, Python plugins and runtime files, rewrite rules, all histories (including unsupported files), logs, certificates, caches, and request drafts. Only known application-owned temporary files are cleaned; exported files, original request files, external Python installations, and external custom certificates/private keys are kept.
+
+Confirmation removes only the built-in CA's exact current-user certificate/trust record on supported platforms, even when custom CA mode is selected. It does not remove external custom CA trust, historical CA certificates, machine-wide trust, or trust in other applications. Normal startup generates a new built-in CA without installing trust; install its trust again when needed. A failed CA query/uninstall or reset preparation leaves application data intact. On the next launch, a shared startup progress page appears before cleanup begins and lists the applicable stages until the main window appears. Completed stages remain visible even when cleanup is fast; a failed stage is marked for retry. This page runs in a separate progress process. The application process keeps the single-instance lock and opens its database only after cleanup succeeds. Temporary file locks receive bounded retries; permanent errors and damaged reset markers offer **Retry / Exit** on the same startup page. Retry reloads and validates the marker before cleanup. A successful retry continues startup. Exiting preserves the pending reset for the next launch. Completion is reported after cleanup and normal startup succeed. If the progress process or startup window cannot start, FlowLens logs the failure and exits without opening the database or deleting application data; the reset marker remains for the next launch.
+
+New history files use HBIN v2, which adds upstream connection timestamps. Existing v1 files remain readable and show these unavailable timings as `—`. Earlier development-only layouts are unsupported; unknown versions are skipped without being deleted.
+
+## MITM Certificates
+
+HTTPS capture requires a locally trusted CA certificate. Inspect the selected CA under Settings, add it to the trust store used by the client application, then restart the proxy service when required.
+
+New installations enable **Use built-in CA certificate** by default. FlowLens manages its certificate and private key internally without displaying their paths. It checks them on startup and when saving a switch to built-in mode, generating a pair only if both files are absent. Existing certificates are reused. Incomplete, invalid, expired or unreadable files are left intact for manual repair through **Generate CA / Regenerate CA**; initialization failures do not prevent opening Settings.
+
+Turn the switch off to select custom CA certificate and private key paths. Both paths are required to start the proxy. Generation and regeneration are disabled in this mode, including backend calls, so FlowLens cannot overwrite your certificate files. Switching modes preserves your custom paths and does not install, uninstall, move or replace certificates. Save to apply the selected mode and restart a running proxy when prompted. Existing installations retain their previous paths in custom mode after upgrading.
+
+On Windows and macOS, the shield icon beside **Generate CA / Regenerate CA** installs or uninstalls the saved MITM CA for the **current user**. Save pending settings before using the button. Installation requires a valid CA certificate and matching private key; only the public certificate is installed. The status reflects the current user's store and trust configuration; it does not guarantee that every application uses the operating system's trust.
+
+Windows installs into the current user's **Trusted Root Certification Authorities** store. Installation and uninstall do not show a Windows certificate confirmation dialog; uninstall during **Restore Initial State** also follows this behavior. Certificates inherited from the local computer are excluded from the displayed status and uninstall operation.
+
+macOS uses `/usr/bin/security` to add the certificate to the current user's **login keychain** and configure user trust for the `ssl` and `basic` policies. macOS may request authentication. The operation does not use `sudo` or change the System keychain or administrator trust settings. Canceling authentication can leave a certificate imported without trust; FlowLens displays **installation incomplete** with a warning icon. Use the uninstall button to clean up before retrying. An orphaned user trust record is also removable even if its login-keychain certificate is already absent.
+
+Uninstall removes only the exact configured certificate and its user trust settings, leaving its local certificate/key files intact. It remains available if the private key is missing or the certificate has expired. Uninstall an installed or incompletely installed CA before regenerating it. FlowLens does not automatically replace trust or clean up historical CAs; Linux, machine-wide trust and application-specific stores still require manual management. If querying the store fails, the action is disabled until the status can be refreshed by reopening Proxy settings.
+
+Default proxy settings:
+
+| Setting | Default |
+| --- | --- |
+| Mode | HTTP |
+| Host | `127.0.0.1` |
+| Port | `8080` |
+| Process attribution | Enabled |
+| Upstream proxy | System Proxy |
+| Use built-in CA certificate | Enabled for new installations |
+
+Changing the listener, proxy mode, or CA may require rebinding or restarting the running proxy service.
+
+## Security
+
+- Use FlowLens only for traffic you own or are authorized to inspect.
+- Listening on `ALL` exposes the proxy to reachable devices; apply suitable firewall and network controls.
+- Anyone with the generated CA private key can impersonate endpoints trusted by that CA. Keep it private and remove or regenerate it when necessary.
+- Captures, history, HAR, API Collections, logs, cached bodies, and process metadata may contain sensitive information.
+- Python plugins run as trusted local code. Interpreter isolation is not a security sandbox.
+
+Report vulnerabilities according to [SECURITY.md](../SECURITY.md), not through public issues.

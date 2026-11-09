@@ -1,0 +1,232 @@
+# FlowLens Python SDK API v1
+
+请为 FlowLens HTTP 请求编辑器编写 Python 3 脚本，使用 SDK API v1。只使用下面列出的 FlowLens API。
+
+## 当前请求脚本
+
+在 HTTP 请求编辑器的 Script 页编辑脚本并打开开关，先在设置中配置 Python。此作用域没有匹配规则或可配置参数，context.params 为空。API 集合可以保存源代码，但重新打开时脚本默认关闭。每次发送的模块状态独立。
+
+## 运行约定
+
+### Hook 约定
+必须同时定义两个同步 Hook：onRequest(context, request) 和 onResponse(context, response)。修改并返回传入的同一个 SDK 对象，或返回 None 阻止处理。不要使用 async def，也不要返回新建的 Request 或 Response。
+
+### 作用域与执行顺序
+Hook 仅在 HTTP 请求编辑器中执行，不参与普通 MITM 抓包、重发和 WebSocket 客户端。请求顺序为全局插件 → 当前请求脚本 → 网络，响应按相反顺序执行。全局插件按列表顺序，基于原始方法与完整 URL 匹配一次。
+
+### 阻止与失败行为
+onRequest 返回 None 会在发送前阻止请求；onResponse 返回 None 会阻止响应展示，SSE 则在开始流式传输前阻止。请求 Hook 出错时不发送请求；响应 Hook 出错时返回未修改的线上响应并附诊断。响应修改仅影响编辑器展示，不改写抓包数据或传输指标。
+
+### 参数与共享状态
+context.params 和 context.transport 为深层只读映射，JSON 数组表现为元组。transport 包含 protocol、proxy_mode、tls_client_hello_profile、http2_fingerprint，不含代理凭据。context.shared 必须保持为 JSON 对象，仅供同一插件、同一次发送的两个 Hook 共享；跨阶段状态应使用它，不依赖模块全局变量。Params 和 shared 编码后各不超过 1 MiB。
+
+### 请求头与查询参数
+Headers 保留顺序、重复名称、原始大小写和空值，查找不区分大小写。Queries 保留顺序、重复项和空值，名称区分大小写。两者支持迭代和 len()；可变对象迭代得到 HeaderField 或 QueryField，只读视图迭代得到 (name, value) 元组。查询修改后使用标准 URL 编码，空格编码为 +。 Headers[index] 读取字段；Queries[index] 读取字段，Queries[name] 读取首个值，Queries[name] = value 等同于 set()。FrozenQueries[index] 返回元组，FrozenQueries[name] 返回首个值。
+
+### URL 与自动生成的请求头
+request.url 决定路由。给 url 赋值会重新解析 path 和 queries；修改 path 或 queries 会重建 url。请求方法必须保持大写。Host、伪头、消息分帧和自动请求头由后端管理。content_type 为只读；非空请求 Body 决定发送的 Content-Type，清空 Body 不会自动移除已有 Content-Type。响应的 Content-Type 通过 response.headers 修改。
+
+### Body 类型与替换
+Body.kind 和 Body.value 不可重新赋值。类型为 none → None；text/xml → str；json → 解码后的 JSON；binary → bytes；file → FileDescriptor；urlencoded → list[URLEncodedField]；multipart → list[MultipartPart]；unavailable → 读取抛出 ValueError。替换 request.body 或 response.body：None 清空，str 为 UTF-8 文本，bytes/bytearray/memoryview 为二进制，dict/list 为 JSON，或显式使用 Body(kind, value)。其他直接赋值类型抛出 TypeError。修改 JSON 后应重新赋回 Body；结构化表单项仍可修改。
+
+### 文件与内存
+读取 body.value 可能将整个 Body 载入内存。body.write_file(绝对路径) 可以不先载入内存而复制普通或文件 Body 的原始字节，不支持 urlencoded 和 multipart。使用 Body(kind, FileDescriptor.from_file(绝对路径)) 从文件替换内容，源文件须为关闭写入器后的非符号链接普通文件。描述符支持 text/json/xml/binary 和仅请求支持的 file。直接赋路径字符串会得到文本。给 Body 所属对象赋值时立即复制源文件；新增 multipart 文件项的源文件必须保留到 Hook 返回。file 和 multipart 仅用于请求，multipart 的 filename 独立于源文件名。
+
+### 只读请求快照
+response.request 是交给传输层的请求语义快照，也可能为 None。RequestSnapshot、BodySnapshot、FrozenHeaders、FrozenQueries、FileSnapshot 和表单快照是运行时提供的视图，不作为 SDK 导入。快照的值深层不可变。FileSnapshot 仅提供 name 和 size，不提供路径；通过 snapshot.body.write_file(绝对路径) 复制可读取的 Body。
+
+### SSE
+SSE Hook 在收到状态码和响应头之后、开始转发事件之前执行，response.body.kind 为 unavailable。只允许修改 response.code 和 response.headers；修改 Body 或 trailers 会被拒绝。SSE 事件块不会经过 Python。
+
+### 运行环境与依赖
+需要 Python 3。flowlens SDK 由应用提供，不要通过 pip 安装它。第三方依赖须手动安装到所选解释器中。Hook 为同步执行，阻塞 I/O 计入设置中的 100–60,000 ms 超时。当前请求脚本源代码上限为 1 MiB，托管源文件上限为 32 MiB，插件包为 64 MiB。Worker 帧上限为 64 MiB；超时、取消、崩溃或协议损坏会导致 Worker 被替换。
+
+### 输出与信任
+使用 context.log.debug/info/warning/error 或 print()，输出按执行 ID 显示在本次发送的 Console 中。不要直接写进程 stdout，也不要让子进程继承 stdout，以免破坏 Worker 协议。插件是具有当前用户权限的可信本地代码，Python 隔离模式不是安全沙箱。避免打印凭据或请求体。
+
+通过传入的对象访问这些视图，不要导入或自行构造。 Context 可导入用于类型标注，但实例由运行时传入。ReadonlyMapping 与 JsonObject 是只读映射和普通 dict 的说明标签，不是 flowlens 类型。
+
+## 完整 API 参考
+
+### Hooks (Hook)
+- `def onRequest(context: Context, request: Request) -> Request | None` — 修改并返回传入的 request，或返回 None 在发送前阻止请求。
+- `def onResponse(context: Context, response: Response) -> Response | None` — 修改并返回传入的 response，或返回 None 阻止响应展示。
+
+### Context (可从 SDK 导入)
+- `Context.id: str  # read-only` (只读) — 请求执行 ID。
+- `Context.timestamp: int  # read-only` (只读) — 发送开始时间，Unix 微秒时间戳。
+- `Context.original_url: str  # read-only` (只读) — 进入 Hook 链之前的原始 URL。
+- `Context.original_method: str  # read-only` (只读) — 进入 Hook 链之前的原始方法。
+- `Context.plugin_id: str  # read-only` (只读) — 当前插件 ID。
+- `Context.plugin_name: str  # read-only` (只读) — 当前插件名称。
+- `Context.params: Mapping[str, Any]  # read-only` (只读) — 当前插件的深层只读参数；JSON 数组表现为元组。
+- `Context.transport: Mapping[str, Any]  # read-only` (只读) — 深层只读传输设置，不包含代理凭据。
+- `Context.shared: dict[str, Any]` (可写) — 同一插件、同一次发送中两个 Hook 共享的 JSON 对象。
+- `Context.log: ContextLogger  # read-only` (只读) — 写入当前请求执行 Console 的结构化日志。
+
+### ContextLogger (运行时提供)
+- `ContextLogger.debug(message: Any) -> None` — 记录调试消息。
+- `ContextLogger.info(message: Any) -> None` — 记录信息消息。
+- `ContextLogger.warning(message: Any) -> None` — 记录警告消息。
+- `ContextLogger.error(message: Any) -> None` — 记录错误消息。
+
+### Request (可从 SDK 导入)
+- `Request(method: str, url: str, headers: Headers | None = None, body: Any = None)` — 创建请求对象；Hook 必须修改并返回传入的对象。
+- `Request.method: str` (可写) — 请求方法，必须保持大写。
+- `Request.url: str` (可写) — 完整 URL；可变请求中赋值会重新解析 path 和 queries。
+- `Request.scheme: str  # read-only` (只读) — URL 协议，只读。
+- `Request.host: str  # read-only` (只读) — URL 主机名，只读。
+- `Request.port: int | None  # read-only` (只读) — URL 端口，只读。
+- `Request.path: str` (可写) — URL 路径；可变请求中修改后会重建 URL。
+- `Request.queries: Queries` (可写) — 保留顺序、重复项和空值的查询参数。
+- `Request.content_type: str | None  # read-only` (只读) — Content-Type 的只读视图。非空请求的发送值由最终 Body 类型生成；响应通过 headers 修改。
+- `Request.headers: Headers` (可写) — 保留顺序、重复项、大小写和空值的请求头。
+- `Request.body: Body` (可写) — 语义 Body；通过修改所属 request.body 或 response.body 替换内容。
+
+### RequestSnapshot (运行时提供)
+- `RequestSnapshot.method: str  # read-only` (只读) — 关联响应的请求方法，只读。
+- `RequestSnapshot.url: str  # read-only` (只读) — 关联响应的完整请求 URL，只读。
+- `RequestSnapshot.scheme: str  # read-only` (只读) — URL 协议，只读。
+- `RequestSnapshot.host: str  # read-only` (只读) — URL 主机名，只读。
+- `RequestSnapshot.port: int | None  # read-only` (只读) — URL 端口，只读。
+- `RequestSnapshot.path: str  # read-only` (只读) — 关联请求的 URL 路径，只读。
+- `RequestSnapshot.queries: FrozenQueries  # read-only` (只读) — 保留顺序、重复项和空值的查询参数。
+- `RequestSnapshot.content_type: str | None  # read-only` (只读) — 关联请求的 Content-Type，只读。
+- `RequestSnapshot.headers: FrozenHeaders  # read-only` (只读) — 关联请求的只读有序请求头。
+- `RequestSnapshot.body: BodySnapshot  # read-only` (只读) — 关联请求的深层只读语义 Body 快照。
+
+### Response (可从 SDK 导入)
+- `Response(code: int, headers: Headers | None = None, trailers: Headers | None = None, body: Any = None, request: RequestSnapshot | None = None, protocol: str = "", status_text: str = "")` — 创建响应对象；Hook 必须修改并返回传入的对象。
+- `Response.code: int` (可写) — 响应状态码。
+- `Response.protocol: str  # read-only` (只读) — 上游响应实际使用的协议，只读。
+- `Response.status_text: str  # read-only` (只读) — 包含状态码的只读状态文本，修改 code 后自动更新。
+- `Response.content_type: str | None  # read-only` (只读) — Content-Type 的只读视图。非空请求的发送值由最终 Body 类型生成；响应通过 headers 修改。
+- `Response.headers: Headers` (可写) — 保留顺序、重复项、大小写和空值的请求头。
+- `Response.trailers: Headers` (可写) — 有序响应尾部字段，SSE 中不可修改。
+- `Response.body: Body` (可写) — 语义 Body；通过修改所属 request.body 或 response.body 替换内容。
+- `Response.request: RequestSnapshot | None  # read-only` (只读) — 产生当前响应的请求只读快照，可能为 None。
+
+### Headers (可从 SDK 导入)
+- `Headers(fields: Iterable[HeaderField | dict[str, str]] | None = None)` — 创建保留顺序和重复项的请求头。
+- `Headers.get(name: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `Headers.get_all(name: str) -> list[str]` — 按顺序返回全部同名值。
+- `Headers.set(name: str, value: str) -> None` — 替换全部同名值并保留首次匹配的位置，无匹配时追加。
+- `Headers.add(name: str, value: str) -> None` — 追加字段，允许重复名称。
+- `Headers.remove(name: str) -> None` — 删除全部匹配名称的字段。
+- `Headers.clear() -> None` — 清空全部字段或共享状态。
+
+### FrozenHeaders (运行时提供)
+- `FrozenHeaders.get(name: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `FrozenHeaders.get_all(name: str) -> list[str]` — 按顺序返回全部同名值。
+
+### Queries (可从 SDK 导入)
+- `Queries(fields: Iterable[QueryField | tuple[str, str] | dict[str, str]] | None = None)` — 创建保留顺序和重复项的查询参数。
+- `Queries.get(name: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `Queries.get_all(name: str) -> list[str]` — 按顺序返回全部同名值。
+- `Queries.set(name: str, value: str) -> None` — 替换全部同名值并保留首次匹配的位置，无匹配时追加。
+- `Queries.add(name: str, value: str) -> None` — 追加字段，允许重复名称。
+- `Queries.remove(name: str) -> None` — 删除全部匹配名称的字段。
+- `Queries.clear() -> None` — 清空全部字段或共享状态。
+- `Queries.to_string() -> str` — 返回不含问号的查询字符串；未修改的查询保留原始编码。
+
+### FrozenQueries (运行时提供)
+- `FrozenQueries.get(name: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `FrozenQueries.get_all(name: str) -> list[str]` — 按顺序返回全部同名值。
+- `FrozenQueries.to_string() -> str` — 返回不含问号的查询字符串；未修改的查询保留原始编码。
+
+### Body (可从 SDK 导入)
+- `Body(kind: str = "none", value: Any = None)` — 创建指定语义类型的 Body。
+- `Body.kind: str  # read-only` (只读) — 类型：none（空）、text、json、xml、binary；仅请求：file、urlencoded、multipart；仅 SSE 响应：unavailable（Body 不可读写）。
+- `Body.value: Any  # read-only` (只读) — 语义值，属性不可重新赋值；读取可能载入完整内容，结构化表单项仍可修改。
+- `Body.write_file(path: str) -> None` — 将可读取的普通或文件 Body 原始字节流式复制到绝对路径，不支持表单 Body。
+
+### BodySnapshot (运行时提供)
+- `BodySnapshot.kind: str  # read-only` (只读) — Body 的语义类型，只读。
+- `BodySnapshot.value: Any  # read-only` (只读) — 深层只读语义值；文件只暴露名称和大小。读取大型普通 Body 可能载入完整内容。
+- `BodySnapshot.write_file(path: str) -> None` — 将可读取的普通或文件 Body 原始字节流式复制到绝对路径，不支持表单 Body。
+
+### QueryField (可从 SDK 导入)
+- `QueryField(name: str, value: str)` — 创建查询字段。
+- `QueryField.name: str` (可写) — 查询参数名。
+- `QueryField.value: str` (可写) — 查询参数值。
+
+### HeaderField (可从 SDK 导入)
+- `HeaderField(name: str, value: str)` — 创建有序请求头字段。
+- `HeaderField.name: str` (可写) — 请求头字段名。
+- `HeaderField.value: str` (可写) — 请求头字段值。
+
+### FileDescriptor (可从 SDK 导入)
+- `FileDescriptor(path: str, name: str = "", size: int = -1, read_only: bool = True)` — 创建文件描述符；用户文件优先使用 from_file()。
+- `FileDescriptor.path: str  # read-only` (只读) — 文件的绝对路径。
+- `FileDescriptor.name: str  # read-only` (只读) — 文件名。
+- `FileDescriptor.size: int  # read-only` (只读) — 文件大小，单位为字节。
+- `FileDescriptor.read_only: bool  # read-only` (只读) — 文件是否只读。
+- `FileDescriptor.from_file(path: str) -> FileDescriptor` — 从绝对路径创建文件描述符，必须是关闭写入器后的非符号链接普通文件。
+
+### FileSnapshot (运行时提供)
+- `FileSnapshot.name: str  # read-only` (只读) — 原始文件名，只读。
+- `FileSnapshot.size: int  # read-only` (只读) — 文件大小，单位为字节。
+
+### URLEncodedField (可从 SDK 导入)
+- `URLEncodedField(name: str, value: str, enabled: bool = True)` — 创建 URL 编码的表单字段。
+- `URLEncodedField.enabled: bool` (可写) — 字段或表单项是否启用。
+- `URLEncodedField.name: str` (可写) — URL 编码表单字段名。
+- `URLEncodedField.value: str` (可写) — URL 编码表单字段值。
+
+### URLEncodedFieldSnapshot (运行时提供)
+- `URLEncodedFieldSnapshot.enabled: bool  # read-only` (只读) — 字段或表单项是否启用。
+- `URLEncodedFieldSnapshot.name: str  # read-only` (只读) — URL 编码表单字段名，只读。
+- `URLEncodedFieldSnapshot.value: str  # read-only` (只读) — URL 编码表单字段值，只读。
+
+### MultipartPart (可从 SDK 导入)
+- `MultipartPart(name: str, value: str = "", file: FileDescriptor | None = None, enabled: bool = True, filename: str = "")` — 创建 multipart 文本或文件表单项。
+- `MultipartPart.enabled: bool` (可写) — 字段或表单项是否启用。
+- `MultipartPart.name: str` (可写) — multipart 表单项名称。
+- `MultipartPart.value: str` (可写) — 文本表单项的值。
+- `MultipartPart.file: FileDescriptor | None` (可写) — 文件表单项的文件描述符；快照不提供路径。
+- `MultipartPart.filename: str` (可写) — Content-Disposition 使用的独立文件名。
+
+### MultipartPartSnapshot (运行时提供)
+- `MultipartPartSnapshot.enabled: bool  # read-only` (只读) — 字段或表单项是否启用。
+- `MultipartPartSnapshot.name: str  # read-only` (只读) — multipart 表单项名称，只读。
+- `MultipartPartSnapshot.value: str  # read-only` (只读) — 文本表单项的值，只读。
+- `MultipartPartSnapshot.file: FileSnapshot | None  # read-only` (只读) — 文件表单项的文件描述符；快照不提供路径。
+- `MultipartPartSnapshot.filename: str  # read-only` (只读) — Content-Disposition 使用的独立文件名。
+
+### ReadonlyMapping (运行时提供)
+- `ReadonlyMapping.get(key: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `ReadonlyMapping.keys() -> KeysView[str]` — 返回全部键。
+- `ReadonlyMapping.items() -> ItemsView[str, Any]` — 返回全部键值对。
+- `ReadonlyMapping.values() -> ValuesView[Any]` — 返回全部值。
+
+### JsonObject (运行时提供)
+- `JsonObject.get(key: str, default: Any = None) -> Any` — 返回首个匹配的值，不存在时返回 default。
+- `JsonObject.keys() -> dict_keys[str]` — 返回全部键。
+- `JsonObject.items() -> dict_items[str, Any]` — 返回全部键值对。
+- `JsonObject.values() -> dict_values[Any]` — 返回全部值。
+- `JsonObject.setdefault(key: str, default: Any = None) -> Any` — 读取键，不存在时写入并返回默认值。
+- `JsonObject.update(other: Mapping[str, Any]) -> None` — 批量更新共享状态。
+- `JsonObject.pop(key: str, default: Any = ...) -> Any` — 删除并返回共享值；未传入默认值时，缺失的键会引发 KeyError。
+- `JsonObject.clear() -> None` — 清空全部字段或共享状态。
+
+## 最小脚本
+
+```python
+from flowlens import *
+
+
+def onRequest(context, request):
+    return request
+
+
+def onResponse(context, response):
+    return response
+```
+
+## 输出要求
+
+输出包含两个同步 Hook 的完整可运行脚本，使用传入的请求与响应对象。优先使用 Python 标准库；确需第三方依赖时列明依赖，并说明安装到所选解释器的方法。不要编造 API、安装 flowlens 或依赖 Worker 和存储内部接口。简要说明如何启用脚本及必要配置。
+
+## 我的需求
+
+请在这里描述匹配条件、请求或响应的修改、输入与预期输出。

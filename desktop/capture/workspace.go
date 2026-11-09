@@ -1,0 +1,315 @@
+// Package capture builds the traffic capture workspace: the proxy toolbar, the
+// filter bar, the traffic table, and the actions on its rows.
+package capture
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
+	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/shortcuts"
+	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
+	"github.com/josexy/flowlens/locales"
+	nui "github.com/josexy/nuxt-ui-go"
+	"github.com/josexy/nuxt-ui-go/icons/lucide"
+)
+
+// Limits of the split between the table and the detail panel.
+const (
+	defaultTableSplit = 60
+	minTableSplit     = 20
+	maxTableSplit     = 90
+)
+
+// Host is what the workspace needs from the rest of the application.
+type Host struct {
+	// ListLocalIPs lists the addresses the proxy can listen on.
+	ListLocalIPs func() []settingservice.LocalIPAddress
+	// Resend sends a captured request again.
+	Resend func(ctx context.Context, id uint64, config proxyservice.ResendConfig) (proxyservice.ResendResult, error)
+	// OpenEditor opens a captured request in a new editor tab.
+	OpenEditor func(entry *logic.TrafficEntry, body *proxyservice.TrafficBodyView, focus bool, historyKey string, done func(error))
+	// Export holds what exporting needs. Exporting is unavailable when nil.
+	Export *ExportHost
+	// PickHARFiles asks for files to import.
+	PickHARFiles func() ([]string, error)
+}
+
+// Workspace is the live capture page of the main window.
+type Workspace struct {
+	Data       *store.Store
+	Host       Host
+	Dispatcher *shortcuts.Dispatcher
+	Notifier   *widgets.Notifier
+	Confirm    *widgets.ConfirmDialog
+	// Detail, when set, builds the panel for the selected entry.
+	Detail func(c *ui.Context, theme nui.Theme)
+	// History, when set, builds the saved sessions below the capture item.
+	History func(c *ui.Context, theme nui.Theme)
+
+	Table *Table
+	// HistoryTable shows the opened saved session.
+	HistoryTable *Table
+	// HistoryDetail, when set, builds the detail panel of a saved session.
+	HistoryDetail func(c *ui.Context, theme nui.Theme)
+	// TabBar, when set, builds the workspace tab strip.
+	TabBar func(c *ui.Context, theme nui.Theme)
+	// RequestTab, when set, builds a request editor tab.
+	RequestTab func(c *ui.Context, theme nui.Theme, tab *logic.WorkspaceTab)
+
+	exporter           *Exporter
+	historyFilterFocus ui.Handle
+	clearingHistory    bool
+	filterFocus        ui.Handle
+	split              float32
+	splitName          string
+	category           categoryView
+	lastSelection      string
+	lastActive         string
+	historyListSeen    uint64
+	toolbar            toolbarState
+	alias              aliasDialog
+}
+
+// New returns the capture workspace.
+func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifier *widgets.Notifier, confirm *widgets.ConfirmDialog, icons *widgets.ProcessIcons) *Workspace {
+	w := &Workspace{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm}
+	if host.Export != nil {
+		w.exporter = &Exporter{Host: *host.Export, Runtime: data.Runtime, Notifier: notifier}
+	}
+	deps := TableDependencies{
+		Settings: data.Settings, Notifier: notifier, Confirm: confirm, Icons: icons,
+		Resend: host.Resend, OpenEditor: host.OpenEditor, Exporter: w.exporter,
+		Runtime: data.Runtime, MacOS: shortcuts.IsMacOS(),
+	}
+	w.Table = NewTable(LiveSource{Traffic: data.Traffic, Filters: data.Filter}, deps)
+	if data.History != nil {
+		w.HistoryTable = NewTable(HistorySource{History: data.History}, deps)
+		w.HistoryTable.HistoryKey = func() string { return data.History.Traffic.Key }
+		w.History = w.historySidebar
+	}
+	return w
+}
+
+// Sidebar builds the capture list of the secondary sidebar.
+func (w *Workspace) Sidebar(c *ui.Context, theme nui.Theme) {
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		w.captureItem(c, theme)
+		if w.History != nil {
+			w.History(c, theme)
+		}
+	})
+}
+
+func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
+	workbench := w.Data.Workbench
+	active := workbench.CaptureSelection == store.CaptureItemLive
+	label := strings.TrimSpace(w.Data.Proxy.Status.CaptureAlias)
+	if label == "" {
+		label = locales.MenuCapture()
+	}
+	row := ui.Row(c.Key("capture-item")).FillWidth().Height(40).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
+	if active {
+		row.Background(theme.Accented).Border(1, theme.BorderAccented)
+	} else {
+		row.Border(1, ui.Transparent)
+	}
+	row.OnClick(func() { w.selectItem(store.CaptureItemLive) })
+	row.ContextMenu(func(menu *ui.Menu) {
+		if w.exporter != nil {
+			alias := w.Data.Proxy.Status.CaptureAlias
+			menu.Submenu(locales.TrafficExportTitle(), func(sub *ui.Menu) {
+				for _, format := range []logic.TrafficExportFormat{logic.ExportCSV, logic.ExportHAR} {
+					if sub.Item(exportFormatLabel(format)).Disabled(w.exporter.Exporting).Chosen() {
+						w.exporter.Export(format, ExportOptions{FilenameHint: alias})
+					}
+				}
+			})
+		}
+		if menu.Item(locales.CaptureSetAlias()).Chosen() {
+			w.ShowAliasDialog()
+		}
+	})
+	row.Children(func() {
+		color := theme.Muted
+		if active {
+			color = theme.Primary
+		}
+		ui.Icon(c, lucide.Radio()).Size(16, 16).Shrink(0).TextColor(color)
+		ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).Bold().TextColor(theme.Text)
+		restart := nui.Button(c.Key("restart"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.SkipForward(), AccessibleLabel: locales.CaptureRestart()})
+		restart.OnClick(w.Restart)
+		nui.Tooltip(c, theme, restart, locales.CaptureRestart(), nui.TooltipOptions{})
+		nui.Badge(c, theme, strconv.FormatInt(w.Data.Traffic.Statistics.Total, 10), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+	})
+}
+
+// Content builds the page.
+func (w *Workspace) Content(c *ui.Context, theme nui.Theme) {
+	w.declareShortcuts()
+	w.pruneHistoryTab()
+	w.syncTabs()
+	if w.TabBar != nil {
+		w.TabBar(c, theme)
+	}
+	if tab := w.requestTab(); tab != nil && w.RequestTab != nil {
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() { w.RequestTab(c, theme, tab) })
+		return
+	}
+	w.buildToolbar(c, theme)
+	ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		if _, open := w.selectedHistory(); open {
+			w.historyPane(c, theme)
+			return
+		}
+		BuildFilterBar(c, theme, w.Data.Filter, &w.filterFocus)
+		area := ui.Box(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() { w.tableAndDetail(c, theme) })
+		w.dropTarget(c, theme, area)
+	})
+	w.alias.build(c, theme, w)
+}
+
+func (w *Workspace) requestTab() *logic.WorkspaceTab {
+	if w.Data.Workspace == nil {
+		return nil
+	}
+	tab := w.Data.Workspace.ActiveTab()
+	if tab.HTTP == nil && tab.WebSocket == nil {
+		return nil
+	}
+	return tab
+}
+
+func (w *Workspace) pruneHistoryTab() {
+	if w.Data.Workspace == nil || w.Data.History == nil || w.Data.History.ListVersion == w.historyListSeen {
+		return
+	}
+	w.historyListSeen = w.Data.History.ListVersion
+	w.Data.Workspace.PruneHistoryTab(func(key string) bool { return w.Data.History.MetadataFor(key) != nil })
+}
+
+// historyTitle names a saved session's tab.
+func (w *Workspace) historyTitle(key string) string {
+	if w.Data.History == nil {
+		return key
+	}
+	metadata := w.Data.History.MetadataFor(key)
+	switch {
+	case metadata == nil:
+		return key
+	case metadata.Alias != "":
+		return metadata.Alias
+	case metadata.CreatedAt == 0:
+		return "-"
+	default:
+		return time.UnixMilli(metadata.CreatedAt).Format("2006-01-02 15:04")
+	}
+}
+
+// selectItem shows a Capture section item in its workspace tab.
+func (w *Workspace) selectItem(item string) {
+	w.Data.Workbench.SelectCaptureItem(item)
+	w.lastSelection = item
+	workspace := w.Data.Workspace
+	if workspace == nil {
+		return
+	}
+	if key, open := historyKeyOf(item); open {
+		workspace.OpenHistoryTab(key, w.historyTitle(key))
+	} else {
+		workspace.ActivateCapture()
+	}
+	w.lastActive = workspace.ActiveKey
+}
+
+// syncTabs keeps the sidebar selection and the active workspace tab equal.
+func (w *Workspace) syncTabs() {
+	workspace := w.Data.Workspace
+	if workspace == nil {
+		return
+	}
+	workbench := w.Data.Workbench
+	if selection := workbench.CaptureSelection; selection != w.lastSelection {
+		w.selectItem(selection)
+		return
+	}
+	if workspace.ActiveKey == w.lastActive {
+		if _, open := historyKeyOf(workbench.CaptureSelection); open && workspace.FindTab(logic.HistoryTabKey) == nil {
+			w.lastSelection = store.CaptureItemLive
+			workbench.SelectCaptureItem(store.CaptureItemLive)
+		}
+		return
+	}
+	w.lastActive = workspace.ActiveKey
+	selection := workbench.CaptureSelection
+	switch tab := workspace.ActiveTab(); tab.Type {
+	case logic.TabTypeCapture:
+		selection = store.CaptureItemLive
+	case logic.TabTypeHistory:
+		selection = historyItemPrefix + tab.HistoryKey
+	}
+	if _, open := historyKeyOf(selection); open && workspace.FindTab(logic.HistoryTabKey) == nil {
+		selection = store.CaptureItemLive
+	}
+	if selection != workbench.CaptureSelection {
+		workbench.SelectCaptureItem(selection)
+	}
+	w.lastSelection = selection
+}
+
+func (w *Workspace) detailVisible() bool {
+	return w.Detail != nil && w.Data.Traffic.Selected != nil && w.Data.Traffic.ShowDetailPanel
+}
+
+func (w *Workspace) tableAndDetail(c *ui.Context, theme nui.Theme) {
+	if !w.detailVisible() {
+		w.Table.Build(c, theme)
+		return
+	}
+	w.buildSplit(c, theme, "tableDetail", func() { w.Table.Build(c, theme) }, func() { w.Detail(c, theme) })
+}
+
+func (w *Workspace) buildSplit(c *ui.Context, theme nui.Theme, prefix string, first, second func()) {
+	settings := w.Data.Settings
+	layout := settings.TrafficDetailLayout()
+	name := prefix + ":" + string(layout)
+	if name != w.splitName {
+		w.splitName, w.split = name, settings.TrafficDetailSplit(name, defaultTableSplit)
+	}
+	nui.Splitter(c.Key(prefix), theme, &w.split, nui.SplitterOptions{
+		Percent: true, Vertical: layout == settingservice.TrafficDetailLayoutHorizontal,
+		Min: nui.Set[float32](minTableSplit), Max: nui.Set[float32](maxTableSplit),
+		OnChange: func(percent float32) { settings.SetTrafficDetailSplit(name, percent) },
+	}, first, second).Fill()
+}
+
+func (w *Workspace) declareShortcuts() {
+	w.Dispatcher.Handle(shortcuts.Handler{
+		CommandID: shortcuts.CaptureFocusFilter,
+		Run:       func() { w.filterFocus.Focus() },
+	})
+	w.Dispatcher.Handle(shortcuts.Handler{
+		CommandID: shortcuts.CaptureToggleProxy,
+		When:      func() bool { return !w.Data.Proxy.Toggling },
+		Run:       w.toggleProxy,
+	})
+	w.Dispatcher.Handle(shortcuts.Handler{
+		CommandID: shortcuts.CaptureToggleSystemProxy,
+		When: func() bool {
+			proxy := w.Data.Proxy
+			return proxy.SystemProxy.Supported && !proxy.SystemProxyApplying && (proxy.SystemProxy.ModeSupported || proxy.SystemProxy.Active)
+		},
+		Run: w.toggleSystemProxy,
+	})
+	w.Dispatcher.Handle(shortcuts.Handler{
+		CommandID: shortcuts.CaptureClearTraffic,
+		When:      func() bool { return len(w.Data.Traffic.Entries) > 0 },
+		Run:       w.clearTraffic,
+	})
+}

@@ -1,6 +1,15 @@
 {
   "name": "FlowLens",
-  "identifier": "com.example.flowlens",
-  "version": "0.1.0",
-  "out": "build"
+  "slug": "flowlens",
+  "identifier": "com.josexy.flowlens",
+  "version": "1.0.5",
+  "out": "build",
+  "resourcesExclude": [
+    "**/*.ttf",
+    "*.png"
+  ],
+  "i18n": {
+    "dir": "locales",
+    "source": "en"
+  }
 }

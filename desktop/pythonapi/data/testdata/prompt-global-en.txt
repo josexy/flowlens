@@ -1,0 +1,232 @@
+# FlowLens Python SDK API v1
+
+Write a Python 3 script for FlowLens HTTP Request Editor using SDK API v1. Use only the documented FlowLens API below.
+
+## Global plugin
+
+Edit main.py in Python Plugins, save and validate it, then enable the plugin and at least one matching rule. Enable Python in Settings and global plugins in Request Editor. Params is a JSON object read through context.params. Multiple matching rules still run a plugin only once.
+
+## Runtime contract
+
+### Hook contract
+Both synchronous hooks are required: onRequest(context, request) and onResponse(context, response). Modify and return the same SDK object received, or return None to block. Do not use async def or return a new Request or Response.
+
+### Scope and execution order
+Hooks run only in HTTP Request Editor, excluding ordinary MITM capture, resend and WebSocket Client. Request order is global plugins → current-request script → network; responses run in reverse. Global plugins are matched once against the original method and full URL, in plugin-list order.
+
+### Blocking and failures
+Returning None from onRequest blocks before transport; returning None from onResponse suppresses the response presentation, and for SSE blocks before streaming. Request errors fail closed. Response errors fail open and return the untouched wire response with diagnostics. Response edits change editor presentation, not captured wire data or transport metrics.
+
+### Parameters and shared state
+context.params and context.transport are deeply read-only mappings; JSON arrays become tuples. transport contains protocol, proxy_mode, tls_client_hello_profile and http2_fingerprint, without proxy credentials. context.shared must remain a JSON object, isolated to one plugin and send; use it across request/response hooks, not module globals. Params and shared each have a 1 MiB encoded limit.
+
+### Headers and queries
+Headers preserves order, duplicate names, original casing and empty values; lookup is case-insensitive. Queries preserves order, duplicates and empty values; names are case-sensitive. Both support iteration and len(). Mutable iteration yields HeaderField or QueryField; frozen views yield (name, value) tuples. A changed query uses standard URL encoding; spaces become +. Headers[index] reads a field. Queries[index] reads a field; Queries[name] reads the first value and Queries[name] = value calls set(). FrozenQueries[index] returns a tuple and FrozenQueries[name] returns the first value.
+
+### URL and generated headers
+request.url controls routing. Assigning url reparses path and queries; changing path or queries rebuilds url. Methods must stay uppercase. Host, pseudo-headers, framing and generated request headers remain backend-owned. content_type is read-only. A non-empty request Body determines outgoing Content-Type; clearing the Body does not remove an existing Content-Type. Modify response Content-Type through response.headers.
+
+### Body kinds and replacement
+Body.kind and Body.value cannot be reassigned. Kinds: none → None; text/xml → str; json → decoded JSON; binary → bytes; file → FileDescriptor; urlencoded → list[URLEncodedField]; multipart → list[MultipartPart]; unavailable → reads raise ValueError. Replace request.body or response.body directly: None clears it, str is UTF-8 text, bytes/bytearray/memoryview is binary, dict/list is JSON, or use Body(kind, value). Other direct values raise TypeError. Modify JSON then assign it back. Structured form items remain mutable.
+
+### Files and memory
+Reading body.value may load the entire Body into memory. body.write_file(absolute_path) copies raw ordinary/file bytes without materializing them; urlencoded and multipart are unsupported. Use Body(kind, FileDescriptor.from_file(absolute_path)) for file-based replacement; paths must be non-symlink regular files with writers closed. Descriptor kinds are text/json/xml/binary and request-only file. A path string alone is text. Owner assignment copies the source immediately; new multipart file sources must survive until the hook returns. file and multipart are request-only. Multipart filename is independent of the source name.
+
+### Read-only request snapshots
+response.request is the semantic request handed to transport, or None. RequestSnapshot, BodySnapshot, FrozenHeaders, FrozenQueries, FileSnapshot and form snapshots are runtime-provided views, not SDK imports. Snapshot values are deeply immutable. FileSnapshot exposes name and size, without a path. Use snapshot.body.write_file(absolute_path) to copy a readable Body.
+
+### SSE
+SSE hooks run after status and headers arrive, before events start. response.body.kind is unavailable. Only response.code and response.headers may be changed; Body and trailer edits are rejected. SSE chunks never pass through Python.
+
+### Runtime and dependencies
+Python 3 is required. FlowLens supplies the flowlens SDK; do not pip install it. Third-party dependencies must be installed in the selected interpreter, manually. Hooks are synchronous; blocking I/O counts toward the configured 100–60,000 ms deadline. Current-request source is limited to 1 MiB. A managed source file is limited to 32 MiB and a plugin package to 64 MiB. Worker frames are bounded at 64 MiB; timeout, cancellation, crash or protocol corruption replaces the Worker.
+
+### Output and trust
+Use context.log.debug/info/warning/error or print(). Output appears in the current send’s Console, correlated by execution ID. Do not write directly to process stdout or let child processes inherit stdout: this corrupts the Worker protocol. Plugins are trusted local code with normal user permissions; isolated Python mode is not a sandbox. Avoid logging credentials or bodies.
+
+Access these views through the provided objects; do not import or construct them. Context can be imported for annotations; its instance is supplied by the runtime. ReadonlyMapping and JsonObject label read-only mappings and ordinary dicts; they are not flowlens types.
+
+## Complete API reference
+
+### Hooks (Hook)
+- `def onRequest(context: Context, request: Request) -> Request | None` — Modify the provided request and return it, or return None to block before transport.
+- `def onResponse(context: Context, response: Response) -> Response | None` — Modify the provided response and return it, or return None to block its presentation.
+
+### Context (SDK import)
+- `Context.id: str  # read-only` (Read-only) — Execution ID.
+- `Context.timestamp: int  # read-only` (Read-only) — Send start time in Unix microseconds.
+- `Context.original_url: str  # read-only` (Read-only) — Original URL before the hook chain.
+- `Context.original_method: str  # read-only` (Read-only) — Original method before the hook chain.
+- `Context.plugin_id: str  # read-only` (Read-only) — Current plugin ID.
+- `Context.plugin_name: str  # read-only` (Read-only) — Current plugin name.
+- `Context.params: Mapping[str, Any]  # read-only` (Read-only) — Deeply read-only parameters for the current plugin.
+- `Context.transport: Mapping[str, Any]  # read-only` (Read-only) — Read-only transport settings for this script execution.
+- `Context.shared: dict[str, Any]` (Writable) — JSON object shared between request and response hooks of this plugin.
+- `Context.log: ContextLogger  # read-only` (Read-only) — Structured logger for the current execution console.
+
+### ContextLogger (Runtime-provided)
+- `ContextLogger.debug(message: Any) -> None` — Log a debug message.
+- `ContextLogger.info(message: Any) -> None` — Log an informational message.
+- `ContextLogger.warning(message: Any) -> None` — Log a warning message.
+- `ContextLogger.error(message: Any) -> None` — Log an error message.
+
+### Request (SDK import)
+- `Request(method: str, url: str, headers: Headers | None = None, body: Any = None)` — Create a request object. Hooks normally modify the provided request.
+- `Request.method: str` (Writable) — Mutable request method.
+- `Request.url: str` (Writable) — Mutable request URL.
+- `Request.scheme: str  # read-only` (Read-only) — Read-only request URL scheme.
+- `Request.host: str  # read-only` (Read-only) — Read-only request URL host.
+- `Request.port: int | None  # read-only` (Read-only) — Read-only request URL port.
+- `Request.path: str` (Writable) — Mutable request URL path.
+- `Request.queries: Queries` (Writable) — Mutable query parameters preserving order and duplicates.
+- `Request.content_type: str | None  # read-only` (Read-only) — Read-only Content-Type view; the outgoing value is generated from the final request body kind.
+- `Request.headers: Headers` (Writable) — Mutable ordered request headers.
+- `Request.body: Body` (Writable) — Request body; direct replacement is supported.
+
+### RequestSnapshot (Runtime-provided)
+- `RequestSnapshot.method: str  # read-only` (Read-only) — Read-only request method associated with the response.
+- `RequestSnapshot.url: str  # read-only` (Read-only) — Read-only request URL associated with the response.
+- `RequestSnapshot.scheme: str  # read-only` (Read-only) — Read-only request URL scheme.
+- `RequestSnapshot.host: str  # read-only` (Read-only) — Read-only request URL host.
+- `RequestSnapshot.port: int | None  # read-only` (Read-only) — Read-only request URL port.
+- `RequestSnapshot.path: str  # read-only` (Read-only) — Read-only request URL path.
+- `RequestSnapshot.queries: FrozenQueries  # read-only` (Read-only) — Read-only query parameters preserving order and duplicates.
+- `RequestSnapshot.content_type: str | None  # read-only` (Read-only) — Content-Type of the associated request.
+- `RequestSnapshot.headers: FrozenHeaders  # read-only` (Read-only) — Read-only request headers associated with the response.
+- `RequestSnapshot.body: BodySnapshot  # read-only` (Read-only) — Semantic read-only request body snapshot associated with the response.
+
+### Response (SDK import)
+- `Response(code: int, headers: Headers | None = None, trailers: Headers | None = None, body: Any = None, request: RequestSnapshot | None = None, protocol: str = "", status_text: str = "")` — Create a response object. Hooks normally modify the provided response.
+- `Response.code: int` (Writable) — Mutable response status code.
+- `Response.protocol: str  # read-only` (Read-only) — Read-only protocol actually used by the upstream response.
+- `Response.status_text: str  # read-only` (Read-only) — Read-only status text including the code; updated when code changes.
+- `Response.content_type: str | None  # read-only` (Read-only) — Read-only Content-Type view; modify response headers explicitly when needed.
+- `Response.headers: Headers` (Writable) — Mutable ordered response headers.
+- `Response.trailers: Headers` (Writable) — Mutable ordered response trailers.
+- `Response.body: Body` (Writable) — Response body; unavailable for SSE responses.
+- `Response.request: RequestSnapshot | None  # read-only` (Read-only) — Read-only snapshot of the request that produced this response.
+
+### Headers (SDK import)
+- `Headers(fields: Iterable[HeaderField | dict[str, str]] | None = None)` — Create headers that preserve order and duplicates.
+- `Headers.get(name: str, default: Any = None) -> Any` — Return the first header with this name.
+- `Headers.get_all(name: str) -> list[str]` — Return all matching headers in wire order.
+- `Headers.set(name: str, value: str) -> None` — Replace all matching headers while preserving the first position.
+- `Headers.add(name: str, value: str) -> None` — Append a header field.
+- `Headers.remove(name: str) -> None` — Remove all matching headers.
+- `Headers.clear() -> None` — Remove all headers.
+
+### FrozenHeaders (Runtime-provided)
+- `FrozenHeaders.get(name: str, default: Any = None) -> Any` — Return the first header with this name.
+- `FrozenHeaders.get_all(name: str) -> list[str]` — Return all matching headers in wire order.
+
+### Queries (SDK import)
+- `Queries(fields: Iterable[QueryField | tuple[str, str] | dict[str, str]] | None = None)` — Create query parameters that preserve order and duplicates.
+- `Queries.get(name: str, default: Any = None) -> Any` — Return the first query value with this name.
+- `Queries.get_all(name: str) -> list[str]` — Return all matching query values in order.
+- `Queries.set(name: str, value: str) -> None` — Replace all matching query values while preserving the first position.
+- `Queries.add(name: str, value: str) -> None` — Append a query field.
+- `Queries.remove(name: str) -> None` — Remove all matching query fields.
+- `Queries.clear() -> None` — Remove all query fields.
+- `Queries.to_string() -> str` — Encode as a URL query string.
+
+### FrozenQueries (Runtime-provided)
+- `FrozenQueries.get(name: str, default: Any = None) -> Any` — Return the first query value with this name.
+- `FrozenQueries.get_all(name: str) -> list[str]` — Return all matching query values in order.
+- `FrozenQueries.to_string() -> str` — Return the original URL query string.
+
+### Body (SDK import)
+- `Body(kind: str = "none", value: Any = None)` — Create a body with an explicit semantic kind.
+- `Body.kind: str  # read-only` (Read-only) — Kinds: none (empty), text, json, xml, binary; request-only: file, urlencoded, multipart; SSE responses: unavailable (body cannot be read or changed).
+- `Body.value: Any  # read-only` (Read-only) — Read-only materialized body value.
+- `Body.write_file(path: str) -> None` — Stream a regular body to an absolute path.
+
+### BodySnapshot (Runtime-provided)
+- `BodySnapshot.kind: str  # read-only` (Read-only) — Read-only semantic body kind.
+- `BodySnapshot.value: Any  # read-only` (Read-only) — Read-only semantic body value; file values do not expose internal paths.
+- `BodySnapshot.write_file(path: str) -> None` — Stream a regular body snapshot to an absolute path.
+
+### QueryField (SDK import)
+- `QueryField(name: str, value: str)` — Create a query field.
+- `QueryField.name: str` (Writable) — Query field name.
+- `QueryField.value: str` (Writable) — Query field value.
+
+### HeaderField (SDK import)
+- `HeaderField(name: str, value: str)` — Create an ordered header field.
+- `HeaderField.name: str` (Writable) — Header name.
+- `HeaderField.value: str` (Writable) — Header value.
+
+### FileDescriptor (SDK import)
+- `FileDescriptor(path: str, name: str = "", size: int = -1, read_only: bool = True)` — Describe a FlowLens-managed file; prefer from_file() for user files.
+- `FileDescriptor.path: str  # read-only` (Read-only) — Absolute file path.
+- `FileDescriptor.name: str  # read-only` (Read-only) — File name.
+- `FileDescriptor.size: int  # read-only` (Read-only) — File size in bytes.
+- `FileDescriptor.read_only: bool  # read-only` (Read-only) — Whether the file is read-only.
+- `FileDescriptor.from_file(path: str) -> FileDescriptor` — Create a safe file descriptor from an absolute path.
+
+### FileSnapshot (Runtime-provided)
+- `FileSnapshot.name: str  # read-only` (Read-only) — Read-only original file name.
+- `FileSnapshot.size: int  # read-only` (Read-only) — Read-only file size in bytes.
+
+### URLEncodedField (SDK import)
+- `URLEncodedField(name: str, value: str, enabled: bool = True)` — Create a URL-encoded body field.
+- `URLEncodedField.enabled: bool` (Writable) — Whether the field is enabled.
+- `URLEncodedField.name: str` (Writable) — Field name.
+- `URLEncodedField.value: str` (Writable) — Field value.
+
+### URLEncodedFieldSnapshot (Runtime-provided)
+- `URLEncodedFieldSnapshot.enabled: bool  # read-only` (Read-only) — Whether the field is enabled.
+- `URLEncodedFieldSnapshot.name: str  # read-only` (Read-only) — Read-only field name.
+- `URLEncodedFieldSnapshot.value: str  # read-only` (Read-only) — Read-only field value.
+
+### MultipartPart (SDK import)
+- `MultipartPart(name: str, value: str = "", file: FileDescriptor | None = None, enabled: bool = True, filename: str = "")` — Create a multipart text or file part.
+- `MultipartPart.enabled: bool` (Writable) — Whether the part is enabled.
+- `MultipartPart.name: str` (Writable) — Part name.
+- `MultipartPart.value: str` (Writable) — Text part value.
+- `MultipartPart.file: FileDescriptor | None` (Writable) — Descriptor for a file part.
+- `MultipartPart.filename: str` (Writable) — Independent filename used by Content-Disposition.
+
+### MultipartPartSnapshot (Runtime-provided)
+- `MultipartPartSnapshot.enabled: bool  # read-only` (Read-only) — Whether the part is enabled.
+- `MultipartPartSnapshot.name: str  # read-only` (Read-only) — Read-only part name.
+- `MultipartPartSnapshot.value: str  # read-only` (Read-only) — Read-only text part value.
+- `MultipartPartSnapshot.file: FileSnapshot | None  # read-only` (Read-only) — File snapshot without an exposed internal path.
+- `MultipartPartSnapshot.filename: str  # read-only` (Read-only) — Read-only part filename.
+
+### ReadonlyMapping (Runtime-provided)
+- `ReadonlyMapping.get(key: str, default: Any = None) -> Any` — Read a value by key.
+- `ReadonlyMapping.keys() -> KeysView[str]` — Return all keys.
+- `ReadonlyMapping.items() -> ItemsView[str, Any]` — Return all key-value pairs.
+- `ReadonlyMapping.values() -> ValuesView[Any]` — Return all values.
+
+### JsonObject (Runtime-provided)
+- `JsonObject.get(key: str, default: Any = None) -> Any` — Read a shared value.
+- `JsonObject.keys() -> dict_keys[str]` — Return all shared keys.
+- `JsonObject.items() -> dict_items[str, Any]` — Return all shared key-value pairs.
+- `JsonObject.values() -> dict_values[Any]` — Return all shared values.
+- `JsonObject.setdefault(key: str, default: Any = None) -> Any` — Read a key or insert its default value.
+- `JsonObject.update(other: Mapping[str, Any]) -> None` — Update shared values.
+- `JsonObject.pop(key: str, default: Any = ...) -> Any` — Remove and return a shared value; without a default, a missing key raises KeyError.
+- `JsonObject.clear() -> None` — Remove all shared values.
+
+## Minimal script
+
+```python
+from flowlens import *
+
+
+def onRequest(context, request):
+    return request
+
+
+def onResponse(context, response):
+    return response
+```
+
+## Output requirements
+
+Return a complete runnable script with both synchronous hooks, using the existing request/response objects. Prefer the Python standard library. If an external dependency is necessary, list it and explain installation into the selected interpreter. Do not invent APIs, install flowlens, or rely on internal Worker/storage interfaces. Briefly explain how to enable the script and any required configuration.
+
+## My requirement
+
+Describe the matching conditions, request/response changes, inputs and expected outputs here.
