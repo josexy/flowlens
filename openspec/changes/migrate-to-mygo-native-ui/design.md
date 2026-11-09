@@ -9,7 +9,7 @@ See `proposal.md` for motivation and `specs/` for required behavior. This sectio
 - `frontend/src`: 200 Vue/TS files, about 46,000 lines. `frontend/tests` holds about 7,500 lines of logic tests.
 - `backend/`: about 43,000 lines plus 37,000 lines of tests. 27 files import Wails, but services use a narrow surface: `Event.Emit`/`On`, `RegisterEvent`, `ServiceStartup`/`ServiceShutdown`, `Env.Info`, `Window.*`, and the updater.
 - Shortcuts already go through a `Registrar` interface, and the updater through an `updateEngine` interface with a fake in tests.
-- Three macOS files use cgo. With cgo off they compile to stubs reporting unavailable (`provider_darwin_nocgo.go`, `system_proxy_darwin_nocgo.go`).
+- Three macOS files use cgo, and they are the only cgo in the project. With cgo off they compile to stubs reporting unavailable (`provider_darwin_nocgo.go`, `system_proxy_darwin_nocgo.go`).
 
 **This repository** holds a `mygo init` scaffold with module `github.com/josexy/flowlens` already set, and no commits.
 
@@ -26,6 +26,7 @@ See `proposal.md` for motivation and `specs/` for required behavior. This sectio
 | `Update.Install` reports only downloaded bytes, then verifies and swaps | Verify and Prepare phases must be inferred |
 | `OnWindowShortcut` fires while a text input has focus unless the input consumes that key, and there is no "editable focused" query | Editable policy needs its own tracking |
 | Release notes come from `CHANGELOG.md` | The repository needs a changelog |
+| The MyGo CLI defaults `CGO_ENABLED` to `0` only when it is unset, documents `1` for apps that need cgo, and applies one value to every target of a `mygo build` | macOS can build with cgo, as a separate build from Windows and Linux |
 
 **No web rendering is needed.** The only `v-html` is update notes; HTML bodies are shown as source, so `ui.WebView` is not used.
 
@@ -163,11 +164,18 @@ Phases are inferred: Download while bytes arrive, Verify once bytes reach the to
 
 Alternative considered: a single engine that always uses GitHub for checks. Rejected because mygo's manifests carry the signature and delta information needed for installation.
 
-### 11. macOS without cgo
+### 11. macOS keeps cgo
 
-The three files are rewritten on `purego`, including `purego/objc` for the `NSRunningApplication`/`NSBundle` work in `bridge_darwin.m`. The stubs are removed so a failure surfaces as a build error rather than silently unavailable features.
+`provider_darwin.go`, `bridge_darwin.{h,m}`, `system_proxy_darwin.go`, and `system_proxy_control_darwin.go` are reused unchanged, and macOS builds with `CGO_ENABLED=1`. Windows and Linux stay at `CGO_ENABLED=0`. Neither MyGo nor nuxt-ui-go uses cgo itself. nuxt-ui-go's documentation says to build with `CGO_ENABLED=0`, but nothing in its code depends on that, and its test suite passes with cgo on under Linux.
 
-Alternative considered: set `CGO_ENABLED=1` for macOS builds. Rejected because nuxt-ui-go and MyGo both specify cgo-free builds, and it would require macOS hosts to compile.
+A macOS build with cgo off would still compile and silently lose process attribution and the managed system proxy. To prevent that, `cgo_guard_darwin.go` in package `main` (`//go:build darwin && !cgo && mygo_noinspector`) refers to an undefined name, so a production `mygo build` for macOS with cgo off fails. The stubs stay, so non-production macOS type-checks still work from Linux. The guard does not apply to `mygo build -debug` or `MYGO_INSPECTOR=1`, which do not set the production tag and are not release builds.
+
+One `mygo build` applies one `CGO_ENABLED` value to all its targets, so macOS is built separately from Windows and Linux. macOS builds keep the old `-mmacosx-version-min=12.0` compiler and linker flags and `MACOSX_DEPLOYMENT_TARGET=12.0`, matching MyGo's default minimum system version.
+
+Alternatives considered:
+
+- Port to `purego`. Rejected because it rewrites about 950 lines of working Go and 283 of Objective-C that cannot be run on the development machine.
+- Check built binaries with `go version -m`. Rejected because it reads only the first architecture of a universal binary and runs after the build.
 
 ### 12. Theme and fonts
 
@@ -175,13 +183,13 @@ Alternative considered: set `CGO_ENABLED=1` for macOS builds. Rejected because n
 
 ### 13. Build, testing, and packaging
 
-`mygo.json` gains `slug: flowlens`, identifier `com.josexy.flowlens`, version, `i18n`, and `updates` (GitHub `josexy/flowlens`). The Taskfile sets `CGO_ENABLED=0` globally and wraps `go tool mygo` commands.
+`mygo.json` gains `slug: flowlens`, identifier `com.josexy.flowlens`, version, `i18n`, and `updates` (GitHub `josexy/flowlens`). The Taskfile sets `CGO_ENABLED` by operating system (`1` on macOS, `0` elsewhere) and wraps `go tool mygo` commands.
 
 Verification tiers:
 
-1. `CGO_ENABLED=0 go test ./...`, including ported logic tests and `ui.NewTester` view tests.
+1. `go test ./...` in each platform's cgo mode, including ported logic tests and `ui.NewTester` view tests.
 2. `go tool mygo vet .` and `mygo i18n check`.
-3. Cross-compilation for Windows, macOS, and Linux.
+3. Cross-compilation for Windows and Linux with cgo off, and native macOS builds with cgo on.
 4. Manual desktop checks on each platform, tracked as explicit tasks.
 
 ## Risks / Trade-offs
@@ -189,7 +197,9 @@ Verification tiers:
 - [Migration size: about 46,000 lines of UI in one change] → Ordered phases, each with its own tests; capture ships first so the riskiest performance work is validated early.
 - [nuxt-ui-go is at v0.0.2 with partial macOS verification and a known IME defect when canceling composition over a selection] → Pin the version, test Chinese input on each platform, and keep FlowLens-specific controls in `desktop/widgets` so library changes stay contained.
 - [Traffic table frame cost at 5000 rows with live updates] → Benchmark in `ui.Tester` during the capture phase, before building other surfaces on the same patterns.
-- [`purego` macOS code cannot be run on the Linux development machine] → It is cross-compiled here and verified on a Mac in the final checks; existing darwin tests are kept.
+- [A macOS build made with cgo off would silently lose native features] → The production build guard in Decision 11 fails such a build, and the Taskfile sets cgo on for macOS.
+- [macOS builds need a Mac with Xcode Command Line Tools and cannot be cross-compiled from Linux] → The release workflow already builds on a `macos-15` runner, and CI gains a macOS job.
+- [nuxt-ui-go documents cgo-free builds and has not been run on macOS with cgo on, and `darwin/universal` through `mygo build` with cgo is unproven] → A final check builds both macOS targets and runs nuxt-ui-go's tests on a Mac with cgo on.
 - [Headless development machine cannot exercise real windows, tray, or global shortcuts] → `ui.Tester` covers view logic; platform behavior is listed as manual checks.
 - [Editable shortcut tracking can miss an input that skips the wrappers] → Wrappers are the only sanctioned input path, enforced by per-surface tests.
 - [Dropped signature help in the Python editor] → Signature text appears in completion details and hovers.

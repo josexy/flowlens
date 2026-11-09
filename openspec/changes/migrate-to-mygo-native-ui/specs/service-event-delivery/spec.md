@@ -10,7 +10,7 @@ Defines how backend services operate independently of the interface and how thei
 Backend services SHALL be constructible and testable without a desktop session or a graphical toolkit.
 
 #### Scenario: Backend tests on a headless machine
-- **WHEN** the backend test suite runs on a machine with no display and with cgo disabled
+- **WHEN** the backend test suite runs on a Linux machine with no display and with cgo disabled
 - **THEN** services start, run, and shut down in tests without opening a window
 
 ### Requirement: Ordered live events

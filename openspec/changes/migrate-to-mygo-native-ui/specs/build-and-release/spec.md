@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Defines how developers build, verify, and release FlowLens from a Go-only toolchain, and which artifacts each release provides.
+Defines how developers build, verify, and release FlowLens without a JavaScript toolchain, and which artifacts each release provides.
 
 ## ADDED Requirements
 
-### Requirement: Go-only development toolchain
-Building and testing FlowLens SHALL require only Go, Task, and the pinned MyGo CLI, without Node.js, npm, or generated web bindings.
+### Requirement: Development toolchain
+Building and testing FlowLens SHALL require only Go, Task, and the pinned MyGo CLI, plus Xcode Command Line Tools on macOS, and SHALL NOT require Node.js, npm, or generated web bindings.
 
 #### Scenario: Fresh checkout
 - **WHEN** a developer with Go and Task runs the build task in a fresh checkout
@@ -24,15 +24,23 @@ The Taskfile SHALL provide tasks for development run, build, packaging, tests, U
 - **WHEN** a developer runs the verification task on a machine with no display
 - **THEN** formatting, lint, UI lifecycle checks, catalog checks, and tests run and report failures with a non-zero exit code
 
-### Requirement: Builds with cgo disabled
-FlowLens SHALL build with cgo disabled for Windows, macOS, and Linux targets.
+### Requirement: Cgo build modes
+FlowLens SHALL build with cgo disabled for Windows and Linux targets and with cgo enabled for macOS targets.
 
 #### Scenario: Cross-compiling from Linux
-- **WHEN** the application is built from Linux with `CGO_ENABLED=0` for Windows amd64, macOS arm64, and Linux amd64
+- **WHEN** the application is built from Linux with `CGO_ENABLED=0` for Windows amd64, Linux amd64, and Linux arm64
 - **THEN** every build succeeds
 
-### Requirement: Platform features without cgo
-macOS builds made with cgo disabled SHALL retain process attribution with icons and the managed system proxy.
+#### Scenario: Building for macOS
+- **WHEN** the application is built on a Mac with `CGO_ENABLED=1` for macOS arm64 and universal
+- **THEN** every build succeeds and the universal application contains both architectures
+
+### Requirement: macOS native features in release builds
+macOS release builds SHALL include process attribution with icons and the managed system proxy.
+
+#### Scenario: Release build with cgo disabled
+- **WHEN** a macOS release build runs with cgo disabled
+- **THEN** the build fails rather than producing an application without these features
 
 #### Scenario: Process attribution on macOS
 - **WHEN** a macOS build attributes a local connection

@@ -1,13 +1,13 @@
 # Tasks
 
-Unless a task says otherwise, tests run with `CGO_ENABLED=0`. View tasks are verified headlessly with `ui.NewTester`. Port tests from `/home/josexy/work/flowlens/frontend/tests` when a task names them; the old project is reference only and must not be modified.
+Unless a task says otherwise, builds and tests run with `CGO_ENABLED=0` on Windows and Linux and `CGO_ENABLED=1` on macOS. View tasks are verified headlessly with `ui.NewTester`. Port tests from `/home/josexy/work/flowlens/frontend/tests` when a task names them; the old project is reference only and must not be modified.
 
 ## 1. Project setup
 
 - [ ] 1.1 Copy `backend/`, `docs/`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `.golangci.yml`, and `.golangci-lint-version` from the old project; verify with `diff -r` that `backend/` is identical
 - [ ] 1.2 Add `github.com/josexy/nuxt-ui-go v0.0.2` as a direct dependency, merge the backend's requirements into `go.mod`, and run `go mod tidy`; verify `go list ./backend/...` resolves every package and `go list -m` shows mygo v0.8.3 and nuxt-ui-go v0.0.2
 - [ ] 1.3 Set `mygo.json` name, `slug: flowlens`, identifier `com.josexy.flowlens`, and version `1.0.5`, and copy the application and tray icons into `resources/`; verify with `go tool mygo doctor` and `cmp` against the old icons
-- [ ] 1.4 Write `Taskfile.yml` with `CGO_ENABLED=0` and tasks `dev`, `build`, `package`, `run`, `test`, `lint:go`, `lint:go:fix`, `modernize`, `modernize:fix`, `vet:ui`, `i18n:generate`, `i18n:check`, `version`, and `verify`; verify `task --list` shows all of them
+- [ ] 1.4 Write `Taskfile.yml` with `CGO_ENABLED` set by OS (`1` with `CGO_CFLAGS`/`CGO_LDFLAGS` of `-mmacosx-version-min=12.0` and `MACOSX_DEPLOYMENT_TARGET=12.0` on macOS, `0` elsewhere) and tasks `dev`, `build`, `package`, `run`, `test`, `lint:go`, `lint:go:fix`, `modernize`, `modernize:fix`, `vet:ui`, `i18n:generate`, `i18n:check`, `version`, and `verify`; verify `task --list` shows all of them and `CGO_ENABLED` resolves to `0` on this Linux machine
 
 ## 2. Remove Wails from the backend
 
@@ -20,11 +20,11 @@ Unless a task says otherwise, tests run with `CGO_ENABLED=0`. View tasks are ver
 - [ ] 2.7 Remove Wails-bound code from `backend/app` (`app.go`, `tray.go`, `updater.go`, `reset_startup_window.go`, and Wails types in `window.go`), retaining pure helpers for geometry, reset storage, and the shutdown coordinator with their tests; verify `go test ./backend/app`
 - [ ] 2.8 Remove Wails from `go.mod`; verify `go list -m all` has no Wails module, `grep -r wailsapp backend` is empty, and `go test ./backend/...` passes on this headless machine
 
-## 3. macOS native integrations without cgo
+## 3. macOS native integrations with cgo
 
-- [ ] 3.1 Rewrite process identity and icon lookup in `process_attribution` on `purego/objc`, removing `bridge_darwin.*` and the no-cgo stub; verify `GOOS=darwin GOARCH=arm64 go vet ./backend/pkg/process_attribution` and that darwin tests compile
-- [ ] 3.2 Rewrite `system_proxy_darwin.go` and `system_proxy_control_darwin.go` on `purego`, removing the no-cgo stub; verify `GOOS=darwin GOARCH=arm64 go vet ./backend/pkg/systemproxy`
-- [ ] 3.3 Verify no `import "C"` remains and that `go build ./backend/...` succeeds for `darwin/arm64`, `darwin/amd64`, `windows/amd64`, `linux/amd64`, and `linux/arm64`
+- [ ] 3.1 Confirm with `diff` that `provider_darwin.go`, `bridge_darwin.{h,m}`, `system_proxy_darwin.go`, `system_proxy_control_darwin.go`, and both no-cgo stubs are unchanged from the old project
+- [ ] 3.2 Add `cgo_guard_darwin.go` to package `main` with `//go:build darwin && !cgo && mygo_noinspector` and an undefined name that states the requirement; verify `CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags mygo_noinspector .` fails naming the guard and succeeds without the tag
+- [ ] 3.3 Verify `CGO_ENABLED=0 go build ./backend/...` succeeds for `windows/amd64`, `linux/amd64`, `linux/arm64`, and `darwin/arm64` (the last type-checks the stubs only)
 
 ## 4. Interface foundation
 
@@ -152,17 +152,17 @@ Unless a task says otherwise, tests run with `CGO_ENABLED=0`. View tasks are ver
 ## 16. Release and documentation
 
 - [ ] 16.1 Create `CHANGELOG.md` with a section for the first MyGo release and implement `task version` in Go, including `CHECK=true`; verify the task sets and detects inconsistent metadata in a test
-- [ ] 16.2 Rewrite `.github/workflows/ci.yml` to run `task verify` and cross-compile; verify with `actionlint` or a local dry run of each command
-- [ ] 16.3 Add `updates` to `mygo.json` with a public key from `mygo keygen`, supplied by the maintainer, and rewrite `.github/workflows/release.yml` for the specified artifacts, failing when `MYGO_UPDATER_PRIVATE_KEY` is absent; verify with a local unsigned `mygo build` and a check of the missing-key failure
+- [ ] 16.2 Rewrite `.github/workflows/ci.yml` to run `task verify` on Linux and macOS runners and cross-compile Windows; verify with `actionlint` or a local dry run of each command
+- [ ] 16.3 Add `updates` to `mygo.json` with a public key from `mygo keygen`, supplied by the maintainer, and rewrite `.github/workflows/release.yml` for the specified artifacts, building macOS targets on macOS with `CGO_ENABLED=1` in a separate `mygo build` from Windows and Linux, and failing when `MYGO_UPDATER_PRIVATE_KEY` is absent; verify with a local unsigned `mygo build` and a check of the missing-key failure
 - [ ] 16.4 Rewrite `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, and `build/` guidance for the new stack, and remove Wails, Node, Monaco, and server-mode references; verify with `grep -ril 'wails\|npm \|monaco'` over docs and by running each documented command
 
 ## 17. Integration checks
 
 - [ ] 17.1 Run `task verify` and `go test -race ./desktop/... ./backend/pkg/process_attribution ./backend/services/proxy_service`, confirm all pass, and run `openspec validate migrate-to-mygo-native-ui --strict`
-- [ ] 17.2 Cross-compile with `mygo build` or `go build` for every release target and confirm each binary is produced
+- [ ] 17.2 Build every Windows and Linux release target from Linux with cgo disabled, using `mygo build` or `go build`, and confirm each binary is produced
 - [ ] 17.3 On a Linux desktop session, run the app against a copy of a real data directory and check windows, tray, Chinese input, file drop, capture, and shutdown; record results
 - [ ] 17.4 On Windows, check title bar, tray, global shortcuts, managed system proxy, CA trust, IME, and the NSIS install; record results
-- [ ] 17.5 On macOS, check purego process attribution and icons, managed system proxy, CA trust, traffic lights, and the DMG; record results
+- [ ] 17.5 On macOS, run `mygo build` for `darwin/arm64` and `darwin/universal` with `CGO_ENABLED=1`, confirm the universal binary contains both architectures, run `CGO_ENABLED=1 go test github.com/josexy/nuxt-ui-go`, and check process attribution and icons, managed system proxy, CA trust, traffic lights, and the DMG; record results
 - [ ] 17.6 Publish two prerelease versions signed with the update key and confirm self-update, tamper rejection, and the manual path; record results
 
 ## Workflow follow-up
