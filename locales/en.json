@@ -1,0 +1,2353 @@
+{
+  "@@locale": "en",
+  "@apiCollectionCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionCreateFolderFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionDeleteApiConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionDeleteFolderConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionDeleteMultiConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionMoveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionRenameFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@apiCollectionSelectItem": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@captureAliasSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@captureRestartFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@categorySourceHistory": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableCurlCopiedSkipped": {
+    "placeholders": {
+      "copied": {
+        "type": "String"
+      },
+      "skipped": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableDeleteMultiConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableDeleteMultiFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableDeleteMultiSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableEditLimit": {
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "@contextMenuTrafficTableResendN": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailBodyCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailBodySaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailCookieAttributeCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailCookieHeaderCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailCookieViewAttributes": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailHeadersCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailHexPage": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailProcessPathCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailQueryCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailRawHttpCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailRequestHeadersSortedState": {
+    "placeholders": {
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailResponseHeadersSortedState": {
+    "placeholders": {
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailResponseTrailersSortedState": {
+    "placeholders": {
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailSseMessageCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@detailSseOpenMessage": {
+    "placeholders": {
+      "sequence": {
+        "type": "String"
+      }
+    }
+  },
+  "@harExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@harExportSuccess": {
+    "placeholders": {
+      "exported": {
+        "type": "String"
+      },
+      "missing": {
+        "type": "String"
+      },
+      "skipped": {
+        "type": "String"
+      }
+    }
+  },
+  "@harImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@harImportFileFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      },
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "@harImportProgress": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "@harImportResult": {
+    "placeholders": {
+      "failed": {
+        "type": "String"
+      },
+      "files": {
+        "type": "String"
+      },
+      "imported": {
+        "type": "String"
+      },
+      "missing": {
+        "type": "String"
+      },
+      "skipped": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsDeleteFileConfirm": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsDeleteFileFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsDeletePluginConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsEnableFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsOpenDirectoryFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsReloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsReorderFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsRevision": {
+    "placeholders": {
+      "revision": {
+        "type": "String"
+      }
+    }
+  },
+  "@pythonPluginsValidationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@resendModalError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@resendModalSuccess": {
+    "placeholders": {
+      "failed": {
+        "type": "String"
+      },
+      "success": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesDeleteDirty": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesEnableRule": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesQuitDirty": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesRegexTestMatches": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesTargetHint": {
+    "placeholders": {
+      "capture": {
+        "type": "String"
+      },
+      "capture2": {
+        "type": "String"
+      }
+    }
+  },
+  "@rewriteRulesUpdateDirty": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsCaTrustInstallFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsCaTrustUninstallFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsClientCertMissingFields": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsClientCertNewTitle": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsClientCertsCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsClientCertsIncomplete": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsErrorSelectCertificateFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsLogErrorClearLogs": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsLogErrorLevel": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsLogErrorLoad": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsLogErrorOpenDir": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsLogErrorToggle": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsPythonInterpreterDetectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsPythonInterpreterPickerFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsPythonInterpreterTestFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsPythonInterpreterTestSuccess": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsPythonRuntimeVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsResetApplicationExitFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsResetApplicationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsRootCasCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsSavedPartialRestartNotice": {
+    "placeholders": {
+      "reasons": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsThemeColorsPreviewFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@shortcutsClearFor": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "@shortcutsConflictMessage": {
+    "placeholders": {
+      "binding": {
+        "type": "String"
+      },
+      "command": {
+        "type": "String"
+      },
+      "conflicts": {
+        "type": "String"
+      }
+    }
+  },
+  "@shortcutsRecordFor": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "@shortcutsResetFor": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusEnvironmentLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusGithubOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusLayoutSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusSelected": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusTotal": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@statusUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@themeTooltip": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarClearFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarDnsCacheFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarHostFilterTooltip": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarOperationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarProxyRunning": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarQuickHost": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarQuickMode": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarQuickPort": {
+    "placeholders": {
+      "port": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarQuickSettingsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarSystemProxyEnabled": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarSystemProxyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarSystemProxyModeUnsupported": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "@toolbarSystemProxyOn": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "@trafficColumnSettingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@trafficExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@trafficExportResult": {
+    "placeholders": {
+      "exported": {
+        "type": "String"
+      },
+      "skipped": {
+        "type": "String"
+      }
+    }
+  },
+  "@trafficProcessPid": {
+    "placeholders": {
+      "pid": {
+        "type": "String"
+      }
+    }
+  },
+  "@trafficShowNewRequests": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@updaterActionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@updaterAvailableTitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updaterInitializationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@updaterProgress": {
+    "placeholders": {
+      "total": {
+        "type": "String"
+      },
+      "written": {
+        "type": "String"
+      }
+    }
+  },
+  "@updaterProgressWithRate": {
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "written": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestConsoleCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestConsoleEntries": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestConsoleLines": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestConsoleSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestFormDataFileRequired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestHeaderInvalidName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestHeadersCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestQueryCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceHttpRequestSendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceWebsocketClientBinarySize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceWebsocketClientConnectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@workspaceWebsocketClientSendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "apiCollectionCancel": "Cancel",
+  "apiCollectionCollapseAll": "Collapse All",
+  "apiCollectionCopied": "Copied",
+  "apiCollectionCopy": "Copy",
+  "apiCollectionCopyFailed": "Failed to copy API: {error}",
+  "apiCollectionCreate": "Create",
+  "apiCollectionCreateFolderFailed": "Failed to create folder: {error}",
+  "apiCollectionCreateFolderFirst": "Create a folder before saving an API request",
+  "apiCollectionDelete": "Delete",
+  "apiCollectionDeleteApiConfirm": "Delete API \"{name}\"?",
+  "apiCollectionDeleteFolderConfirm": "Delete folder \"{name}\" and everything inside it?",
+  "apiCollectionDeleteMultiConfirm": "Delete the selected {count} items? Folders and everything inside them will also be deleted.",
+  "apiCollectionDeleteTitle": "Delete",
+  "apiCollectionDeleted": "Deleted",
+  "apiCollectionDestinationFolder": "Destination Folder",
+  "apiCollectionEmpty": "No saved APIs",
+  "apiCollectionExitMultiSelect": "Exit multi-select",
+  "apiCollectionExpandAll": "Expand All",
+  "apiCollectionFolderNamePlaceholder": "Folder name",
+  "apiCollectionFolderNameRequired": "Enter a folder name",
+  "apiCollectionLoadFailed": "Failed to load API collection: {error}",
+  "apiCollectionMoveFailed": "Failed to move: {error}",
+  "apiCollectionMoveToRoot": "Move to Root",
+  "apiCollectionMultiSelect": "Multi-select",
+  "apiCollectionNewChildFolder": "New Child Folder",
+  "apiCollectionNewFolder": "New Folder",
+  "apiCollectionOpenFailed": "Failed to open API: {error}",
+  "apiCollectionRefresh": "Refresh",
+  "apiCollectionRename": "Rename",
+  "apiCollectionRenameFailed": "Failed to rename: {error}",
+  "apiCollectionRenameNamePlaceholder": "Enter name",
+  "apiCollectionRenameNameRequired": "Enter a name",
+  "apiCollectionRenameTitle": "Rename",
+  "apiCollectionRenamed": "Renamed",
+  "apiCollectionRequestName": "API Name",
+  "apiCollectionRequestNamePlaceholder": "Enter API name",
+  "apiCollectionRootFolder": "Root Folder",
+  "apiCollectionSave": "Save",
+  "apiCollectionSaveFailed": "Failed to save API: {error}",
+  "apiCollectionSaveModalTitle": "Save API",
+  "apiCollectionSaved": "Saved",
+  "apiCollectionSelectItem": "Select \"{name}\"",
+  "apiCollectionTitle": "API Collection",
+  "appLoading": "Loading",
+  "appShutdownDescription": "Saving data, please wait…",
+  "appShutdownTitle": "Closing FlowLens",
+  "appTitle": "FlowLens",
+  "captureAliasCleared": "Alias cleared",
+  "captureAliasPlaceholder": "Enter an alias for the current session",
+  "captureAliasSaveFailed": "Failed to save alias: {error}",
+  "captureAliasSaved": "Alias saved",
+  "captureRestart": "Restart Capture",
+  "captureRestartConfirm": "This capture has records. Save or discard them before restarting.",
+  "captureRestartDiscard": "Discard and Restart",
+  "captureRestartDiscardedSuccess": "Discarded the current capture and started a new session",
+  "captureRestartFailed": "Failed to restart capture: {error}",
+  "captureRestartSave": "Save and Restart",
+  "captureRestartSavedSuccess": "Saved the current capture and started a new session",
+  "captureRestartSuccess": "Started a new capture session",
+  "captureRestartTitle": "Restart Capture",
+  "captureSaveAlias": "Save",
+  "captureSetAlias": "Set Alias",
+  "categoryEmpty": "No traffic data available for classification",
+  "categoryEmptyFiltered": "No matching domains or processes",
+  "categoryHost": "Host",
+  "categoryProcess": "Process",
+  "categoryProcessUnidentified": "Unidentified process",
+  "categorySearchPlaceholder": "Search domains or processes",
+  "categorySourceCapture": "Source: Capture",
+  "categorySourceHistory": "Source: History {label}",
+  "categoryStructure": "Structure",
+  "categoryTitle": "Categories",
+  "categoryUnsupported": "No capture or history context is available",
+  "commonName": "Name",
+  "commonNoContent": "No content",
+  "commonValue": "Value",
+  "contextMenuTrafficTableCancel": "Cancel",
+  "contextMenuTrafficTableConfirm": "Delete",
+  "contextMenuTrafficTableCopied": "Copied to clipboard",
+  "contextMenuTrafficTableCopy": "Copy",
+  "contextMenuTrafficTableCopyClientaddr": "Client Address",
+  "contextMenuTrafficTableCopyClientip": "Client IP",
+  "contextMenuTrafficTableCopyCurl": "Copy as cURL",
+  "contextMenuTrafficTableCopyDomain": "Domain",
+  "contextMenuTrafficTableCopyPath": "Path",
+  "contextMenuTrafficTableCopyRow": "Row",
+  "contextMenuTrafficTableCopyServeraddr": "Server Address",
+  "contextMenuTrafficTableCopyServerip": "Server IP",
+  "contextMenuTrafficTableCopyTarget": "Target",
+  "contextMenuTrafficTableCopyUrl": "URL",
+  "contextMenuTrafficTableCurlCopiedSkipped": "Copied {copied} cURL commands; skipped {skipped} non-HTTP entries.",
+  "contextMenuTrafficTableDelete": "Delete",
+  "contextMenuTrafficTableDeleteMultiConfirm": "Delete the selected {count} entries?",
+  "contextMenuTrafficTableDeleteMultiFailed": "Failed to delete selected entries: {error}",
+  "contextMenuTrafficTableDeleteMultiSuccess": "Deleted {count} entries.",
+  "contextMenuTrafficTableEdit": "Edit",
+  "contextMenuTrafficTableEditLimit": "You can edit up to {limit} entries at once.",
+  "contextMenuTrafficTableExport": "Export",
+  "contextMenuTrafficTableHighlight": "Highlight",
+  "contextMenuTrafficTableHighlightBlue": "Blue",
+  "contextMenuTrafficTableHighlightClear": "Clear",
+  "contextMenuTrafficTableHighlightGreen": "Green",
+  "contextMenuTrafficTableHighlightOrange": "Orange",
+  "contextMenuTrafficTableHighlightPurple": "Purple",
+  "contextMenuTrafficTableHighlightRed": "Red",
+  "contextMenuTrafficTableHighlightYellow": "Yellow",
+  "contextMenuTrafficTableResend": "Resend",
+  "contextMenuTrafficTableResendN": "Resend {n} Time(s)",
+  "contextMenuTrafficTableResendTimes": "Resend N Times",
+  "contextMenuTrafficTableShowDetails": "Show",
+  "detailAlpn": "ALPN",
+  "detailBinaryData": "Binary Data",
+  "detailBinaryDataHint": "[Binary data - view in Hex or Image tab]",
+  "detailBodyCopied": "Body copied",
+  "detailBodyCopyFailed": "Failed to copy body: {error}",
+  "detailBodyEmpty": "Empty body",
+  "detailBodyRaw": "Raw",
+  "detailBodySaveFailed": "Failed to save body: {error}",
+  "detailBodyUnavailable": "Body unavailable",
+  "detailCertDns": "Cert DNS",
+  "detailCertInfo": "Certificate",
+  "detailCertIps": "Cert IPs",
+  "detailCertIssuer": "Issuer CN",
+  "detailCertIssuerCountry": "Issuer Country",
+  "detailCertIssuerLocality": "Issuer Locality",
+  "detailCertIssuerOrg": "Issuer Org",
+  "detailCertIssuerOu": "Issuer OU",
+  "detailCertIssuerPostal": "Issuer Postal",
+  "detailCertIssuerProvince": "Issuer Province",
+  "detailCertIssuerSerial": "Issuer Serial",
+  "detailCertIssuerStreet": "Issuer Street",
+  "detailCertNotAfter": "Cert Not After",
+  "detailCertNotBefore": "Cert Not Before",
+  "detailCertSerialNumber": "Serial Number",
+  "detailCertSha1Fingerprint": "SHA1 Fingerprint",
+  "detailCertSha256Fingerprint": "SHA256 Fingerprint",
+  "detailCertSignatureAlgorithm": "Signature Algorithm",
+  "detailCertSubject": "Subject CN",
+  "detailCertSubjectCountry": "Subject Country",
+  "detailCertSubjectLocality": "Subject Locality",
+  "detailCertSubjectOrg": "Subject Org",
+  "detailCertSubjectOu": "Subject OU",
+  "detailCertSubjectPostal": "Subject Postal",
+  "detailCertSubjectProvince": "Subject Province",
+  "detailCertSubjectSerial": "Subject Serial",
+  "detailCertSubjectStreet": "Subject Street",
+  "detailCertVersion": "Cert Version",
+  "detailCipherSuite": "Cipher Suite",
+  "detailClosePanel": "Close details",
+  "detailCookieAttributeCount": "{count} attributes",
+  "detailCookieAttributes": "Attributes",
+  "detailCookieEmptyValue": "Empty value",
+  "detailCookieHeaderCopied": "Cookie header copied",
+  "detailCookieHeaderCopyFailed": "Failed to copy cookie header: {error}",
+  "detailCookieList": "Cookie List",
+  "detailCookieNoAttributes": "No attributes",
+  "detailCookieRawHeader": "Raw Set-Cookie",
+  "detailCookieUnnamed": "Unnamed",
+  "detailCookieViewAttributes": "View attributes of {name} ({count})",
+  "detailCookies": "Cookie",
+  "detailCopyBody": "Copy body",
+  "detailCopyCookieHeader": "Copy Cookie header",
+  "detailCopyProcessPath": "Copy executable path",
+  "detailCopyQuery": "Copy query parameters",
+  "detailCopyRawHttp": "Copy raw HTTP message",
+  "detailCopyRequestHeadersJson": "Copy headers as JSON",
+  "detailCopyRequestHeadersText": "Copy headers as text",
+  "detailCopyResponseHeadersJson": "Copy headers as JSON",
+  "detailCopyResponseHeadersText": "Copy headers as text",
+  "detailCopyResponseTrailersJson": "Copy trailers as JSON",
+  "detailCopyResponseTrailersText": "Copy trailers as text",
+  "detailCopySetCookieHeader": "Copy Set-Cookie headers",
+  "detailError": "Error",
+  "detailFormatted": "Formatted",
+  "detailHeaderFieldsTruncated": "Header block truncated; fields or order may be incomplete.",
+  "detailHeaderOrderUnavailable": "Wire order was not recorded; normalized fields are shown.",
+  "detailHeaderSortAsc": "ascending",
+  "detailHeaderSortDefault": "original order",
+  "detailHeaderSortDesc": "descending",
+  "detailHeadersCopyFailed": "Failed to copy headers: {error}",
+  "detailHex": "Hex",
+  "detailHexCopyBase64": "Copy as Base64",
+  "detailHexCopyHex": "Copy HEX",
+  "detailHexCopyText": "Copy text",
+  "detailHexDecodeFailed": "Failed to prepare hex view",
+  "detailHexExport": "Export",
+  "detailHexFirstPage": "First segment",
+  "detailHexLargeBodyTitle": "Large hex view",
+  "detailHexLastPage": "Last segment",
+  "detailHexLoading": "Preparing hex view...",
+  "detailHexNextPage": "Next segment",
+  "detailHexPage": "Segment {current} / {total}",
+  "detailHexPreviousPage": "Previous segment",
+  "detailHexSelectionCopied": "Selection copied",
+  "detailImagePreviewFailed": "This image could not be decoded. View it in Raw or Hex.",
+  "detailImageReset": "Reset",
+  "detailImageSave": "Save",
+  "detailImageZoomHint": "Ctrl + wheel to zoom",
+  "detailImageZoomIn": "Zoom In",
+  "detailImageZoomOut": "Zoom Out",
+  "detailLegacyMetricsUnavailable": "No timing or size metrics for this entry.",
+  "detailLoadHexDump": "Load",
+  "detailLocalConnectionTime": "Local Conn Time",
+  "detailLocalDestinationAddress": "Local Dest Address",
+  "detailLocalSourceAddress": "Local Src Address",
+  "detailMessageSize": "Size",
+  "detailMethod": "Method",
+  "detailMetricStateCanceled": "Canceled",
+  "detailMetricStateFailed": "Failed",
+  "detailMetricStatePending": "In progress",
+  "detailNoCookies": "No cookies",
+  "detailNoHeaders": "No headers",
+  "detailNoMessages": "No messages",
+  "detailNoQueryParameters": "No query parameters",
+  "detailOverview": "Overview",
+  "detailPath": "Path",
+  "detailPreview": "Preview",
+  "detailProcess": "Request Process",
+  "detailProcessAppId": "App ID",
+  "detailProcessApplicationName": "Application Name",
+  "detailProcessExecutablePath": "Executable Path",
+  "detailProcessName": "Process Name",
+  "detailProcessPathCopied": "Executable path copied",
+  "detailProcessPathCopyFailed": "Failed to copy executable path: {error}",
+  "detailProcessPid": "PID",
+  "detailProcessReasonLookupTimeout": "Process lookup timed out; capture continued.",
+  "detailProcessReasonMetadataDenied": "PID found; process details unavailable.",
+  "detailProcessReasonMultipleSocketOwners": "Multiple processes may own this connection.",
+  "detailProcessReasonPermissionDenied": "Insufficient permission to identify the process.",
+  "detailProcessReasonQueueFull": "Process lookup busy; capture continued.",
+  "detailProcessReasonRemoteClient": "Remote client; local direct connections only.",
+  "detailProcessReasonSocketOwnerNotFound": "Owning process not found.",
+  "detailProcessReasonUnavailable": "Process information is unavailable.",
+  "detailProcessStatusAmbiguous": "Multiple processes may own this connection.",
+  "detailProcessStatusNotFound": "Owning process not found.",
+  "detailProcessStatusPending": "Identifying the process...",
+  "detailProcessStatusPermissionDenied": "Insufficient permission to identify the process.",
+  "detailProcessStatusRemote": "Local direct connections only.",
+  "detailProcessStatusUnavailable": "Process information is unavailable.",
+  "detailProcessStatusUnsupported": "Process identification is unavailable on this platform.",
+  "detailProcessUnknown": "Unknown process",
+  "detailProtocol": "Protocol",
+  "detailQuery": "Query",
+  "detailQueryCopied": "Query parameters copied",
+  "detailQueryCopyFailed": "Failed to copy query parameters: {error}",
+  "detailQueryList": "Query Parameters",
+  "detailRaw": "Raw",
+  "detailRawHttpCopied": "Raw HTTP message copied",
+  "detailRawHttpCopyFailed": "Failed to copy raw HTTP message: {error}",
+  "detailRawHttpWaiting": "Waiting for response headers...",
+  "detailRawTcpObservedAt": "Observed At",
+  "detailRawTcpOuterConnectHeaders": "CONNECT Headers",
+  "detailRawTcpOuterConnectProtocol": "CONNECT Protocol",
+  "detailRawTcpSource": "Source",
+  "detailRawTcpSourceDirect": "Direct",
+  "detailRawTcpSourceHttpConnect": "HTTP CONNECT",
+  "detailRawTcpSourceSocks5": "SOCKS5",
+  "detailRawTcpSourceUnknown": "Unknown",
+  "detailRawTcpTarget": "Target",
+  "detailRawTcpTunnelInfo": "Tunnel Information",
+  "detailRemoteConnectionTime": "Remote Conn Time",
+  "detailRemoteDestinationAddress": "Remote Dest Address",
+  "detailRemoteSourceAddress": "Remote Src Address",
+  "detailRequest": "Request",
+  "detailRequestBody": "Body",
+  "detailRequestBodySize": "Request Body",
+  "detailRequestBodyUnavailable": "The request body is unavailable; this action cannot be completed",
+  "detailRequestDuration": "Request Duration",
+  "detailRequestEnd": "Request End",
+  "detailRequestHeaderSize": "Request Header",
+  "detailRequestHeaders": "Headers",
+  "detailRequestHeadersCopiedJson": "Headers copied as JSON",
+  "detailRequestHeadersCopiedText": "Headers copied as text",
+  "detailRequestHeadersSortedState": "Headers sorted {state}",
+  "detailRequestSize": "Request",
+  "detailRequestStart": "Request Start",
+  "detailRequestTime": "Request Time",
+  "detailResponse": "Response",
+  "detailResponseBody": "Body",
+  "detailResponseBodySize": "Response Body",
+  "detailResponseDuration": "Response Duration",
+  "detailResponseEnd": "Response End",
+  "detailResponseHeaderSize": "Response Header",
+  "detailResponseHeaders": "Headers",
+  "detailResponseHeadersCopiedJson": "Headers copied as JSON",
+  "detailResponseHeadersCopiedText": "Headers copied as text",
+  "detailResponseHeadersSortedState": "Headers sorted {state}",
+  "detailResponseSize": "Response",
+  "detailResponseStart": "Response Start",
+  "detailResponseTrailerList": "Trailer List",
+  "detailResponseTrailers": "Trailers",
+  "detailResponseTrailersCopiedJson": "Trailers copied as JSON",
+  "detailResponseTrailersCopiedText": "Trailers copied as text",
+  "detailResponseTrailersSortedState": "Trailers sorted {state}",
+  "detailSaveBody": "Save body",
+  "detailSelectRequest": "Select a traffic entry to view details",
+  "detailServerAddress": "Server Address",
+  "detailSetCookieHeaderCopied": "Set-Cookie headers copied",
+  "detailSortRequestHeaders": "Sort headers",
+  "detailSortResponseHeaders": "Sort headers",
+  "detailSortResponseTrailers": "Sort trailers",
+  "detailSseCopyMessage": "Copy displayed content",
+  "detailSseData": "Data",
+  "detailSseEmpty": "No complete messages",
+  "detailSseEmptyData": "(empty)",
+  "detailSseEventType": "Event type",
+  "detailSseId": "ID",
+  "detailSseIncomplete": "The event at the end of the response is incomplete. View it in the Raw tab.",
+  "detailSseJumpToLatest": "Jump to latest message",
+  "detailSseMessageCount": "Messages: {count}",
+  "detailSseMessageDetail": "SSE message details",
+  "detailSseOpenMessage": "View SSE message {sequence}",
+  "detailSseParsing": "Parsing…",
+  "detailSsePreview": "Data preview",
+  "detailSseRawEvent": "Raw event",
+  "detailSseSaveMessage": "Save displayed content",
+  "detailSseTab": "SSE",
+  "detailSseUnavailable": "This body is Base64-encoded and cannot be parsed as SSE. Save it or open the Hex tab.",
+  "detailSslHandshake": "SSL Handshake",
+  "detailStatusCode": "Status Code",
+  "detailSupportedAlpns": "Supported ALPNs",
+  "detailSupportedCipherSuites": "Supported Cipher Suites",
+  "detailSupportedTlsVersions": "Supported TLS Versions",
+  "detailTiming": "Timing",
+  "detailTlsInfo": "TLS Information",
+  "detailTlsServerName": "TLS Server Name",
+  "detailTlsVersion": "TLS Version",
+  "detailTotalDuration": "Total Duration",
+  "detailTotalSize": "Total",
+  "detailTrailerFieldsTruncated": "Trailers truncated; fields or order may be incomplete.",
+  "detailUpstreamConnect": "Upstream TCP",
+  "detailUpstreamDns": "Upstream DNS",
+  "detailUpstreamTls": "Upstream TLS",
+  "detailUrl": "URL",
+  "detailWrapBody": "Wrap body",
+  "filterAll": "All",
+  "filterBinary": "Binary",
+  "filterHtml": "HTML",
+  "filterHttp": "HTTP",
+  "filterHttp1": "HTTP1",
+  "filterHttp2": "HTTP2",
+  "filterHttps": "HTTPS",
+  "filterImage": "Image",
+  "filterJs": "JS",
+  "filterJson": "JSON",
+  "filterMedia": "Media",
+  "filterSearchPlaceholder": "Search URL, target, port, source or path...",
+  "filterSse": "SSE",
+  "filterTcp": "TCP",
+  "filterText": "Text",
+  "filterWebsocket": "Websocket",
+  "filterXml": "XML",
+  "harExportExportSelected": "Export HAR",
+  "harExportExportSession": "Export HAR",
+  "harExportFailed": "Failed to export HAR: {error}",
+  "harExportFileFilter": "HTTP Archive Files",
+  "harExportSuccess": "{exported} exported; {skipped} skipped; {missing} bodies missing.",
+  "harImportDropHint": "Drop to import HAR",
+  "harImportFailed": "Import failed: {error}",
+  "harImportFileFailed": "{file}: {error}",
+  "harImportFileFilter": "HTTP Archive (*.har)",
+  "harImportNoEntries": "No importable entries",
+  "harImportOpenFailed": "History was saved but could not be opened. Refresh the history list.",
+  "harImportProgress": "Importing {current}/{total}",
+  "harImportResult": "Imported {files} files and {imported} entries; skipped {skipped}, {missing} bodies unavailable, {failed} failures",
+  "harImportTitle": "Import HAR",
+  "historyCancel": "Cancel",
+  "historyClearAll": "Clear All",
+  "historyClearAllConfirm": "Clear all history records? This action cannot be undone.",
+  "historyDelete": "Delete",
+  "historyDeleteConfirm": "Delete this history record?",
+  "historyDeleted": "Deleted",
+  "historyEmpty": "No history records",
+  "historyRefresh": "Refresh",
+  "historySelectHint": "Select a history record to view traffic",
+  "historyTitle": "History",
+  "languageEn": "English",
+  "languageSwitch": "Switch Language",
+  "languageZh": "Chinese",
+  "memstatsChartTitle": "Memory Usage Over Time",
+  "memstatsClear": "Clear",
+  "memstatsForcedGcCount": "Forced GC",
+  "memstatsFrees": "Total frees",
+  "memstatsGcCount": "GC cycles",
+  "memstatsGcCpu": "GC CPU fraction",
+  "memstatsGoVersion": "Go Version",
+  "memstatsInterval": "Sampling interval",
+  "memstatsHeapAlloc": "Heap Alloc",
+  "memstatsHeapAllocDesc": "Heap Allocated",
+  "memstatsHeapIdle": "Heap idle",
+  "memstatsHeapInuse": "Heap in use",
+  "memstatsHeapObjects": "Live objects",
+  "memstatsHeapReleased": "Returned to OS",
+  "memstatsHeapSys": "Heap from OS",
+  "memstatsLastGcTime": "Last GC time",
+  "memstatsLiveObjects": "Live objects",
+  "memstatsMallocs": "Total mallocs",
+  "memstatsNextGc": "Next GC target",
+  "memstatsNoData": "No monitoring data",
+  "memstatsNoGc": "No GC yet",
+  "memstatsNumCpu": "CPU Cores",
+  "memstatsNumGc": "GC Count",
+  "memstatsNumGoroutine": "Goroutines",
+  "memstatsOsArch": "OS / Arch",
+  "memstatsPauseLast": "Last GC pause",
+  "memstatsPauseTotal": "Total GC pause",
+  "memstatsRefresh": "Refresh",
+  "memstatsSectionGc": "Garbage Collection",
+  "memstatsSectionHeap": "Heap Memory",
+  "memstatsSectionOverall": "Overall",
+  "memstatsSectionRuntime": "Runtime",
+  "memstatsSectionStack": "Stack Memory",
+  "memstatsStackInuse": "Stack in use",
+  "memstatsStackSys": "Stack from OS",
+  "memstatsStart": "Start",
+  "memstatsStop": "Pause",
+  "memstatsSubtitle": "Go Backend Runtime",
+  "memstatsSys": "Total Sys",
+  "memstatsTitle": "Memory Stats",
+  "memstatsTotalAlloc": "Cumulative alloc",
+  "menuApiCollection": "API Collection",
+  "menuCapture": "Capture",
+  "menuCategory": "Category",
+  "menuHistory": "History",
+  "menuMemstats": "Memory",
+  "menuPythonPlugins": "Python Plugins",
+  "menuRewriteRules": "Rewrite Rules",
+  "menuSettings": "Settings",
+  "pythonPluginHelpTitle": "Python API Help",
+  "pythonPluginsAddRule": "Add rule",
+  "pythonPluginsCancel": "Cancel",
+  "pythonPluginsConfirm": "Confirm",
+  "pythonPluginsCreate": "New",
+  "pythonPluginsCreateSuccess": "Plugin created",
+  "pythonPluginsCreateTitle": "New Plugin",
+  "pythonPluginsDelete": "Delete",
+  "pythonPluginsDeleteFailed": "Could not delete plugin: {error}",
+  "pythonPluginsDeleteFile": "Delete file",
+  "pythonPluginsDeleteFileConfirm": "Delete {path}? Unsaved content will also be lost.",
+  "pythonPluginsDeleteFileFailed": "Could not delete file: {error}",
+  "pythonPluginsDeletePlugin": "Delete plugin",
+  "pythonPluginsDeletePluginConfirm": "Delete {name} and all of its plugin files? This cannot be undone.",
+  "pythonPluginsDeleteRule": "Delete rule",
+  "pythonPluginsDeleteSuccess": "Plugin deleted",
+  "pythonPluginsDescription": "Description",
+  "pythonPluginsDisabled": "Disabled",
+  "pythonPluginsEditPlugin": "Edit Plugin",
+  "pythonPluginsEmpty": "No Python plugins",
+  "pythonPluginsEmptyHint": "Create a plugin from the sidebar to write request and response handlers.",
+  "pythonPluginsEnableFailed": "Could not change plugin state: {error}",
+  "pythonPluginsEnabled": "Enabled",
+  "pythonPluginsFileDeleted": "File deleted",
+  "pythonPluginsFilePath": "Relative path",
+  "pythonPluginsFilePathHint": "The path must stay inside this plugin directory.",
+  "pythonPluginsFilePathRequired": "Enter a file path",
+  "pythonPluginsFileSaved": "File saved",
+  "pythonPluginsFiles": "Files",
+  "pythonPluginsFormat": "Format",
+  "pythonPluginsLoadFailed": "Could not load plugins: {error}",
+  "pythonPluginsMetadataSaved": "Plugin details saved",
+  "pythonPluginsName": "Name",
+  "pythonPluginsNameRequired": "Enter a plugin name",
+  "pythonPluginsNewFile": "New file",
+  "pythonPluginsNoFileSelected": "Select a file to edit",
+  "pythonPluginsNoRevision": "No active version",
+  "pythonPluginsNoRules": "No matching rules",
+  "pythonPluginsNoSearchResults": "No matching plugins",
+  "pythonPluginsOpenDirectory": "Open plugin directory",
+  "pythonPluginsOpenDirectoryFailed": "Could not open directory: {error}",
+  "pythonPluginsOpenRootDirectory": "Open plugins directory",
+  "pythonPluginsParams": "Params",
+  "pythonPluginsParamsHint": "Params must be a JSON object. Each script run receives a read-only copy.",
+  "pythonPluginsParamsObjectRequired": "Params must be a JSON object",
+  "pythonPluginsParamsSaved": "Params saved",
+  "pythonPluginsReload": "Reload",
+  "pythonPluginsReloadFailed": "Could not reload plugin: {error}",
+  "pythonPluginsReloadHint": "Reload the plugin from saved files",
+  "pythonPluginsReloadSuccess": "Plugin reloaded",
+  "pythonPluginsRenameFile": "Rename file",
+  "pythonPluginsRenamePlugin": "Edit plugin details",
+  "pythonPluginsReorderFailed": "Could not reorder plugins: {error}",
+  "pythonPluginsRevision": "Active version {revision}",
+  "pythonPluginsRulePatternPlaceholder": "https://api.example.com/*",
+  "pythonPluginsRules": "Rules",
+  "pythonPluginsRulesHint": "Methods are uppercase or *; URLs support * and ? wildcards.",
+  "pythonPluginsRuntimeDisabled": "Not enabled",
+  "pythonPluginsRuntimeError": "Runtime error",
+  "pythonPluginsRuntimeIdle": "Waiting for first use",
+  "pythonPluginsRuntimeReady": "Ready",
+  "pythonPluginsRuntimeUnknown": "Status unknown",
+  "pythonPluginsSave": "Save",
+  "pythonPluginsSaveFile": "Save current file",
+  "pythonPluginsSaveParams": "Save params",
+  "pythonPluginsSearchPlaceholder": "Search plugins",
+  "pythonPluginsTitle": "Python Plugins",
+  "pythonPluginsValidate": "Validate",
+  "pythonPluginsValidateHint": "Save the current file and validate this plugin",
+  "pythonPluginsValidationFailed": "Plugin validation failed: {error}",
+  "pythonPluginsValidationInvalid": "Validation failed",
+  "pythonPluginsValidationSuccess": "Plugin validated and ready to use",
+  "pythonPluginsValidationUnavailable": "Not validated",
+  "pythonPluginsValidationValid": "Validated",
+  "resendModalCancel": "Cancel",
+  "resendModalCancelled": "Resending stopped. Requests already sent cannot be undone.",
+  "resendModalConfirm": "Send",
+  "resendModalCount": "Count",
+  "resendModalDelay": "Initial Delay (ms)",
+  "resendModalError": "Failed: {error}",
+  "resendModalInterval": "Interval (ms)",
+  "resendModalStop": "Stop",
+  "resendModalSuccess": "Done: {success} succeeded, {failed} failed",
+  "resendModalTitle": "Resend N Times",
+  "resendModalUpstreamProxy": "Upstream Proxy",
+  "resendModalUpstreamProxyPlaceholder": "e.g. http://127.0.0.1:8888",
+  "resendModalUseProxy": "Via MITM Proxy",
+  "rewriteRulesAction": "Action",
+  "rewriteRulesActionRedirect": "Redirect",
+  "rewriteRulesActionRequest": "Modify request",
+  "rewriteRulesActionResponse": "Modify response",
+  "rewriteRulesAddOperation": "Add",
+  "rewriteRulesBody": "Body",
+  "rewriteRulesBodyHint": "UTF-8 text only, up to 8 MiB.",
+  "rewriteRulesBodyNone": "Keep unchanged",
+  "rewriteRulesBodyRegex": "Regex replace",
+  "rewriteRulesBodyReplace": "Replace body",
+  "rewriteRulesCancel": "Cancel",
+  "rewriteRulesConflict": "This rule changed or was deleted elsewhere. Your edits are kept. Saving overwrites the latest version or recreates a deleted rule disabled.",
+  "rewriteRulesDelete": "Delete rule",
+  "rewriteRulesDeleteConfirm": "Delete “{name}”? This cannot be undone.",
+  "rewriteRulesDeleteDirty": "“{name}” has unsaved changes. Deletion cannot be undone.",
+  "rewriteRulesDiscardContinue": "Discard and continue",
+  "rewriteRulesDiscardDelete": "Discard and delete",
+  "rewriteRulesDraft": "Draft",
+  "rewriteRulesEmptyDescription": "Save a new rule, then enable it.",
+  "rewriteRulesEmptyTitle": "Select or create a rule",
+  "rewriteRulesEnableAll": "Enable rewrites",
+  "rewriteRulesEnableRule": "Enable {name}",
+  "rewriteRulesExpandedTarget": "Redirect URL",
+  "rewriteRulesFieldName": "Field name",
+  "rewriteRulesFieldValue": "Value (may be empty)",
+  "rewriteRulesHostPolicy": "Host header",
+  "rewriteRulesHostPreserve": "Keep current Host",
+  "rewriteRulesHostTarget": "Use target Host",
+  "rewriteRulesKeepDraft": "Keep my edits",
+  "rewriteRulesLoadSaved": "Load latest",
+  "rewriteRulesLoading": "Loading…",
+  "rewriteRulesMatched": "Matched",
+  "rewriteRulesMethod": "Method",
+  "rewriteRulesMoveDown": "Move down",
+  "rewriteRulesMoveUp": "Move up",
+  "rewriteRulesName": "Name",
+  "rewriteRulesNewName": "Untitled rule",
+  "rewriteRulesNewRule": "New rule",
+  "rewriteRulesNoRules": "No rewrite rules",
+  "rewriteRulesNoSearchResults": "No matching rules",
+  "rewriteRulesNotMatched": "No match",
+  "rewriteRulesOperation": "Operation",
+  "rewriteRulesOperationAdd": "Add",
+  "rewriteRulesOperationDelete": "Delete",
+  "rewriteRulesOperationSet": "Set",
+  "rewriteRulesOperationsHelp": "About operations",
+  "rewriteRulesOperationsHint": "Run in order. Add keeps duplicates; Set replaces all matches with one value; Delete removes all matches.",
+  "rewriteRulesPatternHint": "Matches the full URL. * matches any text. Example: https://example.com/api/*",
+  "rewriteRulesPreview": "Match test",
+  "rewriteRulesPreviewHint": "Checks URL matching only; no request is sent.",
+  "rewriteRulesQuery": "Query parameters",
+  "rewriteRulesQuitDirty": "Save changes to {count} rules before quitting?",
+  "rewriteRulesQuitTitle": "Unsaved rewrite rules",
+  "rewriteRulesRefresh": "Refresh rules",
+  "rewriteRulesRegexHint": "RE2 syntax. Use $1 and $2 for groups; $$ inserts $.",
+  "rewriteRulesRegexPattern": "Regular expression",
+  "rewriteRulesRegexReplacement": "Replacement",
+  "rewriteRulesRegexTest": "Regex replacement test",
+  "rewriteRulesRegexTestCopyInput": "Copy sample",
+  "rewriteRulesRegexTestCopyOutput": "Copy replacement result",
+  "rewriteRulesRegexTestEdit": "Edit sample",
+  "rewriteRulesRegexTestHint": "Edit a sample, then preview. Changing the pattern or replacement updates the preview automatically. No save or request is needed.",
+  "rewriteRulesRegexTestInput": "Sample body",
+  "rewriteRulesRegexTestMatches": "Matches: {count}",
+  "rewriteRulesRegexTestOutput": "Result preview",
+  "rewriteRulesRegexTestPreview": "Preview",
+  "rewriteRulesRegexTestTooLarge": "The sample body must not exceed 8 MiB in UTF-8.",
+  "rewriteRulesRegexTestUpdating": "Updating…",
+  "rewriteRulesRegexTestWrap": "Word wrap",
+  "rewriteRulesRemoveOperation": "Remove",
+  "rewriteRulesReplacementText": "Replacement text",
+  "rewriteRulesRequestHeaders": "Request headers",
+  "rewriteRulesResponseHeaders": "Response headers",
+  "rewriteRulesRevert": "Revert",
+  "rewriteRulesSave": "Save",
+  "rewriteRulesSaveContinue": "Save and continue",
+  "rewriteRulesSaveDelete": "Save and delete",
+  "rewriteRulesSearch": "Search rules",
+  "rewriteRulesTargetHint": "Use {capture} and {capture2} for the URL’s * captures.",
+  "rewriteRulesTargetUrl": "Target URL",
+  "rewriteRulesTestMatch": "Test",
+  "rewriteRulesTestUrl": "Test URL",
+  "rewriteRulesTitle": "Rewrite Rules",
+  "rewriteRulesUnavailable": "Unavailable",
+  "rewriteRulesUnsaved": "Unsaved",
+  "rewriteRulesUpdateDirty": "Save changes to {count} rules before restarting to update?",
+  "rewriteRulesUrlPattern": "Match URL",
+  "rewriteRulesValidationFixFields": "Fix the highlighted rule fields first",
+  "rewriteRulesValidationNameRequired": "Enter a rule name",
+  "rewriteRulesValidationNameTooLong": "Rule name is too long; shorten it",
+  "rewriteRulesValidationUrlRequired": "Enter a match URL",
+  "rewriteRulesValidationUrlTooLong": "Match URL is too long; shorten it",
+  "settingsAddClientCert": "Add Certificate",
+  "settingsAddDomainFilter": "Add",
+  "settingsAddPathManually": "Enter Path Manually",
+  "settingsAddRootCa": "Add",
+  "settingsAddRootCaAction": "Add Root CA",
+  "settingsAllFilesFilter": "All Files",
+  "settingsAppFontLabel": "App Font",
+  "settingsAppFontSizeLabel": "App Font Size",
+  "settingsCaCertExists": "Cert File",
+  "settingsCaFilesMissing": "Custom CA certificate or key file not found. Check the paths or select the files.",
+  "settingsCaFingerprint": "SHA256 Fingerprint",
+  "settingsCaGeneratedRestartNotice": "CA generated; restart the proxy to apply it.",
+  "settingsCaHideDetails": "Hide Certificate Details",
+  "settingsCaIsCa": "CA Certificate",
+  "settingsCaIssuer": "Issuer",
+  "settingsCaKeyExists": "Key File",
+  "settingsCaNotCa": "The selected certificate is not a CA. Select a valid CA certificate.",
+  "settingsCaSaveFirst": "Save settings before generating the CA certificate.",
+  "settingsCaShowDetails": "View Certificate Details",
+  "settingsCaStatusIncomplete": "CA configuration unavailable. Check the certificate and key.",
+  "settingsCaStatusReady": "CA certificate ready",
+  "settingsCaStatusUnavailable": "CA information unavailable",
+  "settingsCaSubject": "Subject",
+  "settingsCaTrustErrorsCaBuiltinUnavailable": "The built-in CA is unavailable. Check its status or regenerate it.",
+  "settingsCaTrustErrorsCaCustomGenerationDisabled": "Custom CAs cannot be regenerated.",
+  "settingsCaTrustErrorsCaCustomPathsRequired": "Specify both the custom CA certificate and private key paths.",
+  "settingsCaTrustErrorsCaTrustCertificateChanged": "The CA certificate changed. Refresh its status and retry.",
+  "settingsCaTrustErrorsCaTrustInvalidCa": "The selected certificate is not a valid CA certificate.",
+  "settingsCaTrustErrorsCaTrustInvalidPair": "The CA certificate or key is unavailable, or they do not match.",
+  "settingsCaTrustErrorsCaTrustInvalidValidity": "The CA certificate is not yet valid or has expired.",
+  "settingsCaTrustErrorsCaTrustLoginKeychainUnavailable": "The current user's login keychain is unavailable.",
+  "settingsCaTrustErrorsCaTrustTimeout": "System authentication or the certificate operation timed out. Check its status and retry.",
+  "settingsCaTrustErrorsCaTrustUninstallFirst": "Uninstall the current user's CA before regenerating it.",
+  "settingsCaTrustErrorsCaTrustUnsupported": "One-click CA installation and removal are not yet supported on this platform.",
+  "settingsCaTrustErrorsCaTrustVerificationFailed": "The installation status could not be verified after the operation. Refresh and retry.",
+  "settingsCaTrustInstall": "Install and trust CA for the current user",
+  "settingsCaTrustInstallFailed": "Failed to install CA: {error}",
+  "settingsCaTrustInstallSuccess": "CA installed and trusted for the current user.",
+  "settingsCaTrustInstalled": "Current user: installed",
+  "settingsCaTrustLoading": "Current user: checking installation status…",
+  "settingsCaTrustNotInstalled": "Current user: not installed",
+  "settingsCaTrustPartial": "Current user: installation incomplete; uninstall before retrying",
+  "settingsCaTrustSaveFirst": "Save settings before installing or uninstalling the CA.",
+  "settingsCaTrustStatusUnavailable": "Current user: installation status unavailable. Reopen Proxy settings to retry.",
+  "settingsCaTrustUninstall": "Uninstall the current user's CA and its trust settings",
+  "settingsCaTrustUninstallFailed": "Failed to uninstall CA: {error}",
+  "settingsCaTrustUninstallFirst": "Uninstall the current user's CA before regenerating it.",
+  "settingsCaTrustUninstallSuccess": "The current user's CA and its trust settings were uninstalled.",
+  "settingsCaUseBuiltin": "Use built-in CA certificate",
+  "settingsCaValidFrom": "Valid From",
+  "settingsCaValidPair": "Cert/Key Match",
+  "settingsCaValidTo": "Valid To",
+  "settingsCacheThresholdAccessibleLabel": "Body cache threshold in bytes",
+  "settingsCacheThresholdHint": "Larger bodies use disk storage",
+  "settingsCacheThresholdLabel": "Body Cache Threshold",
+  "settingsCertificateFileFilter": "Certificate Files",
+  "settingsClearAction": "Clear",
+  "settingsClearAllData": "Clear Caches and History",
+  "settingsClearAllDataConfirm": "Permanently delete caches and readable history? Other data is kept.",
+  "settingsClearAllDataDesc": "Clear caches and readable history. Keep collections and settings.",
+  "settingsClearAllDataSuccess": "Caches and history cleared.",
+  "settingsClearCacheFiles": "Clear Cache Files",
+  "settingsClearCacheFilesConfirm": "Permanently delete body, request-file, and process-icon caches?",
+  "settingsClearCacheFilesDesc": "Deletes cache but keeps history.",
+  "settingsClearCacheSuccess": "Cache files cleared.",
+  "settingsClientCertDisabled": "Disabled",
+  "settingsClientCertEnabled": "Enabled",
+  "settingsClientCertFile": "Certificate File",
+  "settingsClientCertHostname": "Hostname",
+  "settingsClientCertMissingFields": "Fill in before enabling: {fields}",
+  "settingsClientCertNewTitle": "Client Certificate {index}",
+  "settingsClientCertPath": "Certificate Path",
+  "settingsClientCertPathPlaceholder": "Select a .crt / .cer / .pem file",
+  "settingsClientCertTargetHost": "Target Hostname",
+  "settingsClientCertTargetHostHint": "No port; must match the upstream host.",
+  "settingsClientCertTargetHostPlaceholder": "api.example.com",
+  "settingsClientCertsCount": "Entries: {count}",
+  "settingsClientCertsIncomplete": "Entries: {count} · Incomplete",
+  "settingsClientKeyFile": "Private Key File",
+  "settingsClientKeyPath": "Key Path",
+  "settingsClientKeyPathPlaceholder": "Select a .key / .pem file",
+  "settingsCodeFontLabel": "Code Font",
+  "settingsCodeFontPreviewText": "GET /api/items HTTP/1.1",
+  "settingsCodeFontSizeLabel": "Code Font Size",
+  "settingsDiskUsageCache": "Cache files",
+  "settingsDiskUsageHistory": "History",
+  "settingsDiskUsageTotal": "Total",
+  "settingsErrorGenerateCa": "Failed to generate CA certificate.",
+  "settingsErrorLoadCaInfo": "Failed to load CA certificate info.",
+  "settingsErrorLoadFonts": "Failed to load system fonts.",
+  "settingsErrorSelectCertificateFile": "Failed to select certificate file: {error}",
+  "settingsExcludeHosts": "Exclude Domains",
+  "settingsFieldSeparator": ", ",
+  "settingsFontDefault": "Default",
+  "settingsFontPreviewText": "Font preview Aa 123",
+  "settingsFontSearchPlaceholder": "Search fonts...",
+  "settingsFontSizeReset": "Reset font size",
+  "settingsGenerateCa": "Generate CA",
+  "settingsHistoryRetentionEnabledHint": "Deletes expired history on startup",
+  "settingsHistoryRetentionEnabledLabel": "Delete Expired History Automatically",
+  "settingsHistoryRetentionPeriodHint": "Applies on next startup",
+  "settingsHistoryRetentionPeriodLabel": "Retention Period",
+  "settingsHistoryRetentionUnitDay": "Days",
+  "settingsHistoryRetentionUnitHour": "Hours",
+  "settingsHistoryRetentionUnitLabel": "Retention Period Unit",
+  "settingsHistoryRetentionUnitMonth": "Months",
+  "settingsHistoryRetentionUnitWeek": "Weeks",
+  "settingsHistoryRetentionUnitYear": "Years",
+  "settingsHostFilterPlaceholder": "e.g. *.example.com or www.example.com",
+  "settingsIncludeHosts": "Include Domains",
+  "settingsLogClearLogs": "Clear Logs",
+  "settingsLogClearLogsConfirm": "Delete old logs and clear the current log?",
+  "settingsLogEnabledLabel": "Enable Logging",
+  "settingsLogErrorClearLogs": "Failed to clear logs: {error}",
+  "settingsLogErrorLevel": "Failed to update log level: {error}",
+  "settingsLogErrorLoad": "Failed to load logging data: {error}",
+  "settingsLogErrorOpenDir": "Failed to open the log folder: {error}",
+  "settingsLogErrorToggle": "Failed to update logging enabled state: {error}",
+  "settingsLogImmediateNotice": "Logging changes apply immediately. No save needed.",
+  "settingsLogLevelDebug": "Debug",
+  "settingsLogLevelError": "Error",
+  "settingsLogLevelInfo": "Info",
+  "settingsLogLevelLabel": "Log Level",
+  "settingsLogLevelTrace": "Trace",
+  "settingsLogLevelWarn": "Warn",
+  "settingsLogMaintenanceLabel": "Log Maintenance",
+  "settingsLogOpenDir": "Open Folder",
+  "settingsLogSuccessClearedLogs": "Logs cleared.",
+  "settingsMainWindowCloseBehaviorHideToTray": "Hide to tray",
+  "settingsMainWindowCloseBehaviorLabel": "When closing main window",
+  "settingsMainWindowCloseBehaviorQuit": "Quit app",
+  "settingsNo": "No",
+  "settingsNoClientCerts": "Not configured",
+  "settingsNoClientCertsDesc": "Only needed for upstream mutual TLS.",
+  "settingsNoRootCas": "System trust",
+  "settingsNoRootCasDesc": "System trust is used by default; add only internal or self-signed CAs.",
+  "settingsOtherUnsavedNotice": "Other settings have unsaved changes",
+  "settingsPathTagPlaceholder": "Enter a path and press Enter",
+  "settingsPointerCursorHint": "Switch to a pointer cursor when hovering over interactive elements",
+  "settingsPointerCursorLabel": "Use pointer cursor",
+  "settingsPrivateKeyFileFilter": "Private Key Files",
+  "settingsProcessAttributionLabel": "Identify request process",
+  "settingsPythonHookTimeoutAccessibleLabel": "Script timeout in milliseconds",
+  "settingsPythonHookTimeoutLabel": "Script Timeout",
+  "settingsPythonInterpreterBrowse": "Choose interpreter",
+  "settingsPythonInterpreterDetect": "Detect",
+  "settingsPythonInterpreterDetectCancel": "Cancel",
+  "settingsPythonInterpreterDetectCurrent": "Current",
+  "settingsPythonInterpreterDetectDescription": "Choose the Python interpreter used by plugins; it takes effect only after you save settings.",
+  "settingsPythonInterpreterDetectFailed": "Could not detect Python interpreters: {error}",
+  "settingsPythonInterpreterDetectLatest": "Highest version",
+  "settingsPythonInterpreterDetectNone": "No compatible Python interpreter was detected. Choose one manually.",
+  "settingsPythonInterpreterDetectTitle": "Choose a Detected Python",
+  "settingsPythonInterpreterDetectUse": "Use This Interpreter",
+  "settingsPythonInterpreterLabel": "Python Interpreter",
+  "settingsPythonInterpreterPickerFailed": "Could not choose interpreter: {error}",
+  "settingsPythonInterpreterPickerMessage": "Choose a Python executable.",
+  "settingsPythonInterpreterPickerTitle": "Choose Python Interpreter",
+  "settingsPythonInterpreterPlaceholder": "e.g. C:\\Python311\\python.exe",
+  "settingsPythonInterpreterTest": "Test",
+  "settingsPythonInterpreterTestFailed": "Interpreter test failed: {error}",
+  "settingsPythonInterpreterTestSuccess": "Interpreter available: {version}",
+  "settingsPythonPluginsEnabledLabel": "Enable Python Plugins",
+  "settingsPythonRuntimeDisabled": "Not enabled",
+  "settingsPythonRuntimeError": "Runtime error",
+  "settingsPythonRuntimeIdle": "Waiting for first use",
+  "settingsPythonRuntimeReady": "Ready",
+  "settingsPythonRuntimeUnknown": "Status unknown",
+  "settingsPythonRuntimeVersion": "Current environment: {version}",
+  "settingsPythonTrustedCodeCancel": "Cancel",
+  "settingsPythonTrustedCodeConfirm": "I Understand and Enable",
+  "settingsPythonTrustedCodeConfirmMessage": "When enabled, Python plugins and current request scripts can run locally. Run trusted code only.",
+  "settingsPythonTrustedCodeTitle": "Run Trusted Code Only",
+  "settingsQuitDirtyCancel": "Keep Editing",
+  "settingsQuitDirtyConfirm": "Discard and Quit",
+  "settingsQuitDirtyMessage": "Quit and discard unsaved settings?",
+  "settingsQuitDirtyTitle": "Unsaved Settings",
+  "settingsRefresh": "Refresh",
+  "settingsRegenerateCa": "Regenerate CA",
+  "settingsRegenerateCaConfirm": "The current CA certificate and key will be backed up and replaced. Applies after a proxy restart.",
+  "settingsRemoveClientCert": "Remove Client Certificate",
+  "settingsRemoveDomainFilter": "Remove Domain",
+  "settingsRemoveRootCa": "Remove Root CA",
+  "settingsReset": "Restore Defaults",
+  "settingsResetApplication": "Restore Initial State",
+  "settingsResetApplicationAction": "Reset",
+  "settingsResetApplicationConfirm": "Remove built-in CA trust, then clear all app data and restore defaults on the next launch. Unsaved content is discarded; external files are kept. This cannot be undone.",
+  "settingsResetApplicationDescription": "Clear app data and restore defaults. Manual restart required.",
+  "settingsResetApplicationExit": "Exit Application",
+  "settingsResetApplicationExitFailed": "Exit failed: {error}",
+  "settingsResetApplicationFailed": "Reset failed: {error}",
+  "settingsResetApplicationProgress": "Preparing Reset",
+  "settingsResetApplicationProgressDescription": "Please wait.",
+  "settingsResetApplicationReady": "Restart FlowLens",
+  "settingsResetApplicationReadyDescription": "Exit and reopen FlowLens to finish the reset.",
+  "settingsResetApplicationSuccess": "Reset complete. Trust the new built-in CA when needed.",
+  "settingsResetRecoveryDescription": "Resolve the error and retry, or exit and reopen FlowLens.",
+  "settingsResetRecoveryExit": "Exit",
+  "settingsResetRecoveryRetry": "Retry",
+  "settingsResetRecoveryTitle": "Reset Incomplete",
+  "settingsResetStartupInitializing": "Initialise app",
+  "settingsResetStartupStorage": "Clear app data",
+  "settingsResetStartupTemporary": "Clear temporary files",
+  "settingsResetStartupTitle": "Restoring Initial State",
+  "settingsRestartReasonListenAddressChanged": "listen address",
+  "settingsRestartReasonMitmCaChanged": "MITM CA",
+  "settingsRestartReasonProxyModeChanged": "proxy mode",
+  "settingsRootCaPathPlaceholder": "e.g. C:\\certs\\internal-ca.pem",
+  "settingsRootCaPaths": "Root CA Paths",
+  "settingsRootCasCount": "Extra CAs: {count}",
+  "settingsSave": "Save Settings",
+  "settingsSaveFailed": "Could not save settings: {error}",
+  "settingsSavedAppliedNotice": "Settings saved and applied.",
+  "settingsSavedNotice": "Settings saved.",
+  "settingsSavedPartialRestartNotice": "Settings saved and applied; restart the proxy for: {reasons}.",
+  "settingsSavedRestartNotice": "Settings saved; restart the proxy to apply them.",
+  "settingsSectionAppearance": "Appearance",
+  "settingsSectionBehavior": "Behavior",
+  "settingsSectionCache": "Cache",
+  "settingsSectionCertificate": "Capture Certificate (MITM CA)",
+  "settingsSectionClientCerts": "Client Certificates",
+  "settingsSectionConnection": "Connection",
+  "settingsSectionDanger": "Danger Zone",
+  "settingsSectionDiskUsage": "Disk Usage",
+  "settingsSectionHistoryRetention": "History Retention",
+  "settingsSectionLogs": "Logging",
+  "settingsSectionPythonPlugins": "Python Environment",
+  "settingsSectionRootCas": "Trusted Upstream Root CAs",
+  "settingsSectionTls": "TLS / Certificates",
+  "settingsSectionUpstreamTls": "Upstream TLS",
+  "settingsSelectCaCertFile": "Select CA Certificate",
+  "settingsSelectCaCertFileMessage": "Select the MITM CA certificate file.",
+  "settingsSelectCaKeyFile": "Select CA Private Key",
+  "settingsSelectCaKeyFileMessage": "Select the private key matching the MITM CA certificate.",
+  "settingsSelectClientCertFile": "Select Client Certificate",
+  "settingsSelectClientCertFileMessage": "Select the client certificate sent to the upstream server.",
+  "settingsSelectClientKeyFile": "Select Client Private Key",
+  "settingsSelectClientKeyFileMessage": "Select the private key matching the client certificate.",
+  "settingsSelectFile": "Select File",
+  "settingsSelectFiles": "Select Files",
+  "settingsSelectRootCaFile": "Select Root CA File",
+  "settingsSelectRootCaFileMessage": "Select one upstream Root CA certificate file.",
+  "settingsSelectRootCaFiles": "Select Root CA Files",
+  "settingsSelectRootCaFilesMessage": "Select one or more upstream Root CA certificate files.",
+  "settingsTabGeneral": "General",
+  "settingsTabLogs": "Logs",
+  "settingsTabProxy": "Proxy",
+  "settingsTabPythonPlugins": "Python",
+  "settingsTabShortcuts": "Shortcuts",
+  "settingsTabStorage": "Storage",
+  "settingsThemeColorsNeutral": "Neutral Color",
+  "settingsThemeColorsPaletteAmber": "Amber",
+  "settingsThemeColorsPaletteBlue": "Blue",
+  "settingsThemeColorsPaletteCyan": "Cyan",
+  "settingsThemeColorsPaletteEmerald": "Emerald",
+  "settingsThemeColorsPaletteFuchsia": "Fuchsia",
+  "settingsThemeColorsPaletteGray": "Gray",
+  "settingsThemeColorsPaletteGreen": "Green",
+  "settingsThemeColorsPaletteIndigo": "Indigo",
+  "settingsThemeColorsPaletteLime": "Lime",
+  "settingsThemeColorsPaletteMauve": "Mauve",
+  "settingsThemeColorsPaletteMist": "Mist",
+  "settingsThemeColorsPaletteNeutral": "Neutral",
+  "settingsThemeColorsPaletteOlive": "Olive",
+  "settingsThemeColorsPaletteOrange": "Orange",
+  "settingsThemeColorsPalettePink": "Pink",
+  "settingsThemeColorsPalettePurple": "Purple",
+  "settingsThemeColorsPaletteRed": "Red",
+  "settingsThemeColorsPaletteRose": "Rose",
+  "settingsThemeColorsPaletteSky": "Sky",
+  "settingsThemeColorsPaletteSlate": "Slate",
+  "settingsThemeColorsPaletteStone": "Stone",
+  "settingsThemeColorsPaletteTaupe": "Taupe",
+  "settingsThemeColorsPaletteTeal": "Teal",
+  "settingsThemeColorsPaletteViolet": "Violet",
+  "settingsThemeColorsPaletteYellow": "Yellow",
+  "settingsThemeColorsPaletteZinc": "Zinc",
+  "settingsThemeColorsPreviewFailed": "Could not preview colors: {error}",
+  "settingsThemeColorsPrimary": "Primary Color",
+  "settingsUnitBytes": "bytes",
+  "settingsUnitMilliseconds": "ms",
+  "settingsUnitPixels": "px",
+  "settingsUpdateDirtyConfirm": "Discard and Update",
+  "settingsUpdateDirtyMessage": "Restarting to update will discard unsaved settings. Continue?",
+  "settingsUpstreamProxyCustomPlaceholder": "e.g. http://127.0.0.1:8888",
+  "settingsUpstreamProxyCustomRequired": "Enter a valid custom upstream proxy URL.",
+  "settingsUpstreamProxyModeCustom": "Custom Proxy",
+  "settingsUpstreamProxyModeNone": "No Proxy",
+  "settingsUpstreamProxyModeSystem": "System Proxy",
+  "settingsWindowFrameModeCustom": "Custom Title Bar",
+  "settingsWindowFrameModeLabel": "Window Title Bar",
+  "settingsWindowFrameModeRestartNotice": "Window style changed; restart the app to apply it.",
+  "settingsWindowFrameModeSystem": "System Title Bar",
+  "settingsWsMaxMessagesHint": "Stops capture at this limit",
+  "settingsWsMaxMessagesLabel": "Max WebSocket Messages",
+  "settingsYes": "Yes",
+  "shortcutsApplyErrorsInvalidConfig": "Invalid shortcut configuration; changes not saved.",
+  "shortcutsApplyErrorsPersistenceFailed": "Save failed; previous bindings remain active.",
+  "shortcutsApplyErrorsRegistrationConflict": "Could not register; the binding may be in use.",
+  "shortcutsApplyErrorsRollbackIncomplete": "Change failed and recovery was incomplete; restart FlowLens.",
+  "shortcutsApplyErrorsUnknown": "The shortcut change could not be applied.",
+  "shortcutsApplyErrorsUnregisterFailed": "Could not release the old shortcut; previous settings restored.",
+  "shortcutsApplyErrorsUnsupported": "Global shortcut unsupported; changes not saved.",
+  "shortcutsCancel": "Cancel",
+  "shortcutsCategoriesApplication": "Application",
+  "shortcutsCategoriesCapture": "Capture",
+  "shortcutsCategoriesRequestEditor": "Request Editor",
+  "shortcutsCategoriesWorkbench": "Workbench",
+  "shortcutsCategoriesWorkspace": "Workspace Tabs",
+  "shortcutsClear": "Clear",
+  "shortcutsClearFor": "Clear shortcut for {command}",
+  "shortcutsCommandsAppOpenSettings": "Open Settings",
+  "shortcutsCommandsAppSave": "Save Changes",
+  "shortcutsCommandsAppShowMainWindow": "Show Main Window",
+  "shortcutsCommandsCaptureClearTraffic": "Clear Traffic",
+  "shortcutsCommandsCaptureFocusFilter": "Focus Filter",
+  "shortcutsCommandsCaptureToggleProxy": "Toggle Proxy",
+  "shortcutsCommandsCaptureToggleSystemProxy": "Toggle System Proxy",
+  "shortcutsCommandsRequestEditorSend": "Send",
+  "shortcutsCommandsWorkbenchApiCollection": "Open API Collection",
+  "shortcutsCommandsWorkbenchCapture": "Open Capture",
+  "shortcutsCommandsWorkbenchCategory": "Open Categories",
+  "shortcutsCommandsWorkbenchMemstats": "Open Memory Monitor",
+  "shortcutsCommandsWorkbenchPythonPlugins": "Open Python Plugins",
+  "shortcutsCommandsWorkbenchRewriteRules": "Rewrite Rules",
+  "shortcutsCommandsWorkspaceCloseTab": "Close Tab",
+  "shortcutsCommandsWorkspaceNewHttpRequest": "New HTTP Request",
+  "shortcutsCommandsWorkspaceNewWebSocketRequest": "New WebSocket Request",
+  "shortcutsCommandsWorkspaceNextTab": "Next Tab",
+  "shortcutsCommandsWorkspacePreviousTab": "Previous Tab",
+  "shortcutsConflictMessage": "{binding} is already assigned to {conflicts}. Replace it with {command}?",
+  "shortcutsConflictTitle": "Shortcut Conflict",
+  "shortcutsEmptySearch": "No matching commands.",
+  "shortcutsGlobalNote": "App shortcuts require focus; global shortcuts require a binding.",
+  "shortcutsNotSet": "Not set",
+  "shortcutsRecordFor": "Change shortcut for {command}",
+  "shortcutsRecording": "Press keys…",
+  "shortcutsReplace": "Replace",
+  "shortcutsReset": "Default",
+  "shortcutsResetAll": "Reset All Shortcuts",
+  "shortcutsResetAllConfirm": "Restore every shortcut to its default binding?",
+  "shortcutsResetFor": "Restore the default shortcut for {command}",
+  "shortcutsRuntimeActive": "System shortcut active",
+  "shortcutsRuntimeConflict": "Shortcut unavailable or already in use",
+  "shortcutsRuntimePortalPending": "Pending desktop portal approval",
+  "shortcutsRuntimeUnsupported": "Not supported on this platform",
+  "shortcutsScopeApplication": "Application",
+  "shortcutsScopeGlobal": "Global",
+  "shortcutsScopeLabel": "Shortcut scope",
+  "shortcutsSearchPlaceholder": "Search commands or shortcuts",
+  "shortcutsTitle": "Keyboard Shortcuts",
+  "shortcutsWarningsMacNonANSICompatibility": "Displayed keys may differ on non-ANSI macOS keyboards.",
+  "shortcutsWarningsWaylandPortalControlsBinding": "The Wayland portal may reject or change global shortcut bindings.",
+  "statusActionEnvironment": "Environment information",
+  "statusActionGithub": "GitHub project",
+  "statusActionUpdate": "Check for updates",
+  "statusEnvironmentAppVersion": "App version",
+  "statusEnvironmentBuildCommit": "Build commit",
+  "statusEnvironmentGo": "Go",
+  "statusEnvironmentLoadFailed": "Failed to load environment information: {error}",
+  "statusEnvironmentMygo": "MyGo",
+  "statusEnvironmentPlatform": "Platform",
+  "statusEnvironmentRetry": "Retry",
+  "statusEnvironmentTitle": "Environment",
+  "statusGithubOpenFailed": "Failed to open the GitHub project: {error}",
+  "statusLayoutSaveFailed": "Failed to save layout: {error}",
+  "statusSelected": "(Selected {count} items)",
+  "statusSwitchHorizontalLayout": "Horizontal layout",
+  "statusSwitchVerticalLayout": "Vertical layout",
+  "statusTotal": "Total {count} items",
+  "statusUpdateAvailable": "Update available",
+  "statusUpdateChecking": "Checking for updates",
+  "statusUpdateError": "Update failed",
+  "statusUpdateFailed": "Update action failed: {error}",
+  "statusUpdateReady": "Restart and update",
+  "themeAuto": "Auto",
+  "themeDark": "Dark",
+  "themeLight": "Light",
+  "themeTooltip": "Theme: {mode}",
+  "toolbarAntiCache": "Anti-cache",
+  "toolbarAntiCacheOff": "Anti-cache: off",
+  "toolbarAntiCacheOn": "Anti-cache: on",
+  "toolbarAntiComp": "Anti-compression",
+  "toolbarAntiCompOff": "Anti-compression: off",
+  "toolbarAntiCompOn": "Anti-compression: on",
+  "toolbarCaCertPath": "CA Cert Path",
+  "toolbarCaKeyPath": "CA Key Path",
+  "toolbarCancel": "Cancel",
+  "toolbarClear": "Clear",
+  "toolbarClearFailed": "Clear failed: {error}",
+  "toolbarCleared": "Traffic cleared",
+  "toolbarCopied": "Address copied",
+  "toolbarDisableHttp2": "Disable HTTP/2",
+  "toolbarDisableHttp2Off": "Disable HTTP/2: off",
+  "toolbarDisableHttp2On": "Disable HTTP/2: on",
+  "toolbarDisableProxy": "Disable Upstream Proxy",
+  "toolbarDisableProxyOff": "Disable upstream proxy: off",
+  "toolbarDisableProxyOn": "Disable upstream proxy: on",
+  "toolbarDnsCache": "DNS Cache",
+  "toolbarDnsCacheApply": "Apply",
+  "toolbarDnsCacheClear": "Clear cache",
+  "toolbarDnsCacheCleared": "Cleared",
+  "toolbarDnsCacheEnabled": "Enable DNS cache",
+  "toolbarDnsCacheFailed": "Operation failed: {error}",
+  "toolbarDnsCacheInvalidTtl": "Enter a whole number between 1 and 3600",
+  "toolbarDnsCacheOff": "DNS cache: off",
+  "toolbarDnsCacheOn": "DNS cache: on",
+  "toolbarDnsCacheTtl": "Cache duration (seconds)",
+  "toolbarHostFilterTitle": "Domain Filters",
+  "toolbarHostFilterTooltip": "Domain filters: {count}",
+  "toolbarInvalidPort": "Enter a port between 1 and 65535",
+  "toolbarOperationFailed": "Operation failed: {error}",
+  "toolbarPort": "Port",
+  "toolbarProxyNotRunning": "Proxy not running",
+  "toolbarProxyRunning": "Proxying on {address}",
+  "toolbarQuickHost": "Listening host IP: {host}",
+  "toolbarQuickMode": "Proxy mode: {mode}",
+  "toolbarQuickPort": "Proxy port: {port}",
+  "toolbarQuickSettingsFailed": "Failed to update proxy settings: {error}",
+  "toolbarSave": "Save",
+  "toolbarSkipVerifyTls": "Skip TLS Verification",
+  "toolbarSkipVerifyTlsOff": "Skip TLS verify: off",
+  "toolbarSkipVerifyTlsOn": "Skip TLS verify: on",
+  "toolbarStart": "Start",
+  "toolbarStarted": "Proxy started",
+  "toolbarStop": "Stop",
+  "toolbarStopped": "Proxy stopped",
+  "toolbarSystemProxyEnabled": "System proxy set to {address}",
+  "toolbarSystemProxyFailed": "System proxy operation failed: {error}",
+  "toolbarSystemProxyModeUnsupported": "System proxy is not supported for {mode} mode on this platform",
+  "toolbarSystemProxyOff": "System proxy: off",
+  "toolbarSystemProxyOn": "System proxy: on ({address})",
+  "toolbarSystemProxyRestored": "System proxy restored",
+  "toolbarUpstreamProxy": "Upstream Proxy",
+  "trafficColumnSettingsSaveFailed": "Failed to save column visibility: {error}",
+  "trafficColumns": "Columns",
+  "trafficDestination": "Server IP",
+  "trafficDuration": "Duration",
+  "trafficExportChooseDirectory": "Choose export directory",
+  "trafficExportFailed": "Export failed: {error}",
+  "trafficExportFormatsCsv": "CSV",
+  "trafficExportFormatsHar": "HAR",
+  "trafficExportFormatsRequest": "Request",
+  "trafficExportFormatsRequestBody": "Request Body",
+  "trafficExportFormatsRequestHeaders": "Request Headers",
+  "trafficExportFormatsRequestResponse": "Request + Response",
+  "trafficExportFormatsResponse": "Response",
+  "trafficExportFormatsResponseBody": "Response Body",
+  "trafficExportFormatsResponseHeaders": "Response Headers",
+  "trafficExportResult": "{exported} exported, {skipped} skipped",
+  "trafficExportTitle": "Export",
+  "trafficHost": "Host",
+  "trafficId": "ID",
+  "trafficMethod": "Method",
+  "trafficPath": "Path",
+  "trafficProcess": "Process",
+  "trafficProcessIdentifying": "Identifying...",
+  "trafficProcessPid": "PID {pid}",
+  "trafficProcessRemote": "Remote",
+  "trafficProtocol": "Protocol",
+  "trafficShowAllColumns": "Show all columns",
+  "trafficShowNewRequests": "Show new requests ({count})",
+  "trafficSize": "Size",
+  "trafficStatus": "Status",
+  "trafficTime": "Time",
+  "trafficType": "Type",
+  "trafficWsMsgsTruncated": "Message limit reached. Some messages were not captured.",
+  "trayClose": "Close",
+  "trayOpenMainWindow": "Open Main Window",
+  "updaterActionBackground": "Continue in background",
+  "updaterActionCancel": "Cancel",
+  "updaterActionCancelAndClose": "Cancel task and close",
+  "updaterActionCheck": "Check for updates",
+  "updaterActionClose": "Close",
+  "updaterActionDownload": "Download and prepare",
+  "updaterActionFailed": "Update action failed: {error}",
+  "updaterActionLater": "Restart later",
+  "updaterActionOpenRelease": "Open release page",
+  "updaterActionRestart": "Restart now",
+  "updaterActionRetry": "Try again",
+  "updaterActionReturn": "Go back",
+  "updaterActionUnderstood": "Got it",
+  "updaterArtifact": "Update file",
+  "updaterAvailableManualDescription": "This installation must be updated from the release page.",
+  "updaterAvailableSelfDescription": "This update can be downloaded and prepared inside the app.",
+  "updaterAvailableTitle": "FlowLens v{version} is available",
+  "updaterCheckingDescription": "Connecting to GitHub and reading the latest release information.",
+  "updaterCheckingTitle": "Checking for updates",
+  "updaterCloseBlockedDescription": "FlowLens is verifying or preparing the update. Wait for this stage to finish so the staged files remain valid.",
+  "updaterCloseBlockedTitle": "This window cannot close yet",
+  "updaterCloseConfirmDescription": "Hide this window and keep the task running, or cancel the current task before closing it.",
+  "updaterCloseConfirmTitle": "The update task is still running",
+  "updaterDownloadingDescription": "You can hide this window and let the download continue in the background.",
+  "updaterDownloadingTitle": "Downloading the update",
+  "updaterErrorDescription": "The update encountered an error. Try again.",
+  "updaterErrorTitle": "The update did not finish",
+  "updaterEyebrow": "FlowLens update center",
+  "updaterIdleDescription": "Manually check GitHub Releases for a newer version for this platform.",
+  "updaterIdleTitle": "Check for FlowLens updates",
+  "updaterInitializationFailed": "Failed to initialize the update window: {error}",
+  "updaterInvalidReleaseUrl": "The release page address is invalid",
+  "updaterManualNoticeDescription": "The GitHub Release page will open. Download the package for this platform and follow the operating system prompts to update.",
+  "updaterManualNoticeTitle": "Manual installation required",
+  "updaterModeManual": "Manual install",
+  "updaterModeSelf": "In-app update",
+  "updaterPhaseCheck": "Check",
+  "updaterPhaseDownload": "Download",
+  "updaterPhasePrepare": "Prepare",
+  "updaterPhaseVerify": "Verify",
+  "updaterPreparingDescription": "Unpacking and staging the new version. This window cannot be closed during this stage.",
+  "updaterPreparingTitle": "Preparing the update",
+  "updaterProgress": "{written} / {total}",
+  "updaterProgressLabel": "Update progress",
+  "updaterProgressWithRate": "{written} / {total} · {rate}",
+  "updaterPublishedAt": "Published",
+  "updaterReadyDescription": "Restart FlowLens to apply the new version.",
+  "updaterReadyTitle": "The update is ready",
+  "updaterReleaseNotes": "Release notes",
+  "updaterReleaseNotesEmpty": "No release notes were provided for this version.",
+  "updaterReleaseVersion": "New version",
+  "updaterUnknownSize": "Unknown size",
+  "updaterUpToDateDescription": "This FlowLens installation does not need an update.",
+  "updaterUpToDateTitle": "You're up to date",
+  "updaterVerifyingDescription": "Checking SHA-256 integrity. This window cannot be closed during this stage.",
+  "updaterVerifyingTitle": "Verifying the download",
+  "updaterWindowTitle": "Software Update",
+  "workspaceClose": "Close",
+  "workspaceHttpRequestAddCookie": "Add cookie",
+  "workspaceHttpRequestAddHeader": "Add",
+  "workspaceHttpRequestAddQueryParameter": "Add query parameter",
+  "workspaceHttpRequestAddRequestHeader": "Add header",
+  "workspaceHttpRequestBodyType": "Data Type",
+  "workspaceHttpRequestBodyTypeFile": "File",
+  "workspaceHttpRequestBodyTypeForm": "Form",
+  "workspaceHttpRequestBodyTypeFormData": "Form-Data",
+  "workspaceHttpRequestBodyTypeJson": "JSON",
+  "workspaceHttpRequestBodyTypeNone": "None",
+  "workspaceHttpRequestBodyTypeText": "Text",
+  "workspaceHttpRequestBodyTypeUrlencoded": "URL Encoded",
+  "workspaceHttpRequestBodyTypeXml": "XML",
+  "workspaceHttpRequestClearCookies": "Clear cookies",
+  "workspaceHttpRequestClearQueryParameters": "Clear query parameters",
+  "workspaceHttpRequestClearRequestHeaders": "Clear headers",
+  "workspaceHttpRequestConsole": "Console",
+  "workspaceHttpRequestConsoleClear": "Clear console",
+  "workspaceHttpRequestConsoleColumnOutput": "Output",
+  "workspaceHttpRequestConsoleColumnSource": "Source",
+  "workspaceHttpRequestConsoleColumnTime": "Time",
+  "workspaceHttpRequestConsoleColumnType": "Type",
+  "workspaceHttpRequestConsoleCopied": "Console output copied",
+  "workspaceHttpRequestConsoleCopyAll": "Copy all output",
+  "workspaceHttpRequestConsoleCopyEntry": "Copy current output",
+  "workspaceHttpRequestConsoleCopyFailed": "Failed to copy console output: {error}",
+  "workspaceHttpRequestConsoleCurrentScript": "Current script",
+  "workspaceHttpRequestConsoleEmpty": "No script output yet",
+  "workspaceHttpRequestConsoleEntries": "{count} output entries",
+  "workspaceHttpRequestConsoleEntryCopied": "Current output copied",
+  "workspaceHttpRequestConsoleEntryDetail": "Output details",
+  "workspaceHttpRequestConsoleLevelDebug": "Debug",
+  "workspaceHttpRequestConsoleLevelError": "Error",
+  "workspaceHttpRequestConsoleLevelInfo": "Info",
+  "workspaceHttpRequestConsoleLevelWarning": "Warning",
+  "workspaceHttpRequestConsoleLines": "{count} lines",
+  "workspaceHttpRequestConsoleRunning": "Script running",
+  "workspaceHttpRequestConsoleSave": "Save console output",
+  "workspaceHttpRequestConsoleSaveEntry": "Save current output",
+  "workspaceHttpRequestConsoleSaveFailed": "Failed to save console output: {error}",
+  "workspaceHttpRequestConsoleTypeStderr": "stderr",
+  "workspaceHttpRequestConsoleTypeStdout": "stdout",
+  "workspaceHttpRequestConsoleUnknownPlugin": "Unknown script",
+  "workspaceHttpRequestConsoleWaitingOutput": "Waiting for script output",
+  "workspaceHttpRequestConsoleWrap": "Wrap console output",
+  "workspaceHttpRequestCookieList": "Cookie List",
+  "workspaceHttpRequestCookieNamePlaceholder": "Cookie name",
+  "workspaceHttpRequestCookieValuePlaceholder": "Cookie value",
+  "workspaceHttpRequestCookies": "Cookie",
+  "workspaceHttpRequestCookiesCleared": "Cookies cleared",
+  "workspaceHttpRequestCopyQuery": "Copy query",
+  "workspaceHttpRequestCopyRequestHeadersJson": "Copy headers as JSON",
+  "workspaceHttpRequestCopyRequestHeadersText": "Copy headers as text",
+  "workspaceHttpRequestCopyResponseErrorDetails": "Copy error details",
+  "workspaceHttpRequestCopyResponseHeadersJson": "Copy headers as JSON",
+  "workspaceHttpRequestCopyResponseHeadersText": "Copy headers as text",
+  "workspaceHttpRequestCopyResponseTrailersJson": "Copy trailers as JSON",
+  "workspaceHttpRequestCopyResponseTrailersText": "Copy trailers as text",
+  "workspaceHttpRequestCustomProxy": "Custom Proxy URL",
+  "workspaceHttpRequestCustomProxyPlaceholder": "e.g. http://127.0.0.1:8888",
+  "workspaceHttpRequestDisableMitmProxy": "Stop using MITM proxy",
+  "workspaceHttpRequestEnableMitmProxy": "Use MITM proxy",
+  "workspaceHttpRequestFileChoose": "Choose File",
+  "workspaceHttpRequestFileClear": "Clear",
+  "workspaceHttpRequestFileDropHint": "Drop a file here or choose one",
+  "workspaceHttpRequestFileName": "Name",
+  "workspaceHttpRequestFilePath": "Path",
+  "workspaceHttpRequestFilePathUnresolved": "Cannot resolve absolute file path",
+  "workspaceHttpRequestFileRequired": "Please choose a file to send",
+  "workspaceHttpRequestFileSize": "Size",
+  "workspaceHttpRequestFormDataAddRow": "Add Row",
+  "workspaceHttpRequestFormDataClearAll": "Clear All",
+  "workspaceHttpRequestFormDataColAction": "Action",
+  "workspaceHttpRequestFormDataColEnabled": "On",
+  "workspaceHttpRequestFormDataColName": "Name",
+  "workspaceHttpRequestFormDataColValue": "Value",
+  "workspaceHttpRequestFormDataFilePlaceholder": "No file selected",
+  "workspaceHttpRequestFormDataFileRequired": "Form-data file item \"{name}\" requires a file",
+  "workspaceHttpRequestFormDataNamePlaceholder": "Field name",
+  "workspaceHttpRequestFormDataRowMenuActions": "Row actions",
+  "workspaceHttpRequestFormDataRowMenuDelete": "Delete Row",
+  "workspaceHttpRequestFormDataRowMenuFile": "File",
+  "workspaceHttpRequestFormDataRowMenuText": "Text",
+  "workspaceHttpRequestFormDataRowMenuUpload": "Upload File",
+  "workspaceHttpRequestFormDataValuePlaceholder": "Field value",
+  "workspaceHttpRequestHeaderDuplicateIgnored": "Duplicate header; this row will be ignored.",
+  "workspaceHttpRequestHeaderFieldsTruncated": "Header block truncated; fields or order may be incomplete.",
+  "workspaceHttpRequestHeaderInvalidName": "Header \"{name}\" is invalid or unsupported by this protocol.",
+  "workspaceHttpRequestHeaderKey": "Header",
+  "workspaceHttpRequestHeaderKeyPlaceholder": "Header key",
+  "workspaceHttpRequestHeaderValue": "Value",
+  "workspaceHttpRequestHeaderValuePlaceholder": "Header value",
+  "workspaceHttpRequestHeadersCopyFailed": "Failed to copy headers: {error}",
+  "workspaceHttpRequestHttp2Fingerprint": "HTTP/2 Fingerprint",
+  "workspaceHttpRequestInlineScript": "Script",
+  "workspaceHttpRequestInlineScriptEmpty": "An enabled script cannot be empty",
+  "workspaceHttpRequestInlineScriptEnable": "Enable",
+  "workspaceHttpRequestInlineScriptName": "Current Request Script",
+  "workspaceHttpRequestInlineScriptRuntimeDisabled": "Select a Python interpreter and enable Python plugins in Settings first.",
+  "workspaceHttpRequestInvalidMethod": "HTTP method is required",
+  "workspaceHttpRequestInvalidUrl": "Please enter a valid URL",
+  "workspaceHttpRequestInvalidUrlScheme": "Only HTTP/HTTPS URLs are supported",
+  "workspaceHttpRequestMaxRedirects": "Max Redirects",
+  "workspaceHttpRequestPluginOutcomeBlockedRequest": "Request blocked by script",
+  "workspaceHttpRequestPluginOutcomeBlockedResponse": "Response blocked by script",
+  "workspaceHttpRequestPluginOutcomeCompleted": "Scripts completed",
+  "workspaceHttpRequestPluginOutcomeCompletedWithPluginError": "Response script failed; original response kept",
+  "workspaceHttpRequestPluginOutcomePluginFailed": "Request script failed; request not sent",
+  "workspaceHttpRequestPluginTerminalTitle": "Request Processing Stopped by Python Script",
+  "workspaceHttpRequestPluginsBypassed": "Global Python plugins skipped for this request",
+  "workspaceHttpRequestPluginsEnabled": "Global Python plugins enabled for this request",
+  "workspaceHttpRequestPluginsGlobalDisabled": "Enable Python plugins in Settings first",
+  "workspaceHttpRequestPluginsToggle": "Use global Python plugins for this request",
+  "workspaceHttpRequestProtocol": "HTTP Protocol",
+  "workspaceHttpRequestProtocolAuto": "Auto",
+  "workspaceHttpRequestProxyMode": "Proxy Mode",
+  "workspaceHttpRequestProxyModeCustom": "Custom Proxy",
+  "workspaceHttpRequestProxyModeMitm": "MITM Proxy",
+  "workspaceHttpRequestProxyModeNone": "No Proxy",
+  "workspaceHttpRequestProxyModeSystem": "System Proxy",
+  "workspaceHttpRequestQuery": "Query",
+  "workspaceHttpRequestQueryCopied": "Query copied",
+  "workspaceHttpRequestQueryCopyFailed": "Failed to copy query: {error}",
+  "workspaceHttpRequestQueryKeyPlaceholder": "Parameter name",
+  "workspaceHttpRequestQueryList": "Query List",
+  "workspaceHttpRequestQueryParametersCleared": "Query parameters cleared",
+  "workspaceHttpRequestQueryValuePlaceholder": "Parameter value",
+  "workspaceHttpRequestRequestBody": "Body",
+  "workspaceHttpRequestRequestCancelledDescription": "Stopped waiting; the server may have processed the request.",
+  "workspaceHttpRequestRequestCancelledTitle": "Request stopped",
+  "workspaceHttpRequestRequestHeaderList": "Header List",
+  "workspaceHttpRequestRequestHeaders": "Headers",
+  "workspaceHttpRequestRequestHeadersCleared": "Headers cleared",
+  "workspaceHttpRequestRequestHeadersCopiedJson": "Headers copied as JSON",
+  "workspaceHttpRequestRequestHeadersCopiedText": "Headers copied as text",
+  "workspaceHttpRequestRequestNotStarted": "Request has not started",
+  "workspaceHttpRequestRequestTimeout": "Request Timeout (ms)",
+  "workspaceHttpRequestRequestTimeoutPlaceholder": "0 means no timeout",
+  "workspaceHttpRequestResponseBody": "Body",
+  "workspaceHttpRequestResponseError": "Error",
+  "workspaceHttpRequestResponseErrorDetails": "Error details",
+  "workspaceHttpRequestResponseErrorDetailsCopied": "Error details copied",
+  "workspaceHttpRequestResponseErrorTitle": "Request failed",
+  "workspaceHttpRequestResponseHeaderList": "Header List",
+  "workspaceHttpRequestResponseHeaders": "Headers",
+  "workspaceHttpRequestResponseHeadersCopiedJson": "Headers copied as JSON",
+  "workspaceHttpRequestResponseHeadersCopiedText": "Headers copied as text",
+  "workspaceHttpRequestResponseSendingTitle": "Sending",
+  "workspaceHttpRequestResponseTrailerList": "Trailer List",
+  "workspaceHttpRequestResponseTrailers": "Trailers",
+  "workspaceHttpRequestResponseTrailersCopiedJson": "Trailers copied as JSON",
+  "workspaceHttpRequestResponseTrailersCopiedText": "Trailers copied as text",
+  "workspaceHttpRequestSend": "Send",
+  "workspaceHttpRequestSendFailed": "Send failed: {error}",
+  "workspaceHttpRequestSendRequest": "Send request",
+  "workspaceHttpRequestSettings": "Settings",
+  "workspaceHttpRequestSettingsPlaceholder": "Request settings",
+  "workspaceHttpRequestSkipVerifyTls": "Skip TLS Verification",
+  "workspaceHttpRequestStop": "Stop",
+  "workspaceHttpRequestStopRequest": "Stop request",
+  "workspaceHttpRequestStopStream": "Stop response stream",
+  "workspaceHttpRequestStreamCompleted": "Stream completed",
+  "workspaceHttpRequestStreamError": "Stream error",
+  "workspaceHttpRequestStreamStopped": "Stream stopped",
+  "workspaceHttpRequestStreaming": "Receiving",
+  "workspaceHttpRequestTlsFingerprint": "TLS Fingerprint",
+  "workspaceHttpRequestTlsFingerprintAndroid": "Android 11 OkHttp",
+  "workspaceHttpRequestTlsFingerprintChrome": "Chrome",
+  "workspaceHttpRequestTlsFingerprintEdge": "Edge",
+  "workspaceHttpRequestTlsFingerprintFirefox": "Firefox",
+  "workspaceHttpRequestTlsFingerprintGolang": "Go (Default)",
+  "workspaceHttpRequestTlsFingerprintIos": "iOS",
+  "workspaceHttpRequestTlsFingerprintRandom": "Random (ALPN)",
+  "workspaceHttpRequestTlsFingerprintSafari": "Safari",
+  "workspaceHttpRequestTrailerFieldsTruncated": "Trailers truncated; fields or order may be incomplete.",
+  "workspaceHttpRequestUrlPlaceholder": "Enter request URL",
+  "workspaceHttpRequestUrlencodedAddRow": "Add Row",
+  "workspaceHttpRequestUrlencodedClearAll": "Clear All",
+  "workspaceHttpRequestUrlencodedNamePlaceholder": "Field name",
+  "workspaceHttpRequestUrlencodedValuePlaceholder": "Field value",
+  "workspaceTabBarNew": "New",
+  "workspaceTabBarNewHttp": "New HTTP",
+  "workspaceTabBarNewWs": "New WebSocket",
+  "workspaceTabBarUnsavedChanges": "Unsaved changes",
+  "workspaceTabBarUntitled": "Untitled",
+  "workspaceTabContextCloseAll": "Close All",
+  "workspaceTabContextCloseAllConfirmContent": "Some API tabs are unsaved. Close all anyway?",
+  "workspaceTabContextCloseAllConfirmTitle": "Close All Tabs",
+  "workspaceTabContextCloseConfirmContent": "This tab has unsaved changes. Close anyway?",
+  "workspaceTabContextCloseConfirmTitle": "Close Tab",
+  "workspaceTabContextCloseCurrent": "Close",
+  "workspaceTabContextCloseOther": "Close Others",
+  "workspaceTabContextCloseOtherConfirmContent": "Other tabs have unsaved changes. Close anyway?",
+  "workspaceTabContextCloseOtherConfirmTitle": "Close Other Tabs",
+  "workspaceTabContextCloseRight": "Close Right",
+  "workspaceTabContextCloseRightConfirmContent": "Right-side tabs have unsaved changes. Close anyway?",
+  "workspaceTabContextCloseRightConfirmTitle": "Close Tabs to the Right",
+  "workspaceTabContextForceCloseAll": "Force Close All",
+  "workspaceTabContextForceCloseCurrent": "Force Close",
+  "workspaceTabContextForceCloseOther": "Force Close Others",
+  "workspaceTabContextForceCloseRight": "Force Close Right",
+  "workspaceTabContextSaveApi": "Save API",
+  "workspaceWebsocketClientBinarySize": "Binary Message ({size} B)",
+  "workspaceWebsocketClientClearMessages": "Clear Messages",
+  "workspaceWebsocketClientConnect": "Connect",
+  "workspaceWebsocketClientConnectFailed": "Connect failed: {error}",
+  "workspaceWebsocketClientConnectionCancelledDescription": "No WebSocket connection was established.",
+  "workspaceWebsocketClientConnectionCancelledTitle": "Connection stopped",
+  "workspaceWebsocketClientConnectionStatusCancelled": "Stopped",
+  "workspaceWebsocketClientConnectionStatusClosed": "Closed",
+  "workspaceWebsocketClientConnectionStatusConnected": "Connected",
+  "workspaceWebsocketClientConnectionStatusConnecting": "Connecting",
+  "workspaceWebsocketClientConnectionStatusError": "Error",
+  "workspaceWebsocketClientConnectionStatusIdle": "Idle",
+  "workspaceWebsocketClientCopyResponseErrorSummary": "Copy error summary",
+  "workspaceWebsocketClientDisconnect": "Disconnect",
+  "workspaceWebsocketClientDraftType": "Message Type",
+  "workspaceWebsocketClientDraftTypeBinaryFile": "Binary File",
+  "workspaceWebsocketClientDraftTypeJson": "JSON",
+  "workspaceWebsocketClientDraftTypeText": "Text",
+  "workspaceWebsocketClientDraftTypeXml": "XML",
+  "workspaceWebsocketClientFileRequired": "Please choose a file to send first",
+  "workspaceWebsocketClientFilterAll": "All",
+  "workspaceWebsocketClientFilterReceive": "Received",
+  "workspaceWebsocketClientFilterSend": "Sent",
+  "workspaceWebsocketClientInvalidUrl": "Please enter a valid WebSocket URL",
+  "workspaceWebsocketClientInvalidUrlScheme": "Only ws:// or wss:// URLs are supported",
+  "workspaceWebsocketClientMessage": "Message",
+  "workspaceWebsocketClientMessageDetail": "Message Detail",
+  "workspaceWebsocketClientMessageDetailReceive": "Received Message Detail",
+  "workspaceWebsocketClientMessageDetailSend": "Sent Message Detail",
+  "workspaceWebsocketClientNoMessages": "No messages",
+  "workspaceWebsocketClientNotConnected": "WebSocket is not connected",
+  "workspaceWebsocketClientRequestHeaders": "Headers",
+  "workspaceWebsocketClientResponse": "Response",
+  "workspaceWebsocketClientResponseError": "Error",
+  "workspaceWebsocketClientResponseErrorDescription": "No handshake response was received.",
+  "workspaceWebsocketClientResponseErrorSummary": "Error summary",
+  "workspaceWebsocketClientResponseErrorSummaryCopied": "Error summary copied",
+  "workspaceWebsocketClientResponseErrorTitle": "WebSocket connection failed",
+  "workspaceWebsocketClientSendFailed": "Send failed: {error}",
+  "workspaceWebsocketClientSendMessage": "Send Message",
+  "workspaceWebsocketClientSettings": "Settings",
+  "workspaceWebsocketClientStop": "Stop",
+  "workspaceWebsocketClientStopConnecting": "Stop connection attempt",
+  "workspaceWebsocketClientUrlPlaceholder": "Enter WebSocket URL",
+  "workspaceWebsocketClientViewModeConversation": "Conversation Mode",
+  "workspaceWebsocketClientViewModeList": "List Mode",
+  "workspaceWordWrap": "Word wrap"
+}

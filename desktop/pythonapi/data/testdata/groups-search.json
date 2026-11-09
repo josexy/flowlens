@@ -1,0 +1,70 @@
+[
+ {
+  "name": "Context",
+  "importable": true,
+  "note": "params and transport are deeply read-only. shared connects this plugin's two hooks for one send.",
+  "entries": [
+   {
+    "name": "transport",
+    "signature": "Context.transport: Mapping[str, Any]  # read-only",
+    "description": "Read-only transport settings for this script execution.",
+    "kind": "property",
+    "writable": false
+   }
+  ]
+ },
+ {
+  "name": "Headers",
+  "importable": true,
+  "note": "Preserves order, duplicates, casing and empty values; lookup ignores case. Indexing and iteration yield HeaderField.",
+  "entries": [
+   {
+    "name": "set",
+    "signature": "Headers.set(name: str, value: str) -> None",
+    "description": "Replace all matching headers while preserving the first position.",
+    "kind": "method",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   }
+  ]
+ },
+ {
+  "name": "Queries",
+  "importable": true,
+  "note": "Preserves order, duplicates and empty values; names are case-sensitive. Name lookup returns the first value. Edits encode spaces as +.",
+  "entries": [
+   {
+    "name": "set",
+    "signature": "Queries.set(name: str, value: str) -> None",
+    "description": "Replace all matching query values while preserving the first position.",
+    "kind": "method",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   }
+  ]
+ },
+ {
+  "name": "JsonObject",
+  "importable": false,
+  "note": "Use a JSON-serializable dict, shared only within this plugin and send.",
+  "entries": [
+   {
+    "name": "setdefault",
+    "signature": "JsonObject.setdefault(key: str, default: Any = None) -> Any",
+    "description": "Read a key or insert its default value.",
+    "kind": "method",
+    "parameters": [
+     "key: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   }
+  ]
+ }
+]

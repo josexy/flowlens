@@ -24,7 +24,7 @@ See `proposal.md` for motivation and `specs/` for required behavior. This sectio
 | `ui.RegisterFont` accepts TrueType/OpenType only | The bundled WOFF2 fonts must be converted |
 | `mygo.Updater.Check` returns `ErrUpdatesDisabled` when the install location is not writable | Non-self-updating installs need a separate release check |
 | `Update.Install` reports only downloaded bytes, then verifies and swaps | Verify and Prepare phases must be inferred |
-| `OnWindowShortcut` fires while a text input has focus unless the input consumes that key, and there is no "editable focused" query | Editable policy needs its own tracking |
+| `OnWindowShortcut` fires while a text input has focus unless the input consumes that key, and `Context.FocusTakesText` reports whether the focused element takes text | The dispatcher evaluates editable policy with `FocusTakesText` |
 | Release notes come from `CHANGELOG.md` | The repository needs a changelog |
 | The MyGo CLI defaults `CGO_ENABLED` to `0` only when it is unset, documents `1` for apps that need cgo, and applies one value to every target of a `mygo build` | macOS can build with cgo, as a separate build from Windows and Linux |
 
@@ -111,6 +111,14 @@ The table is built on `ui.Table` with an index-based cell builder over the filte
 
 Sorting, ordering, eviction, and hold-while-reading logic is ported from `traffic-table-state.ts` and `stores/traffic.ts` into `desktop/logic`, with the existing tests ported, including the 10,000-row payload-update case.
 
+`ListState.Key`, `FollowEnd`, and `DragSelect` replace the old table's manual scroll anchoring and drag handling: rows keep their place by entry ID as older rows are evicted, so the eviction scroll calculation is not ported.
+
+The hex view is a `ui.List` of byte rows, which scrolls by row in `float64`, so the old segment paging that kept a WebView under its layout height limit is not ported. Keeping the reading position across width changes uses the byte offset of the first visible row (`logic.HexRowOf`).
+
+`BenchmarkHexFrame500MB` measures one hex view frame over a 500 MB body at 0.30 ms on the same machine; `TestHexBuildsOnlyVisibleRowsOf500MB` confirms only rows in view are built.
+
+Measured with `BenchmarkTrafficTableFrame` (headless `ui.Tester`, 1400x800, arm64, one live patch applied per frame): 2.28 ms per frame at 500 rows and 2.60 ms at 5000 rows. `TestVisibleCellBuildsDoNotGrowWithTotalRows` confirms the number of cells built per frame does not grow with the total row count.
+
 ### 6. Editors and viewers
 
 - **Code**: one `desktop/widgets.CodeView` wraps `editor.View` for read-only and editable modes. The thresholds of 512K characters or 128K characters per line switch the buffer to plain text.
@@ -130,7 +138,7 @@ The saved `zh`/`en` setting stays authoritative and maps to `zh-Hans`/`en` throu
 
 `desktop/shortcuts` ports the catalog and binding resolution. One dispatcher registers each resolved binding with `OnWindowShortcut` and evaluates `when`, modal, and editable policies before running a handler.
 
-For editable policy, `desktop/widgets` input wrappers bind a `ui.Handle` and report `handle.Focused(c)` during build into a per-window flag. All text entry must use these wrappers, and a test asserts it for each surface.
+For editable policy, the dispatcher reads `Context.FocusTakesText`, which covers text inputs, text areas, and editors that are not read-only, so no per-widget tracking is needed.
 
 Global shortcuts use a small adapter from `mygo.GlobalShortcut` to the existing `Registrar` interface, so `shortcut_service` and its tests are unchanged.
 
@@ -201,7 +209,6 @@ Verification tiers:
 - [macOS builds need a Mac with Xcode Command Line Tools and cannot be cross-compiled from Linux] → The release workflow already builds on a `macos-15` runner, and CI gains a macOS job.
 - [nuxt-ui-go documents cgo-free builds and has not been run on macOS with cgo on, and `darwin/universal` through `mygo build` with cgo is unproven] → A final check builds both macOS targets and runs nuxt-ui-go's tests on a Mac with cgo on.
 - [Headless development machine cannot exercise real windows, tray, or global shortcuts] → `ui.Tester` covers view logic; platform behavior is listed as manual checks.
-- [Editable shortcut tracking can miss an input that skips the wrappers] → Wrappers are the only sanctioned input path, enforced by per-surface tests.
 - [Dropped signature help in the Python editor] → Signature text appears in completion details and hovers.
 - [Installed 1.0.x users do not auto-update] → One manual install, noted in the release notes.
 - [Tray and global shortcuts vary by Linux desktop] → Failures are reported and handled per the specs instead of being fatal.

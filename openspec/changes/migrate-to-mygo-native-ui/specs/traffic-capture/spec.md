@@ -88,7 +88,7 @@ The table SHALL filter by a search query over URL, target, port, source, and pat
 - **THEN** that entry is not shown
 
 ### Requirement: Table columns
-The table SHALL offer ID, Process, Method, Host, Path, Status, Type, Time, Duration, Size, Server IP, and Protocol columns, which the user can sort, resize, reorder, and hide, with these preferences persisted.
+The table SHALL offer ID, Process, Method, Host, Path, Status, Type, Duration, Size, Server IP, and Protocol columns, which the user can sort, resize, reorder, and hide, with these preferences persisted.
 
 #### Scenario: Persisted layout
 - **WHEN** the user reorders, resizes, or hides columns and restarts FlowLens

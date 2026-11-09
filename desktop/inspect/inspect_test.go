@@ -1,0 +1,661 @@
+package inspect
+
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
+	"iter"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/egoist/mygo/i18n"
+	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/backend/pkg/database"
+	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
+	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
+	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
+	"github.com/josexy/flowlens/locales"
+	nui "github.com/josexy/nuxt-ui-go"
+	"golang.org/x/image/bmp"
+)
+
+type fakeData struct {
+	entry   *logic.TrafficEntry
+	body    *proxyservice.TrafficBodyView
+	version uint64
+	loading bool
+}
+
+func (d *fakeData) SelectedEntry() *logic.TrafficEntry      { return d.entry }
+func (d *fakeData) BodyView() *proxyservice.TrafficBodyView { return d.body }
+func (d *fakeData) BodyVersion() uint64                     { return d.version }
+func (d *fakeData) BodyLoading() bool                       { return d.loading }
+
+type fixture struct {
+	t        testing.TB
+	data     *fakeData
+	panel    *Panel
+	tester   *ui.Tester
+	window   *runtimetest.Window
+	rt       store.Runtime
+	settings *store.SettingsStore
+	service  *settingservice.SettingService
+	saved    []proxyservice.SaveBodyToFileRequest
+	path     string
+}
+
+func (f *fixture) settle() {
+	for range 4 {
+		f.rt.Jobs.Wait()
+		f.window.Drain()
+		f.tester.Frame()
+	}
+}
+
+func newFixture(t testing.TB, entry *logic.TrafficEntry, body *proxyservice.TrafficBodyView) *fixture {
+	t.Helper()
+	i18n.SetLocaleFunc(func() string { return "en" })
+	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	service := settingservice.New(db)
+	if err := service.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetLanguage("en"); err != nil {
+		t.Fatal(err)
+	}
+	rt := store.NewRuntime()
+	t.Cleanup(rt.Close)
+	window := &runtimetest.Window{}
+	rt.Dispatcher.SetMain(window)
+	settings := store.NewSettingsStore(rt, store.SettingsDependencies{Backend: service})
+	if err := settings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	f := &fixture{t: t, data: &fakeData{entry: entry, body: body}, window: window, rt: rt, settings: settings, service: service, path: "/tmp/out"}
+	notifier := &widgets.Notifier{}
+	f.panel = NewPanel(f.data, Dependencies{
+		Runtime: rt, Settings: settings, Notifier: notifier,
+		PickSavePath: func(name string) (string, error) { return f.path, nil },
+		SaveBody: func(request proxyservice.SaveBodyToFileRequest) error {
+			f.saved = append(f.saved, request)
+			return nil
+		},
+	})
+	f.tester = ui.NewTester(func(c *ui.Context) {
+		theme := nui.App(c, settings.Theme().Config)
+		ui.Column(c).Fill().Children(func() { f.panel.Build(c, theme) })
+		notifier.Show(c, theme)
+		nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 3})
+	}, 1400, 2200)
+	f.tester.SetLocale("en")
+	f.settle()
+	return f
+}
+
+func (f *fixture) click(label string) {
+	f.t.Helper()
+	if err := f.tester.Click(label); err != nil {
+		f.t.Fatalf("click %q: %v\n%v", label, err, f.tester.Texts())
+	}
+	f.settle()
+}
+
+func (f *fixture) has(text string) {
+	f.t.Helper()
+	if !f.tester.HasText(text) {
+		f.t.Fatalf("missing %q in %v", text, f.tester.Texts())
+	}
+}
+
+func (f *fixture) lacks(text string) {
+	f.t.Helper()
+	if f.tester.HasText(text) {
+		f.t.Fatalf("unexpected %q in %v", text, f.tester.Texts())
+	}
+}
+
+func httpEntry() *logic.TrafficEntry {
+	return &logic.TrafficEntry{
+		ID: 1, Revision: 1, Type: "https", Method: "GET", Host: "a.test", Path: "/x", URL: "https://a.test/x?q=1", StatusCode: 200, Status: "200 OK",
+		Request:  &proxyservice.HTTPMessage{Proto: "HTTP/2.0", HeaderFields: []logic.HeaderField{{Name: ":authority", Value: "a.test"}, {Name: "Accept", Value: "*/*"}}},
+		Response: &proxyservice.HTTPMessage{Proto: "HTTP/2.0", HeaderFields: []logic.HeaderField{{Name: "Set-Cookie", Value: "a=1; Path=/"}, {Name: "set-cookie", Value: "b=2"}}},
+	}
+}
+
+func TestApplicableTabs(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	for _, label := range []string{"Overview", "Raw", "Query(1)", "Cookie(2)"} {
+		f.has(label)
+	}
+	f.lacks("Trailers")
+}
+
+func TestErrorTab(t *testing.T) {
+	entry := httpEntry()
+	entry.Error = &proxyservice.TrafficError{Timestamp: time.Unix(1, 0), Error: "connection refused"}
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{})
+	f.has("connection refused")
+	f.lacks("Cookie(2)")
+}
+
+func TestActiveTabSurvivesLiveUpdates(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	f.click("Query(1)")
+	updated := *f.data.entry
+	updated.Revision = 2
+	f.data.entry = &updated
+	f.settle()
+	if f.panel.requestTab != tabRequestQuery {
+		t.Fatal(f.panel.requestTab)
+	}
+}
+
+func TestTabFallsBackWhenItDisappears(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	f.click("Query(1)")
+	replaced := *f.data.entry
+	replaced.ID, replaced.URL = 2, "https://a.test/x"
+	f.data.entry = &replaced
+	f.settle()
+	if f.panel.requestTab != tabRequestHeaders {
+		t.Fatal(f.panel.requestTab)
+	}
+}
+
+func TestWebSocketEntryOpensItsTab(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "wss"
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{{Direction: "send", MsgType: "text", Data: "hello ws", DataSize: 8}}, WsMsgsTruncated: true})
+	if f.panel.responseTab != tabWebSocket {
+		t.Fatal(f.panel.responseTab)
+	}
+	f.has("hello ws")
+	f.has(locales.TrafficWsMsgsTruncated())
+}
+
+func TestWebSocketDetailAndFilter(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "ws"
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
+		{Direction: "send", MsgType: "text", Data: "outgoing", DataSize: 8},
+		{Direction: "receive", MsgType: "text", Data: "incoming", DataSize: 8},
+	}})
+	f.has("outgoing")
+	f.has("incoming")
+	f.click(locales.WorkspaceWebsocketClientFilterAll())
+	f.has("outgoing")
+	f.lacks("incoming")
+	f.click(locales.WorkspaceWebsocketClientFilterSend())
+	f.lacks("outgoing")
+	f.has("incoming")
+	f.click("incoming")
+	f.has(locales.WorkspaceWebsocketClientMessageDetailReceive())
+	f.click(locales.DetailSaveBody())
+	if len(f.saved) != 1 || f.saved[0].Body != "incoming" {
+		t.Fatalf("%+v", f.saved)
+	}
+}
+
+func TestOverviewUnknownValues(t *testing.T) {
+	entry := httpEntry()
+	entry.Request.Metrics = &proxyservice.HTTPMessageMetrics{StartedAtMicros: 1, EndedAtMicros: -1, HeaderSize: -1, BodySize: -1, State: proxyservice.HTTPMessageStateFailed}
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{})
+	f.click(locales.DetailTiming())
+	f.has(locales.DetailMetricStateFailed())
+	f.has(logic.UnknownValue)
+	f.click(locales.DetailMessageSize())
+	f.has(locales.DetailTotalSize())
+}
+
+func TestLegacyEntryHasNoMetrics(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	f.has(locales.DetailLegacyMetricsUnavailable())
+}
+
+func TestProcessAndTLSSections(t *testing.T) {
+	entry := httpEntry()
+	entry.Metadata = &proxyservice.Metadata{
+		Process:     &proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusResolved, DisplayName: "Safari", ProcessName: "safari", PID: 77, AppID: "com.apple", ExecutablePath: "/usr/bin/safari"},
+		TLS:         &proxyservice.TLSState{ServerName: "sni.test", SelectedVersion: "TLS1.3"},
+		Certificate: &proxyservice.ServerCertificate{Version: 3, Subject: &proxyservice.PkixName{CommonName: "cn.test"}, DNSNames: []string{"a", "b"}},
+	}
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{})
+	f.click(locales.DetailProcess())
+	for _, text := range []string{"Safari", "safari", "77", "com.apple", "/usr/bin/safari"} {
+		f.has(text)
+	}
+	f.click(locales.DetailTlsInfo())
+	f.has("sni.test")
+	f.click(locales.DetailCertInfo())
+	f.has("cn.test")
+	f.has("a, b")
+}
+
+func TestHeadersKeepOrderDuplicatesAndCase(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	f.panel.requestTab = tabOverview
+	f.panel.responseTab = tabResponseHeaders
+	f.settle()
+	texts := strings.Join(f.tester.Texts(), "|")
+	first := strings.Index(texts, "Set-Cookie")
+	second := strings.Index(texts, "set-cookie")
+	if first < 0 || second < first {
+		t.Fatalf("order lost: %s", texts)
+	}
+	f.click(locales.DetailCopyResponseHeadersText())
+	if got := f.tester.Clipboard(); !strings.Contains(got, "Set-Cookie: a=1; Path=/") || !strings.Contains(got, "set-cookie: b=2") {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestHeaderNotices(t *testing.T) {
+	entry := httpEntry()
+	entry.Response.HeadersTruncated = true
+	entry.Response.HeaderOrderUnavailable = true
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{})
+	f.has(locales.DetailHeaderFieldsTruncated())
+	f.has(locales.DetailHeaderOrderUnavailable())
+}
+
+func TestQueryAndCookiePanes(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	f.click("Query(1)")
+	f.has("q")
+	f.click(locales.DetailCopyQuery())
+	if got := f.tester.Clipboard(); got != "q=1" {
+		t.Fatalf("%q", got)
+	}
+	f.click("Cookie(2)")
+	f.has("a")
+	f.has("b")
+	f.click(locales.DetailCopySetCookieHeader())
+	if got := f.tester.Clipboard(); !strings.Contains(got, "a=1; Path=/") {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestRawHTTPSynthesizesHTTP2Lines(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{RequestBody: "payload"})
+	f.panel.requestTab = tabRequestRaw
+	f.settle()
+	text := f.panel.requestRaw.text
+	if !strings.HasPrefix(text, "GET /x?q=1 HTTP/2.0") || !strings.Contains(text, "payload") {
+		t.Fatalf("%q", text)
+	}
+	f.click(locales.DetailCopyRawHttp())
+	if f.tester.Clipboard() != text {
+		t.Fatal("copy")
+	}
+}
+
+func TestRawTCPConnectDetails(t *testing.T) {
+	entry := &logic.TrafficEntry{ID: 2, Type: "tcp", Host: "a.test:443", StartedAt: time.Unix(5, 0),
+		RawTCP:  &proxyservice.RawTCPTunnelInfo{Source: proxyservice.RawTCPTunnelSourceHTTPConnect, HostPort: "a.test:443", TLS: true},
+		Request: &proxyservice.HTTPMessage{Proto: "HTTP/1.1", HeaderFields: []logic.HeaderField{{Name: "Proxy-Auth", Value: "x"}}},
+	}
+	f := newFixture(t, entry, nil)
+	f.has("a.test:443")
+	f.has(locales.DetailRawTcpSourceHttpConnect())
+	f.has("HTTP/1.1")
+	f.has("Proxy-Auth")
+	f.has("TCP/TLS")
+}
+
+func bodyFixture(t testing.TB, contentType, body, encoding string) *fixture {
+	entry := httpEntry()
+	entry.Response.HeaderFields = []logic.HeaderField{{Name: "Content-Type", Value: contentType}}
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{ResponseBody: body, ResponseBodyEncoding: encoding})
+	f.panel.responseTab = tabResponseBody
+	f.settle()
+	return f
+}
+
+func TestJSONBodyIsFormatted(t *testing.T) {
+	f := bodyFixture(t, "application/json", `{"a":1}`, "")
+	if f.panel.responseBody.Active() != logic.BodyTabRaw {
+		t.Fatal(f.panel.responseBody.Active())
+	}
+	f.click(locales.DetailFormatted())
+	if got := f.panel.responseBody.formatted.Text(); got != "{\n  \"a\": 1\n}" {
+		t.Fatalf("%q", got)
+	}
+	f.click(locales.DetailCopyBody())
+	if got := f.tester.Clipboard(); got != "{\n  \"a\": 1\n}" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestSaveUsesInferredNameAndCompleteContent(t *testing.T) {
+	f := bodyFixture(t, "text/plain", "whole text", "")
+	f.click(locales.DetailSaveBody())
+	if len(f.saved) != 1 || f.saved[0].Body != "whole text" || f.saved[0].Path != "/tmp/out" {
+		t.Fatalf("%+v", f.saved)
+	}
+}
+
+func TestEmptyIsDistinctFromUnavailable(t *testing.T) {
+	f := bodyFixture(t, "text/plain", "", "")
+	f.has(locales.DetailBodyEmpty())
+	f.lacks(locales.DetailBodyUnavailable())
+	f.data.body = &proxyservice.TrafficBodyView{ResponseBodyUnavailable: true}
+	f.settle()
+	f.has(locales.DetailBodyUnavailable())
+	f.lacks(locales.DetailBodyEmpty())
+}
+
+func TestLargeTextIsPlain(t *testing.T) {
+	f := bodyFixture(t, "application/json", `"`+strings.Repeat("x", logic.LargeTextThreshold)+`"`, "")
+	if !f.panel.responseBody.raw.PlainText() {
+		t.Fatal("not plain")
+	}
+	for _, tab := range f.panel.responseBody.tabs {
+		if tab == logic.BodyTabFormatted {
+			t.Fatal("formatted offered for a large body")
+		}
+	}
+}
+
+func imageFixture(t *testing.T, encode func(*bytes.Buffer, image.Image) error) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 3))
+	img.Set(1, 1, color.RGBA{R: 200, A: 255})
+	var data bytes.Buffer
+	if err := encode(&data, img); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(data.Bytes())
+}
+
+func TestImageFormatsDecode(t *testing.T) {
+	cases := map[string]string{
+		"image/png":  imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }),
+		"image/jpeg": imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return jpeg.Encode(w, i, nil) }),
+		"image/gif":  imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return gif.Encode(w, i, nil) }),
+		"image/bmp":  imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return bmp.Encode(w, i) }),
+		"image/webp": "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
+	}
+	for contentType, encoded := range cases {
+		t.Run(contentType, func(t *testing.T) {
+			f := bodyFixture(t, contentType, encoded, "base64")
+			if f.panel.responseBody.Active() != logic.BodyTabImage {
+				t.Fatal(f.panel.responseBody.Active())
+			}
+			preview := &f.panel.responseBody.image
+			if preview.failed || preview.image.bitmap == nil {
+				t.Fatalf("%+v", preview)
+			}
+			f.has(logic.ImageFormatLabel(contentType))
+		})
+	}
+}
+
+func TestSVGPreview(t *testing.T) {
+	f := bodyFixture(t, "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`, "")
+	if f.panel.responseBody.image.failed || f.panel.responseBody.image.image.svg == nil {
+		t.Fatalf("%+v", f.panel.responseBody.image)
+	}
+}
+
+func TestInvalidImageKeepsRawAndHex(t *testing.T) {
+	f := bodyFixture(t, "image/png", base64.StdEncoding.EncodeToString([]byte("not a png")), "base64")
+	f.has(locales.DetailImagePreviewFailed())
+	f.click(locales.DetailHex())
+	if f.panel.responseBody.Active() != logic.BodyTabHex {
+		t.Fatal(f.panel.responseBody.Active())
+	}
+	f.has("6E 6F 74")
+}
+
+func TestImageZoomBounds(t *testing.T) {
+	f := bodyFixture(t, "image/png", imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }), "base64")
+	preview := &f.panel.responseBody.image
+	for range 60 {
+		preview.zoom(logic.ImageScaleStep)
+	}
+	if preview.scale != logic.ImageScaleMax {
+		t.Fatal(preview.scale)
+	}
+	f.click(locales.DetailImageReset())
+	if preview.scale != 1 {
+		t.Fatal(preview.scale)
+	}
+}
+
+func TestHexShowsColumnsAndCopiesSelection(t *testing.T) {
+	f := bodyFixture(t, "application/octet-stream", base64.StdEncoding.EncodeToString([]byte{0, 'A', '\n', '~', 0xFF}), "base64")
+	f.click(locales.DetailHex())
+	f.has("00 41 0A 7E FF")
+	f.has(".A.~.")
+	hex := f.panel.responseBody.hex
+	hex.anchor, hex.focus, hex.hasChoice = 0, 4, true
+	f.settle()
+	for label, want := range map[string]string{
+		locales.DetailHexCopyHex():    "00 41 0A 7E FF",
+		locales.DetailHexCopyBase64(): "AEEKfv8=",
+		locales.DetailHexCopyText():   "\\x00A\n~\u00ff",
+	} {
+		hex.copySelection(map[string]logic.HexCopyFormat{locales.DetailHexCopyHex(): logic.HexCopyHex, locales.DetailHexCopyBase64(): logic.HexCopyBase64, locales.DetailHexCopyText(): logic.HexCopyText}[label])
+		f.settle()
+		if got := f.tester.Clipboard(); got != want {
+			t.Fatalf("%s: %q", label, got)
+		}
+	}
+	hex.exportSelection()
+	f.settle()
+	if len(f.saved) != 1 || f.saved[0].Body != "AEEKfv8=" || f.saved[0].BodyEncoding != "base64" {
+		t.Fatalf("%+v", f.saved)
+	}
+}
+
+func TestHexPointerSelectsBytes(t *testing.T) {
+	f := bodyFixture(t, "text/plain", strings.Repeat("A", 100), "")
+	f.click(locales.DetailHex())
+	hex := f.panel.responseBody.hex
+	row, ok := f.tester.Find("00000")
+	if !ok {
+		t.Fatalf("%v", f.tester.Texts())
+	}
+	x, y := row.X+200, row.Y+row.H/2
+	f.tester.Press(x, y)
+	f.tester.Frame()
+	f.tester.Move(x+60, y+22)
+	f.tester.Frame()
+	f.tester.Move(x+60, y+22)
+	f.tester.Frame()
+	f.tester.Release(x+60, y+22)
+	f.settle()
+	start, end, selected := hex.SelectionRange()
+	if !selected || end-start < 2 {
+		t.Fatalf("%d %d %v", start, end, selected)
+	}
+}
+
+func TestHexResetsOnReplacement(t *testing.T) {
+	f := bodyFixture(t, "text/plain", "hello", "")
+	f.click(locales.DetailHex())
+	hex := f.panel.responseBody.hex
+	hex.anchor, hex.focus, hex.hasChoice = 0, 1, true
+	body := *f.data.body
+	body.ResponseBody = "hello world"
+	f.data.body = &body
+	f.settle()
+	if _, _, selected := hex.SelectionRange(); !selected {
+		t.Fatal("an append keeps the selection")
+	}
+	body.ResponseBody = "other text"
+	f.data.body = &body
+	f.settle()
+	if _, _, selected := hex.SelectionRange(); selected {
+		t.Fatal("a replacement clears the selection")
+	}
+}
+
+func TestHexBuildsOnlyVisibleRowsOf500MB(t *testing.T) {
+	f := bodyFixture(t, "text/plain", "x", "")
+	f.click(locales.DetailHex())
+	hex := f.panel.responseBody.hex
+	hex.source = hugeSource{500 * 1024 * 1024}
+	hex.RowBuilds = 0
+	f.tester.Frame()
+	f.tester.Frame()
+	if hex.RowBuilds == 0 || hex.RowBuilds > 200 {
+		t.Fatalf("built %d rows", hex.RowBuilds)
+	}
+}
+
+type hugeSource struct{ size int64 }
+
+func (s hugeSource) Len() int64 { return s.size }
+func (s hugeSource) Get(index int64) (byte, bool) {
+	if index < 0 || index >= s.size {
+		return 0, false
+	}
+	return byte(index), true
+}
+func (s hugeSource) Range(int64, int64) iter.Seq[[]byte] { return func(func([]byte) bool) {} }
+
+func BenchmarkHexFrame500MB(b *testing.B) {
+	f := bodyFixture(b, "text/plain", "x", "")
+	f.panel.responseBody.active = logic.BodyTabHex
+	f.settle()
+	f.panel.responseBody.hex.source = hugeSource{500 * 1024 * 1024}
+	f.settle()
+	for b.Loop() {
+		f.tester.Frame()
+	}
+}
+
+func sseFixture(t testing.TB, body string) *fixture {
+	return bodyFixture(t, "text/event-stream", body, "")
+}
+
+func TestSSEOpensByDefaultAndListsEvents(t *testing.T) {
+	f := sseFixture(t, "id: 7\nevent: hello\ndata: first\n\ndata: second\n\n")
+	if f.panel.responseBody.Active() != logic.BodyTabSSE {
+		t.Fatal(f.panel.responseBody.Active())
+	}
+	for _, text := range []string{"hello", "7", "first", "second"} {
+		f.has(text)
+	}
+	f.has(locales.DetailSseMessageCount("2"))
+}
+
+func TestSSEIncompleteNotice(t *testing.T) {
+	f := sseFixture(t, "data: done\n\ndata: tail")
+	f.has(locales.DetailSseIncomplete())
+	f.has(locales.DetailSseMessageCount("1"))
+}
+
+func TestSSEBase64Explains(t *testing.T) {
+	f := bodyFixture(t, "text/event-stream", base64.StdEncoding.EncodeToString([]byte("data: x\n\n")), "base64")
+	f.has(locales.DetailSseUnavailable())
+	f.click(locales.DetailHex())
+	if f.panel.responseBody.Active() != logic.BodyTabHex {
+		t.Fatal("hex")
+	}
+}
+
+func TestSSEAppendKeepsEvents(t *testing.T) {
+	f := sseFixture(t, "data: first\n\n")
+	view := f.panel.responseBody.sse
+	first := view.events[0]
+	body := *f.data.body
+	body.ResponseBody += "data: next\n\n"
+	f.data.body = &body
+	f.settle()
+	if len(view.events) != 2 || view.events[0] != first {
+		t.Fatalf("%d", len(view.events))
+	}
+	body.ResponseBody = "data: replacement\n\n"
+	f.data.body = &body
+	f.settle()
+	if len(view.events) != 1 || view.events[0].Preview != "replacement" {
+		t.Fatalf("%+v", view.events)
+	}
+}
+
+func TestSSEDetailCopiesAndSavesSelectedView(t *testing.T) {
+	f := sseFixture(t, "id: 1\ndata: {\"a\":1}\n\n")
+	f.click(locales.DetailSseOpenMessage("1"))
+	f.has(locales.DetailSseMessageDetail())
+	f.click(locales.DetailSseCopyMessage())
+	if got := f.tester.Clipboard(); got != `{"a":1}` {
+		t.Fatalf("%q", got)
+	}
+	view := f.panel.responseBody.sse
+	view.detailTab = "raw"
+	f.settle()
+	f.click(locales.DetailSseCopyMessage())
+	if got := f.tester.Clipboard(); got != "id: 1\ndata: {\"a\":1}\n\n" {
+		t.Fatalf("%q", got)
+	}
+	view.detailTab = "formatted"
+	f.settle()
+	f.click(locales.DetailSseSaveMessage())
+	if len(f.saved) != 1 || f.saved[0].Body != "{\n  \"a\": 1\n}" || f.saved[0].ContentType != "application/json" {
+		t.Fatalf("%+v", f.saved)
+	}
+}
+
+func TestSSEFollowAndJumpToLatest(t *testing.T) {
+	var body strings.Builder
+	for index := range 500 {
+		fmt.Fprintf(&body, "data: row-%d\n\n", index)
+	}
+	f := sseFixture(t, body.String())
+	view := f.panel.responseBody.sse
+	f.has("row-499")
+	view.list.ScrollTo(0, ui.Start)
+	f.settle()
+	f.settle()
+	f.has(locales.DetailSseJumpToLatest())
+	f.click(locales.DetailSseJumpToLatest())
+	f.settle()
+	f.has("row-499")
+}
+
+func TestLoadingAndMissingBody(t *testing.T) {
+	f := newFixture(t, httpEntry(), nil)
+	f.panel.responseTab = tabResponseBody
+	f.settle()
+	f.has(locales.DetailBodyEmpty())
+	f.data.loading = true
+	f.settle()
+	f.lacks(locales.DetailBodyEmpty())
+}
+
+func TestNoSelection(t *testing.T) {
+	f := newFixture(t, nil, nil)
+	f.has(locales.DetailSelectRequest())
+}
+
+func TestSplitIsSavedPerLayout(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	if f.panel.split != defaultSplit {
+		t.Fatal(f.panel.split)
+	}
+	f.settings.SetTrafficDetailSplit(splitName(settingservice.TrafficDetailLayoutVertical), 62)
+	if got := f.settings.TrafficDetailSplit(splitName(settingservice.TrafficDetailLayoutVertical), 0); got != 62 {
+		t.Fatal(got)
+	}
+	if got := f.settings.TrafficDetailSplit(splitName(settingservice.TrafficDetailLayoutHorizontal), 50); got != 50 {
+		t.Fatal(got)
+	}
+}

@@ -1,0 +1,231 @@
+package settingservice
+
+type ProxyMode string
+
+const (
+	ProxyModeHTTP   ProxyMode = "http"
+	ProxyModeSOCKS5 ProxyMode = "socks5"
+)
+
+type UpstreamProxyMode string
+
+const (
+	UpstreamProxyModeNone   UpstreamProxyMode = "none"
+	UpstreamProxyModeSystem UpstreamProxyMode = "system"
+	UpstreamProxyModeCustom UpstreamProxyMode = "custom"
+)
+
+type WindowFrameMode string
+
+const (
+	WindowFrameModeCustom WindowFrameMode = "custom"
+	WindowFrameModeSystem WindowFrameMode = "system"
+)
+
+type MainWindowCloseBehavior string
+
+const (
+	MainWindowCloseBehaviorHideToTray MainWindowCloseBehavior = "hide_to_tray"
+	MainWindowCloseBehaviorQuit       MainWindowCloseBehavior = "quit"
+)
+
+type HistoryRetentionUnit string
+
+const (
+	HistoryRetentionUnitHour  HistoryRetentionUnit = "hour"
+	HistoryRetentionUnitDay   HistoryRetentionUnit = "day"
+	HistoryRetentionUnitWeek  HistoryRetentionUnit = "week"
+	HistoryRetentionUnitMonth HistoryRetentionUnit = "month"
+	HistoryRetentionUnitYear  HistoryRetentionUnit = "year"
+)
+
+type ShortcutScope string
+
+const (
+	ShortcutScopeApplication ShortcutScope = "application"
+	ShortcutScopeGlobal      ShortcutScope = "global"
+)
+
+type ShortcutModifier string
+
+const (
+	ShortcutModifierPrimary ShortcutModifier = "primary"
+	ShortcutModifierControl ShortcutModifier = "control"
+	ShortcutModifierAlt     ShortcutModifier = "alt"
+	ShortcutModifierShift   ShortcutModifier = "shift"
+	ShortcutModifierSuper   ShortcutModifier = "super"
+)
+
+type CommonConfig struct {
+	LogLevel          string `json:"logLevel"`
+	LogDisabled       bool   `json:"logDisabled"`
+	AppFontFamily     string `json:"appFontFamily"`
+	AppFontSize       int    `json:"appFontSize"`
+	CodeFontFamily    string `json:"codeFontFamily"`
+	CodeFontSize      int    `json:"codeFontSize"`
+	PointerCursor     bool   `json:"pointerCursor"`
+	ThemeMode         string `json:"themeMode"`
+	ThemePrimaryColor string `json:"themePrimaryColor"`
+	ThemeNeutralColor string `json:"themeNeutralColor"`
+	Language          string `json:"language"`
+}
+
+type ProxyConfig struct {
+	Mode               ProxyMode          `json:"mode"`
+	Host               string             `json:"host"`
+	Port               int                `json:"port"`
+	UseBuiltinCA       bool               `json:"useBuiltinCA"`
+	CACertPath         string             `json:"caCertPath"`
+	CAKeyPath          string             `json:"caKeyPath"`
+	UpstreamMode       UpstreamProxyMode  `json:"upstreamProxyMode"`
+	UpstreamProxy      string             `json:"upstreamProxy"`
+	DisableProxy       bool               `json:"disableProxy"`
+	DisableHTTP2       bool               `json:"disableHttp2"`
+	SkipVerifyTLS      bool               `json:"skipVerifyTls"`
+	AntiCache          bool               `json:"antiCache"`
+	AntiComp           bool               `json:"antiComp"`
+	DNSCacheEnabled    bool               `json:"dnsCacheEnabled"`
+	DNSCacheTTLSeconds int                `json:"dnsCacheTTLSeconds"`
+	IncludeHosts       []string           `json:"includeHosts"`
+	ExcludeHosts       []string           `json:"excludeHosts"`
+	RootCAPaths        []string           `json:"rootCAPaths"`
+	ClientCerts        []ClientCertConfig `json:"clientCerts"`
+}
+
+type ClientCertConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Hostname string `json:"hostname"`
+	CertPath string `json:"certPath"`
+	KeyPath  string `json:"keyPath"`
+}
+
+type WindowConfig struct {
+	PositionX               int                     `json:"positionX"`
+	PositionY               int                     `json:"positionY"`
+	Width                   int                     `json:"width"`
+	Height                  int                     `json:"height"`
+	HasPosition             bool                    `json:"hasPosition"`
+	IsMaximized             bool                    `json:"isMaximized"`
+	IsFullScreen            bool                    `json:"isFullScreen"`
+	FrameMode               WindowFrameMode         `json:"frameMode"`
+	MainWindowCloseBehavior MainWindowCloseBehavior `json:"mainWindowCloseBehavior"`
+}
+
+type CacheConfig struct {
+	BodyCacheThresholdBytes int64 `json:"bodyCacheThresholdBytes"`
+	MaxWsMessages           int   `json:"maxWsMessages"`
+}
+
+type HistoryRetentionConfig struct {
+	Enabled bool                 `json:"enabled"`
+	Value   int                  `json:"value"`
+	Unit    HistoryRetentionUnit `json:"unit"`
+}
+
+type ProcessAttributionConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
+type TrafficTableConfig struct {
+	HiddenColumns []string `json:"hiddenColumns"`
+	// ColumnOrder lists columns in the order the user arranged them.
+	ColumnOrder []string `json:"columnOrder,omitempty"`
+	// ColumnWidths holds widths the user set, in DIPs, by column key.
+	ColumnWidths map[string]float32 `json:"columnWidths,omitempty"`
+}
+
+type TrafficDetailLayout string
+
+const (
+	TrafficDetailLayoutVertical   TrafficDetailLayout = "vertical"
+	TrafficDetailLayoutHorizontal TrafficDetailLayout = "horizontal"
+)
+
+type TrafficDetailConfig struct {
+	Layout TrafficDetailLayout `json:"layout"`
+	// Splits holds the percentage of each adjustable split, by split name.
+	Splits map[string]float32 `json:"splits,omitempty"`
+}
+
+type PythonPluginConfig struct {
+	Enabled         bool   `json:"enabled"`
+	InterpreterPath string `json:"interpreterPath"`
+	HookTimeoutMs   int    `json:"hookTimeoutMs"`
+}
+
+type ShortcutConfig struct {
+	Overrides map[string]ShortcutOverride `json:"overrides"`
+}
+
+type ShortcutOverride struct {
+	// A nil Binding represents an explicit disabled shortcut.
+	Binding *ShortcutBinding `json:"binding"`
+	Scope   ShortcutScope    `json:"scope"`
+}
+
+type ShortcutBinding struct {
+	Modifiers []ShortcutModifier `json:"modifiers"`
+	Key       string             `json:"key"`
+}
+
+type Settings struct {
+	CommonConfig             *CommonConfig             `json:"commonConfig"`
+	ProxyConfig              *ProxyConfig              `json:"proxyConfig"`
+	WindowConfig             *WindowConfig             `json:"windowConfig"`
+	CacheConfig              *CacheConfig              `json:"cacheConfig"`
+	HistoryRetentionConfig   *HistoryRetentionConfig   `json:"historyRetentionConfig"`
+	ProcessAttributionConfig *ProcessAttributionConfig `json:"processAttributionConfig"`
+	TrafficTableConfig       *TrafficTableConfig       `json:"trafficTableConfig"`
+	TrafficDetailConfig      *TrafficDetailConfig      `json:"trafficDetailConfig"`
+	PythonPluginConfig       *PythonPluginConfig       `json:"pythonPluginConfig"`
+	Shortcuts                *ShortcutConfig           `json:"shortcuts"`
+}
+
+type FontOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type LocalIPAddress struct {
+	Label         string `json:"label"`
+	Value         string `json:"value"`
+	InterfaceName string `json:"interfaceName,omitempty"`
+}
+
+type CACertificateInfo struct {
+	CertPath          string `json:"certPath"`
+	KeyPath           string `json:"keyPath"`
+	CertExists        bool   `json:"certExists"`
+	KeyExists         bool   `json:"keyExists"`
+	ValidPair         bool   `json:"validPair"`
+	IsCA              bool   `json:"isCa"`
+	Subject           string `json:"subject"`
+	Issuer            string `json:"issuer"`
+	SerialNumber      string `json:"serialNumber"`
+	NotBeforeMicros   int64  `json:"notBeforeMicros"`
+	NotAfterMicros    int64  `json:"notAfterMicros"`
+	SHA256Fingerprint string `json:"sha256Fingerprint"`
+	Error             string `json:"error"`
+}
+
+type GenerateCACertificateRequest struct {
+	Overwrite  bool   `json:"overwrite"`
+	CommonName string `json:"commonName"`
+	ValidDays  int    `json:"validDays"`
+}
+
+// CACertificateTrustStatus describes the configured certificate in the current
+// user's store and trust settings, excluding machine-wide or inherited trust.
+type CACertificateTrustStatus struct {
+	Supported bool `json:"supported"`
+	// Present also covers incomplete macOS installations requiring cleanup.
+	Present           bool   `json:"present"`
+	Installed         bool   `json:"installed"`
+	SHA256Fingerprint string `json:"sha256Fingerprint"`
+	Error             string `json:"error"`
+}
+
+type LogConfig struct {
+	Enabled bool
+	Level   string
+}

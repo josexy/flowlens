@@ -1,0 +1,111 @@
+version: "3"
+
+vars:
+  APP_NAME: flowlens
+  BIN_DIR: bin
+  EXE: '{{if eq OS "windows"}}.exe{{end}}'
+
+# macOS keeps its cgo integrations (process attribution and the managed system
+# proxy). Windows and Linux build without cgo.
+env:
+  CGO_ENABLED: '{{if eq OS "darwin"}}1{{else}}0{{end}}'
+  CGO_CFLAGS: '{{if eq OS "darwin"}}-mmacosx-version-min=12.0{{end}}'
+  CGO_LDFLAGS: '{{if eq OS "darwin"}}-mmacosx-version-min=12.0{{end}}'
+  MACOSX_DEPLOYMENT_TARGET: '{{if eq OS "darwin"}}12.0{{end}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list
+
+  dev:
+    desc: Runs the application with live reload
+    cmds:
+      - go tool mygo dev
+
+  build:
+    desc: Builds the application binary into bin/
+    cmds:
+      - go build -o "{{.BIN_DIR}}/{{.APP_NAME}}{{.EXE}}" .
+
+  run:
+    desc: Builds and runs the application
+    deps: [build]
+    cmds:
+      - '"./{{.BIN_DIR}}/{{.APP_NAME}}{{.EXE}}"'
+
+  package:
+    desc: Packages a production build for the current platform
+    cmds:
+      - go tool mygo build {{.CLI_ARGS}}
+
+  test:
+    desc: Runs all Go tests
+    cmds:
+      - go test ./...
+
+  fmt:check:
+    desc: Fails if any Go file needs formatting
+    cmds:
+      - test -z "$(gofmt -l main.go backend desktop scripts 2>/dev/null)"
+
+  lint:go:
+    desc: Checks Go code with golangci-lint
+    cmds:
+      - golangci-lint config verify
+      - golangci-lint run ./...
+
+  lint:go:fix:
+    desc: Applies safe Go lint and formatting fixes
+    cmds:
+      - golangci-lint run --fix ./...
+
+  modernize:
+    desc: Analyzes Go code for modernization opportunities
+    cmds:
+      - go fix -diff ./...
+
+  modernize:fix:
+    desc: Applies Go modernization fixes
+    cmds:
+      - go fix ./...
+
+  vet:ui:
+    desc: Checks native UI lifecycle rules
+    cmds:
+      - go tool mygo vet .
+
+  i18n:generate:
+    desc: Generates the typed message package from the catalogs
+    cmds:
+      - go tool mygo generate
+
+  i18n:check:
+    desc: Checks the message catalogs
+    cmds:
+      - go tool mygo i18n check
+
+  version:
+    desc: 'Sets or checks release version metadata (VERSION=1.2.3 [CHECK=true])'
+    cmds:
+      - go run ./scripts/setversion --version "{{.VERSION}}" {{if eq .CHECK "true"}}--check{{end}}
+    vars:
+      VERSION: '{{.VERSION | default ""}}'
+      CHECK: '{{.CHECK | default "false"}}'
+
+  release:check:
+    desc: 'Checks that a version can be signed and published (VERSION=1.2.3)'
+    cmds:
+      - go run ./scripts/setversion --version "{{.VERSION}}" --release
+    vars:
+      VERSION: '{{.VERSION | default ""}}'
+
+  verify:
+    desc: Runs formatting, lint, UI lifecycle, catalog, and test checks
+    cmds:
+      - task: fmt:check
+      - task: lint:go
+      - task: vet:ui
+      - task: i18n:check
+      - task: test

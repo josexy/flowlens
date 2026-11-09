@@ -1,0 +1,312 @@
+[
+  {
+    "name": "HTTP1 escaped target and duplicate UTF8 fields",
+    "entry": {
+      "type": "http",
+      "method": "GET",
+      "url": "https://example.test/a%2Fb?x=1&x=#ignored",
+      "host": "example.test",
+      "status": "299 Custom Reason",
+      "statusCode": 299,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": [
+          {
+            "name": "Host",
+            "value": "example.test"
+          },
+          {
+            "name": "x-Dup",
+            "value": "一"
+          },
+          {
+            "name": "X-Dup",
+            "value": ""
+          },
+          {
+            "name": "x-Dup",
+            "value": "😀"
+          }
+        ]
+      },
+      "response": {
+        "proto": "HTTP/1.0",
+        "headerFields": [
+          {
+            "name": "Content-Length",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "requestHead": "GET /a%2Fb?x=1&x= HTTP/1.1\r\nHost: example.test\r\nx-Dup: 一\r\nX-Dup: \r\nx-Dup: 😀\r\n\r\n",
+    "responseHead": "HTTP/1.0 299 Custom Reason\r\nContent-Length: 0\r\n\r\n"
+  },
+  {
+    "name": "HTTP1 empty fields and status code fallback",
+    "entry": {
+      "type": "http",
+      "method": "GET",
+      "url": "https://example.test/",
+      "host": "example.test",
+      "status": "",
+      "statusCode": 204,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      },
+      "response": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      }
+    },
+    "requestHead": "GET / HTTP/1.1\r\n\r\n",
+    "responseHead": "HTTP/1.1 204\r\n\r\n"
+  },
+  {
+    "name": "HTTP1 OPTIONS asterisk",
+    "entry": {
+      "type": "http",
+      "method": "OPTIONS",
+      "url": "*",
+      "host": "example.test",
+      "status": "200 OK",
+      "statusCode": 200,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      },
+      "response": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      }
+    },
+    "requestHead": "OPTIONS * HTTP/1.1\r\n\r\n",
+    "responseHead": "HTTP/1.1 200 OK\r\n\r\n"
+  },
+  {
+    "name": "HTTP1 CONNECT authority form",
+    "entry": {
+      "type": "http",
+      "method": "CONNECT",
+      "url": "https://[::1]:443/ignored?q=1",
+      "host": "[::1]:443",
+      "status": "200 Connection Established",
+      "statusCode": 200,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": [
+          {
+            "name": "Host",
+            "value": "[::1]:443"
+          }
+        ]
+      },
+      "response": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      }
+    },
+    "requestHead": "CONNECT [::1]:443 HTTP/1.1\r\nHost: [::1]:443\r\n\r\n",
+    "responseHead": "HTTP/1.1 200 Connection Established\r\n\r\n"
+  },
+  {
+    "name": "HTTP2 pseudo headers override metadata and retain duplicates",
+    "entry": {
+      "type": "http",
+      "method": "GET",
+      "url": "https://example.test/",
+      "host": "example.test",
+      "status": "200 OK",
+      "statusCode": 200,
+      "request": {
+        "proto": " http/2 ",
+        "headerFields": [
+          {
+            "name": ":method",
+            "value": "POST"
+          },
+          {
+            "name": "accept",
+            "value": "*/*"
+          },
+          {
+            "name": ":authority",
+            "value": "upstream.test"
+          },
+          {
+            "name": ":path",
+            "value": "/中文?q=%2F"
+          },
+          {
+            "name": ":scheme",
+            "value": "https"
+          },
+          {
+            "name": ":authority",
+            "value": "other.test"
+          },
+          {
+            "name": "X-Dup",
+            "value": "一"
+          },
+          {
+            "name": "x-dup",
+            "value": ""
+          },
+          {
+            "name": ":protocol",
+            "value": "websocket"
+          }
+        ]
+      },
+      "response": {
+        "proto": "HTTP/2.0",
+        "headerFields": [
+          {
+            "name": ":status",
+            "value": "201"
+          },
+          {
+            "name": "set-cookie",
+            "value": "a=1"
+          },
+          {
+            "name": "Set-Cookie",
+            "value": "b="
+          },
+          {
+            "name": ":scheme",
+            "value": "https"
+          }
+        ]
+      }
+    },
+    "requestHead": "POST /中文?q=%2F HTTP/2.0\r\nhost: upstream.test\r\nhost: other.test\r\naccept: */*\r\nX-Dup: 一\r\nx-dup: \r\nprotocol: websocket\r\n\r\n",
+    "responseHead": "HTTP/2.0 201\r\nset-cookie: a=1\r\nSet-Cookie: b=\r\n\r\n"
+  },
+  {
+    "name": "HTTP2 metadata fallback without reason phrase",
+    "entry": {
+      "type": "http",
+      "method": "GET",
+      "url": "https://example.test?x=1",
+      "host": "example.test",
+      "status": "200 OK",
+      "statusCode": 0,
+      "request": {
+        "proto": "HTTP/2.0",
+        "headerFields": [
+          {
+            "name": "accept",
+            "value": "*/*"
+          }
+        ],
+        "headerOrderUnavailable": true
+      },
+      "response": {
+        "proto": "HTTP/2",
+        "headerFields": [
+          {
+            "name": "server",
+            "value": "test"
+          }
+        ],
+        "headerOrderUnavailable": true
+      }
+    },
+    "requestHead": "GET /?x=1 HTTP/2.0\r\naccept: */*\r\n\r\n",
+    "responseHead": "HTTP/2.0 200\r\nserver: test\r\n\r\n"
+  },
+  {
+    "name": "HTTP2 CONNECT authority fallback",
+    "entry": {
+      "type": "http",
+      "method": "CONNECT",
+      "url": "",
+      "host": "example.test",
+      "status": "200 OK",
+      "statusCode": 200,
+      "request": {
+        "proto": "HTTP/2.0",
+        "headerFields": [
+          {
+            "name": ":method",
+            "value": "CONNECT"
+          },
+          {
+            "name": ":authority",
+            "value": "tunnel.test:443"
+          }
+        ]
+      },
+      "response": {
+        "proto": "HTTP/2.0",
+        "headerFields": [
+          {
+            "name": ":status",
+            "value": "200"
+          }
+        ]
+      }
+    },
+    "requestHead": "CONNECT tunnel.test:443 HTTP/2.0\r\nhost: tunnel.test:443\r\n\r\n",
+    "responseHead": "HTTP/2.0 200\r\n\r\n"
+  },
+  {
+    "name": "HTTP1 preserves dot segments and trailing query",
+    "entry": {
+      "type": "http",
+      "method": "GET",
+      "url": "https://example.test/a/../%2e%2e/a?",
+      "host": "example.test",
+      "status": "200 OK",
+      "statusCode": 200,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      },
+      "response": {
+        "proto": "HTTP/1.1",
+        "headerFields": []
+      }
+    },
+    "requestHead": "GET /a/../%2e%2e/a? HTTP/1.1\r\n\r\n",
+    "responseHead": "HTTP/1.1 200 OK\r\n\r\n"
+  },
+  {
+    "name": "WebSocket handshake head",
+    "entry": {
+      "type": "wss",
+      "method": "GET",
+      "url": "wss://example.test/socket",
+      "host": "example.test",
+      "status": "101 Switching Protocols",
+      "statusCode": 101,
+      "request": {
+        "proto": "HTTP/1.1",
+        "headerFields": [
+          {
+            "name": "Host",
+            "value": "example.test"
+          },
+          {
+            "name": "Upgrade",
+            "value": "websocket"
+          }
+        ]
+      },
+      "response": {
+        "proto": "HTTP/1.1",
+        "headerFields": [
+          {
+            "name": "Upgrade",
+            "value": "websocket"
+          }
+        ]
+      }
+    },
+    "requestHead": "GET /socket HTTP/1.1\r\nHost: example.test\r\nUpgrade: websocket\r\n\r\n",
+    "responseHead": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
+  }
+]

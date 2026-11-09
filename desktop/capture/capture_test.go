@@ -1,0 +1,1570 @@
+package capture
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/egoist/mygo/i18n"
+	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/backend/host"
+	"github.com/josexy/flowlens/backend/pkg/database"
+	historyservice "github.com/josexy/flowlens/backend/services/history_service"
+	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
+	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
+	"github.com/josexy/flowlens/desktop/shortcuts"
+	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
+	"github.com/josexy/flowlens/locales"
+	nui "github.com/josexy/nuxt-ui-go"
+)
+
+type fakeBackend struct {
+	mu       sync.Mutex
+	entries  []*logic.TrafficEntry
+	stats    proxyservice.TrafficStatistics
+	bodies   map[uint64]*proxyservice.TrafficBodyView
+	deleted  []int64
+	cleared  int
+	status   proxyservice.ProxyStatus
+	system   proxyservice.SystemProxyStatus
+	dns      proxyservice.DNSCacheStatus
+	startErr error
+	starts   int
+	stops    int
+	restarts []bool
+	alias    string
+	dnsClear int
+}
+
+func (f *fakeBackend) GetTraffic() []*logic.TrafficEntry {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.entries)
+}
+func (f *fakeBackend) GetStatistics() proxyservice.TrafficStatistics {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stats
+}
+func (f *fakeBackend) ClearTraffic() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cleared++
+	return nil
+}
+func (f *fakeBackend) DeleteTraffic(ids []int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleted = append(f.deleted, ids...)
+}
+func (f *fakeBackend) SetLiveTrafficDetail(uint64) {}
+func (f *fakeBackend) GetTrafficBodyView(id uint64) (*proxyservice.TrafficBodyView, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if view, ok := f.bodies[id]; ok {
+		return view, nil
+	}
+	return &proxyservice.TrafficBodyView{}, nil
+}
+func (f *fakeBackend) Start() (proxyservice.ProxyStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.starts++
+	if f.startErr != nil {
+		return proxyservice.ProxyStatus{}, f.startErr
+	}
+	f.status = proxyservice.ProxyStatus{Running: true, Address: "127.0.0.1:8080"}
+	return f.status, nil
+}
+func (f *fakeBackend) Stop() (proxyservice.ProxyStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stops++
+	f.status = proxyservice.ProxyStatus{}
+	return f.status, nil
+}
+func (f *fakeBackend) GetStatus() proxyservice.ProxyStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.status
+}
+func (f *fakeBackend) GetSystemProxyStatus() proxyservice.SystemProxyStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.system
+}
+func (f *fakeBackend) SetSystemProxyEnabled(enabled bool) (proxyservice.SystemProxyStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.system.Active, f.system.Address = enabled, "127.0.0.1:8080"
+	return f.system, nil
+}
+func (f *fakeBackend) GetDNSCacheStatus() proxyservice.DNSCacheStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dns
+}
+func (f *fakeBackend) ClearDNSCache() proxyservice.DNSCacheStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dnsClear++
+	return f.dns
+}
+func (f *fakeBackend) RestartCapture(save bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restarts = append(f.restarts, save)
+	return nil
+}
+func (f *fakeBackend) UpdateHistoryAlias(alias string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.alias = alias
+}
+func (f *fakeBackend) ApplyCurrentProxyConfig() (proxyservice.ProxyConfigApplyResult, error) {
+	return proxyservice.ProxyConfigApplyResult{Applied: true}, nil
+}
+
+func firstHistory(history []store.HistoryBackend) store.HistoryBackend {
+	if len(history) > 0 {
+		return history[0]
+	}
+	return nil
+}
+
+type resendCall struct {
+	id     uint64
+	config proxyservice.ResendConfig
+}
+
+type fixture struct {
+	t              testing.TB
+	backend        *fakeBackend
+	data           *store.Store
+	window         *runtimetest.Window
+	workspace      *Workspace
+	tester         *ui.Tester
+	notifier       *widgets.Notifier
+	confirm        *widgets.ConfirmDialog
+	dispatch       *shortcuts.Dispatcher
+	service        *settingservice.SettingService
+	mu             sync.Mutex
+	resends        []resendCall
+	resendErr      error
+	block          chan struct{}
+	opened         []uint64
+	exported       []string
+	showCategories bool
+	pickedName     string
+	savePath       string
+}
+
+func (f *fixture) settle() {
+	for range 4 {
+		f.data.Runtime.Jobs.Wait()
+		f.window.Drain()
+		f.tester.Frame()
+	}
+}
+
+func entry(id uint64, host string) *logic.TrafficEntry {
+	return &logic.TrafficEntry{ID: id, Revision: 1, Type: "http", Method: "GET", Host: host, Path: fmt.Sprintf("/p%d", id), URL: fmt.Sprintf("http://%s/p%d", host, id)}
+}
+
+func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height int, history ...store.HistoryBackend) *fixture {
+	t.Helper()
+	i18n.SetLocaleFunc(func() string { return "en" })
+	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	service := settingservice.New(db)
+	if err := service.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetLanguage("en"); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeBackend{entries: entries, bodies: map[uint64]*proxyservice.TrafficBodyView{}, system: proxyservice.SystemProxyStatus{Supported: true, ModeSupported: true}, dns: proxyservice.DNSCacheStatus{TTLSeconds: 60}}
+	backend.stats.Total = int64(len(entries))
+	rt := store.NewRuntime()
+	window := &runtimetest.Window{}
+	rt.Dispatcher.SetMain(window)
+	data := store.New(rt, store.Dependencies{
+		Settings: store.SettingsDependencies{Backend: service, Proxy: backend},
+		Traffic:  backend, Proxy: backend, History: firstHistory(history), Requests: requestStub{},
+	})
+	if err := data.Settings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	notifier := &widgets.Notifier{}
+	confirm := &widgets.ConfirmDialog{}
+	dispatch := shortcuts.NewDispatcher(func() *settingservice.ShortcutConfig { return nil })
+	f := &fixture{t: t, backend: backend, data: data, window: window, notifier: notifier, confirm: confirm, dispatch: dispatch, service: service}
+	workspace := New(data, Host{
+		Resend: func(ctx context.Context, id uint64, config proxyservice.ResendConfig) (proxyservice.ResendResult, error) {
+			f.mu.Lock()
+			f.resends = append(f.resends, resendCall{id, config})
+			block, err := f.block, f.resendErr
+			f.mu.Unlock()
+			if block != nil {
+				select {
+				case <-block:
+				case <-ctx.Done():
+					return proxyservice.ResendResult{}, ctx.Err()
+				}
+			}
+			if err != nil {
+				return proxyservice.ResendResult{}, err
+			}
+			return proxyservice.ResendResult{Success: config.Count}, nil
+		},
+		OpenEditor: func(entry *logic.TrafficEntry, _ *proxyservice.TrafficBodyView, _ bool, _ string, done func(error)) {
+			f.opened = append(f.opened, entry.ID)
+			done(nil)
+		},
+		Export: f.exportHost(),
+	}, dispatch, notifier, confirm, nil)
+	f.workspace = workspace
+	view := func(c *ui.Context) {
+		theme := nui.App(c, data.Settings.Theme().Config)
+		dispatch.Begin()
+		ui.Row(c).Fill().Children(func() {
+			ui.Box(c).Width(240).FillHeight().Shrink(0).Children(func() {
+				if f.showCategories {
+					workspace.CategorySidebar(c, theme)
+					return
+				}
+				workspace.Sidebar(c, theme)
+			})
+			ui.Column(c).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() { workspace.Content(c, theme) })
+		})
+		notifier.Show(c, theme)
+		nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 3})
+		if confirm.Open() {
+			dispatch.NoteModal()
+		}
+		confirm.Build(c, theme)
+		dispatch.Install(c)
+	}
+	f.tester = ui.NewTester(view, width, height)
+	f.tester.SetLocale("en")
+	t.Cleanup(rt.Close)
+	data.Proxy.Initialize(nopBus{})
+	data.Traffic.Initialize(nil)
+	data.Filter.Refresh()
+	if data.History != nil {
+		data.History.LoadList()
+	}
+	f.settle()
+	return f
+}
+
+type requestStub struct{}
+
+func (requestStub) SendHTTPRequest(context.Context, proxyservice.SendRequestConfig, string, string, []logic.HeaderField, proxyservice.SendRequestBody) (proxyservice.SendRequestResponse, error) {
+	return proxyservice.SendRequestResponse{}, nil
+}
+func (requestStub) DisconnectHTTPRequestStream(string) error { return nil }
+func (requestStub) ConnectWebSocket(context.Context, proxyservice.WebSocketConnectRequest) (proxyservice.WebSocketConnectResponse, error) {
+	return proxyservice.WebSocketConnectResponse{}, nil
+}
+func (requestStub) SendWebSocketMessage(proxyservice.WebSocketSendRequest) error { return nil }
+func (requestStub) DisconnectWebSocket(string) error                             { return nil }
+func (requestStub) RecoverRequestBodyForEditing(string, []logic.HeaderField, proxyservice.TrafficBodyView) (proxyservice.RequestBodyRecoveryResult, error) {
+	return proxyservice.RequestBodyRecoveryResult{}, nil
+}
+
+type nopBus struct{}
+
+func (nopBus) Emit(string, ...any) bool           { return true }
+func (nopBus) On(string, func(host.Event)) func() { return func() {} }
+
+func resendConfirmLabel() string { return locales.ResendModalConfirm() }
+
+func newFixture(t *testing.T, entries ...*logic.TrafficEntry) *fixture {
+	t.Helper()
+	return newFixtureSized(t, entries, 1400, 800)
+}
+
+func (f *fixture) exportHost() *ExportHost {
+	return &ExportHost{
+		Generation: func() uint64 { return 3 },
+		ExportLive: func(_ context.Context, request proxyservice.TrafficExportRequest) (proxyservice.TrafficExportResult, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.exported = append(f.exported, fmt.Sprintf("%s:%s:%s:%v:%d", request.Kind, request.TargetType, request.Path, request.TrafficIDs, *request.CaptureGeneration))
+			return proxyservice.TrafficExportResult{Exported: len(request.TrafficIDs)}, nil
+		},
+		ExportHistory: func(_ context.Context, request historyservice.TrafficExportRequest) (proxyservice.TrafficExportResult, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.exported = append(f.exported, fmt.Sprintf("history:%s:%s:%s", request.Key, request.Kind, request.Path))
+			return proxyservice.TrafficExportResult{Exported: 1}, nil
+		},
+		ExportLiveHAR: func(request proxyservice.HARExportRequest) (proxyservice.HARWriteResult, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.exported = append(f.exported, fmt.Sprintf("har:%s:%v", request.Path, request.TrafficIDs))
+			return proxyservice.HARWriteResult{Exported: 1}, nil
+		},
+		ExportHistoryHAR: func(request historyservice.HARExportRequest) (proxyservice.HARWriteResult, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.exported = append(f.exported, fmt.Sprintf("history-har:%s:%s", request.Key, request.Path))
+			return proxyservice.HARWriteResult{Exported: 1}, nil
+		},
+		PickSavePath: func(filename, _, _ string) (string, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.pickedName = filename
+			if f.savePath != "" {
+				return f.savePath, nil
+			}
+			return "/tmp/x", nil
+		},
+		PickDirectory: func(string) (string, error) { return "/tmp/dir", nil },
+	}
+}
+
+func (f *fixture) click(label string) {
+	f.t.Helper()
+	if err := f.tester.Click(label); err != nil {
+		f.t.Fatalf("click %q: %v\ntexts: %v", label, err, f.tester.Texts())
+	}
+	f.settle()
+}
+
+func (f *fixture) requireText(text string) {
+	f.t.Helper()
+	if !f.tester.HasText(text) {
+		f.t.Fatalf("missing %q in %v", text, f.tester.Texts())
+	}
+}
+
+func (f *fixture) requireNoText(text string) {
+	f.t.Helper()
+	if f.tester.HasText(text) {
+		f.t.Fatalf("unexpected %q in %v", text, f.tester.Texts())
+	}
+}
+
+func (f *fixture) deliver(entries ...*logic.TrafficEntry) {
+	for _, item := range entries {
+		f.data.Traffic.AddOrUpdate(item)
+	}
+	f.data.Traffic.FlushPending()
+	f.settle()
+}
+
+func TestFilterTabsNarrowRows(t *testing.T) {
+	json := entry(1, "json.test")
+	json.Response = &proxyservice.HTTPMessage{HeaderFields: []logic.HeaderField{{Name: "Content-Type", Value: "application/json"}}}
+	html := entry(2, "html.test")
+	html.Response = &proxyservice.HTTPMessage{HeaderFields: []logic.HeaderField{{Name: "Content-Type", Value: "text/html"}}}
+	f := newFixture(t, json, html)
+	f.requireText("json.test")
+	f.requireText("html.test")
+	f.click("JSON")
+	f.requireText("json.test")
+	f.requireNoText("html.test")
+	f.click("HTML")
+	f.requireNoText("json.test")
+	f.requireText("html.test")
+	f.click("All")
+	f.requireText("json.test")
+}
+
+func TestSearchNarrowsRowsAndKeepsTotal(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
+	f.data.Filter.SearchText = "b.test"
+	f.settle()
+	f.requireNoText("a.test")
+	f.requireText("b.test")
+	if f.data.Traffic.Statistics.Total != 2 {
+		t.Fatalf("total %d", f.data.Traffic.Statistics.Total)
+	}
+}
+
+func TestFocusFilterShortcut(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	if !f.dispatch.Invoke(shortcuts.CaptureFocusFilter) {
+		t.Fatal("shortcut did not run")
+	}
+	f.settle()
+	f.tester.Type("needle")
+	f.settle()
+	if f.data.Filter.SearchText != "needle" {
+		t.Fatalf("search %q", f.data.Filter.SearchText)
+	}
+}
+
+func TestStartAndStop(t *testing.T) {
+	f := newFixture(t)
+	f.requireText("Proxy not running")
+	f.click("Start")
+	if f.backend.starts != 1 || !f.data.Proxy.Status.Running {
+		t.Fatal("not started")
+	}
+	f.requireText("http://127.0.0.1:8080")
+	f.click("Stop")
+	if f.backend.stops != 1 || f.data.Proxy.Status.Running {
+		t.Fatal("not stopped")
+	}
+	f.requireText("Proxy not running")
+}
+
+func TestStartFailureStaysStopped(t *testing.T) {
+	f := newFixture(t)
+	f.backend.startErr = errors.New("port in use")
+	f.click("Start")
+	f.requireText("port in use")
+	f.requireText("Proxy not running")
+	if f.data.Proxy.LastError == "" {
+		t.Fatal("error not recorded")
+	}
+}
+
+func TestProxyDisplayAddress(t *testing.T) {
+	if got := ProxyDisplayAddress("1.2.3.4:1", settingservice.ProxyModeSOCKS5); got != "socks5://1.2.3.4:1" {
+		t.Fatal(got)
+	}
+	if got := ProxyDisplayAddress("http://x", settingservice.ProxyModeSOCKS5); got != "http://x" {
+		t.Fatal(got)
+	}
+}
+
+func TestPortValidation(t *testing.T) {
+	for _, value := range []float64{0, 65536, 1.5} {
+		if validPort(nui.Set(value)) {
+			t.Fatalf("%v accepted", value)
+		}
+	}
+	if validPort(nui.Optional[float64]{}) || !validPort(nui.Set[float64](8080)) {
+		t.Fatal("bounds")
+	}
+}
+
+func TestInvalidPortIsRejectedAndSavedPortUnchanged(t *testing.T) {
+	f := newFixture(t)
+	saved := f.data.Settings.Current.ProxyConfig.Port
+	f.click("Proxy port: 8080")
+	f.requireText("Port")
+	f.workspace.toolbar.portValue = nui.Set[float64](70000)
+	f.settle()
+	f.requireText("Enter a port between 1 and 65535")
+	if err := f.tester.Click("Save"); err == nil {
+		f.settle()
+	}
+	if f.data.Settings.Current.ProxyConfig.Port != saved {
+		t.Fatalf("port %d", f.data.Settings.Current.ProxyConfig.Port)
+	}
+}
+
+func TestValidPortSaves(t *testing.T) {
+	f := newFixture(t)
+	f.click("Proxy port: 8080")
+	f.workspace.toolbar.portValue = nui.Set[float64](9090)
+	f.settle()
+	f.click("Save")
+	if f.data.Settings.Current.ProxyConfig.Port != 9090 {
+		t.Fatalf("port %d", f.data.Settings.Current.ProxyConfig.Port)
+	}
+	if f.workspace.toolbar.portOpen {
+		t.Fatal("popover should close")
+	}
+}
+
+func TestBooleanToggleSaves(t *testing.T) {
+	f := newFixture(t)
+	f.click("Disable HTTP/2")
+	if !f.data.Settings.Current.ProxyConfig.DisableHTTP2 {
+		t.Fatal("not saved")
+	}
+	f.click("Disable HTTP/2")
+	if f.data.Settings.Current.ProxyConfig.DisableHTTP2 {
+		t.Fatal("not turned off")
+	}
+}
+
+func (f *fixture) requireTextLabel(label string) {
+	f.t.Helper()
+	if _, ok := f.tester.Find(label); !ok {
+		f.t.Fatalf("missing %q", label)
+	}
+}
+
+func TestDomainFiltersSaveAndShowCount(t *testing.T) {
+	f := newFixture(t)
+	f.click("Domain filters: 0")
+	f.requireText("Domain Filters")
+	dialog := &f.workspace.toolbar.hosts
+	dialog.add(&dialog.include)
+	dialog.include[0].value = " *.a.test "
+	dialog.add(&dialog.exclude)
+	dialog.add(&dialog.exclude)
+	dialog.exclude[1].value = "b.test"
+	f.settle()
+	f.click("Save")
+	config := f.data.Settings.Current.ProxyConfig
+	if !slices.Equal(config.IncludeHosts, []string{"*.a.test"}) || !slices.Equal(config.ExcludeHosts, []string{"b.test"}) {
+		t.Fatalf("%v %v", config.IncludeHosts, config.ExcludeHosts)
+	}
+	f.requireTextLabel("Domain filters: 2")
+}
+
+func TestDNSValidationBounds(t *testing.T) {
+	for value, want := range map[float64]bool{0: false, 1: true, 3600: true, 3601: false, 1.5: false} {
+		if got := validTTL(nui.Set(value)); got != want {
+			t.Errorf("%v: %v", value, got)
+		}
+	}
+}
+
+func TestDNSInvalidDurationKeepsConfiguration(t *testing.T) {
+	f := newFixture(t)
+	f.click("DNS Cache")
+	f.workspace.toolbar.dnsTTL = nui.Set[float64](4000)
+	f.settle()
+	f.requireText("3600")
+	if err := f.tester.Click("Apply"); err == nil {
+		f.settle()
+	}
+	if f.data.Settings.Current.ProxyConfig.DNSCacheTTLSeconds == 4000 {
+		t.Fatal("invalid duration saved")
+	}
+}
+
+func TestDNSApplyAndClear(t *testing.T) {
+	f := newFixture(t)
+	f.click("DNS Cache")
+	f.workspace.toolbar.dnsEnabled = true
+	f.workspace.toolbar.dnsTTL = nui.Set[float64](120)
+	f.settle()
+	f.click("Clear cache")
+	if f.backend.dnsClear != 1 {
+		t.Fatal("not cleared")
+	}
+	f.click("Apply")
+	config := f.data.Settings.Current.ProxyConfig
+	if !config.DNSCacheEnabled || config.DNSCacheTTLSeconds != 120 {
+		t.Fatalf("%+v", config)
+	}
+}
+
+func TestSystemProxyAbsentWhenUnsupported(t *testing.T) {
+	f := newFixture(t)
+	f.data.Proxy.SystemProxy = proxyservice.SystemProxyStatus{Supported: false}
+	f.settle()
+	if _, ok := f.tester.Find("System proxy: off"); ok {
+		t.Fatal("control shown on Linux")
+	}
+}
+
+func TestSystemProxyDisabledForUnsupportedMode(t *testing.T) {
+	f := newFixture(t)
+	f.data.Proxy.SystemProxy = proxyservice.SystemProxyStatus{Supported: true, ModeSupported: false}
+	f.settle()
+	label := "System proxy is not supported for HTTP mode on this platform"
+	f.requireTextLabel(label)
+	_ = f.tester.Click(label)
+	f.settle()
+	if f.data.Proxy.SystemProxy.Active {
+		t.Fatal("disabled control acted")
+	}
+}
+
+func TestSystemProxyToggle(t *testing.T) {
+	f := newFixture(t)
+	f.click("System proxy: off")
+	if !f.data.Proxy.SystemProxy.Active {
+		t.Fatal("not on")
+	}
+	f.requireTextLabel("System proxy: on (127.0.0.1:8080)")
+}
+
+func TestSortCycleAndIncompleteValues(t *testing.T) {
+	complete := entry(2, "b.test")
+	complete.Request = &proxyservice.HTTPMessage{Metrics: &proxyservice.HTTPMessageMetrics{StartedAtMicros: 1, EndedAtMicros: 2}}
+	complete.Response = &proxyservice.HTTPMessage{Metrics: &proxyservice.HTTPMessageMetrics{StartedAtMicros: 3, EndedAtMicros: 9}}
+	f := newFixture(t, entry(1, "a.test"), complete, entry(3, "c.test"))
+	table := f.workspace.Table
+	f.click("Duration")
+	if table.sort.Column != "duration" || table.sort.Descending {
+		t.Fatalf("first click %+v", table.sort)
+	}
+	if got := rowIDs(table); !slices.Equal(got, []uint64{2, 1, 3}) {
+		t.Fatal(got)
+	}
+	f.click("Duration")
+	if !table.sort.Descending {
+		t.Fatalf("second click %+v", table.sort)
+	}
+	if got := rowIDs(table); !slices.Equal(got, []uint64{2, 1, 3}) {
+		t.Fatal(got)
+	}
+	f.click("Duration")
+	if table.sort.Column != "" {
+		t.Fatalf("third click %+v", table.sort)
+	}
+	if got := rowIDs(table); !slices.Equal(got, []uint64{1, 2, 3}) {
+		t.Fatal(got)
+	}
+}
+
+func rowIDs(table *Table) []uint64 {
+	ids := make([]uint64, len(table.rows))
+	for index, row := range table.rows {
+		ids[index] = row.ID
+	}
+	return ids
+}
+
+func TestHidingColumnsPersistsAndClearsItsSort(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	table := f.workspace.Table
+	f.click("Host")
+	if table.sort.Column != "host" {
+		t.Fatal("sort")
+	}
+	if !f.data.Settings.SetTrafficColumnVisible(logic.ColumnHost, false, nil) {
+		t.Fatal("hide")
+	}
+	f.settle()
+	f.requireNoText("a.test")
+	if table.sort.Column != "" {
+		t.Fatalf("sort stayed on a hidden column: %+v", table.sort)
+	}
+	snapshot, err := f.service.Snapshot()
+	if err != nil || !slices.Contains(snapshot.TrafficTableConfig.HiddenColumns, "host") {
+		t.Fatalf("%v %v", snapshot.TrafficTableConfig, err)
+	}
+}
+
+func TestColumnLayoutPersists(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	table := f.workspace.Table
+	order := slices.Clone(table.list.Columns.Order)
+	order[0], order[1] = order[1], order[0]
+	table.list.Columns.Order = order
+	table.list.Columns.Widths = map[string]float32{"host": 333}
+	f.settle()
+	snapshot, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := snapshot.TrafficTableConfig
+	if config.ColumnOrder[0] != "method" || config.ColumnWidths["host"] != 333 {
+		t.Fatalf("%+v", config)
+	}
+	restored := NewTable(table.source, table.deps)
+	restored.loadLayout()
+	if restored.list.Columns.Order[0] != "method" || restored.list.Columns.Widths["host"] != 333 {
+		t.Fatalf("%+v", restored.list.Columns)
+	}
+}
+
+func TestHeaderMenuHidesColumn(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	if err := f.tester.RightClick("Protocol"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if err := f.tester.ChooseMenuItem("Protocol"); err != nil {
+		t.Fatalf("%v %v", err, f.tester.Menu())
+	}
+	f.settle()
+	if !slices.Contains(f.data.Settings.HiddenTrafficColumns(), "protocol") {
+		t.Fatalf("%v", f.data.Settings.HiddenTrafficColumns())
+	}
+}
+
+func TestSingleSelectionOpensDetail(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
+	f.click("b.test")
+	if f.data.Traffic.Selected == nil || f.data.Traffic.Selected.ID != 2 || !f.data.Traffic.ShowDetailPanel || f.data.Traffic.SelectedCount != 1 {
+		t.Fatalf("%+v %v", f.data.Traffic.Selected, f.data.Traffic.ShowDetailPanel)
+	}
+}
+
+func TestModifierSelection(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"), entry(3, "c.test"))
+	f.click("a.test")
+	if err := f.tester.ClickWith(ui.Cmd, "c.test"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if f.data.Traffic.SelectedCount != 2 {
+		t.Fatalf("count %d", f.data.Traffic.SelectedCount)
+	}
+	if err := f.tester.ClickWith(ui.Shift, "b.test"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if f.data.Traffic.SelectedCount < 2 {
+		t.Fatalf("count %d", f.data.Traffic.SelectedCount)
+	}
+}
+
+func TestEvictedSelectionIsRemoved(t *testing.T) {
+	entries := make([]*logic.TrafficEntry, 5000)
+	for index := range entries {
+		entries[index] = entry(uint64(index+1), "a.test")
+	}
+	f := newFixtureSized(t, entries, 1400, 800)
+	table := f.workspace.Table
+	table.replaceSelection(0)
+	f.data.Traffic.Select(table.rows[0])
+	f.settle()
+	if f.data.Traffic.SelectedCount != 1 {
+		t.Fatal("count")
+	}
+	f.data.Traffic.ResumeLiveEviction()
+	f.deliver(entry(5001, "z.test"))
+	if f.data.Traffic.SelectedCount != 0 || f.data.Traffic.Selected != nil {
+		t.Fatalf("count %d selected %v", f.data.Traffic.SelectedCount, f.data.Traffic.Selected)
+	}
+}
+
+func TestNewRowsAppearAtTheLatestEdge(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.deliver(entry(2, "b.test"))
+	f.requireText("b.test")
+}
+
+func TestHoldWhileReadingAndShowNew(t *testing.T) {
+	entries := make([]*logic.TrafficEntry, 5000)
+	for index := range entries {
+		entries[index] = entry(uint64(index+1), "a.test")
+	}
+	f := newFixtureSized(t, entries, 1400, 800)
+	table := f.workspace.Table
+	table.list.ScrollTo(100, ui.Start)
+	f.settle()
+	f.settle()
+	if !f.data.Traffic.LiveEvictionPaused() {
+		t.Fatal("scrolling away should hold the window")
+	}
+	first, _ := table.list.Visible()
+	if first < 90 {
+		t.Fatalf("first %d", first)
+	}
+	f.deliver(entry(5001, "new.test"))
+	if f.data.Traffic.PendingLiveEntryCount() != 1 {
+		t.Fatalf("queued %d", f.data.Traffic.PendingLiveEntryCount())
+	}
+	now, _ := table.list.Visible()
+	if now != first {
+		t.Fatalf("view moved from %d to %d", first, now)
+	}
+	f.requireText("Show new requests (1)")
+
+	// A status change on a row on screen applies in place.
+	updated := entry(uint64(first+1), "a.test")
+	updated.Revision, updated.StatusCode = 2, 418
+	f.deliver(updated)
+	f.requireText("418")
+	if f.data.Traffic.PendingLiveEntryCount() != 1 {
+		t.Fatal("queue changed")
+	}
+
+	f.click("Show new requests (1)")
+	if f.data.Traffic.PendingLiveEntryCount() != 0 || f.data.Traffic.LiveEvictionPaused() {
+		t.Fatalf("queued %d paused %v", f.data.Traffic.PendingLiveEntryCount(), f.data.Traffic.LiveEvictionPaused())
+	}
+	if len(table.rows) != 5000 || table.rows[len(table.rows)-1].ID != 5001 || table.rows[0].ID != 2 {
+		t.Fatal("drained in order")
+	}
+	f.settle()
+	f.requireText("new.test")
+}
+
+func openRowMenu(t *testing.T, f *fixture, label string) {
+	t.Helper()
+	if err := f.tester.RightClick(label); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if len(f.tester.Menu()) == 0 {
+		t.Fatal("no menu")
+	}
+}
+
+func (f *fixture) choose(path ...string) {
+	f.t.Helper()
+	if err := f.tester.ChooseMenuItem(path...); err != nil {
+		f.t.Fatalf("%v: %v", err, f.tester.Menu())
+	}
+	f.settle()
+}
+
+func TestRowMenuShowDetails(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Show")
+	if !f.data.Traffic.ShowDetailPanel || f.data.Traffic.Selected.ID != 1 {
+		t.Fatal("details")
+	}
+}
+
+func TestRowMenuCopyValues(t *testing.T) {
+	item := entry(1, "a.test")
+	item.Metadata = &proxyservice.Metadata{RemoteDestinationAddr: "9.9.9.9:443"}
+	f := newFixture(t, item)
+	openRowMenu(t, f, "a.test")
+	f.choose("Copy", "Server IP")
+	if got := f.tester.Clipboard(); got != "9.9.9.9" {
+		t.Fatalf("clipboard %q", got)
+	}
+}
+
+func TestCopyRowUsesVisibleColumns(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Copy", "Row")
+	if got := f.tester.Clipboard(); !strings.HasPrefix(got, "1\tGET\ta.test\t/p1") {
+		t.Fatalf("clipboard %q", got)
+	}
+}
+
+func TestCopyCurlAndUnavailableBody(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
+	f.backend.bodies[1] = &proxyservice.TrafficBodyView{RequestBody: "hi"}
+	f.backend.bodies[2] = &proxyservice.TrafficBodyView{RequestBodyUnavailable: true}
+	openRowMenu(t, f, "a.test")
+	f.choose("Copy as cURL")
+	if got := f.tester.Clipboard(); !strings.Contains(got, "--data-raw 'hi'") {
+		t.Fatalf("clipboard %q", got)
+	}
+	openRowMenu(t, f, "b.test")
+	f.choose("Copy as cURL")
+	f.requireText("unavailable")
+	if got := f.tester.Clipboard(); strings.Contains(got, "b.test") {
+		t.Fatalf("incomplete copy: %q", got)
+	}
+}
+
+func TestHighlightAndClear(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Highlight", "Red")
+	if f.data.Traffic.Highlights[1] != "#ef4444" {
+		t.Fatal("highlight")
+	}
+	openRowMenu(t, f, "a.test")
+	f.choose("Highlight", "Clear")
+	if len(f.data.Traffic.Highlights) != 0 {
+		t.Fatal("clear")
+	}
+}
+
+func TestDeleteSingleAndMultiple(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"), entry(3, "c.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Delete")
+	f.requireNoText("a.test")
+	if !slices.Equal(f.backend.deleted, []int64{1}) {
+		t.Fatal(f.backend.deleted)
+	}
+	table := f.workspace.Table
+	table.selection.Add(2)
+	table.selection.Add(3)
+	f.settle()
+	openRowMenu(t, f, "b.test")
+	f.choose("Delete")
+	if !f.confirm.Open() {
+		t.Fatal("should confirm")
+	}
+	f.workspace.Table.deleteConfirmed([]uint64{2, 3})
+	f.settle()
+	f.requireNoText("b.test")
+	f.requireNoText("c.test")
+	if len(f.backend.deleted) != 3 {
+		t.Fatal(f.backend.deleted)
+	}
+}
+
+func TestRawTCPHasNoRequestActions(t *testing.T) {
+	item := entry(1, "a.test")
+	item.Type = "tcp"
+	item.RawTCP = &proxyservice.RawTCPTunnelInfo{HostPort: "a.test:443"}
+	f := newFixture(t, item)
+	openRowMenu(t, f, "a.test:443")
+	menu := strings.Join(f.tester.Menu(), "|")
+	for _, absent := range []string{"Copy as cURL", "Edit", "Resend"} {
+		if strings.Contains(menu, absent) {
+			t.Fatalf("%q in %s", absent, menu)
+		}
+	}
+}
+
+func TestQuickResend(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Resend", "Resend 3 Time(s)")
+	if len(f.resends) != 1 || f.resends[0].id != 1 || f.resends[0].config.Count != 3 || !f.resends[0].config.UseProxy {
+		t.Fatalf("%+v", f.resends)
+	}
+}
+
+func TestResendRefusesUnavailableBody(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.backend.bodies[1] = &proxyservice.TrafficBodyView{RequestBodyUnavailable: true}
+	openRowMenu(t, f, "a.test")
+	f.choose("Resend", "Resend 1 Time(s)")
+	if len(f.resends) != 0 {
+		t.Fatalf("%+v", f.resends)
+	}
+	f.requireText("unavailable")
+}
+
+func TestResendNTimesBounds(t *testing.T) {
+	if validResendCount(nui.Set[float64](0)) || validResendCount(nui.Set[float64](1001)) || !validResendCount(nui.Set[float64](1000)) {
+		t.Fatal("bounds")
+	}
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Resend", "Resend N Times")
+	dialog := &f.workspace.Table.resend
+	if !dialog.open {
+		t.Fatal("not open")
+	}
+	dialog.count = nui.Set[float64](1001)
+	f.settle()
+	_ = f.tester.Click(resendConfirmLabel())
+	f.settle()
+	if len(f.resends) != 0 {
+		t.Fatal("over limit sent")
+	}
+	dialog.count = nui.Set[float64](7)
+	f.settle()
+	if err := dialog.startLabelClick(f); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.resends) != 1 || f.resends[0].config.Count != 7 || dialog.open {
+		t.Fatalf("%+v open=%v", f.resends, dialog.open)
+	}
+}
+
+func (d *resendDialog) startLabelClick(f *fixture) error {
+	if err := f.tester.Click(resendConfirmLabel()); err != nil {
+		return err
+	}
+	f.settle()
+	return nil
+}
+
+func TestResendStopKeepsDialog(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.block = make(chan struct{})
+	dialog := &f.workspace.Table.resend
+	dialog.show(1)
+	f.settle()
+	if err := f.tester.Click(resendConfirmLabel()); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		f.mu.Lock()
+		sent := len(f.resends)
+		f.mu.Unlock()
+		if sent == 1 {
+			break
+		}
+	}
+	f.window.Drain()
+	f.tester.Frame()
+	if !dialog.sending {
+		t.Fatal("should be sending")
+	}
+	if err := f.tester.Click(locales.ResendModalStop()); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if dialog.sending || !dialog.cancelled || !dialog.open {
+		t.Fatalf("%+v", dialog)
+	}
+}
+
+func TestEditLimit(t *testing.T) {
+	entries := make([]*logic.TrafficEntry, 51)
+	for index := range entries {
+		entries[index] = entry(uint64(index+1), "a.test")
+	}
+	f := newFixtureSized(t, entries, 1400, 800)
+	table := f.workspace.Table
+	for _, item := range entries {
+		table.selection.Add(item.ID)
+	}
+	f.settle()
+	openRowMenu(t, f, "/p51")
+	f.choose("Edit")
+	if len(f.opened) != 0 {
+		t.Fatalf("%v", f.opened)
+	}
+	f.requireText("50")
+	table.selection.Remove(1)
+	f.settle()
+	openRowMenu(t, f, "/p51")
+	f.choose("Edit")
+	for range 60 {
+		f.settle()
+	}
+	if len(f.opened) != 50 {
+		t.Fatalf("opened %d", len(f.opened))
+	}
+}
+
+func TestExportSelection(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f, "a.test")
+	f.choose("Export", "HAR")
+	if !slices.Equal(f.exported, []string{"har:/tmp/x.har:[1]"}) {
+		t.Fatal(f.exported)
+	}
+}
+
+func TestProcessColumnStates(t *testing.T) {
+	process := func(id uint64, info proxyservice.ProcessInfo) *logic.TrafficEntry {
+		item := entry(id, fmt.Sprintf("h%d.test", id))
+		item.Metadata = &proxyservice.Metadata{Process: &info}
+		return item
+	}
+	f := newFixture(t,
+		process(1, proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusPending}),
+		process(2, proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusResolved, DisplayName: "Safari", IconKey: "x"}),
+		process(3, proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusRemote}),
+		process(4, proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusResolved, PID: 77}),
+	)
+	f.requireText("Identifying...")
+	f.requireText("Safari")
+	f.requireText("PID 77")
+	f.requireText("Remote")
+}
+
+func TestClearTraffic(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.click("Clear")
+	if f.backend.cleared != 1 {
+		t.Fatal("not cleared")
+	}
+	f.requireText("Traffic cleared")
+}
+
+func TestClearDisabledWhenEmpty(t *testing.T) {
+	f := newFixture(t)
+	_ = f.tester.Click("Clear")
+	f.settle()
+	if f.backend.cleared != 0 {
+		t.Fatal("cleared nothing")
+	}
+}
+
+func TestSessionAlias(t *testing.T) {
+	f := newFixture(t)
+	f.workspace.ShowAliasDialog()
+	f.settle()
+	f.requireText("Set Alias")
+	f.workspace.alias.draft = "  my session "
+	f.settle()
+	f.click("Save")
+	if f.backend.alias != "my session" || f.data.Proxy.Status.CaptureAlias != "my session" {
+		t.Fatalf("%q", f.backend.alias)
+	}
+	f.requireText("Alias saved")
+}
+
+func TestRestartWithoutRecordsDoesNotAsk(t *testing.T) {
+	f := newFixture(t)
+	f.workspace.Restart()
+	f.settle()
+	if f.confirm.Open() || !slices.Equal(f.backend.restarts, []bool{false}) {
+		t.Fatalf("%v", f.backend.restarts)
+	}
+}
+
+func TestRestartWithRecordsAsks(t *testing.T) {
+	for label, want := range map[string]bool{"Save and Restart": true, "Discard and Restart": false} {
+		f := newFixture(t, entry(1, "a.test"))
+		f.workspace.Restart()
+		f.settle()
+		if !f.confirm.Open() {
+			t.Fatal("should ask")
+		}
+		f.click(label)
+		if !slices.Equal(f.backend.restarts, []bool{want}) {
+			t.Fatalf("%s: %v", label, f.backend.restarts)
+		}
+	}
+}
+
+func TestSidebarRestartAndAlias(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.requireText("Capture")
+	f.click(locales.CaptureRestart())
+	if !f.confirm.Open() {
+		t.Fatal("should ask")
+	}
+	f.click("Discard and Restart")
+	if !slices.Equal(f.backend.restarts, []bool{false}) {
+		t.Fatal(f.backend.restarts)
+	}
+	if err := f.tester.RightClick("Capture"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	f.choose("Set Alias")
+	if !f.workspace.alias.open {
+		t.Fatal("alias dialog should open")
+	}
+	f.requireText("Set Alias")
+}
+
+func TestToggleProxyShortcut(t *testing.T) {
+	f := newFixture(t)
+	if !f.dispatch.Invoke(shortcuts.CaptureToggleProxy) {
+		t.Fatal("shortcut")
+	}
+	f.settle()
+	if f.backend.starts != 1 {
+		t.Fatal("not started")
+	}
+}
+
+func manyEntries(count int) []*logic.TrafficEntry {
+	entries := make([]*logic.TrafficEntry, count)
+	for index := range entries {
+		entries[index] = entry(uint64(index+1), fmt.Sprintf("host%d.test", index+1))
+	}
+	return entries
+}
+
+func TestDragSelectsRangeOfRows(t *testing.T) {
+	f := newFixture(t, manyEntries(5)...)
+	from, ok := f.tester.Find("host1.test")
+	if !ok {
+		t.Fatal("row 1")
+	}
+	to, ok := f.tester.Find("host4.test")
+	if !ok {
+		t.Fatal("row 4")
+	}
+	x, y := from.X+from.W/2, from.Y+from.H/2
+	f.tester.Press(x, y)
+	f.tester.Frame()
+	f.tester.Move(x, y+8)
+	f.tester.Frame()
+	f.tester.Move(to.X+to.W/2, to.Y+to.H/2)
+	f.tester.Frame()
+	f.tester.Release(to.X+to.W/2, to.Y+to.H/2)
+	f.settle()
+	if f.data.Traffic.SelectedCount != 4 {
+		t.Fatalf("selected %d", f.data.Traffic.SelectedCount)
+	}
+	if f.data.Traffic.Selected == nil || f.data.Traffic.Selected.ID != 4 {
+		t.Fatalf("focus %+v", f.data.Traffic.Selected)
+	}
+	if f.data.Traffic.ShowDetailPanel {
+		t.Fatal("a range selection should not open the detail panel")
+	}
+}
+
+func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
+	f := newFixture(t, manyEntries(200)...)
+	table := f.workspace.Table
+	table.list.ScrollTo(0, ui.Start)
+	f.settle()
+	first, last := table.list.Visible()
+	if first != 0 {
+		t.Fatalf("first %d", first)
+	}
+	row, ok := f.tester.Find(fmt.Sprintf("host%d.test", last-2))
+	if !ok {
+		t.Fatalf("row %d", last-2)
+	}
+	x, y := row.X+row.W/2, row.Y+row.H/2
+	f.tester.Press(x, y)
+	f.tester.Frame()
+	f.tester.Move(x, y+10)
+	f.tester.Frame()
+	f.tester.Move(x, 790)
+	for range 30 {
+		f.tester.Advance(16 * time.Millisecond)
+		f.tester.Frame()
+	}
+	f.tester.Release(x, 790)
+	f.settle()
+	if now, _ := table.list.Visible(); now == 0 {
+		t.Fatal("the table did not scroll")
+	}
+	if f.data.Traffic.SelectedCount < 4 {
+		t.Fatalf("selected %d", f.data.Traffic.SelectedCount)
+	}
+}
+
+func TestDraggingAHeaderReordersAndSaves(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	method, ok := f.tester.Find("Method")
+	if !ok {
+		t.Fatal("method header")
+	}
+	host, ok := f.tester.Find("Host")
+	if !ok {
+		t.Fatal("host header")
+	}
+	y := method.Y + method.H/2
+	f.tester.Press(method.X+method.W/2, y)
+	f.tester.Frame()
+	for x := method.X + method.W/2; x < host.X+host.W+40; x += 20 {
+		f.tester.Move(x, y)
+		f.tester.Frame()
+	}
+	f.tester.Release(host.X+host.W+40, y)
+	f.settle()
+	order := f.workspace.Table.list.Columns.Order
+	if slices.Index(order, "method") < slices.Index(order, "host") {
+		t.Fatalf("order %v", order)
+	}
+	if len(order) != len(logic.TrafficColumnKeys) {
+		t.Fatalf("hidden slots lost: %v", order)
+	}
+	snapshot, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := snapshot.TrafficTableConfig.ColumnOrder
+	if slices.Index(saved, "method") < slices.Index(saved, "host") {
+		t.Fatalf("saved %v", saved)
+	}
+}
+
+func TestDetailPanelOpensBesideTheTable(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.workspace.Detail = func(c *ui.Context, _ nui.Theme) { ui.Text(c, "detail-content") }
+	f.settle()
+	f.requireNoText("detail-content")
+	f.click("a.test")
+	f.requireText("detail-content")
+	f.data.Traffic.SetShowDetailPanel(false)
+	f.settle()
+	f.requireNoText("detail-content")
+}
+
+type fakeHistoryBackend struct {
+	list    []*proxyservice.HistoryMetadata
+	entries map[string][]*logic.TrafficEntry
+	deleted []string
+	cleared int
+	import_ func(path string) (proxyservice.HARImportResult, error)
+}
+
+func (b *fakeHistoryBackend) ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error) {
+	return b.list, nil
+}
+func (b *fakeHistoryBackend) GetHistory(key string) ([]*logic.TrafficEntry, error) {
+	return b.entries[key], nil
+}
+func (b *fakeHistoryBackend) GetHistoryTrafficBodyView(string, uint64) (*proxyservice.TrafficBodyView, error) {
+	return &proxyservice.TrafficBodyView{}, nil
+}
+func (b *fakeHistoryBackend) DeleteHistory(key string) error {
+	b.deleted = append(b.deleted, key)
+	kept := b.list[:0:0]
+	for _, item := range b.list {
+		if item.Key != key {
+			kept = append(kept, item)
+		}
+	}
+	b.list = kept
+	return nil
+}
+func (b *fakeHistoryBackend) ClearHistories() error {
+	b.cleared++
+	b.list = nil
+	return nil
+}
+func (b *fakeHistoryBackend) ImportHAR(_ context.Context, request historyservice.HARImportRequest) (proxyservice.HARImportResult, error) {
+	return b.import_(request.Path)
+}
+
+type historyFixture struct {
+	*fixture
+	history *fakeHistoryBackend
+}
+
+func newHistoryFixture(t *testing.T, entries ...*logic.TrafficEntry) *historyFixture {
+	t.Helper()
+	backend := &fakeHistoryBackend{
+		list:    []*proxyservice.HistoryMetadata{{Key: "k1", Alias: "session one", CreatedAt: 1700000000000, Total: 2, FormatVersion: 2}, {Key: "k2", Alias: "old format", CreatedAt: 1600000000000, Total: 1, FormatVersion: 9}},
+		entries: map[string][]*logic.TrafficEntry{"k1": {entry(11, "saved.test"), entry(12, "other.test")}},
+	}
+	f := newFixtureSized(t, entries, 1400, 800, backend)
+	return &historyFixture{fixture: f, history: backend}
+}
+
+func TestHistoryListOpensAndShowsTraffic(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.requireText("session one")
+	f.click("session one")
+	f.requireText("saved.test")
+	if f.data.Workbench.CaptureSelection != "history:k1" {
+		t.Fatal(f.data.Workbench.CaptureSelection)
+	}
+	f.click("Capture")
+	f.requireNoText("saved.test")
+}
+
+func TestSidebarAndWorkspaceTabsStayTogether(t *testing.T) {
+	f := newHistoryFixture(t)
+	workspace := f.data.Workspace
+	f.click("session one")
+	if workspace.ActiveKey != logic.HistoryTabKey || workspace.ActiveTab().HistoryKey != "k1" || workspace.ActiveTab().Title != "session one" {
+		t.Fatalf("%+v", workspace.ActiveTab())
+	}
+	f.click("Capture")
+	if workspace.ActiveKey != logic.CaptureTabKey || f.data.Workbench.CaptureSelection != store.CaptureItemLive {
+		t.Fatal(workspace.ActiveKey, f.data.Workbench.CaptureSelection)
+	}
+	workspace.Activate(logic.HistoryTabKey)
+	f.settle()
+	if f.data.Workbench.CaptureSelection != "history:k1" {
+		t.Fatal(f.data.Workbench.CaptureSelection)
+	}
+	f.requireText("saved.test")
+	workspace.CloseTab(logic.HistoryTabKey)
+	f.settle()
+	if f.data.Workbench.CaptureSelection != store.CaptureItemLive {
+		t.Fatal("closing the history tab returns to capture", f.data.Workbench.CaptureSelection)
+	}
+	f.requireNoText("saved.test")
+}
+
+func TestRequestTabReplacesTrafficContent(t *testing.T) {
+	f := newFixture(t, entry(1, "live.test"))
+	shown := false
+	f.workspace.RequestTab = func(c *ui.Context, theme nui.Theme, tab *logic.WorkspaceTab) { shown = tab.HTTP != nil }
+	key := f.data.Workspace.CreateHTTPRequestTab(logic.DraftNew, nil)
+	f.settle()
+	if !shown || f.tester.HasText("live.test") {
+		t.Fatal(shown)
+	}
+	f.data.Workspace.CloseTab(key)
+	f.settle()
+	if !f.tester.HasText("live.test") {
+		t.Fatalf("%v", f.tester.Texts())
+	}
+}
+
+func TestHistoryDeleteAndUnsupportedFormatStaysListed(t *testing.T) {
+	f := newHistoryFixture(t)
+	if err := f.tester.RightClick("old format"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	menu := strings.Join(f.tester.Menu(), "|")
+	if !strings.Contains(menu, "Delete") {
+		t.Fatal(menu)
+	}
+	f.choose("Delete")
+	if !f.confirm.Open() {
+		t.Fatal("ask")
+	}
+	f.requireText("old format")
+	f.confirm.Accept()
+	f.settle()
+	if !slices.Equal(f.history.deleted, []string{"k2"}) {
+		t.Fatal(f.history.deleted)
+	}
+	f.requireNoText("old format")
+	f.requireText("session one")
+}
+
+func TestHistoryClearAll(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.click("session one")
+	f.click(locales.HistoryClearAll())
+	f.requireText(locales.HistoryClearAllConfirm())
+	f.confirm.Accept()
+	f.settle()
+	if f.history.cleared != 1 || f.data.Workbench.CaptureSelection != store.CaptureItemLive {
+		t.Fatalf("%d %s", f.history.cleared, f.data.Workbench.CaptureSelection)
+	}
+	f.requireText(locales.HistoryEmpty())
+}
+
+func TestHARImportFromDropOpensResult(t *testing.T) {
+	f := newHistoryFixture(t, entry(1, "live.test"))
+	f.history.import_ = func(path string) (proxyservice.HARImportResult, error) {
+		f.history.list = append(f.history.list, &proxyservice.HistoryMetadata{Key: "imported", Alias: "imported one", CreatedAt: 1800000000000})
+		f.history.entries["imported"] = []*logic.TrafficEntry{entry(21, "imported.test")}
+		return proxyservice.HARImportResult{Imported: 1, Metadata: &proxyservice.HistoryMetadata{Key: "imported"}}, nil
+	}
+	rect, ok := f.tester.Find("live.test")
+	if !ok {
+		t.Fatal("row")
+	}
+	if !f.tester.DropFiles(rect.X, rect.Y, "/tmp/a.har") {
+		t.Fatal("drop not taken")
+	}
+	f.settle()
+	f.requireText("imported.test")
+	if f.data.Workbench.CaptureSelection != "history:imported" {
+		t.Fatal(f.data.Workbench.CaptureSelection)
+	}
+	f.requireText("Imported 1 files")
+}
+
+func TestHARImportPartialFailureAndCancel(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.history.import_ = func(path string) (proxyservice.HARImportResult, error) {
+		if path == "/bad.har" {
+			return proxyservice.HARImportResult{}, errors.New("corrupt")
+		}
+		return proxyservice.HARImportResult{Imported: 3, Metadata: &proxyservice.HistoryMetadata{Key: "k1"}}, nil
+	}
+	f.workspace.ImportHAR([]string{"/bad.har", "/good.har"})
+	f.settle()
+	f.requireText("bad.har")
+	f.requireText("corrupt")
+
+	f.workspace.Host.PickHARFiles = func() ([]string, error) { return nil, nil }
+	f.workspace.ImportHAR(nil)
+	f.settle()
+	if f.data.History.Importing {
+		t.Fatal("canceled dialog should not import")
+	}
+}
+
+func TestExportSingleFileUsesFileTarget(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	exporter := f.workspace.exporter
+	if !exporter.Export(logic.ExportCSV, ExportOptions{IDs: []uint64{1, 1}}) {
+		t.Fatal("export")
+	}
+	f.settle()
+	if !slices.Equal(f.exported, []string{"csv:file:/tmp/x.csv:[1]:3"}) {
+		t.Fatal(f.exported)
+	}
+	f.requireText("1 exported")
+}
+
+func TestExportManyEntriesUsesDirectory(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.workspace.exporter.Export(logic.ExportRequest, ExportOptions{IDs: []uint64{1, 2}})
+	f.settle()
+	if !slices.Equal(f.exported, []string{"request:directory:/tmp/dir:[1 2]:3"}) {
+		t.Fatal(f.exported)
+	}
+}
+
+func TestExportDialogCancelDoesNothing(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"))
+	f.workspace.exporter.Host.PickSavePath = func(string, string, string) (string, error) { return " ", nil }
+	f.workspace.exporter.Export(logic.ExportHAR, ExportOptions{})
+	f.settle()
+	if len(f.exported) != 0 || f.workspace.exporter.Exporting {
+		t.Fatal(f.exported)
+	}
+}
+
+func TestHistoryExportUsesHistoryService(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.workspace.exporter.Export(logic.ExportHAR, ExportOptions{HistoryKey: "k1"})
+	f.settle()
+	f.workspace.exporter.Export(logic.ExportCSV, ExportOptions{HistoryKey: "k1"})
+	f.settle()
+	if !slices.Equal(f.exported, []string{"history-har:k1:/tmp/x.har", "history:k1:csv:/tmp/x.csv"}) {
+		t.Fatal(f.exported)
+	}
+}
+
+func TestHistoryMenuBlocksExportOfUnreadableFormat(t *testing.T) {
+	f := newHistoryFixture(t)
+	if err := f.tester.RightClick("old format"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if err := f.tester.ChooseMenuItem(locales.TrafficExportTitle(), "HAR"); err == nil {
+		f.settle()
+	}
+	if len(f.exported) != 0 {
+		t.Fatal(f.exported)
+	}
+}
+
+func categoryFixture(t *testing.T) *fixture {
+	api := entry(1, "api.test")
+	api.Metadata = &proxyservice.Metadata{Process: &proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusResolved, AppID: "com.browser", DisplayName: "Browser"}}
+	cdn := entry(2, "cdn.test")
+	cdn.URL, cdn.Path = "http://cdn.test/assets/app.js", "/assets/app.js"
+	f := newFixture(t, api, cdn)
+	f.showCategories = true
+	f.settle()
+	return f
+}
+
+func TestCategoryTreeListsAndFilters(t *testing.T) {
+	f := categoryFixture(t)
+	f.requireText("Browser")
+	f.requireText(locales.CategoryProcessUnidentified())
+	f.click("api.test")
+	if !slices.Equal(f.data.Filter.SelectedHosts, []string{"api.test"}) || len(f.data.Filter.Filtered()) != 1 {
+		t.Fatalf("%v", f.data.Filter.SelectedHosts)
+	}
+	f.click("api.test")
+	if len(f.data.Filter.SelectedHosts) != 0 {
+		t.Fatal("toggle")
+	}
+	f.click("Browser")
+	if !slices.Equal(f.data.Filter.SelectedProcessKeys, []string{"app:com.browser"}) || len(f.data.Filter.Filtered()) != 1 {
+		t.Fatal(f.data.Filter.SelectedProcessKeys)
+	}
+}
+
+func TestCategorySearchAndSections(t *testing.T) {
+	f := categoryFixture(t)
+	f.workspace.category.search = "cdn"
+	f.settle()
+	labels := []string{}
+	for _, row := range f.workspace.category.rows(f.data.Filter) {
+		if row.kind == categoryHost {
+			labels = append(labels, row.label)
+		}
+	}
+	if !slices.Equal(labels, []string{"cdn.test"}) {
+		t.Fatal(labels)
+	}
+	f.workspace.category.search = "no such thing"
+	f.settle()
+	f.requireText(locales.CategoryEmptyFiltered())
+	f.workspace.category.search = ""
+	f.settle()
+	f.click(locales.CategoryHost())
+	if !f.workspace.category.collapsed[sectionHost] {
+		t.Fatal("collapse")
+	}
+}
+
+func TestCategoryStructureExpandsAndFocuses(t *testing.T) {
+	f := categoryFixture(t)
+	f.click(locales.CategoryHost())
+	f.click(locales.CategoryProcess())
+	f.click("cdn.test")
+	f.click("assets")
+	f.click("app.js")
+	if f.data.Traffic.Selected == nil || f.data.Traffic.Selected.ID != 2 {
+		t.Fatalf("%+v", f.data.Traffic.Selected)
+	}
+}

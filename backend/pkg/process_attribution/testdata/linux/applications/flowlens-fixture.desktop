@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=FlowLens Fixture
+Exec="/opt/Flow Lens/bin/flowlens-fixture" %F --url=%u %%
+TryExec=/opt/Flow Lens/bin/flowlens-fixture
+Icon=flowlens-fixture

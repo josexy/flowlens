@@ -1,0 +1,1158 @@
+{
+ "members": {
+  "Context": [
+   {
+    "name": "id",
+    "kind": "property",
+    "signature": "id: str  # read-only",
+    "insertText": "id",
+    "documentation": "Execution ID.",
+    "writable": false
+   },
+   {
+    "name": "timestamp",
+    "kind": "property",
+    "signature": "timestamp: int  # read-only",
+    "insertText": "timestamp",
+    "documentation": "Send start time in Unix microseconds.",
+    "writable": false
+   },
+   {
+    "name": "original_url",
+    "kind": "property",
+    "signature": "original_url: str  # read-only",
+    "insertText": "original_url",
+    "documentation": "Original URL before the hook chain.",
+    "writable": false
+   },
+   {
+    "name": "original_method",
+    "kind": "property",
+    "signature": "original_method: str  # read-only",
+    "insertText": "original_method",
+    "documentation": "Original method before the hook chain.",
+    "writable": false
+   },
+   {
+    "name": "plugin_id",
+    "kind": "property",
+    "signature": "plugin_id: str  # read-only",
+    "insertText": "plugin_id",
+    "documentation": "Current plugin ID.",
+    "writable": false
+   },
+   {
+    "name": "plugin_name",
+    "kind": "property",
+    "signature": "plugin_name: str  # read-only",
+    "insertText": "plugin_name",
+    "documentation": "Current plugin name.",
+    "writable": false
+   },
+   {
+    "name": "params",
+    "kind": "property",
+    "signature": "params: Mapping[str, Any]  # read-only",
+    "insertText": "params",
+    "documentation": "Deeply read-only parameters for the current plugin.",
+    "resultType": "ReadonlyMapping",
+    "writable": false
+   },
+   {
+    "name": "transport",
+    "kind": "property",
+    "signature": "transport: Mapping[str, Any]  # read-only",
+    "insertText": "transport",
+    "documentation": "Read-only transport settings for this script execution.",
+    "resultType": "ReadonlyMapping",
+    "writable": false
+   },
+   {
+    "name": "shared",
+    "kind": "property",
+    "signature": "shared: dict[str, Any]",
+    "insertText": "shared",
+    "documentation": "JSON object shared between request and response hooks of this plugin.",
+    "resultType": "JsonObject",
+    "writable": true
+   },
+   {
+    "name": "log",
+    "kind": "property",
+    "signature": "log: ContextLogger  # read-only",
+    "insertText": "log",
+    "documentation": "Structured logger for the current execution console.",
+    "resultType": "ContextLogger",
+    "writable": false
+   }
+  ],
+  "ContextLogger": [
+   {
+    "name": "debug",
+    "kind": "method",
+    "signature": "debug(message: Any) -> None",
+    "insertText": "debug(${1:message})",
+    "documentation": "Log a debug message.",
+    "parameters": [
+     "message: Any"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "info",
+    "kind": "method",
+    "signature": "info(message: Any) -> None",
+    "insertText": "info(${1:message})",
+    "documentation": "Log an informational message.",
+    "parameters": [
+     "message: Any"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "warning",
+    "kind": "method",
+    "signature": "warning(message: Any) -> None",
+    "insertText": "warning(${1:message})",
+    "documentation": "Log a warning message.",
+    "parameters": [
+     "message: Any"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "error",
+    "kind": "method",
+    "signature": "error(message: Any) -> None",
+    "insertText": "error(${1:message})",
+    "documentation": "Log an error message.",
+    "parameters": [
+     "message: Any"
+    ],
+    "returnType": "None"
+   }
+  ],
+  "Request": [
+   {
+    "name": "method",
+    "kind": "property",
+    "signature": "method: str",
+    "insertText": "method",
+    "documentation": "Mutable request method.",
+    "writable": true
+   },
+   {
+    "name": "url",
+    "kind": "property",
+    "signature": "url: str",
+    "insertText": "url",
+    "documentation": "Mutable request URL.",
+    "writable": true
+   },
+   {
+    "name": "scheme",
+    "kind": "property",
+    "signature": "scheme: str  # read-only",
+    "insertText": "scheme",
+    "documentation": "Read-only request URL scheme.",
+    "writable": false
+   },
+   {
+    "name": "host",
+    "kind": "property",
+    "signature": "host: str  # read-only",
+    "insertText": "host",
+    "documentation": "Read-only request URL host.",
+    "writable": false
+   },
+   {
+    "name": "port",
+    "kind": "property",
+    "signature": "port: int | None  # read-only",
+    "insertText": "port",
+    "documentation": "Read-only request URL port.",
+    "writable": false
+   },
+   {
+    "name": "path",
+    "kind": "property",
+    "signature": "path: str",
+    "insertText": "path",
+    "documentation": "Mutable request URL path.",
+    "writable": true
+   },
+   {
+    "name": "queries",
+    "kind": "property",
+    "signature": "queries: Queries",
+    "insertText": "queries",
+    "documentation": "Mutable query parameters preserving order and duplicates.",
+    "resultType": "Queries",
+    "writable": true
+   },
+   {
+    "name": "content_type",
+    "kind": "property",
+    "signature": "content_type: str | None  # read-only",
+    "insertText": "content_type",
+    "documentation": "Read-only Content-Type view; the outgoing value is generated from the final request body kind.",
+    "writable": false
+   },
+   {
+    "name": "headers",
+    "kind": "property",
+    "signature": "headers: Headers",
+    "insertText": "headers",
+    "documentation": "Mutable ordered request headers.",
+    "resultType": "Headers",
+    "writable": true
+   },
+   {
+    "name": "body",
+    "kind": "property",
+    "signature": "body: Body",
+    "insertText": "body",
+    "documentation": "Request body; direct replacement is supported.",
+    "resultType": "Body",
+    "writable": true
+   }
+  ],
+  "RequestSnapshot": [
+   {
+    "name": "method",
+    "kind": "property",
+    "signature": "method: str  # read-only",
+    "insertText": "method",
+    "documentation": "Read-only request method associated with the response.",
+    "writable": false
+   },
+   {
+    "name": "url",
+    "kind": "property",
+    "signature": "url: str  # read-only",
+    "insertText": "url",
+    "documentation": "Read-only request URL associated with the response.",
+    "writable": false
+   },
+   {
+    "name": "scheme",
+    "kind": "property",
+    "signature": "scheme: str  # read-only",
+    "insertText": "scheme",
+    "documentation": "Read-only request URL scheme.",
+    "writable": false
+   },
+   {
+    "name": "host",
+    "kind": "property",
+    "signature": "host: str  # read-only",
+    "insertText": "host",
+    "documentation": "Read-only request URL host.",
+    "writable": false
+   },
+   {
+    "name": "port",
+    "kind": "property",
+    "signature": "port: int | None  # read-only",
+    "insertText": "port",
+    "documentation": "Read-only request URL port.",
+    "writable": false
+   },
+   {
+    "name": "path",
+    "kind": "property",
+    "signature": "path: str  # read-only",
+    "insertText": "path",
+    "documentation": "Read-only request URL path.",
+    "writable": false
+   },
+   {
+    "name": "queries",
+    "kind": "property",
+    "signature": "queries: FrozenQueries  # read-only",
+    "insertText": "queries",
+    "documentation": "Read-only query parameters preserving order and duplicates.",
+    "resultType": "FrozenQueries",
+    "writable": false
+   },
+   {
+    "name": "content_type",
+    "kind": "property",
+    "signature": "content_type: str | None  # read-only",
+    "insertText": "content_type",
+    "documentation": "Content-Type of the associated request.",
+    "writable": false
+   },
+   {
+    "name": "headers",
+    "kind": "property",
+    "signature": "headers: FrozenHeaders  # read-only",
+    "insertText": "headers",
+    "documentation": "Read-only request headers associated with the response.",
+    "resultType": "FrozenHeaders",
+    "writable": false
+   },
+   {
+    "name": "body",
+    "kind": "property",
+    "signature": "body: BodySnapshot  # read-only",
+    "insertText": "body",
+    "documentation": "Semantic read-only request body snapshot associated with the response.",
+    "resultType": "BodySnapshot",
+    "writable": false
+   }
+  ],
+  "Response": [
+   {
+    "name": "code",
+    "kind": "property",
+    "signature": "code: int",
+    "insertText": "code",
+    "documentation": "Mutable response status code.",
+    "writable": true
+   },
+   {
+    "name": "protocol",
+    "kind": "property",
+    "signature": "protocol: str  # read-only",
+    "insertText": "protocol",
+    "documentation": "Read-only protocol actually used by the upstream response.",
+    "writable": false
+   },
+   {
+    "name": "status_text",
+    "kind": "property",
+    "signature": "status_text: str  # read-only",
+    "insertText": "status_text",
+    "documentation": "Read-only status text including the code; updated when code changes.",
+    "writable": false
+   },
+   {
+    "name": "content_type",
+    "kind": "property",
+    "signature": "content_type: str | None  # read-only",
+    "insertText": "content_type",
+    "documentation": "Read-only Content-Type view; modify response headers explicitly when needed.",
+    "writable": false
+   },
+   {
+    "name": "headers",
+    "kind": "property",
+    "signature": "headers: Headers",
+    "insertText": "headers",
+    "documentation": "Mutable ordered response headers.",
+    "resultType": "Headers",
+    "writable": true
+   },
+   {
+    "name": "trailers",
+    "kind": "property",
+    "signature": "trailers: Headers",
+    "insertText": "trailers",
+    "documentation": "Mutable ordered response trailers.",
+    "resultType": "Headers",
+    "writable": true
+   },
+   {
+    "name": "body",
+    "kind": "property",
+    "signature": "body: Body",
+    "insertText": "body",
+    "documentation": "Response body; unavailable for SSE responses.",
+    "resultType": "Body",
+    "writable": true
+   },
+   {
+    "name": "request",
+    "kind": "property",
+    "signature": "request: RequestSnapshot | None  # read-only",
+    "insertText": "request",
+    "documentation": "Read-only snapshot of the request that produced this response.",
+    "resultType": "RequestSnapshot",
+    "writable": false
+   }
+  ],
+  "Headers": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(name: str, default: Any = None) -> Any",
+    "insertText": "get('${1:name}')",
+    "documentation": "Return the first header with this name.",
+    "parameters": [
+     "name: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "get_all",
+    "kind": "method",
+    "signature": "get_all(name: str) -> list[str]",
+    "insertText": "get_all('${1:name}')",
+    "documentation": "Return all matching headers in wire order.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "list[str]"
+   },
+   {
+    "name": "set",
+    "kind": "method",
+    "signature": "set(name: str, value: str) -> None",
+    "insertText": "set('${1:name}', '${2:value}')",
+    "documentation": "Replace all matching headers while preserving the first position.",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "add",
+    "kind": "method",
+    "signature": "add(name: str, value: str) -> None",
+    "insertText": "add('${1:name}', '${2:value}')",
+    "documentation": "Append a header field.",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "remove",
+    "kind": "method",
+    "signature": "remove(name: str) -> None",
+    "insertText": "remove('${1:name}')",
+    "documentation": "Remove all matching headers.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "clear",
+    "kind": "method",
+    "signature": "clear() -> None",
+    "insertText": "clear()",
+    "documentation": "Remove all headers.",
+    "parameters": [],
+    "returnType": "None"
+   }
+  ],
+  "FrozenHeaders": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(name: str, default: Any = None) -> Any",
+    "insertText": "get('${1:name}')",
+    "documentation": "Return the first header with this name.",
+    "parameters": [
+     "name: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "get_all",
+    "kind": "method",
+    "signature": "get_all(name: str) -> list[str]",
+    "insertText": "get_all('${1:name}')",
+    "documentation": "Return all matching headers in wire order.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "list[str]"
+   }
+  ],
+  "Queries": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(name: str, default: Any = None) -> Any",
+    "insertText": "get('${1:name}')",
+    "documentation": "Return the first query value with this name.",
+    "parameters": [
+     "name: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "get_all",
+    "kind": "method",
+    "signature": "get_all(name: str) -> list[str]",
+    "insertText": "get_all('${1:name}')",
+    "documentation": "Return all matching query values in order.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "list[str]"
+   },
+   {
+    "name": "set",
+    "kind": "method",
+    "signature": "set(name: str, value: str) -> None",
+    "insertText": "set('${1:name}', '${2:value}')",
+    "documentation": "Replace all matching query values while preserving the first position.",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "add",
+    "kind": "method",
+    "signature": "add(name: str, value: str) -> None",
+    "insertText": "add('${1:name}', '${2:value}')",
+    "documentation": "Append a query field.",
+    "parameters": [
+     "name: str",
+     "value: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "remove",
+    "kind": "method",
+    "signature": "remove(name: str) -> None",
+    "insertText": "remove('${1:name}')",
+    "documentation": "Remove all matching query fields.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "clear",
+    "kind": "method",
+    "signature": "clear() -> None",
+    "insertText": "clear()",
+    "documentation": "Remove all query fields.",
+    "parameters": [],
+    "returnType": "None"
+   },
+   {
+    "name": "to_string",
+    "kind": "method",
+    "signature": "to_string() -> str",
+    "insertText": "to_string()",
+    "documentation": "Encode as a URL query string.",
+    "parameters": [],
+    "returnType": "str"
+   }
+  ],
+  "FrozenQueries": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(name: str, default: Any = None) -> Any",
+    "insertText": "get('${1:name}')",
+    "documentation": "Return the first query value with this name.",
+    "parameters": [
+     "name: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "get_all",
+    "kind": "method",
+    "signature": "get_all(name: str) -> list[str]",
+    "insertText": "get_all('${1:name}')",
+    "documentation": "Return all matching query values in order.",
+    "parameters": [
+     "name: str"
+    ],
+    "returnType": "list[str]"
+   },
+   {
+    "name": "to_string",
+    "kind": "method",
+    "signature": "to_string() -> str",
+    "insertText": "to_string()",
+    "documentation": "Return the original URL query string.",
+    "parameters": [],
+    "returnType": "str"
+   }
+  ],
+  "Body": [
+   {
+    "name": "kind",
+    "kind": "property",
+    "signature": "kind: str  # read-only",
+    "insertText": "kind",
+    "documentation": "Read-only semantic body kind.",
+    "writable": false
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: Any  # read-only",
+    "insertText": "value",
+    "documentation": "Read-only materialized body value.",
+    "writable": false
+   },
+   {
+    "name": "write_file",
+    "kind": "method",
+    "signature": "write_file(path: str) -> None",
+    "insertText": "write_file('${1:absolute_path}')",
+    "documentation": "Stream a regular body to an absolute path.",
+    "parameters": [
+     "path: str"
+    ],
+    "returnType": "None"
+   }
+  ],
+  "BodySnapshot": [
+   {
+    "name": "kind",
+    "kind": "property",
+    "signature": "kind: str  # read-only",
+    "insertText": "kind",
+    "documentation": "Read-only semantic body kind.",
+    "writable": false
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: Any  # read-only",
+    "insertText": "value",
+    "documentation": "Read-only semantic body value; file values do not expose internal paths.",
+    "writable": false
+   },
+   {
+    "name": "write_file",
+    "kind": "method",
+    "signature": "write_file(path: str) -> None",
+    "insertText": "write_file('${1:absolute_path}')",
+    "documentation": "Stream a regular body snapshot to an absolute path.",
+    "parameters": [
+     "path: str"
+    ],
+    "returnType": "None"
+   }
+  ],
+  "QueryField": [
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str",
+    "insertText": "name",
+    "documentation": "Query field name.",
+    "writable": true
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str",
+    "insertText": "value",
+    "documentation": "Query field value.",
+    "writable": true
+   }
+  ],
+  "HeaderField": [
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str",
+    "insertText": "name",
+    "documentation": "Header name.",
+    "writable": true
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str",
+    "insertText": "value",
+    "documentation": "Header value.",
+    "writable": true
+   }
+  ],
+  "FileDescriptor": [
+   {
+    "name": "path",
+    "kind": "property",
+    "signature": "path: str  # read-only",
+    "insertText": "path",
+    "documentation": "Absolute file path.",
+    "writable": false
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str  # read-only",
+    "insertText": "name",
+    "documentation": "File name.",
+    "writable": false
+   },
+   {
+    "name": "size",
+    "kind": "property",
+    "signature": "size: int  # read-only",
+    "insertText": "size",
+    "documentation": "File size in bytes.",
+    "writable": false
+   },
+   {
+    "name": "read_only",
+    "kind": "property",
+    "signature": "read_only: bool  # read-only",
+    "insertText": "read_only",
+    "documentation": "Whether the file is read-only.",
+    "writable": false
+   }
+  ],
+  "FileSnapshot": [
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str  # read-only",
+    "insertText": "name",
+    "documentation": "Read-only original file name.",
+    "writable": false
+   },
+   {
+    "name": "size",
+    "kind": "property",
+    "signature": "size: int  # read-only",
+    "insertText": "size",
+    "documentation": "Read-only file size in bytes.",
+    "writable": false
+   }
+  ],
+  "FileDescriptorClass": [
+   {
+    "name": "from_file",
+    "kind": "method",
+    "signature": "from_file(path: str) -> FileDescriptor",
+    "insertText": "from_file('${1:absolute_path}')",
+    "documentation": "Create a safe file descriptor from an absolute path.",
+    "parameters": [
+     "path: str"
+    ],
+    "resultType": "FileDescriptor",
+    "returnType": "FileDescriptor"
+   }
+  ],
+  "URLEncodedField": [
+   {
+    "name": "enabled",
+    "kind": "property",
+    "signature": "enabled: bool",
+    "insertText": "enabled",
+    "documentation": "Whether the field is enabled.",
+    "writable": true
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str",
+    "insertText": "name",
+    "documentation": "Field name.",
+    "writable": true
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str",
+    "insertText": "value",
+    "documentation": "Field value.",
+    "writable": true
+   }
+  ],
+  "URLEncodedFieldSnapshot": [
+   {
+    "name": "enabled",
+    "kind": "property",
+    "signature": "enabled: bool  # read-only",
+    "insertText": "enabled",
+    "documentation": "Whether the field is enabled.",
+    "writable": false
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str  # read-only",
+    "insertText": "name",
+    "documentation": "Read-only field name.",
+    "writable": false
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str  # read-only",
+    "insertText": "value",
+    "documentation": "Read-only field value.",
+    "writable": false
+   }
+  ],
+  "MultipartPart": [
+   {
+    "name": "enabled",
+    "kind": "property",
+    "signature": "enabled: bool",
+    "insertText": "enabled",
+    "documentation": "Whether the part is enabled.",
+    "writable": true
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str",
+    "insertText": "name",
+    "documentation": "Part name.",
+    "writable": true
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str",
+    "insertText": "value",
+    "documentation": "Text part value.",
+    "writable": true
+   },
+   {
+    "name": "file",
+    "kind": "property",
+    "signature": "file: FileDescriptor | None",
+    "insertText": "file",
+    "documentation": "Descriptor for a file part.",
+    "resultType": "FileDescriptor",
+    "writable": true
+   },
+   {
+    "name": "filename",
+    "kind": "property",
+    "signature": "filename: str",
+    "insertText": "filename",
+    "documentation": "Independent filename used by Content-Disposition.",
+    "writable": true
+   }
+  ],
+  "MultipartPartSnapshot": [
+   {
+    "name": "enabled",
+    "kind": "property",
+    "signature": "enabled: bool  # read-only",
+    "insertText": "enabled",
+    "documentation": "Whether the part is enabled.",
+    "writable": false
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "signature": "name: str  # read-only",
+    "insertText": "name",
+    "documentation": "Read-only part name.",
+    "writable": false
+   },
+   {
+    "name": "value",
+    "kind": "property",
+    "signature": "value: str  # read-only",
+    "insertText": "value",
+    "documentation": "Read-only text part value.",
+    "writable": false
+   },
+   {
+    "name": "file",
+    "kind": "property",
+    "signature": "file: FileSnapshot | None  # read-only",
+    "insertText": "file",
+    "documentation": "File snapshot without an exposed internal path.",
+    "resultType": "FileSnapshot",
+    "writable": false
+   },
+   {
+    "name": "filename",
+    "kind": "property",
+    "signature": "filename: str  # read-only",
+    "insertText": "filename",
+    "documentation": "Read-only part filename.",
+    "writable": false
+   }
+  ],
+  "ReadonlyMapping": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(key: str, default: Any = None) -> Any",
+    "insertText": "get('${1:key}')",
+    "documentation": "Read a value by key.",
+    "parameters": [
+     "key: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "keys",
+    "kind": "method",
+    "signature": "keys() -> KeysView[str]",
+    "insertText": "keys()",
+    "documentation": "Return all keys.",
+    "parameters": [],
+    "returnType": "KeysView[str]"
+   },
+   {
+    "name": "items",
+    "kind": "method",
+    "signature": "items() -> ItemsView[str, Any]",
+    "insertText": "items()",
+    "documentation": "Return all key-value pairs.",
+    "parameters": [],
+    "returnType": "ItemsView[str, Any]"
+   },
+   {
+    "name": "values",
+    "kind": "method",
+    "signature": "values() -> ValuesView[Any]",
+    "insertText": "values()",
+    "documentation": "Return all values.",
+    "parameters": [],
+    "returnType": "ValuesView[Any]"
+   }
+  ],
+  "JsonObject": [
+   {
+    "name": "get",
+    "kind": "method",
+    "signature": "get(key: str, default: Any = None) -> Any",
+    "insertText": "get('${1:key}')",
+    "documentation": "Read a shared value.",
+    "parameters": [
+     "key: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "keys",
+    "kind": "method",
+    "signature": "keys() -> dict_keys[str]",
+    "insertText": "keys()",
+    "documentation": "Return all shared keys.",
+    "parameters": [],
+    "returnType": "dict_keys[str]"
+   },
+   {
+    "name": "items",
+    "kind": "method",
+    "signature": "items() -> dict_items[str, Any]",
+    "insertText": "items()",
+    "documentation": "Return all shared key-value pairs.",
+    "parameters": [],
+    "returnType": "dict_items[str, Any]"
+   },
+   {
+    "name": "values",
+    "kind": "method",
+    "signature": "values() -> dict_values[Any]",
+    "insertText": "values()",
+    "documentation": "Return all shared values.",
+    "parameters": [],
+    "returnType": "dict_values[Any]"
+   },
+   {
+    "name": "setdefault",
+    "kind": "method",
+    "signature": "setdefault(key: str, default: Any = None) -> Any",
+    "insertText": "setdefault('${1:key}', ${2:None})",
+    "documentation": "Read a key or insert its default value.",
+    "parameters": [
+     "key: str",
+     "default: Any = None"
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "update",
+    "kind": "method",
+    "signature": "update(other: Mapping[str, Any]) -> None",
+    "insertText": "update(${1:values})",
+    "documentation": "Update shared values.",
+    "parameters": [
+     "other: Mapping[str, Any]"
+    ],
+    "returnType": "None"
+   },
+   {
+    "name": "pop",
+    "kind": "method",
+    "signature": "pop(key: str, default: Any = ...) -> Any",
+    "insertText": "pop('${1:key}')",
+    "documentation": "Remove and return a shared value; without a default, a missing key raises KeyError.",
+    "parameters": [
+     "key: str",
+     "default: Any = ..."
+    ],
+    "returnType": "Any"
+   },
+   {
+    "name": "clear",
+    "kind": "method",
+    "signature": "clear() -> None",
+    "insertText": "clear()",
+    "documentation": "Remove all shared values.",
+    "parameters": [],
+    "returnType": "None"
+   }
+  ]
+ },
+ "constructors": [
+  {
+   "name": "Body",
+   "signature": "Body(kind: str = \"none\", value: Any = None)",
+   "documentation": "Create a body with an explicit semantic kind.",
+   "parameters": [
+    "kind: str = \"none\"",
+    "value: Any = None"
+   ]
+  },
+  {
+   "name": "FileDescriptor",
+   "signature": "FileDescriptor(path: str, name: str = \"\", size: int = -1, read_only: bool = True)",
+   "documentation": "Describe a FlowLens-managed file; prefer from_file() for user files.",
+   "parameters": [
+    "path: str",
+    "name: str = \"\"",
+    "size: int = -1",
+    "read_only: bool = True"
+   ]
+  },
+  {
+   "name": "HeaderField",
+   "signature": "HeaderField(name: str, value: str)",
+   "documentation": "Create an ordered header field.",
+   "parameters": [
+    "name: str",
+    "value: str"
+   ]
+  },
+  {
+   "name": "Queries",
+   "signature": "Queries(fields: Iterable[QueryField | tuple[str, str] | dict[str, str]] | None = None)",
+   "documentation": "Create query parameters that preserve order and duplicates.",
+   "parameters": [
+    "fields: Iterable[QueryField | tuple[str, str] | dict[str, str]] | None = None"
+   ]
+  },
+  {
+   "name": "QueryField",
+   "signature": "QueryField(name: str, value: str)",
+   "documentation": "Create a query field.",
+   "parameters": [
+    "name: str",
+    "value: str"
+   ]
+  },
+  {
+   "name": "Headers",
+   "signature": "Headers(fields: Iterable[HeaderField | dict[str, str]] | None = None)",
+   "documentation": "Create headers that preserve order and duplicates.",
+   "parameters": [
+    "fields: Iterable[HeaderField | dict[str, str]] | None = None"
+   ]
+  },
+  {
+   "name": "MultipartPart",
+   "signature": "MultipartPart(name: str, value: str = \"\", file: FileDescriptor | None = None, enabled: bool = True, filename: str = \"\")",
+   "documentation": "Create a multipart text or file part.",
+   "parameters": [
+    "name: str",
+    "value: str = \"\"",
+    "file: FileDescriptor | None = None",
+    "enabled: bool = True",
+    "filename: str = \"\""
+   ]
+  },
+  {
+   "name": "Request",
+   "signature": "Request(method: str, url: str, headers: Headers | None = None, body: Any = None)",
+   "documentation": "Create a request object. Hooks normally modify the provided request.",
+   "parameters": [
+    "method: str",
+    "url: str",
+    "headers: Headers | None = None",
+    "body: Any = None"
+   ]
+  },
+  {
+   "name": "Response",
+   "signature": "Response(code: int, headers: Headers | None = None, trailers: Headers | None = None, body: Any = None, request: RequestSnapshot | None = None, protocol: str = \"\", status_text: str = \"\")",
+   "documentation": "Create a response object. Hooks normally modify the provided response.",
+   "parameters": [
+    "code: int",
+    "headers: Headers | None = None",
+    "trailers: Headers | None = None",
+    "body: Any = None",
+    "request: RequestSnapshot | None = None",
+    "protocol: str = \"\"",
+    "status_text: str = \"\""
+   ]
+  },
+  {
+   "name": "URLEncodedField",
+   "signature": "URLEncodedField(name: str, value: str, enabled: bool = True)",
+   "documentation": "Create a URL-encoded body field.",
+   "parameters": [
+    "name: str",
+    "value: str",
+    "enabled: bool = True"
+   ]
+  }
+ ],
+ "hooks": [
+  {
+   "name": "onRequest",
+   "signature": "onRequest(context: Context, request: Request) -> Request | None",
+   "parameters": [
+    "context: Context",
+    "request: Request"
+   ],
+   "returnType": "Request | None",
+   "insertText": "def onRequest(context, request):\n\t${1:return request}",
+   "documentation": "Modify the provided request and return it, or return None to block before transport."
+  },
+  {
+   "name": "onResponse",
+   "signature": "onResponse(context: Context, response: Response) -> Response | None",
+   "parameters": [
+    "context: Context",
+    "response: Response"
+   ],
+   "returnType": "Response | None",
+   "insertText": "def onResponse(context, response):\n\t${1:return response}",
+   "documentation": "Modify the provided response and return it, or return None to block its presentation."
+  }
+ ],
+ "minimalScript": "from flowlens import *\n\n\ndef onRequest(context, request):\n    return request\n\n\ndef onResponse(context, response):\n    return response\n",
+ "memberOrder": [
+  "Context",
+  "ContextLogger",
+  "Request",
+  "RequestSnapshot",
+  "Response",
+  "Headers",
+  "FrozenHeaders",
+  "Queries",
+  "FrozenQueries",
+  "Body",
+  "BodySnapshot",
+  "QueryField",
+  "HeaderField",
+  "FileDescriptor",
+  "FileSnapshot",
+  "FileDescriptorClass",
+  "URLEncodedField",
+  "URLEncodedFieldSnapshot",
+  "MultipartPart",
+  "MultipartPartSnapshot",
+  "ReadonlyMapping",
+  "JsonObject"
+ ]
+}
