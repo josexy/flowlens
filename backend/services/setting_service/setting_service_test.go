@@ -132,9 +132,6 @@ func TestUpdateFillsCommonConfigDefaults(t *testing.T) {
 	if settings.CommonConfig.LogDisabled {
 		t.Fatal("expected logging to be enabled by default")
 	}
-	if settings.CommonConfig.PointerCursor {
-		t.Fatal("expected pointer cursor to be disabled by default")
-	}
 	if settings.HistoryRetentionConfig.Enabled {
 		t.Fatal("expected history retention cleanup to be disabled by default")
 	}
@@ -143,44 +140,43 @@ func TestUpdateFillsCommonConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestPointerCursorPreferenceRoundTripsThroughOrdinarySettingsSave(t *testing.T) {
+func TestLegacyCursorPreferenceIsIgnoredAndDropped(t *testing.T) {
 	configureTestSettingsPath(t)
 	svc := newPersistentTestSettingService(t)
-	// Existing common settings have no cursor preference.
+	// 1.0.5 stored a pointer cursor preference, which FlowLens no longer has.
 	if _, err := svc.repository.db.Exec(`
 		INSERT INTO app_settings(section, payload_version, payload_json, updated_at)
 		VALUES (?, ?, ?, ?)
-	`, settingsSectionCommon, settingsPayloadVersion, `{"themeMode":"dark","language":"en"}`, time.Now().UnixMilli()); err != nil {
+	`, settingsSectionCommon, settingsPayloadVersion, `{"themeMode":"dark","language":"en","pointerCursor":true,"logDisabled":true}`, time.Now().UnixMilli()); err != nil {
 		t.Fatalf("insert existing common settings: %v", err)
 	}
 	settings, err := svc.Get()
 	if err != nil {
 		t.Fatalf("Get existing settings: %v", err)
 	}
-	if settings.CommonConfig.PointerCursor {
-		t.Fatal("expected missing pointer cursor preference to remain disabled")
+	if settings.CommonConfig.ThemeMode != "dark" || settings.CommonConfig.Language != "en" || !settings.CommonConfig.LogDisabled {
+		t.Fatalf("other common settings changed: %+v", settings.CommonConfig)
 	}
-
-	for _, enabled := range []bool{true, false} {
-		settings.CommonConfig.PointerCursor = enabled
-		if err := svc.UpdatePreservingShortcuts(settings); err != nil {
-			t.Fatalf("UpdatePreservingShortcuts: %v", err)
-		}
-		if err := svc.Save(); err != nil {
-			t.Fatalf("Save: %v", err)
-		}
-
-		svc = newPersistentTestSettingService(t)
-		settings, err = svc.Get()
-		if err != nil {
-			t.Fatalf("Get reloaded settings: %v", err)
-		}
-		if settings.CommonConfig.PointerCursor != enabled {
-			t.Fatalf("pointer cursor after reload = %v, want %v", settings.CommonConfig.PointerCursor, enabled)
-		}
-		if settings.CommonConfig.ThemeMode != "dark" || settings.CommonConfig.Language != "en" {
-			t.Fatalf("cursor preference update changed existing preferences: %+v", settings.CommonConfig)
-		}
+	settings.CommonConfig.ThemeMode = "light"
+	if err := svc.UpdatePreservingShortcuts(settings); err != nil {
+		t.Fatalf("UpdatePreservingShortcuts: %v", err)
+	}
+	if err := svc.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	var payload string
+	if err := svc.repository.db.QueryRow(`SELECT payload_json FROM app_settings WHERE section = ?`, settingsSectionCommon).Scan(&payload); err != nil {
+		t.Fatalf("read common settings: %v", err)
+	}
+	if strings.Contains(payload, "pointerCursor") {
+		t.Fatalf("saved common settings keep the pointer cursor: %s", payload)
+	}
+	reloaded, err := newPersistentTestSettingService(t).Get()
+	if err != nil {
+		t.Fatalf("Get reloaded settings: %v", err)
+	}
+	if reloaded.CommonConfig.ThemeMode != "light" || reloaded.CommonConfig.Language != "en" || !reloaded.CommonConfig.LogDisabled {
+		t.Fatalf("reloaded common settings: %+v", reloaded.CommonConfig)
 	}
 }
 

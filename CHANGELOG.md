@@ -10,6 +10,7 @@ FlowLens is now a native desktop application built on MyGo instead of a web view
 - Updates are signed: an update installs only after its signature matches the key built into the application.
 - macOS keeps process attribution with icons and the managed system proxy. Windows and Linux builds no longer need cgo.
 - A response in the request editor now shows the time the client measured for it.
+- The "Use pointer cursor" setting is removed: controls show the system's default cursor. Your other settings are kept.
 
 ### Installing this version
 

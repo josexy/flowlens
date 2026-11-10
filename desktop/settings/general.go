@@ -149,9 +149,6 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 		v.sizeRow(c, palette, "app-size", locales.SettingsAppFontSizeLabel(), &state.appSize, &common.AppFontSize, theme.MinAppFontSize, theme.MaxAppFontSize, theme.DefaultAppFontSize)
 		v.fontRow(c, palette, "code-font", locales.SettingsCodeFontLabel(), &common.CodeFontFamily, common.CodeFontSize, locales.SettingsCodeFontPreviewText(), &state.codeFont, &state.codeValue, items, palette.MonoFont)
 		v.sizeRow(c, palette, "code-size", locales.SettingsCodeFontSizeLabel(), &state.codeSize, &common.CodeFontSize, theme.MinCodeFontSize, theme.MaxCodeFontSize, theme.DefaultCodeFontSize)
-		row(c, palette, "pointer", locales.SettingsPointerCursorLabel(), locales.SettingsPointerCursorHint(), func() {
-			nui.Switch(c.Key("switch"), palette, &common.PointerCursor, nui.SwitchOptions{}).Label(locales.SettingsPointerCursorLabel())
-		})
 	})
 	v.section(c, palette, "behavior", locales.SettingsSectionBehavior(), false, nil, func() {
 		row(c, palette, "frame", locales.SettingsWindowFrameModeLabel(), "", func() {

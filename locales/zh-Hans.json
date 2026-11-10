@@ -745,8 +745,6 @@
   "settingsNoRootCasDesc": "默认使用系统信任；仅内部或自签 CA 需添加。",
   "settingsOtherUnsavedNotice": "其他设置页有未保存的修改",
   "settingsPathTagPlaceholder": "输入路径后回车",
-  "settingsPointerCursorHint": "悬停交互元素时切换为指针光标",
-  "settingsPointerCursorLabel": "使用指针光标",
   "settingsPrivateKeyFileFilter": "私钥文件",
   "settingsProcessAttributionLabel": "识别请求进程",
   "settingsPythonHookTimeoutAccessibleLabel": "脚本执行超时（毫秒）",

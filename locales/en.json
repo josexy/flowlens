@@ -1712,8 +1712,6 @@
   "settingsNoRootCasDesc": "System trust is used by default; add only internal or self-signed CAs.",
   "settingsOtherUnsavedNotice": "Other settings have unsaved changes",
   "settingsPathTagPlaceholder": "Enter a path and press Enter",
-  "settingsPointerCursorHint": "Switch to a pointer cursor when hovering over interactive elements",
-  "settingsPointerCursorLabel": "Use pointer cursor",
   "settingsPrivateKeyFileFilter": "Private Key Files",
   "settingsProcessAttributionLabel": "Identify request process",
   "settingsPythonHookTimeoutAccessibleLabel": "Script timeout in milliseconds",

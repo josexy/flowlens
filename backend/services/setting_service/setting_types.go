@@ -63,7 +63,6 @@ type CommonConfig struct {
 	AppFontSize       int    `json:"appFontSize"`
 	CodeFontFamily    string `json:"codeFontFamily"`
 	CodeFontSize      int    `json:"codeFontSize"`
-	PointerCursor     bool   `json:"pointerCursor"`
 	ThemeMode         string `json:"themeMode"`
 	ThemePrimaryColor string `json:"themePrimaryColor"`
 	ThemeNeutralColor string `json:"themeNeutralColor"`

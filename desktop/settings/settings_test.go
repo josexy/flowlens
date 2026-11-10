@@ -279,13 +279,13 @@ func TestSixSectionsAndDraftsSurviveNavigation(t *testing.T) {
 		f.click(label)
 	}
 	f.open(locales.SettingsTabGeneral())
-	f.draft().CommonConfig.PointerCursor = true
+	f.draft().CommonConfig.LogDisabled = true
 	f.settle()
 	f.open(locales.SettingsTabStorage())
 	f.draft().CacheConfig.MaxWsMessages = 42
 	f.settle()
 	f.open(locales.SettingsTabGeneral())
-	if !f.draft().CommonConfig.PointerCursor || !f.view.Dirty() {
+	if !f.draft().CommonConfig.LogDisabled || !f.view.Dirty() {
 		t.Fatal("changes stay while switching sections")
 	}
 	f.click(locales.SettingsSave())
@@ -293,10 +293,10 @@ func TestSixSectionsAndDraftsSurviveNavigation(t *testing.T) {
 		t.Fatal("saved together")
 	}
 	stored, err := f.service.Snapshot()
-	if err != nil || !stored.CommonConfig.PointerCursor || stored.CacheConfig.MaxWsMessages != 42 {
+	if err != nil || !stored.CommonConfig.LogDisabled || stored.CacheConfig.MaxWsMessages != 42 {
 		t.Fatalf("%v %+v %+v", err, stored.CommonConfig, stored.CacheConfig)
 	}
-	if !f.data.Settings.Current.CommonConfig.PointerCursor {
+	if !f.data.Settings.Current.CommonConfig.LogDisabled {
 		t.Fatal("every window follows")
 	}
 	if !f.has(locales.SettingsSavedNotice()) && !f.has(locales.SettingsSavedAppliedNotice()) {
@@ -311,7 +311,7 @@ func TestCloseConfirmsWhenDirty(t *testing.T) {
 	}
 	f.view.Begin()
 	f.settle()
-	f.draft().CommonConfig.PointerCursor = true
+	f.draft().CommonConfig.LogDisabled = true
 	f.settle()
 	if f.view.CloseRequested() || !f.confirm.Open() {
 		t.Fatal("asks first")
@@ -329,7 +329,7 @@ func TestCloseConfirmsWhenDirty(t *testing.T) {
 
 func TestSaveKeepsNewerLayout(t *testing.T) {
 	f := newFixture(t)
-	f.draft().CommonConfig.PointerCursor = true
+	f.draft().CommonConfig.LogDisabled = true
 	f.settle()
 	layout := settingservice.TrafficDetailLayoutVertical
 	if f.data.Settings.TrafficDetailLayout() == layout {
@@ -820,7 +820,7 @@ func TestSaveShortcutRunsSave(t *testing.T) {
 	if f.dispatch.Invoke(shortcuts.AppSave) {
 		t.Fatal("nothing to save")
 	}
-	f.draft().CommonConfig.PointerCursor = true
+	f.draft().CommonConfig.LogDisabled = true
 	f.settle()
 	if !f.dispatch.Invoke(shortcuts.AppSave) {
 		t.Fatal("runs")
@@ -886,7 +886,7 @@ func TestFailedResetUnblocks(t *testing.T) {
 
 func TestDiscardForUpdateUsesItsOwnWording(t *testing.T) {
 	f := newFixture(t)
-	f.draft().CommonConfig.PointerCursor = true
+	f.draft().CommonConfig.LogDisabled = true
 	f.settle()
 	proceeded, canceled := 0, 0
 	f.view.AskDiscardBeforeQuit(true, func() { proceeded++ }, func() { canceled++ })

@@ -7816,26 +7816,6 @@ func (msgs Messages) SettingsPathTagPlaceholder() string {
 	return Catalog.Format(msgs.locale, "settingsPathTagPlaceholder", nil)
 }
 
-// SettingsPointerCursorHint says "Switch to a pointer cursor when hovering over interactive elements"
-// in the language the app shows.
-func SettingsPointerCursorHint() string { return In(i18n.Locale()).SettingsPointerCursorHint() }
-
-// SettingsPointerCursorHint says "Switch to a pointer cursor when hovering over interactive elements"
-// in the language of msgs.
-func (msgs Messages) SettingsPointerCursorHint() string {
-	return Catalog.Format(msgs.locale, "settingsPointerCursorHint", nil)
-}
-
-// SettingsPointerCursorLabel says "Use pointer cursor"
-// in the language the app shows.
-func SettingsPointerCursorLabel() string { return In(i18n.Locale()).SettingsPointerCursorLabel() }
-
-// SettingsPointerCursorLabel says "Use pointer cursor"
-// in the language of msgs.
-func (msgs Messages) SettingsPointerCursorLabel() string {
-	return Catalog.Format(msgs.locale, "settingsPointerCursorLabel", nil)
-}
-
 // SettingsPrivateKeyFileFilter says "Private Key Files"
 // in the language the app shows.
 func SettingsPrivateKeyFileFilter() string { return In(i18n.Locale()).SettingsPrivateKeyFileFilter() }
