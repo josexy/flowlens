@@ -9,7 +9,7 @@ The native MyGo interface works end to end, and commit `aad9892` already brought
 The review compared the old Vue templates and styles with the Go views, rendered the new main window headlessly in both themes, compared it with `assets/screenshots/flowlens-{light,dark}.png` from the old repository, and listed locale keys that the old frontend used but no Go code uses. Differences found:
 
 - **Cross-cutting interaction**
-  - The saved Pointer Cursor setting has no effect.
+  - The Pointer Cursor setting is shown in Settings and saved, but has no effect.
   - Inputs that appear after an action, such as inline folder creation, rename, create, and alias dialogs, and cell editors, do not take focus. 1.0.5 focused them in 13 places.
   - Escape does not cancel inline folder creation.
   - A vertical wheel does not scroll the overflowing workspace and detail tab strips; MyGo scrolls them sideways only with Shift.
@@ -41,7 +41,7 @@ The review compared the old Vue templates and styles with the Go views, rendered
 
 Each item is restored to 1.0.5. Where MyGo replaces a WebView workaround, such as the hex viewer's segment paging and its large-body gate, which virtualization makes unnecessary, the native behavior stays and `design.md` records it as an exception.
 
-nuxt-ui-go v0.0.2 has no theme-level cursor hook. With the maintainer's approval, a small upstream addition to `github.com/josexy/nuxt-ui-go` adds one, and FlowLens moves to the release that contains it.
+The Pointer Cursor setting is the one item removed rather than restored. The maintainer decided the native app does not need it. Restoring it would take a cursor hook in every nuxt-ui-go control, and the setting has never worked in the native build. Settings no longer offers the option, and FlowLens stops storing it.
 
 ## Capabilities
 
@@ -51,21 +51,22 @@ nuxt-ui-go v0.0.2 has no theme-level cursor hook. With the maintainer's approval
 
 ### Modified Capabilities
 
-These capabilities are defined by the in-flight `migrate-to-mygo-native-ui` change and are not yet in `openspec/specs/`. This change adds requirements to them; it does not alter existing ones.
+These capabilities are defined by the in-flight `migrate-to-mygo-native-ui` change and are not yet in `openspec/specs/`. This change adds requirements to them and modifies one: General settings drops the pointer cursor option.
 
-- `appearance`: 1.0.5 as the visual reference, the Pointer Cursor setting, and legible colored badges on any row state.
+- `appearance`: 1.0.5 as the visual reference, and legible colored badges on any row state.
 - `desktop-shell`: The shutdown indicator's content.
 - `traffic-capture`: Traffic table header, badge, row marker, and numeric styling.
 - `traffic-inspection`: Compact field tables, full-width detail tab strips, localized TLS and certificate details, response cookie attributes, image zoom and pan, and code viewer scroll limits.
 - `traffic-history`: Category tree section headers and filter check marks.
 - `request-workspace`: Grid key/value editors, keeping the active tab in view, and tab drag feedback.
 - `api-collections`: Tree row presentation and drag feedback.
-- `application-settings`: File picker messages and filters. Shortcut row tooltips fall under `interaction-conventions`.
+- `application-settings`: General settings no longer offer a pointer cursor option. File pickers get their messages and filters back. Shortcut row tooltips fall under `interaction-conventions`.
 
 ## Impact
 
-- **Code**: `desktop/{shell,capture,inspect,editor,collection,settings,update,widgets,theme}`. New shared widgets: an editable grid, a wheel-to-horizontal helper, and autofocus support. `backend/app/settings_window.go` gains dialog messages. Copy changes use existing locale keys; any new keys go into both catalogs.
-- **Dependencies**: `github.com/josexy/nuxt-ui-go` moves from v0.0.2 to a release with a pointer-cursor theme option. That work happens in `/home/josexy/work/nuxt-ui-go`, outside this repository's edit roots, with the maintainer's approval.
-- **Persistence**: No changes to schemas or settings. The header table's name column width stays in the view and is not saved, as in 1.0.5.
+- **Code**: `desktop/{shell,capture,inspect,editor,collection,settings,store,update,widgets,theme}`. New shared widgets: an editable grid, a wheel-to-horizontal helper, and autofocus support. `backend/app/settings_window.go` gains dialog messages. `backend/services/setting_service` loses the `CommonConfig.PointerCursor` field. Copy changes use existing locale keys; the two pointer cursor keys are removed from both catalogs.
+- **Dependencies**: None. `github.com/josexy/nuxt-ui-go` stays at v0.0.2.
+- **Persistence**: No schema change. A stored `pointerCursor` value in the common settings section is ignored on load and dropped at the next save, so no migration is needed. The header table's name column width stays in the view and is not saved, as in 1.0.5.
+- **Release notes**: The `CHANGELOG.md` 1.1.0 section notes that the pointer cursor setting was removed.
 - **Ordering**: Archive `migrate-to-mygo-native-ui` first, so these added requirements merge into its capability specs.
 - **Verification limits**: The headless Tester has no CJK font, and the old app cannot run here. Visual checks compare English headless renders against the two reference screenshots plus code-derived 1.0.5 values. A desktop pass on each platform still has to confirm the final look.

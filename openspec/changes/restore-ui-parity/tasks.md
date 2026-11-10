@@ -47,19 +47,18 @@ Each task is checked against the 1.0.5 source in `/home/josexy/work/flowlens/fro
 - [ ] 7.1 Show the shutdown indicator as a non-dismissible card with the title, `AppShutdownDescription`, and a spinner, blocking workbench input. Verify Tester cases that the description is shown, that clicks on the workbench do nothing, and that `ShutdownUIReady` is still called once. Run `go test ./desktop/shell ./backend/app`.
 - [ ] 7.2 Pass picker messages and the Private Key Files filter name from Settings to `mygo.OpenDialogOptions`. Verify with a fake `PickFile` that records the title, message, and filter for each certificate and interpreter picker. Run `go test ./desktop/settings ./backend/app`.
 
-## 8. Pointer cursor
+## 8. Remove the Pointer Cursor setting
 
-- [ ] 8.1 In `/home/josexy/work/nuxt-ui-go`, add `Theme.PointerCursor` and apply `ui.CursorPointer` to enabled interactive parts (buttons, links, tab triggers, menu and listbox items, select and menu triggers, switches, checkboxes, radios, disclosure triggers, pagination, and tree items), leaving text inputs with the I-beam. Add contract tests with `Tester.Cursor` for each part, enabled and disabled. Tag v0.0.3 after the maintainer reviews it. Verify that `go test ./...` in that repository passes.
-- [ ] 8.2 Move `github.com/josexy/nuxt-ui-go` to v0.0.3 and run `go mod tidy`. Verify `go list -m github.com/josexy/nuxt-ui-go` reports v0.0.3 and `task verify` passes.
-- [ ] 8.3 Map `CommonConfig.PointerCursor` into `theme.Appearance` and both resolved themes. Add `widgets.Clickable` and use it at every FlowLens call site that attaches `OnClick` to a custom element. Verify Tester cases in the main, Settings, and Update windows: with the setting on, hovering a button, tab, clickable row, and title bar control reports `ui.CursorPointer`; with it off, the default cursor; a disabled button never shows the hand. A save takes effect without a restart. Run `go test ./desktop/theme ./desktop/widgets ./desktop/settings ./desktop/shell ./desktop/capture`.
+- [ ] 8.1 Remove the General settings row and the Restore Initial State reset of `PointerCursor`, and remove `CommonConfig.PointerCursor` with its default and round-trip tests. Point the `desktop/settings` tests that toggle `PointerCursor` to dirty the draft at another common boolean. Verify that `grep -rn PointerCursor backend desktop` finds nothing; that a Tester case shows General settings without a pointer cursor row; and that a `setting_service` test storing a common payload with `"pointerCursor":true` loads, keeps its other values, and saves without the key. Run `go test ./backend/services/setting_service ./desktop/settings ./desktop/store`.
+- [ ] 8.2 Remove `settingsPointerCursorLabel` and `settingsPointerCursorHint` from `locales/en.json` and `locales/zh-Hans.json`, run `task i18n:generate`, and add a line to the `CHANGELOG.md` 1.1.0 section saying the pointer cursor setting was removed. Verify that `task i18n:check` passes, that the generated catalog has no pointer cursor accessors, and that the changelog line sits under `## 1.1.0`.
 
 ## 9. Integration checks
 
 - [ ] 9.1 Run `task verify`, `task vet:ui`, and `CGO_ENABLED=1 go test -race ./desktop/...`. Record the results in this file.
 - [ ] 9.2 Render every surface in both themes with `FLOWLENS_RENDER_DIR`. Review the PNGs against the reference screenshots and the `design.md` values, and record the remaining differences (expected: only the listed exceptions and font rendering) in `docs/technical/ui-parity.md`.
-- [ ] 9.3 On a Linux desktop session, compare FlowLens with 1.0.5 side by side for pointer cursor, focus, wheel scrolling of strips, grid editing with Chinese IME input, drag feedback, and notifications. Record results. Windows and macOS checks join migration tasks 17.4 and 17.5.
+- [ ] 9.3 On a Linux desktop session, compare FlowLens with 1.0.5 side by side for focus, wheel scrolling of strips, grid editing with Chinese IME input, drag feedback, and notifications. Record results. Windows and macOS checks join migration tasks 17.4 and 17.5.
 
 ## Workflow follow-up
 
-- Archive `migrate-to-mygo-native-ui` before archiving this change, so the added requirements merge into its capability specs.
+- Archive `migrate-to-mygo-native-ui` before archiving this change. Its capability specs must exist for the added requirements to merge, and for the `application-settings` General settings modification, which `openspec` refuses to archive without a base spec.
 - Archive this change after implementation and review are complete.

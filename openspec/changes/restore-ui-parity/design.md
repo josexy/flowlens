@@ -6,7 +6,7 @@ See `proposal.md` for the differences and why they matter. The facts below shape
 
 | Fact | Consequence |
 | --- | --- |
-| mygo resolves the cursor from the innermost element that sets one, stopping at the innermost clickable (`ui/runtime.go` `updateCursor`). A cursor set on a container never reaches the controls inside it. nuxt-ui-go controls set no cursor, and `nui.Theme` has no cursor field. | The Pointer Cursor setting needs a nuxt-ui-go change for library controls, plus a FlowLens helper for its own `ButtonBase` and clickable rows. |
+| `CommonConfig.PointerCursor` is shown in General settings and saved, but nothing reads it. `decodeSettingSection` decodes the common section with plain `json.Unmarshal`. | Removing the field ignores stored values on load and drops them at the next save, with no migration. |
 | mygo scrolls a horizontal-only container with the wheel only when Shift is held (`ui/input.go` `scroll`), but `Element.HandleInput` sees `InputScroll` before scroll containers do. | Restoring wheel scrolling of tab strips is a FlowLens helper. No library change is needed. |
 | `Element.AutoFocus` focuses an element in the frame it appears. `nui.InputOptions.Style` exposes the inner editor element. `Element.Shortcut` reports an element-scoped key. | Autofocus and Escape-to-cancel can be done in FlowLens without new APIs. |
 | `ui.Table` draws a resize edge with `Theme.Border` after every header cell, and titles in `Theme.TextMuted` at weight 600. `ListState.HeaderCell` decorates header cells. | The traffic table's header can be restyled through its own `ui.Theme` (already built by `capture.tableTheme`) and `HeaderCell`, without forking the table. |
@@ -23,13 +23,12 @@ The 1.0.5 values are read from the old templates: `h-8` is 32 px, `h-10` 40 px, 
 
 - Close every difference listed in the proposal, with a test per spec scenario. Visual items get a render check.
 - Put each new behavior in one shared place, such as `desktop/widgets` or `desktop/theme`, rather than repeating it per view.
-- Keep the nuxt-ui-go change small, generic, and useful outside FlowLens.
 
 **Non-Goals:**
 
 - Pixel-identical rendering. Font rasterization, native scroll bars, and nuxt-ui-go component internals may differ.
-- New features, changes to persisted data, or saving the header table's name column width, which 1.0.5 did not save.
-- Changes to mygo. Its owner is outside this project.
+- New features, persisted data beyond dropping `pointerCursor`, or saving the header table's name column width, which 1.0.5 did not save.
+- Changes to mygo or nuxt-ui-go. FlowLens stays on mygo v0.8.3 and nuxt-ui-go v0.0.2.
 - Reworking surfaces that already match, such as Python Plugins, Rewrite Rules, Update, and Memory Statistics, beyond the shared conventions.
 
 ## Decisions
@@ -44,20 +43,24 @@ Each item is restored from the 1.0.5 source unless it appears below. An exceptio
 | 10 px WebKit scroll bars | Platform overlay scroll bars | The toolkit draws native scroll bars. |
 | Monaco bracket colorization and find widget | `ui/editor` highlighting and find bar | Monaco is not available. Highlighting, folding, and find are equivalent. |
 | CSS color transitions of 150–200 ms | nuxt-ui-go motion tokens where a component has them | Transitions do not change behavior. |
+| "Use pointer cursor" setting | Removed; controls show the platform's default cursor | The maintainer decided the native app does not need it (decision 2). |
 
-Unused locale keys for these exceptions stay in the catalogs, so a later change can restore them without new translations.
+Unused locale keys for the first four exceptions stay in the catalogs, so a later change can restore them without new translations.
 
-### 2. Pointer cursor: nuxt-ui-go theme flag plus a FlowLens helper
+### 2. Remove the Pointer Cursor setting
 
-Upstream, in `/home/josexy/work/nuxt-ui-go`, add `Theme.PointerCursor bool` (default false). Every interactive part the library builds then applies `ui.CursorPointer` when the flag is set and the part is enabled. Parts in scope: buttons, links, tab triggers, menu and listbox items, select and menu triggers, switches, checkboxes, radios, accordion and disclosure triggers, pagination, and tree items. Text inputs keep the I-beam. Release the change as v0.0.3 with tests, and move `go.mod` to it.
+The maintainer decided the setting is not needed after the move to MyGo, so FlowLens drops it rather than restoring it:
 
-In FlowLens, `theme.Appearance` gains `PointerCursor` from `CommonConfig.PointerCursor`, and `theme.Resolve` sets it on both themes. A helper `widgets.Clickable(element, theme)` sets the hand on FlowLens' own clickable elements: `ui.ButtonBase` call sites, clickable rows, tabs, and the title bar controls. Each call site that attaches `OnClick` to a custom element goes through the helper.
+- Remove the General settings row in `desktop/settings/general.go`, and the `PointerCursor` reset in Restore Initial State defaults in `desktop/store/settings.go`.
+- Remove `CommonConfig.PointerCursor` from `backend/services/setting_service/setting_types.go`, along with its default and round-trip tests. A test instead stores a common payload containing `"pointerCursor":true` and checks that it loads and saves without error.
+- Several `desktop/settings` tests toggle `PointerCursor` only to make the draft dirty. Point them at another common boolean, such as `LogDisabled`.
+- Remove `settingsPointerCursorLabel` and `settingsPointerCursorHint` from both catalogs, and regenerate with `task i18n:generate`.
+- Note the removal in the `CHANGELOG.md` 1.1.0 section.
 
 Alternatives considered:
 
-- *FlowLens wrappers only*: cannot reach the clickable parts inside library components such as tabs, menu items, and switches.
-- *Hide the setting*: drops a 1.0.5 feature, against the chosen reference.
-- *Change mygo so containers set a default cursor for clickables*: mygo is outside the maintainer's control.
+- *Implement it*: needs a `Theme.PointerCursor` flag in every interactive nuxt-ui-go part, a release, a `go.mod` bump, and a FlowLens helper at about 230 clickable call sites. mygo resolves the cursor from the innermost clickable, so a container cannot set it for its children. The maintainer declined this cost.
+- *Hide the row but keep the field*: leaves a setting nothing reads, which `setting_service` would still default, validate, and persist.
 
 ### 3. Focus, Enter, and Escape live in `desktop/widgets`
 
@@ -117,13 +120,12 @@ Add a test-only package, `desktop/internal/rendertest`, with fixture traffic and
 
 ## Risks / Trade-offs
 
-- [The nuxt-ui-go release is delayed or rejected.] → Items in decisions 2–11 do not depend on it. The pointer-cursor tasks are last and can ship separately. Until they land, the setting stays a no-op, as it is today.
+- [Users who enabled the pointer cursor in 1.0.5 find the option gone.] → It never worked in the native build. The 1.1.0 release notes state that it was removed, and their other settings load unchanged.
 - [The editable grid regresses performance or IME input in large tables.] → Keep `ui.List` virtualization, open only one overlay at a time, and add Tester cases for 1,000 rows and for IME composition in the overlay. Chinese input still needs a check on each desktop platform.
 - [A transparent table `Border` hides lines the table still needs.] → Render checks in both themes. If any line disappears, draw it explicitly in `cellBackground` or the header row.
 - [A wheel handler on strips captures scrolling that should go to the page.] → The handler returns false unless the strip overflows and can still move in that direction. A Tester case covers the non-overflowing strip.
 - [Visual parity is judged by eye from English renders.] → Use the two reference screenshots and the Tailwind-derived values. Record a desktop comparison per platform in the integration tasks.
-- [nuxt-ui-go work sits outside this repository's allowed edit roots.] → It is done in its own repository with the maintainer's approval. This change consumes only the tagged release through `go.mod`.
 
 ## Migration Plan
 
-No data migration is needed. Merge `restore-ui-parity` after `migrate-to-mygo-native-ui` is archived, so its added requirements merge into the capability specs. Rolling back means reverting the commits. Settings and stored data are untouched, and the `go.mod` bump can be reverted on its own.
+No data migration is needed. A stored `pointerCursor` value is ignored on load and dropped at the next save of the common section. Archive `migrate-to-mygo-native-ui` before this change. Its General settings requirement is the base that the `application-settings` delta modifies, and `openspec` refuses to archive the MODIFIED block until that spec exists. Rolling back means reverting the commits. A rollback that restores the field reads it as false for users whose settings were saved in between.
