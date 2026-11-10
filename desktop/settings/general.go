@@ -117,7 +117,7 @@ func (v *View) sizeRow(c *ui.Context, palette nui.Theme, key, label string, fiel
 	row(c, palette, key, label, "", func() {
 		ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 			field.build(c, palette, "number", label, value, float64(minimum), float64(maximum), 1, v.committing)
-			ui.Text(c, locales.SettingsUnitPixels()).FontSize(13).TextColor(palette.Muted)
+			ui.Text(c, locales.SettingsUnitPixels()).FontSize(14).TextColor(palette.Muted)
 			blocked := v.committing || *value == fallback
 			reset := nui.Button(c.Key("reset"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.RotateCcw(), Disabled: blocked, AccessibleLabel: locales.SettingsFontSizeReset() + " " + label})
 			if !blocked {
@@ -130,7 +130,7 @@ func (v *View) sizeRow(c *ui.Context, palette nui.Theme, key, label string, fiel
 func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservice.Settings) {
 	common, window := draft.CommonConfig, draft.WindowConfig
 	state := &v.general
-	section(c, palette, "appearance", locales.SettingsSectionAppearance(), false, nil, func() {
+	v.section(c, palette, "appearance", locales.SettingsSectionAppearance(), false, nil, func() {
 		colorRow := func(key, label string, names []string, target *string) {
 			row(c, palette, key, label, "", func() {
 				ui.Box(c.Key("menu")).Width(320).Children(func() {
@@ -153,7 +153,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 			nui.Switch(c.Key("switch"), palette, &common.PointerCursor, nui.SwitchOptions{}).Label(locales.SettingsPointerCursorLabel())
 		})
 	})
-	section(c, palette, "behavior", locales.SettingsSectionBehavior(), false, nil, func() {
+	v.section(c, palette, "behavior", locales.SettingsSectionBehavior(), false, nil, func() {
 		row(c, palette, "frame", locales.SettingsWindowFrameModeLabel(), "", func() {
 			value := string(window.FrameMode)
 			ui.Box(c.Key("menu")).Width(320).Children(func() {

@@ -192,10 +192,10 @@ func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
 			items = append(items, nui.TabItem{ID: "formatted", Label: locales.DetailFormatted()})
 		}
 		items = append(items, nui.TabItem{ID: "raw", Label: locales.DetailSseRawEvent()})
-		nui.Tabs(c.Key("sse-tabs"), palette, &s.detailTab, items, nui.TabsOptions{Label: locales.DetailSseMessageDetail(), Size: nui.SM, Content: nui.Set(false)})
+		nui.Tabs(c.Key("sse-tabs"), palette, &s.detailTab, items, nui.TabsOptions{Label: locales.DetailSseMessageDetail(), Size: nui.XS, Content: nui.Set(false)})
 		text := s.detailContent()
 		if text == "" {
-			ui.Text(c, locales.DetailSseEmptyData()).FontSize(13).TextColor(palette.Muted)
+			ui.Text(c, locales.DetailSseEmptyData()).FontSize(14).TextColor(palette.Muted)
 			return
 		}
 		if s.detailView.Text() != text {

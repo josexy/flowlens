@@ -249,7 +249,9 @@ func (f *fixture) clickAction(label string) {
 	if !ok {
 		f.t.Fatalf("no %q in %v", label, f.tester.Texts())
 	}
-	x, y := float32(1240), rect.Y+rect.H/2
+	// Pages are at most 1040 wide after the 160-wide navigation and their
+	// 28-wide margin, so the button ends near x = 1218.
+	x, y := float32(1200), rect.Y+rect.H/2
 	f.tester.Press(x, y)
 	f.tester.Release(x, y)
 	f.settle()

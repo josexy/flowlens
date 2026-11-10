@@ -117,12 +117,14 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 	if history == nil {
 		return
 	}
-	header := ui.Row(c).FillWidth().Height(38).Shrink(0).Margin(6, 0, 0, 0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(0, 8, 0, 10)
+	header := ui.Row(c).FillWidth().MinHeight(38).Shrink(0).Margin(6, 0, 0, 0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(0, 8, 0, 10).Background(theme.Elevated)
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	header.Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-			ui.Text(c, locales.HistoryTitle()).FontSize(14).Bold().TextColor(theme.Muted)
-			nui.Badge(c, theme, strconv.Itoa(len(history.Metadata)), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+			ui.Text(c, locales.HistoryTitle()).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+			ui.Box(c).PaddingX(6).PaddingY(1).Radius(8).Background(theme.Elevated.Mix(theme.Background, 0.18)).Children(func() {
+				ui.Text(c, strconv.Itoa(len(history.Metadata))).SingleLine().FontSize(14).LineHeight(1.6).TextColor(theme.Muted)
+			})
 		})
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
 			toolbarButton(c, theme, toolButton{key: "import", icon: lucide.FileInput(), tooltip: w.importLabel(), disabled: history.Importing || w.clearingHistory, run: func() { w.ImportHAR(nil) }})
@@ -154,24 +156,27 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 	key := metadata.Key
 	active := w.Data.Workbench.CaptureSelection == historyItemPrefix+key
 	row := ui.Row(c.Key(key)).FillWidth().Height(44).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10).Label(historyLabel(metadata))
-	if active {
-		row.Background(theme.Accented).Border(1, theme.BorderAccented)
-	} else {
+	switch {
+	case active:
+		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
+	case row.Hovered():
+		row.Background(theme.Elevated).Border(1, ui.Transparent)
+	default:
 		row.Border(1, ui.Transparent)
 	}
 	row.OnClick(func() { w.openHistory(key) })
 	row.ContextMenu(func(menu *ui.Menu) { w.historyMenu(menu, metadata) })
 	row.Children(func() {
-		color := theme.Muted
+		color := theme.Muted.Alpha(0.7)
 		if active {
 			color = theme.Primary
 		}
 		ui.Icon(c, lucide.Archive()).Size(15, 15).Shrink(0).TextColor(color)
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, historyLabel(metadata)).SingleLine().FontSize(14).Bold().TextColor(theme.Text)
-			ui.Text(c, historyTime(metadata)).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, historyLabel(metadata)).SingleLine().FontSize(14).FontWeight(600).TextColor(theme.Text)
+			ui.Text(c, historyTime(metadata)).FontSize(12).LineHeight(16.0 / 12.0).TextColor(theme.Muted)
 		})
-		nui.Badge(c, theme, strconv.Itoa(metadata.Total), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+		CountPill(c, theme, strconv.Itoa(metadata.Total), active)
 	})
 }
 

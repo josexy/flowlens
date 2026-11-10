@@ -82,7 +82,9 @@ type View struct {
 	Dispatcher *shortcuts.Dispatcher
 	Notifier   *widgets.Notifier
 	Confirm    *widgets.ConfirmDialog
-	MacOS      bool
+	// sections counts the sections built on the page so far.
+	sections int
+	MacOS    bool
 
 	tab        string
 	baseline   *settingservice.Settings
@@ -412,7 +414,7 @@ func (v *View) Build(c *ui.Context) {
 	if settings.Draft != nil {
 		v.syncDirty()
 	}
-	ui.Column(c.Key("settings-window")).Fill().Background(theme.Background).Children(func() {
+	ui.Column(c.Key("settings-window")).Fill().Background(theme.MutedBackground).Children(func() {
 		v.Host.Frame.Build(c, theme)
 		ui.Row(c.Key("settings-body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			v.nav(c, theme)
@@ -436,23 +438,28 @@ func (v *View) Build(c *ui.Context) {
 }
 
 func (v *View) nav(c *ui.Context, theme nui.Theme) {
-	ui.Column(c.Key("settings-nav")).Width(190).Shrink(0).FillHeight().Gap(2).Padding(14, 8).Background(theme.MutedBackground).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
-		ui.Text(c, locales.MenuSettings()).FontSize(13).Bold().TextColor(theme.Muted).Padding(0, 8, 6, 8)
+	ui.Column(c.Key("settings-nav")).Width(160).Shrink(0).FillHeight().Gap(2).Padding(16, 8).Background(theme.Background).BorderWidth(0, 1, 0, 0).BorderColor(theme.BorderAccented).Children(func() {
+		ui.Text(c, strings.ToUpper(locales.MenuSettings())).FontSize(14).FontWeight(600).LetterSpacing(0.84).TextColor(theme.Muted).Padding(0, 8, 10, 8)
 		for _, item := range navItems() {
 			active := v.tab == item.key
-			row := ui.Row(c.Key(item.key)).FillWidth().Height(34).AlignItems(ui.Center).Gap(8).PaddingX(10).Radius(theme.Radius).Role(ui.RoleButton).Label(item.label)
-			color := theme.Toned
-			if active {
+			row := ui.Row(c.Key(item.key)).FillWidth().AlignItems(ui.Center).Gap(8).Padding(7, 10).Radius(6).Role(ui.RoleButton).Label(item.label)
+			color, weight := theme.Toned, 400
+			switch {
+			case active:
 				row.Background(theme.Primary.Alpha(0.12))
-				color = theme.Primary
-			} else if row.Hovered() {
+				color, weight = theme.Primary, 600
+			case row.Hovered():
 				row.Background(theme.Elevated)
+				color = theme.Text
 			}
 			key := item.key
 			row.OnClick(func() { v.selectTab(key) })
 			row.Children(func() {
+				if active {
+					ui.Box(c.Key("bar")).Absolute().Left(0).Top(6).Bottom(6).Width(3).Radius(1.5).Background(theme.Primary).IgnoreInput(true)
+				}
 				ui.Icon(c, item.icon).Size(15, 15).Shrink(0).TextColor(color)
-				ui.Text(c, item.label).SingleLine().FontSize(14).TextColor(color)
+				ui.Text(c, item.label).SingleLine().Shrink(1).FontSize(14).FontWeight(weight).TextColor(color)
 			})
 		}
 	})
@@ -469,14 +476,18 @@ func (v *View) tabTitle() string {
 
 func (v *View) page(c *ui.Context, theme nui.Theme) {
 	draft := v.Data.Settings.Draft
-	ui.Column(c.Key(v.tab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Text(c, v.tabTitle()).FontSize(18).Bold().TextColor(theme.Highlighted).Padding(16, 20, 8, 20).Shrink(0)
-		if draft == nil {
-			ui.Column(c.Key("loading")).Fill().Center().Children(func() { ui.Spinner(c) })
-			return
-		}
-		ui.Scroll(c.Key("page")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Gap(18).Padding(4, 20, 20, 20).Children(func() {
+	v.sections = 0
+	ui.Scroll(c.Key(v.tab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		ui.Column(c.Key("page")).FillWidth().MaxWidth(1040+2*28).Padding(0, 28, 20, 28).Children(func() {
+			title := ui.Row(c.Key("title")).FillWidth().Padding(20, 0, 16, 0).Margin(0, 0, 24, 0).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
+			title.Children(func() {
+				ui.Text(c, v.tabTitle()).FontSize(18).LineHeight(1.35).Bold().TextColor(theme.Text)
+			})
+			if draft == nil {
+				ui.Row(c.Key("loading")).FillWidth().MinHeight(160).Center().Children(func() { ui.Spinner(c) })
+				return
+			}
+			ui.Column(c.Key("content")).FillWidth().Children(func() {
 				switch v.tab {
 				case tabProxy:
 					v.proxyPage(c, theme, draft)
@@ -507,8 +518,8 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 			v.showNotice = false
 		} else {
 			c.After(v.noticeEnds.Sub(now))
-			ui.Column(c.Key("notice")).FillWidth().Shrink(0).Gap(6).Padding(0, 20, 8, 20).Children(func() {
-				nui.Alert(c, theme, nui.AlertOptions{Title: v.notice, Color: v.noticeKind, Variant: nui.Soft})
+			ui.Column(c.Key("notice")).FillWidth().Shrink(0).Gap(6).Padding(10, 32).Background(theme.Elevated).Children(func() {
+				nui.Alert(c, theme, nui.AlertOptions{Title: v.notice, Color: v.noticeKind, Variant: nui.Subtle})
 				if proxy := settings.LastProxyApplyResult; proxy != nil && proxy.RestartRequired && v.Host.RestartProxy != nil {
 					nui.Button(c.Key("restart"), theme, locales.CaptureRestart(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.SM}).OnClick(v.Host.RestartProxy)
 				}
@@ -518,48 +529,64 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 	if v.tab == tabLogs && !settings.Dirty() && !settings.Saving {
 		return
 	}
-	ui.Row(c.Key("footer")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.End).Gap(8).Padding(10, 20).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+	ui.Row(c.Key("footer")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.End).Gap(10).Padding(10, 28).Background(theme.Elevated).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 		if v.tab == tabLogs && settings.Dirty() {
-			ui.Text(c, locales.SettingsOtherUnsavedNotice()).Grow(1).Basis(0).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.SettingsOtherUnsavedNotice()).Grow(1).Basis(0).FontSize(14).LineHeight(1.6).TextColor(theme.Muted)
 		}
 		busy := v.committing || settings.Resetting
-		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: busy})
+		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: busy}).MinWidth(88).Shrink(0)
 		if !busy {
 			reset.OnClick(v.reset)
 		}
 		disabled := !settings.Dirty() || settings.Resetting
-		save := nui.Button(c.Key("save"), theme, locales.SettingsSave(), nui.ButtonOptions{Leading: lucide.Save(), Disabled: disabled, Loading: settings.Saving || v.committing})
+		save := nui.Button(c.Key("save"), theme, locales.SettingsSave(), nui.ButtonOptions{Leading: lucide.Save(), Disabled: disabled, Loading: settings.Saving || v.committing}).MinWidth(88).Shrink(0)
 		if !disabled {
 			save.OnClick(v.save)
 		}
 	})
 }
 
-func section(c *ui.Context, theme nui.Theme, key, title string, danger bool, actions func(), body func()) {
-	ui.Column(c.Key(key)).FillWidth().Gap(10).Children(func() {
+// section is a titled group of a settings page. Every section after the first
+// of a page starts below a rule.
+func (v *View) section(c *ui.Context, theme nui.Theme, key, title string, danger bool, actions func(), body func()) {
+	v.sections++
+	group := ui.Column(c.Key(key)).FillWidth()
+	if v.sections > 1 {
+		group.Margin(24, 0, 0, 0).Padding(20, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
+	}
+	group.Children(func() {
 		if title != "" || actions != nil {
-			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-				color := theme.Highlighted
+			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(16).Margin(0, 0, 12, 0).Children(func() {
+				color := theme.Text
 				if danger {
 					color = theme.Error
 				}
-				ui.Text(c, title).FontSize(15).Bold().TextColor(color)
+				ui.Text(c, title).FontSize(14).LineHeight(1.4).Bold().TextColor(color)
 				if actions != nil {
-					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(actions)
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(actions)
 				}
 			})
 		}
-		ui.Column(c.Key("body")).FillWidth().Gap(10).Children(body)
+		ui.Column(c.Key("body")).FillWidth().Gap(8).Children(body)
 	})
 }
 
 func row(c *ui.Context, theme nui.Theme, key, label, hint string, body func()) {
-	ui.Row(c.Key(key)).FillWidth().Gap(12).AlignItems(ui.Start).MinHeight(34).Children(func() {
-		ui.Text(c, label).Width(170).Shrink(0).FontSize(14).TextColor(theme.Toned).Margin(6, 0, 0, 0)
-		ui.Column(c.Key("control")).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
+	line := ui.Row(c.Key(key)).FillWidth().Gap(12).MinHeight(38).PaddingY(2)
+	if hint != "" {
+		line.AlignItems(ui.Start)
+	} else {
+		line.AlignItems(ui.Center)
+	}
+	line.Children(func() {
+		name := ui.Text(c, label).Width(170).Shrink(0).FontSize(14).LineHeight(1.4).FontWeight(600).TextColor(theme.Toned)
+		if hint != "" {
+			name.Margin(6, 0, 0, 0)
+		}
+		ui.Column(c.Key("control")).Grow(1).Basis(0).MinWidth(0).Gap(6).Children(func() {
 			body()
 			if hint != "" {
-				ui.Text(c.Key("hint"), hint).FontSize(12).TextColor(theme.Muted).FillWidth()
+				ui.Text(c.Key("hint"), hint).FontSize(14).LineHeight(1.6).TextColor(theme.Muted).FillWidth()
 			}
 		})
 	})

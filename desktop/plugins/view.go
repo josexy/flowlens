@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	pluginRowHeight float32 = 58
+	pluginRowHeight float32 = 54
 	ruleRowHeight   float32 = 44
 )
 
@@ -153,9 +153,9 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).MinWidth(0).Children(func() {
-					ui.Text(c, locales.PythonPluginsTitle()).SingleLine().FontSize(13).Bold().TextColor(theme.Highlighted)
+					ui.Text(c, locales.PythonPluginsTitle()).SingleLine().Shrink(1).FontSize(14).FontWeight(600).TextColor(theme.Highlighted)
 					label, color := v.runtimeBadge()
-					nui.Badge(c.Key("runtime"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Soft, Size: nui.SM})
+					nui.Badge(c.Key("runtime"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
 				})
 				ui.Row(c).Gap(2).Children(func() {
 					if v.OpenHelp != nil {
@@ -169,7 +169,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		})
 		visible := v.filtered()
 		ui.Scroll(c.Key("plugin-list")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Padding(6).Children(func() {
+			ui.Column(c).FillWidth().PaddingY(6).Children(func() {
 				switch {
 				case plugins.LoadingPlugins && len(plugins.Plugins) == 0:
 					ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() { ui.Spinner(c) })
@@ -178,7 +178,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 					if strings.TrimSpace(v.search) != "" {
 						title = locales.PythonPluginsNoSearchResults()
 					}
-					nui.Empty(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: title, Variant: nui.Ghost})
+					widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: title})
 				}
 				for index, plugin := range visible {
 					v.pluginRow(c, theme, index, plugin, visible)
@@ -222,18 +222,26 @@ func (v *View) selectPlugin(id string) {
 func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *store.Plugin, visible []*store.Plugin) {
 	plugins := v.Data.Plugins
 	selected := plugins.SelectedPluginID == plugin.ID
-	row := ui.Row(c.Key(plugin.ID)).FillWidth().Height(pluginRowHeight-4).Margin(0, 0, 4, 0).AlignItems(ui.Center).Gap(6).Padding(6, 8).Radius(theme.Radius).Border(1, ui.Transparent).Label(plugin.Name)
-	if selected {
-		row.Border(1, theme.Primary).Background(theme.Primary.Alpha(0.1))
-	} else if row.Hovered() {
+	row := ui.Row(c.Key(plugin.ID)).FillWidth().Height(pluginRowHeight).AlignItems(ui.Center).Gap(6).Padding(8, 8, 8, 5).Label(plugin.Name)
+	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent)
+	hovered := row.Hovered()
+	switch {
+	case selected:
+		row.BorderColor(theme.Primary).Background(theme.Primary.Alpha(0.1))
+	case hovered:
 		row.Background(theme.Elevated)
 	}
 	row.OnClick(func() { v.selectPlugin(plugin.ID) })
 	row.Children(func() {
-		v.grip(c, theme, plugin, visible)
-		ui.Box(c.Key("status")).Size(8, 8).Shrink(0).Radius(4).Background(validationColor(theme, plugin.ValidationStatus)).Label(validationLabel(plugin.ValidationStatus))
+		v.grip(c, theme, plugin, visible, hovered)
+		ui.Box(c.Key("icon")).Size(16, 16).Shrink(0).Children(func() {
+			ui.Icon(c, lucide.FileCode()).Size(16, 16).TextColor(theme.Muted)
+			dot := ui.Box(c.Key("status")).Absolute().Right(-2).Bottom(-2).Size(7, 7).Radius(3.5).Border(2, theme.Background).
+				Background(validationColor(theme, plugin.ValidationStatus)).Label(validationLabel(plugin.ValidationStatus))
+			nui.Tooltip(c, theme, dot, validationLabel(plugin.ValidationStatus), nui.TooltipOptions{})
+		})
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, plugin.Name).SingleLine().FontSize(13).Bold().TextColor(theme.Highlighted)
+			ui.Text(c, plugin.Name).SingleLine().FontSize(14).FontWeight(500).TextColor(theme.Highlighted)
 			if plugin.Description != "" {
 				ui.Text(c, plugin.Description).SingleLine().FontSize(12).TextColor(theme.Muted)
 			}
@@ -252,9 +260,12 @@ func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *stor
 	})
 }
 
-func (v *View) grip(c *ui.Context, theme nui.Theme, plugin *store.Plugin, visible []*store.Plugin) {
+func (v *View) grip(c *ui.Context, theme nui.Theme, plugin *store.Plugin, visible []*store.Plugin, shown bool) {
 	plugins := v.Data.Plugins
 	grip := ui.Icon(c.Key("grip"), lucide.GripVertical()).Size(14, 14).Shrink(0).TextColor(theme.Dimmed).Label("drag " + plugin.Name)
+	if !shown && v.drag.key != plugin.ID {
+		grip.Opacity(0)
+	}
 	if strings.TrimSpace(v.search) != "" {
 		return
 	}
@@ -419,7 +430,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("plugins-page")).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		if plugin == nil {
 			ui.Column(c).Fill().Center().Children(func() {
-				nui.Empty(c, theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: locales.PythonPluginsEmpty(), Description: locales.PythonPluginsEmptyHint(), Variant: nui.Ghost})
+				widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: locales.PythonPluginsEmpty(), Description: locales.PythonPluginsEmptyHint()})
 			})
 			return
 		}
@@ -590,7 +601,7 @@ func (v *View) fileRow(c *ui.Context, theme nui.Theme, row fileRow) {
 			color = theme.Primary
 		}
 		ui.Icon(c, icon).Size(14, 14).Shrink(0).TextColor(color)
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(color)
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
 		if selected && plugins.EditorDirty() {
 			ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary)
 		}
@@ -602,7 +613,7 @@ func (v *View) editorPane(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("editor")).FillWidth().Grow(3).Basis(0).MinHeight(0).Children(func() {
 		if plugins.SelectedFilePath == "" {
 			ui.Column(c).Fill().Center().Children(func() {
-				nui.Empty(c, theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: locales.PythonPluginsNoFileSelected(), Variant: nui.Ghost})
+				widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: locales.PythonPluginsNoFileSelected()})
 			})
 		} else {
 			ui.Box(c.Key(fileLanguage(plugins.SelectedFilePath) == "python")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
@@ -621,8 +632,8 @@ func (v *View) editorPane(c *ui.Context, theme nui.Theme) {
 func (v *View) detailPane(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 	items := []nui.TabItem{{ID: "rules", Label: locales.PythonPluginsRules()}, {ID: "params", Label: locales.PythonPluginsParams()}}
 	ui.Column(c.Key("detail")).FillWidth().Grow(2).Basis(0).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
-		ui.Box(c.Key("tabs")).FillWidth().Shrink(0).PaddingX(6).Children(func() {
-			nui.Tabs(c.Key("detail-tabs"), theme, &v.detailTab, items, nui.TabsOptions{Label: locales.PythonPluginsRules(), Size: nui.SM, Content: nui.Set(false)})
+		ui.Box(c.Key("tabs")).FillWidth().Shrink(0).PaddingX(8).Children(func() {
+			nui.Tabs(c.Key("detail-tabs"), theme, &v.detailTab, items, nui.TabsOptions{Label: locales.PythonPluginsRules(), Size: nui.SM, Content: nui.Set(false), Underline: true})
 		})
 		ui.Column(c.Key(v.detailTab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			if v.detailTab == "params" {

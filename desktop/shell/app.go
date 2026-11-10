@@ -141,7 +141,7 @@ func (a *App) workspaceMain(c *ui.Context, theme nui.Theme) {
 	workbench := a.Store.Workbench
 	surface := a.Surfaces[workbench.ActiveSection]
 	content := func() {
-		ui.Column(c).Fill().MinHeight(0).Children(func() {
+		ui.Column(c).Fill().MinHeight(0).Background(theme.MutedBackground).Children(func() {
 			if surface.Content != nil {
 				surface.Content(c, theme)
 				return
@@ -158,7 +158,7 @@ func (a *App) workspaceMain(c *ui.Context, theme nui.Theme) {
 		Min:     nui.Set[float32](15),
 		Max:     nui.Set[float32](42),
 	}, func() {
-		ui.Column(c).Fill().MinHeight(0).Background(theme.MutedBackground).Children(func() {
+		ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 			if surface.Sidebar != nil {
 				surface.Sidebar(c, theme)
 			}

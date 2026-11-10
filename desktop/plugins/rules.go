@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
 	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -81,7 +82,7 @@ func (r *rulesPane) build(c *ui.Context, theme nui.Theme, v *View, plugin *store
 	}
 	if len(r.drafts) == 0 {
 		ui.Column(c.Key("no-rules")).Fill().Center().Children(func() {
-			nui.Empty(c, theme, nui.EmptyOptions{Icon: lucide.Route(), Title: locales.PythonPluginsNoRules(), Variant: nui.Ghost})
+			widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.Route(), Title: locales.PythonPluginsNoRules()})
 		})
 		return
 	}

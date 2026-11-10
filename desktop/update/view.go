@@ -4,6 +4,7 @@ package update
 import (
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -272,37 +273,46 @@ func (v *View) downloadProgress(c *ui.Context, theme nui.Theme) {
 	if known {
 		percent = math.Min(100, math.Max(0, float64(progress.Written)/float64(progress.Total)*100))
 	}
-	ui.Column(c.Key("progress")).FillWidth().Gap(6).Children(func() {
+	cardSection(c, theme, "progress").Gap(8).Children(func() {
 		nui.Progress(c.Key("bar"), theme, percent, nui.ProgressOptions{Label: locales.UpdaterDownloadingTitle(), Size: nui.SM, Indeterminate: !known})
 		if progress != nil {
-			ui.Row(c.Key("summary")).FillWidth().Justify(ui.SpaceBetween).Children(func() {
-				ui.Text(c, progressSummary(progress)).FontSize(12).TextColor(theme.Muted)
+			ui.Row(c.Key("summary")).FillWidth().Justify(ui.SpaceBetween).Gap(16).Children(func() {
+				ui.Text(c, progressSummary(progress)).FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
 				if known {
-					ui.Text(c, strconv.Itoa(int(math.Round(percent)))+"%").FontSize(12).TextColor(theme.Muted)
+					ui.Text(c, strconv.Itoa(int(math.Round(percent)))+"%").FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
 				}
 			})
 		}
 	})
 }
 
-func detail(c *ui.Context, theme nui.Theme, key, label, value string) {
-	ui.Row(c.Key(key)).FillWidth().Gap(8).Children(func() {
-		ui.Text(c, label).Width(110).Shrink(0).FontSize(13).TextColor(theme.Muted)
-		ui.Text(c, value).Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(theme.Text)
+// cardSection is a part of the status card below a rule.
+func cardSection(c *ui.Context, theme nui.Theme, key string) ui.Element {
+	return ui.Column(c.Key(key)).FillWidth().Padding(16, 20).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
+}
+
+func detail(c *ui.Context, theme nui.Theme, key, label, value string, strong bool) {
+	ui.Row(c.Key(key)).FillWidth().Gap(20).Children(func() {
+		ui.Text(c, label).Width(110).Shrink(0).FontSize(14).TextColor(theme.Muted)
+		text := ui.Text(c, value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).Font(theme.MonoFont).TextColor(theme.Toned)
+		if strong {
+			text.FontWeight(600).TextColor(theme.Text)
+		}
 	})
 }
 
 func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 	updater := v.Data.Updater
 	status := v.status(theme)
-	ui.Column(c.Key("status")).FillWidth().Gap(12).Padding(14).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-		ui.Row(c.Key("line")).FillWidth().Gap(12).Children(func() {
-			ui.Box(c.Key("icon")).Size(36, 36).Shrink(0).Radius(theme.Radius).Background(status.color.Alpha(0.12)).Center().Children(func() {
-				ui.Icon(c, status.icon).Size(18, 18).TextColor(status.color)
+	ui.Column(c.Key("status")).FillWidth().Margin(10, 0, 0, 0).Radius(12).Border(1, theme.BorderAccented).Background(theme.Background).Clip().
+		Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35)).Children(func() {
+		ui.Row(c.Key("line")).FillWidth().Gap(16).Padding(20).Children(func() {
+			ui.Box(c.Key("icon")).Size(44, 44).Shrink(0).Radius(8).Background(status.color.Alpha(0.1)).Center().Children(func() {
+				ui.Icon(c, status.icon).Size(24, 24).TextColor(status.color)
 			})
-			ui.Column(c.Key("text")).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, status.title).FontSize(15).Bold().TextColor(theme.Highlighted).FillWidth()
-				ui.Text(c, status.description).FontSize(13).TextColor(theme.Muted).FillWidth()
+			ui.Column(c.Key("text")).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, status.title).FontSize(18).LineHeight(24.0 / 18.0).Bold().TextColor(theme.Text).FillWidth()
+				ui.Text(c, status.description).FontSize(14).LineHeight(20.0 / 14.0).TextColor(theme.Muted).FillWidth()
 			})
 		})
 		if updater.Phase() == appservice.UpdatePhaseDownloading {
@@ -312,17 +322,17 @@ func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 		if release == nil {
 			return
 		}
-		ui.Column(c.Key("release")).FillWidth().Gap(4).Children(func() {
-			detail(c, theme, "version", locales.UpdaterReleaseVersion(), "v"+release.Version)
+		cardSection(c, theme, "release").Gap(8).Children(func() {
+			detail(c, theme, "version", locales.UpdaterReleaseVersion(), "v"+release.Version, true)
 			if release.PublishedAt != "" {
-				detail(c, theme, "published", locales.UpdaterPublishedAt(), publishedAt(release.PublishedAt))
+				detail(c, theme, "published", locales.UpdaterPublishedAt(), publishedAt(release.PublishedAt), false)
 			}
 			if release.ArtifactName != "" {
 				value := release.ArtifactName
 				if release.ArtifactSize > 0 {
 					value += " · " + formatSize(float64(release.ArtifactSize))
 				}
-				detail(c, theme, "artifact", locales.UpdaterArtifact(), value)
+				detail(c, theme, "artifact", locales.UpdaterArtifact(), value, false)
 			}
 		})
 	})
@@ -342,62 +352,68 @@ func (v *View) notes(c *ui.Context, theme nui.Theme) {
 	if release == nil {
 		return
 	}
-	ui.Column(c.Key("notes")).FillWidth().Gap(8).Children(func() {
-		ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			ui.Text(c, locales.UpdaterReleaseNotes()).FontSize(15).Bold().TextColor(theme.Highlighted)
+	ui.Column(c.Key("notes")).FillWidth().Margin(6, 0, 0, 0).Gap(8).Children(func() {
+		ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(12).Children(func() {
+			ui.Text(c, locales.UpdaterReleaseNotes()).FontSize(14).Bold().TextColor(theme.Text)
 			label, color := locales.UpdaterModeManual(), nui.Info
 			if updater.SelfUpdate() {
 				label, color = locales.UpdaterModeSelf(), nui.Success
 			}
-			nui.Badge(c.Key("mode"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Soft, Size: nui.SM})
+			nui.Badge(c.Key("mode"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
 		})
-		if release.Notes == "" {
-			ui.Text(c.Key("empty"), locales.UpdaterReleaseNotesEmpty()).FontSize(13).TextColor(theme.Muted)
-			return
-		}
-		ui.Column(c.Key("body")).FillWidth().Padding(12).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-			markdown.View(c.Key("markdown"), release.Notes, &markdown.Options{OnLink: v.openLink})
+		ui.Scroll(c.Key("body")).FillWidth().MinHeight(96).MaxHeight(224).Radius(8).Border(1, theme.Border).Background(theme.Background).Children(func() {
+			ui.Column(c.Key("text")).FillWidth().Padding(12, 16).Children(func() {
+				if release.Notes == "" {
+					ui.Text(c.Key("empty"), locales.UpdaterReleaseNotesEmpty()).FontSize(14).TextColor(theme.Muted)
+					return
+				}
+				markdown.View(c.Key("markdown"), release.Notes, &markdown.Options{OnLink: v.openLink})
+			})
 		})
 	})
 }
 
 func (v *View) footer(c *ui.Context, theme nui.Theme) {
-	updater := v.Data.Updater
-	ui.Row(c.Key("footer")).FillWidth().Shrink(0).Justify(ui.End).Gap(8).Padding(12, 20).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
-		phase := updater.Phase()
-		switch {
-		case updater.Snapshot.CanCancel:
-			nui.Button(c.Key("cancel"), theme, locales.UpdaterActionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.X(), Loading: updater.ActionPending}).OnClick(func() { updater.Cancel(v.report) })
-		case !updater.Busy():
-			label := locales.UpdaterActionClose()
-			if phase == appservice.UpdatePhaseReady {
-				label = locales.UpdaterActionLater()
-			}
-			nui.Button(c.Key("close"), theme, label, nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(v.closeWindow)
-		}
-		var label string
-		var icon *ui.SVG
-		switch phase {
-		case appservice.UpdatePhaseAvailable:
-			if updater.SelfUpdate() {
-				label, icon = locales.UpdaterActionDownload(), lucide.Download()
-			} else {
-				label, icon = locales.UpdaterActionOpenRelease(), lucide.ExternalLink()
-			}
-		case appservice.UpdatePhaseReady:
-			label, icon = locales.UpdaterActionRestart(), lucide.Power()
-		case appservice.UpdatePhaseError:
-			label, icon = locales.UpdaterActionRetry(), lucide.RefreshCw()
-		case appservice.UpdatePhaseIdle, appservice.UpdatePhaseUpToDate:
-			label, icon = locales.UpdaterActionCheck(), lucide.Search()
-		}
-		if label != "" {
-			button := nui.Button(c.Key("primary"), theme, label, nui.ButtonOptions{Leading: icon, Loading: updater.ActionPending})
-			if !updater.ActionPending {
-				button.OnClick(v.runPrimary)
-			}
-		}
+	ui.Row(c.Key("footer")).FillWidth().Shrink(0).Justify(ui.Center).Padding(12, 28).Background(theme.Elevated).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+		ui.Row(c.Key("actions")).FillWidth().MaxWidth(768).Justify(ui.End).AlignItems(ui.Center).Gap(10).Children(func() { v.footerActions(c, theme) })
 	})
+}
+
+func (v *View) footerActions(c *ui.Context, theme nui.Theme) {
+	updater := v.Data.Updater
+	phase := updater.Phase()
+	switch {
+	case updater.Snapshot.CanCancel:
+		nui.Button(c.Key("cancel"), theme, locales.UpdaterActionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.X(), Loading: updater.ActionPending}).OnClick(func() { updater.Cancel(v.report) })
+	case !updater.Busy():
+		label := locales.UpdaterActionClose()
+		if phase == appservice.UpdatePhaseReady {
+			label = locales.UpdaterActionLater()
+		}
+		nui.Button(c.Key("close"), theme, label, nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(v.closeWindow)
+	}
+	var label string
+	var icon *ui.SVG
+	switch phase {
+	case appservice.UpdatePhaseAvailable:
+		if updater.SelfUpdate() {
+			label, icon = locales.UpdaterActionDownload(), lucide.Download()
+		} else {
+			label, icon = locales.UpdaterActionOpenRelease(), lucide.ExternalLink()
+		}
+	case appservice.UpdatePhaseReady:
+		label, icon = locales.UpdaterActionRestart(), lucide.Power()
+	case appservice.UpdatePhaseError:
+		label, icon = locales.UpdaterActionRetry(), lucide.RefreshCw()
+	case appservice.UpdatePhaseIdle, appservice.UpdatePhaseUpToDate:
+		label, icon = locales.UpdaterActionCheck(), lucide.Search()
+	}
+	if label != "" {
+		button := nui.Button(c.Key("primary"), theme, label, nui.ButtonOptions{Leading: icon, Loading: updater.ActionPending})
+		if !updater.ActionPending {
+			button.OnClick(v.runPrimary)
+		}
+	}
 }
 
 func (v *View) closeDialog(c *ui.Context, theme nui.Theme) {
@@ -436,29 +452,34 @@ var appIcon = sync.OnceValue(func() ui.ImageSource {
 func (v *View) Build(c *ui.Context) {
 	updater := v.Data.Updater
 	theme := nui.App(c, v.Data.Settings.Theme().Config)
-	ui.Column(c.Key("update")).Fill().Background(theme.Background).Children(func() {
+	ui.Column(c.Key("update")).Fill().Background(theme.MutedBackground).Children(func() {
 		v.Host.Frame.Build(c, theme)
 		ui.Scroll(c.Key("scroll")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c.Key("content")).FillWidth().Gap(14).Padding(20).Children(func() {
-				ui.Row(c.Key("header")).FillWidth().Gap(12).AlignItems(ui.Center).Children(func() {
-					if icon := appIcon(); icon != nil {
-						ui.Image(c.Key("icon"), icon).Size(44, 44).Shrink(0)
-					}
-					ui.Column(c.Key("heading")).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-						ui.Text(c, locales.UpdaterEyebrow()).FontSize(12).TextColor(theme.Muted)
-						ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, locales.UpdaterWindowTitle()).FontSize(20).Bold().TextColor(theme.Highlighted)
-							nui.Badge(c.Key("version"), theme, "v"+updater.Snapshot.CurrentVersion, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+			ui.Column(c.Key("content")).FillWidth().MaxWidth(768+2*28).Margin(0, ui.Auto, 0, ui.Auto).Gap(16).Padding(24, 28).Children(func() {
+				ui.Row(c.Key("header")).FillWidth().Gap(16).AlignItems(ui.Start).Children(func() {
+					tile := ui.Box(c.Key("icon")).Size(52, 52).Shrink(0).Radius(12).Center().Background(theme.Elevated).Border(1, theme.BorderAccented).
+						Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35)).Clip()
+					tile.Children(func() {
+						ui.Box(c.Key("glow")).Absolute().Left(6).Right(6).Bottom(4).Height(4).Radius(2).Background(theme.Primary.Alpha(0.08))
+						if icon := appIcon(); icon != nil {
+							ui.Image(c.Key("image"), icon).Size(32, 32).Fit(ui.Contain)
+						}
+					})
+					ui.Column(c.Key("heading")).Grow(1).Basis(0).MinWidth(0).Gap(4).Padding(2, 0, 0, 0).Children(func() {
+						ui.Text(c, strings.ToUpper(locales.UpdaterEyebrow())).FontSize(12).FontWeight(600).LetterSpacing(1.7).TextColor(theme.Muted)
+						ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
+							ui.Text(c, locales.UpdaterWindowTitle()).FontSize(20).Bold().LetterSpacing(-0.4).TextColor(theme.Text)
+							nui.Badge(c.Key("version"), theme, "v"+updater.Snapshot.CurrentVersion, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Subtle, Size: nui.SM})
 						})
 					})
 				})
 				v.steps(c, theme)
 				v.statusCard(c, theme)
 				if updater.Snapshot.Release != nil && !updater.SelfUpdate() {
-					nui.Alert(c.Key("manual"), theme, nui.AlertOptions{Title: locales.UpdaterManualNoticeTitle(), Description: locales.UpdaterManualNoticeDescription(), Color: nui.Info, Variant: nui.Soft, Icon: lucide.ExternalLink()})
+					nui.Alert(c.Key("manual"), theme, nui.AlertOptions{Title: locales.UpdaterManualNoticeTitle(), Description: locales.UpdaterManualNoticeDescription(), Color: nui.Info, Variant: nui.Subtle, Icon: lucide.ExternalLink()})
 				}
 				if v.blocked {
-					nui.Alert(c.Key("blocked"), theme, nui.AlertOptions{Title: locales.UpdaterCloseBlockedTitle(), Description: locales.UpdaterCloseBlockedDescription(), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.LockKeyhole(), Actions: func() {
+					nui.Alert(c.Key("blocked"), theme, nui.AlertOptions{Title: locales.UpdaterCloseBlockedTitle(), Description: locales.UpdaterCloseBlockedDescription(), Color: nui.Warning, Variant: nui.Subtle, Icon: lucide.LockKeyhole(), Actions: func() {
 						nui.Button(c.Key("understood"), theme, locales.UpdaterActionUnderstood(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.SM}).OnClick(func() { v.blocked = false })
 					}})
 				}

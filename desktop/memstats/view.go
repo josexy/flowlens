@@ -10,6 +10,7 @@ import (
 	memstatsservice "github.com/josexy/flowlens/backend/services/mem_stats_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -99,12 +100,15 @@ func countOf[T int | uint32 | uint64](sample *memstatsservice.MemSnapshot, read 
 
 func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	data := v.Data
-	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, locales.MemstatsTitle()).FontSize(15).Bold().TextColor(theme.Highlighted)
-			nui.Badge(c.Key("subtitle"), theme, locales.MemstatsSubtitle(), nui.BadgeOptions{Color: nui.Info, Variant: nui.Soft, Size: nui.SM})
+	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
+			ui.Text(c, locales.MemstatsTitle()).SingleLine().FontSize(15.2).FontWeight(600).TextColor(theme.Text)
+			nui.Badge(c.Key("subtitle"), theme, locales.MemstatsSubtitle(), nui.BadgeOptions{
+				Color: nui.Info, Variant: nui.Subtle, Size: nui.MD,
+				UI: nui.Styles{nui.Root: {FontSize: nui.Set[float32](14), Weight: nui.Set(600), PaddingX: nui.Set[float32](8), PaddingY: nui.Set[float32](2)}},
+			})
 		})
-		ui.Row(c.Key("actions")).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c.Key("actions")).Gap(8).AlignItems(ui.Center).Children(func() {
 			label, icon, color := locales.MemstatsStart(), lucide.Play(), nui.Primary
 			if data.Monitoring {
 				label, icon, color = locales.MemstatsStop(), lucide.Pause(), nui.Warning
@@ -117,7 +121,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 				}
 			})
 			v.interval = data.IntervalMs
-			ui.Box(c.Key("interval")).Width(96).Children(func() {
+			ui.Box(c.Key("interval")).Width(110).Children(func() {
 				nui.Select(c.Key("select"), theme, &v.interval, intervals, nui.SelectOptions{Label: locales.MemstatsInterval(), Size: nui.SM})
 			})
 			data.SetInterval(v.interval)
@@ -134,11 +138,11 @@ func (v *View) summary(c *ui.Context, theme nui.Theme, sample *memstatsservice.M
 		{locales.MemstatsNumGc(), countOf(sample, func(s *memstatsservice.MemSnapshot) uint32 { return s.NumGC })},
 		{locales.MemstatsNumGoroutine(), countOf(sample, func(s *memstatsservice.MemSnapshot) int { return s.NumGoroutine })},
 	}
-	ui.Row(c.Key("summary")).FillWidth().Gap(10).Children(func() {
+	ui.Row(c.Key("summary")).FillWidth().Gap(12).Children(func() {
 		for index, card := range cards {
-			ui.Column(c.Key(index)).Grow(1).Basis(0).MinWidth(0).Gap(4).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-				ui.Text(c, card.label).SingleLine().FontSize(12).TextColor(theme.Muted)
-				ui.Text(c, card.value).SingleLine().FontSize(18).Bold().TextColor(theme.Highlighted)
+			panelCard(c, theme, index).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+				ui.Text(c, card.label).SingleLine().FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, card.value).SingleLine().FontSize(17.6).FontWeight(600).TextColor(theme.Primary)
 			})
 		}
 	})
@@ -175,45 +179,60 @@ func (v *View) syncChart() {
 }
 
 func (v *View) chartCard(c *ui.Context, theme nui.Theme) {
-	ui.Column(c.Key("chart")).FillWidth().Gap(8).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-		ui.Text(c, locales.MemstatsChartTitle()).FontSize(14).Bold().TextColor(theme.Highlighted)
+	panelCard(c, theme, "chart").FillWidth().Gap(12).Children(func() {
+		heading(c, theme, locales.MemstatsChartTitle())
 		if len(v.Data.Samples) == 0 {
-			nui.Empty(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.ChartLine(), Title: locales.MemstatsNoData()})
+			widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.ChartLine(), Title: locales.MemstatsNoData()}).MinHeight(120)
 			return
 		}
 		v.syncChart()
 		nui.Chart(c.Key("plot"), theme, &v.chart, nui.ChartOptions{
-			Label: locales.MemstatsChartTitle(), Kind: nui.ChartLine, Height: 240, Legend: nui.Set(true), Grid: nui.Set(true),
+			Label: locales.MemstatsChartTitle(), Kind: nui.ChartLine, Height: 220, Legend: nui.Set(true), Grid: nui.Set(true),
 			Animate: nui.Set(false), FormatY: func(value float64) string { return formatBytes(uint64(max(value, 0))) },
 			FormatTime: func(at time.Time) string { return at.Local().Format("15:04:05") },
 		}).FillWidth()
 	})
 }
 
+// panelCard is a bordered card on the panel background.
+func panelCard(c *ui.Context, theme nui.Theme, key any) ui.Element {
+	return ui.Column(c.Key(key)).Padding(12).Radius(8).Border(1, theme.Border).Background(theme.Background).
+		Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35))
+}
+
 func metrics(c *ui.Context, theme nui.Theme, key string, items []metric) {
-	ui.Column(c.Key(key)).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Clip().Children(func() {
+	ui.Column(c.Key(key)).FillWidth().Border(1, theme.Border).Radius(6).Clip().Children(func() {
 		for index, item := range items {
-			line := ui.Row(c.Key(index)).FillWidth()
+			line := ui.Row(c.Key(index)).FillWidth().AlignItems(ui.Stretch)
 			if index > 0 {
 				line.BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
 			}
 			line.Children(func() {
-				ui.Text(c, item.label).Width(170).Shrink(0).FontSize(12).Padding(6, 9).TextColor(theme.Muted).Background(theme.Elevated)
-				ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(12).Padding(6, 9).TextColor(theme.Text).Selectable()
+				ui.Text(c, item.label).WidthPercent(38).MinWidth(120).Shrink(0).FontSize(12).LineHeight(1.35).Padding(7, 9).TextColor(theme.Muted).Background(theme.Elevated)
+				ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(12).LineHeight(1.35).Padding(7, 9).TextColor(theme.Text).Selectable()
 			})
 		}
 	})
 }
 
 func heading(c *ui.Context, theme nui.Theme, title string) {
-	ui.Text(c.Key(title), title).FontSize(14).Bold().TextColor(theme.Highlighted)
+	ui.Text(c.Key(title), title).FontSize(14).FontWeight(600).TextColor(theme.Text)
+}
+
+// divider names a group inside a card, with a rule after the name.
+func divider(c *ui.Context, theme nui.Theme, title string) {
+	ui.Row(c.Key(title)).FillWidth().AlignItems(ui.Center).Gap(8).Margin(12, 0, 12, 0).Children(func() {
+		ui.Text(c, title).SingleLine().FontSize(14).FontWeight(600).TextColor(theme.Muted)
+		ui.Box(c).Grow(1).Height(1).Background(theme.Border)
+	})
 }
 
 func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSnapshot) {
 	type snapshot = memstatsservice.MemSnapshot
 	ui.Row(c.Key("details")).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
-		ui.Column(c.Key("left")).Grow(1).Basis(0).MinWidth(0).Gap(8).Children(func() {
+		panelCard(c, theme, "left").Grow(1).Basis(0).MinWidth(0).Children(func() {
 			heading(c, theme, locales.MemstatsSectionHeap())
+			ui.Box(c).Height(12)
 			metrics(c, theme, "heap", []metric{
 				{locales.MemstatsHeapAllocDesc(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapAlloc })},
 				{locales.MemstatsHeapSys(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapSys })},
@@ -222,14 +241,15 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 				{locales.MemstatsHeapReleased(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapReleased })},
 				{locales.MemstatsHeapObjects(), countOf(s, func(s *snapshot) uint64 { return s.HeapObjects })},
 			})
-			heading(c, theme, locales.MemstatsSectionStack())
+			divider(c, theme, locales.MemstatsSectionStack())
 			metrics(c, theme, "stack", []metric{
 				{locales.MemstatsStackInuse(), bytesOf(s, func(s *snapshot) uint64 { return s.StackInuse })},
 				{locales.MemstatsStackSys(), bytesOf(s, func(s *snapshot) uint64 { return s.StackSys })},
 			})
 		})
-		ui.Column(c.Key("right")).Grow(1).Basis(0).MinWidth(0).Gap(8).Children(func() {
+		panelCard(c, theme, "right").Grow(1).Basis(0).MinWidth(0).Children(func() {
 			heading(c, theme, locales.MemstatsSectionGc())
+			ui.Box(c).Height(12)
 			metrics(c, theme, "gc", []metric{
 				{locales.MemstatsGcCount(), countOf(s, func(s *snapshot) uint32 { return s.NumGC })},
 				{locales.MemstatsForcedGcCount(), countOf(s, func(s *snapshot) uint32 { return s.NumForcedGC })},
@@ -239,14 +259,14 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 				{locales.MemstatsNextGc(), bytesOf(s, func(s *snapshot) uint64 { return s.NextGC })},
 				{locales.MemstatsLastGcTime(), value(s, func(s *snapshot) string { return formatLastGC(s.LastGC) })},
 			})
-			heading(c, theme, locales.MemstatsSectionOverall())
+			divider(c, theme, locales.MemstatsSectionOverall())
 			metrics(c, theme, "overall", []metric{
 				{locales.MemstatsTotalAlloc(), bytesOf(s, func(s *snapshot) uint64 { return s.TotalAlloc })},
 				{locales.MemstatsMallocs(), countOf(s, func(s *snapshot) uint64 { return s.Mallocs })},
 				{locales.MemstatsFrees(), countOf(s, func(s *snapshot) uint64 { return s.Frees })},
 				{locales.MemstatsLiveObjects(), value(s, liveObjects)},
 			})
-			heading(c, theme, locales.MemstatsSectionRuntime())
+			divider(c, theme, locales.MemstatsSectionRuntime())
 			metrics(c, theme, "runtime", []metric{
 				{locales.MemstatsGoVersion(), value(s, func(s *snapshot) string { return s.GoVersion })},
 				{locales.MemstatsOsArch(), value(s, func(s *snapshot) string { return s.GOOS + " / " + s.GOARCH })},
@@ -259,13 +279,14 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 
 // Sidebar shows the section's single entry.
 func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
-	ui.Column(c.Key("memstats-sidebar")).Fill().Padding(8).Children(func() {
-		entry := ui.Row(c.Key("entry")).FillWidth().Height(34).AlignItems(ui.Center).Gap(8).PaddingX(10).Radius(theme.Radius).Background(theme.Primary.Alpha(0.12)).Role(ui.RoleButton).Label(locales.MenuMemstats())
+	ui.Column(c.Key("memstats-sidebar")).Fill().Children(func() {
+		entry := ui.Row(c.Key("entry")).FillWidth().MinHeight(40).AlignItems(ui.Center).Gap(8).Padding(8, 10, 8, 7).Background(theme.Primary.Alpha(0.08)).Role(ui.RoleButton).Label(locales.MenuMemstats())
+		entry.BorderWidth(0, 0, 0, 3).BorderColor(theme.Primary)
 		if v.Select != nil {
 			entry.OnClick(v.Select)
 		}
 		entry.Children(func() {
-			ui.Icon(c, lucide.Activity()).Size(15, 15).Shrink(0).TextColor(theme.Primary)
+			ui.Icon(c, lucide.Activity()).Size(16, 16).Shrink(0).TextColor(theme.Primary)
 			ui.Text(c, locales.MenuMemstats()).SingleLine().FontSize(14).Bold().TextColor(theme.Text)
 		})
 	})
@@ -276,7 +297,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("memstats")).Fill().Children(func() {
 		v.toolbar(c, theme)
 		ui.Scroll(c.Key("body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c.Key("content")).FillWidth().Gap(12).Padding(16).Children(func() {
+			ui.Column(c.Key("content")).FillWidth().Gap(12).Padding(12).Children(func() {
 				v.summary(c, theme, v.Data.Latest)
 				v.chartCard(c, theme)
 				v.details(c, theme, v.Data.Latest)

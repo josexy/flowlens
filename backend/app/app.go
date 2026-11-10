@@ -440,7 +440,7 @@ func openMainWindow(
 	app.Surfaces[store.WorkspaceCategory] = shell.Surface{Sidebar: captureWorkspace.CategorySidebar, Content: captureWorkspace.Content}
 	data.History.LoadList()
 	app.Surfaces[store.WorkspaceCapture] = shell.Surface{Sidebar: captureWorkspace.Sidebar, Content: captureWorkspace.Content}
-	app.Counts = func() (int, int) { return int(data.Traffic.Statistics.Total), data.Traffic.SelectedCount }
+	app.Counts = func() (int, int) { return activeTrafficCounts(data) }
 
 	options := mygo.WindowOptions{
 		Title:     appservice.APP_NAME,
@@ -585,6 +585,32 @@ func openMainWindow(
 		}
 		go startGlobalShortcuts(all.shortcut)
 	})
+}
+
+// activeTrafficCounts counts the traffic of the active workspace tab: a saved
+// session's, or the live capture's.
+func activeTrafficCounts(data *store.Store) (total, selected int) {
+	history := data.History
+	fromHistory := false
+	if data.Workspace != nil && history != nil {
+		tab := data.Workspace.ActiveTab()
+		switch {
+		case tab.Type == logic.TabTypeHistory:
+			fromHistory = true
+		case tab.HTTP != nil:
+			fromHistory = tab.HTTP.Source == logic.DraftHistoryEdit
+		case tab.WebSocket != nil:
+			fromHistory = tab.WebSocket.Source == logic.DraftHistoryEdit
+		}
+	}
+	if !fromHistory {
+		return int(data.Traffic.Statistics.Total), data.Traffic.SelectedCount
+	}
+	traffic := history.Traffic
+	if history.LoadingHistory || history.SelectedKey != traffic.Key {
+		return len(traffic.Entries), 0
+	}
+	return len(traffic.Entries), traffic.SelectedCount
 }
 
 func startGlobalShortcuts(shortcut *shortcutservice.ShortcutService) {

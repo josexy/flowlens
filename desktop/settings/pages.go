@@ -140,7 +140,7 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 	if config.InterpreterPath != state.seenPath {
 		state.seenPath, state.status, state.testError = config.InterpreterPath, nil, ""
 	}
-	section(c, palette, "python", locales.SettingsSectionPythonPlugins(), false, nil, func() {
+	v.section(c, palette, "python", locales.SettingsSectionPythonPlugins(), false, nil, func() {
 		row(c, palette, "enabled", locales.SettingsPythonPluginsEnabledLabel(), "", func() {
 			ui.Row(c.Key("line")).Gap(8).AlignItems(ui.Center).Children(func() {
 				enabled := config.Enabled
@@ -198,7 +198,7 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 		row(c, palette, "timeout", locales.SettingsPythonHookTimeoutLabel(), "", func() {
 			ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 				state.timeout.build(c, palette, "number", locales.SettingsPythonHookTimeoutAccessibleLabel(), &config.HookTimeoutMs, 100, 60000, 100, false)
-				ui.Text(c, locales.SettingsUnitMilliseconds()).FontSize(13).TextColor(palette.Muted)
+				ui.Text(c, locales.SettingsUnitMilliseconds()).FontSize(14).TextColor(palette.Muted)
 			})
 		})
 		runtime := v.Data.Settings.PythonStatus
@@ -224,7 +224,7 @@ func (v *View) discoveryDialog(c *ui.Context, palette nui.Theme, config *setting
 		})
 	}}, func(theme nui.Theme) {
 		ui.Column(c).FillWidth().Gap(6).Children(func() {
-			ui.Text(c, locales.SettingsPythonInterpreterDetectDescription()).FontSize(13).TextColor(theme.Muted).FillWidth()
+			ui.Text(c, locales.SettingsPythonInterpreterDetectDescription()).FontSize(14).TextColor(theme.Muted).FillWidth()
 			highest := state.candidates[0]
 			for index, candidate := range state.candidates {
 				selected := state.selected == candidate.InterpreterPath
@@ -285,12 +285,12 @@ func logLevelOptions() []nui.Option[string] {
 
 func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 	state := &v.logs
-	ui.Text(c.Key("immediate"), locales.SettingsLogImmediateNotice()).FontSize(13).TextColor(palette.Muted).FillWidth()
+	ui.Text(c.Key("immediate"), locales.SettingsLogImmediateNotice()).FontSize(14).TextColor(palette.Muted).FillWidth()
 	if state.status == nil {
 		v.loadLogs()
 		return
 	}
-	section(c, palette, "logging", "", false, nil, func() {
+	v.section(c, palette, "logging", "", false, nil, func() {
 		row(c, palette, "enabled", locales.SettingsLogEnabledLabel(), "", func() {
 			enabled := state.status.Enabled
 			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: state.updatingEnabled}).Label(locales.SettingsLogEnabledLabel())
@@ -326,7 +326,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 			}
 		})
 	})
-	section(c, palette, "maintenance", locales.SettingsLogMaintenanceLabel(), false, nil, func() {
+	v.section(c, palette, "maintenance", locales.SettingsLogMaintenanceLabel(), false, nil, func() {
 		ui.Row(c.Key("actions")).Gap(8).Children(func() {
 			nui.Button(c.Key("open"), palette, locales.SettingsLogOpenDir(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.FolderOpen(), Loading: state.opening}).OnClick(func() {
 				state.opening = true
@@ -415,12 +415,16 @@ func (v *View) resetApplication() {
 }
 
 func (v *View) dangerRow(c *ui.Context, palette nui.Theme, key, title, description, label string, color nui.Color, variant nui.Variant, disabled, loading bool, run func()) {
-	ui.Row(c.Key(key)).FillWidth().Gap(12).AlignItems(ui.Center).Padding(10).Border(1, palette.Border).Radius(palette.Radius).Children(func() {
-		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, title).FontSize(14).TextColor(palette.Text)
-			ui.Text(c, description).FontSize(12).TextColor(palette.Muted).FillWidth()
+	border := palette.Border
+	if color == nui.Error {
+		border = palette.Error.Alpha(0.35).Over(palette.Border)
+	}
+	ui.Row(c.Key(key)).FillWidth().Gap(16).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(12).Border(1, border).Radius(6).Background(palette.Elevated.Alpha(0.44)).Children(func() {
+		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
+			ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(palette.Text)
+			ui.Text(c, description).FontSize(14).LineHeight(1.5).TextColor(palette.Muted).FillWidth()
 		})
-		button := nui.Button(c.Key("action"), palette, label, nui.ButtonOptions{Color: color, Variant: variant, Size: nui.SM, Leading: lucide.Trash(), Disabled: disabled, Loading: loading, AccessibleLabel: title})
+		button := nui.Button(c.Key("action"), palette, label, nui.ButtonOptions{Color: color, Variant: variant, Leading: lucide.Trash(), Disabled: disabled, Loading: loading, AccessibleLabel: title}).Shrink(0)
 		if !disabled {
 			button.OnClick(run)
 		}
@@ -431,12 +435,12 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 	state := &v.storage
 	settings := v.Data.Settings
 	cache, retention := draft.CacheConfig, draft.HistoryRetentionConfig
-	section(c, palette, "cache", locales.SettingsSectionCache(), false, nil, func() {
+	v.section(c, palette, "cache", locales.SettingsSectionCache(), false, nil, func() {
 		row(c, palette, "threshold", locales.SettingsCacheThresholdLabel(), locales.SettingsCacheThresholdHint(), func() {
 			threshold := int(cache.BodyCacheThresholdBytes)
 			ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 				state.threshold.build(c, palette, "number", locales.SettingsCacheThresholdAccessibleLabel(), &threshold, 1, 1<<40, 1, false)
-				ui.Text(c, locales.SettingsUnitBytes()).FontSize(13).TextColor(palette.Muted)
+				ui.Text(c, locales.SettingsUnitBytes()).FontSize(14).TextColor(palette.Muted)
 			})
 			cache.BodyCacheThresholdBytes = int64(threshold)
 		})
@@ -444,7 +448,7 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 			state.maxMessages.build(c, palette, "number", locales.SettingsWsMaxMessagesLabel(), &cache.MaxWsMessages, 1, 1<<30, 1, false)
 		})
 	})
-	section(c, palette, "retention", locales.SettingsSectionHistoryRetention(), false, nil, func() {
+	v.section(c, palette, "retention", locales.SettingsSectionHistoryRetention(), false, nil, func() {
 		row(c, palette, "enabled", locales.SettingsHistoryRetentionEnabledLabel(), locales.SettingsHistoryRetentionEnabledHint(), func() {
 			nui.Switch(c.Key("switch"), palette, &retention.Enabled, nui.SwitchOptions{}).Label(locales.SettingsHistoryRetentionEnabledLabel())
 		})
@@ -463,25 +467,27 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 			})
 		})
 	})
-	section(c, palette, "disk", locales.SettingsSectionDiskUsage(), false, nil, func() {
-		ui.Row(c.Key("grid")).FillWidth().Gap(24).Children(func() {
+	v.section(c, palette, "disk", locales.SettingsSectionDiskUsage(), false, nil, func() {
+		// Compact tiles, each as wide as its content and at least 118 wide.
+		ui.Row(c.Key("grid")).FillWidth().Wrap().Gap(8).Children(func() {
 			for index, item := range []struct {
 				label string
 				value int64
 			}{{locales.SettingsDiskUsageCache(), state.size.CacheBytes}, {locales.SettingsDiskUsageHistory(), state.size.HistoryBytes}, {locales.SettingsDiskUsageTotal(), state.size.CacheBytes + state.size.HistoryBytes}} {
-				ui.Column(c.Key(index)).Gap(2).Children(func() {
-					ui.Text(c, item.label).FontSize(12).TextColor(palette.Muted)
-					ui.Text(c, formatSize(item.value)).FontSize(14).Bold().TextColor(palette.Text)
+				tile := ui.Column(c.Key(index)).MinWidth(118).Gap(4).Padding(9, 10).Radius(6).Border(1, palette.Border).Background(palette.Elevated.Alpha(0.72))
+				tile.Children(func() {
+					ui.Text(c, item.label).SingleLine().FontSize(14).LineHeight(1.4).FontWeight(600).TextColor(palette.Muted)
+					ui.Text(c, formatSize(item.value)).FontSize(14).LineHeight(1.35).FontWeight(600).TextColor(palette.Toned)
 				})
 			}
 		})
 	})
-	section(c, palette, "danger", locales.SettingsSectionDanger(), true, nil, func() {
+	v.section(c, palette, "danger", locales.SettingsSectionDanger(), true, nil, func() {
 		if state.cacheDone {
-			nui.Alert(c.Key("cache-done"), palette, nui.AlertOptions{Title: locales.SettingsClearCacheSuccess(), Color: nui.Success, Variant: nui.Soft})
+			nui.Alert(c.Key("cache-done"), palette, nui.AlertOptions{Title: locales.SettingsClearCacheSuccess(), Color: nui.Success, Variant: nui.Subtle})
 		}
 		if state.allDone {
-			nui.Alert(c.Key("all-done"), palette, nui.AlertOptions{Title: locales.SettingsClearAllDataSuccess(), Color: nui.Success, Variant: nui.Soft})
+			nui.Alert(c.Key("all-done"), palette, nui.AlertOptions{Title: locales.SettingsClearAllDataSuccess(), Color: nui.Success, Variant: nui.Subtle})
 		}
 		blocked := state.pending || settings.Resetting
 		v.dangerRow(c, palette, "clear-cache", locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesDesc(), locales.SettingsClearAction(), nui.Neutral, nui.Outline, blocked, false, func() {
@@ -654,7 +660,7 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 		target.commands = append(target.commands, command)
 	}
 	if len(groups) == 0 {
-		ui.Text(c.Key("empty"), locales.ShortcutsEmptySearch()).FontSize(13).TextColor(palette.Muted)
+		ui.Text(c.Key("empty"), locales.ShortcutsEmptySearch()).FontSize(14).TextColor(palette.Muted)
 		return
 	}
 	for index, current := range groups {

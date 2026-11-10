@@ -333,7 +333,7 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 			text, color := yesNo(item.value)
 			ui.Column(c.Key(index)).Gap(2).Children(func() {
 				ui.Text(c, item.label).FontSize(12).TextColor(palette.Muted)
-				ui.Text(c, text).FontSize(13).Bold().TextColor(color)
+				ui.Text(c, text).FontSize(14).Bold().TextColor(color)
 			})
 		}
 	})
@@ -343,7 +343,7 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 		}
 		ui.Column(c.Key(key)).FillWidth().Gap(2).Children(func() {
 			ui.Text(c, label).FontSize(12).TextColor(palette.Muted)
-			ui.Text(c, value).FontSize(13).TextColor(palette.Text).Selectable().FillWidth()
+			ui.Text(c, value).FontSize(14).TextColor(palette.Text).Selectable().FillWidth()
 		})
 	}
 	micros := func(value int64) string {
@@ -361,7 +361,7 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 
 func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *settingservice.ProxyConfig) {
 	state := &v.proxy
-	section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, proxy.UseBuiltinCA) }, func() {
+	v.section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, proxy.UseBuiltinCA) }, func() {
 		color := palette.Warning
 		icon := lucide.Info()
 		if state.ready() {
@@ -387,7 +387,7 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 					}
 					ui.Row(c.Key("trust")).Gap(6).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, trustIcon).Size(14, 14).TextColor(toneColor)
-						ui.Text(c, text).FontSize(13).TextColor(toneColor)
+						ui.Text(c, text).FontSize(14).TextColor(toneColor)
 					})
 				}
 			})
@@ -421,7 +421,7 @@ func collapsibleHead(c *ui.Context, palette nui.Theme, key, title, summary strin
 			}
 			ui.Icon(c, icon).Size(14, 14).TextColor(palette.Muted)
 			ui.Text(c, title).FontSize(14).TextColor(palette.Text)
-			ui.Text(c, summary).FontSize(13).TextColor(summaryColor)
+			ui.Text(c, summary).FontSize(14).TextColor(summaryColor)
 		})
 		actions()
 	})
@@ -453,13 +453,13 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 		return
 	}
 	if len(proxy.RootCAPaths) == 0 {
-		ui.Text(c.Key("roots-empty"), locales.SettingsNoRootCasDesc()).FontSize(13).TextColor(palette.Muted).FillWidth()
+		ui.Text(c.Key("roots-empty"), locales.SettingsNoRootCasDesc()).FontSize(14).TextColor(palette.Muted).FillWidth()
 		return
 	}
 	for index := range proxy.RootCAPaths {
 		number := strconv.Itoa(index + 1)
 		ui.Row(c.Key("root-" + number)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, number).Width(20).Shrink(0).FontSize(13).TextColor(palette.Muted)
+			ui.Text(c, number).Width(20).Shrink(0).FontSize(14).TextColor(palette.Muted)
 			ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				v.fileInput(c, palette, "file", locales.SettingsRootCaPathPlaceholder()+" "+number, locales.SettingsRootCaPathPlaceholder(), locales.SettingsSelectRootCaFile(), certificatePatterns, &proxy.RootCAPaths[index])
 			})
@@ -543,7 +543,7 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 		return
 	}
 	if len(proxy.ClientCerts) == 0 {
-		ui.Text(c.Key("certs-empty"), locales.SettingsNoClientCertsDesc()).FontSize(13).TextColor(palette.Muted).FillWidth()
+		ui.Text(c.Key("certs-empty"), locales.SettingsNoClientCertsDesc()).FontSize(14).TextColor(palette.Muted).FillWidth()
 		return
 	}
 	for index := range proxy.ClientCerts {
@@ -591,14 +591,14 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 
 func (v *View) proxyPage(c *ui.Context, palette nui.Theme, draft *settingservice.Settings) {
 	proxy := draft.ProxyConfig
-	section(c, palette, "connection", locales.SettingsSectionConnection(), false, nil, func() {
+	v.section(c, palette, "connection", locales.SettingsSectionConnection(), false, nil, func() {
 		v.upstream(c, palette, proxy)
 		row(c, palette, "attribution", locales.SettingsProcessAttributionLabel(), "", func() {
 			nui.Switch(c.Key("switch"), palette, &draft.ProcessAttributionConfig.Enabled, nui.SwitchOptions{}).Label(locales.SettingsProcessAttributionLabel())
 		})
 	})
 	v.certificateSection(c, palette, proxy)
-	section(c, palette, "upstream-tls", locales.SettingsSectionUpstreamTls(), false, nil, func() {
+	v.section(c, palette, "upstream-tls", locales.SettingsSectionUpstreamTls(), false, nil, func() {
 		v.rootCAs(c, palette, proxy)
 		v.clientCerts(c, palette, proxy)
 	})

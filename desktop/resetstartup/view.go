@@ -158,12 +158,12 @@ func (v *View) Build(c *ui.Context) {
 		ui.Column(c.Key("head")).FillWidth().Gap(4).Children(func() {
 			ui.Text(c, title).FontSize(18).Bold().TextColor(theme.Highlighted).FillWidth()
 			if problem != "" {
-				ui.Text(c, locales.SettingsResetRecoveryDescription()).FontSize(13).TextColor(theme.Muted).FillWidth()
+				ui.Text(c, locales.SettingsResetRecoveryDescription()).FontSize(14).TextColor(theme.Muted).FillWidth()
 			}
 		})
 		v.stages(c, theme)
 		if problem != "" {
-			ui.Text(c.Key("error"), problem).FontSize(13).TextColor(theme.Error).FillWidth().Role(ui.RoleAlert).Selectable()
+			ui.Text(c.Key("error"), problem).FontSize(14).TextColor(theme.Error).FillWidth().Role(ui.RoleAlert).Selectable()
 		}
 		ui.Box(c.Key("space")).Grow(1)
 		ui.Row(c.Key("actions")).FillWidth().Justify(ui.End).Gap(8).Children(func() {

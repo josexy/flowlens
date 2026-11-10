@@ -191,13 +191,14 @@ func (p *socketPane) build(c *ui.Context, theme nui.Theme) {
 
 func (p *socketPane) connectionLine(c *ui.Context, theme nui.Theme) {
 	state := p.state
-	ui.Row(c.Key("connection-line")).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(8, 10).Children(func() {
-		ui.Box(c.Key("url")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, theme, &state.URL, nui.InputOptions{Label: locales.WorkspaceWebsocketClientUrlPlaceholder(), Placeholder: locales.WorkspaceWebsocketClientUrlPlaceholder(), Size: nui.MD}).FillWidth()
-		})
-		mitmButton(c, theme, state.Settings.ProxyMode == logic.ProxyModeMITM, func() {
-			state.Settings.ProxyMode = logic.ToggleMITMProxyMode(state.Settings.ProxyMode, &p.restoreProxy)
-		})
+	requestLine(c, theme, "connection-line", func() {
+		urlField{
+			url: &state.URL, label: locales.WorkspaceWebsocketClientUrlPlaceholder(), placeholder: locales.WorkspaceWebsocketClientUrlPlaceholder(),
+			mitm: state.Settings.ProxyMode == logic.ProxyModeMITM,
+			toggleMITM: func() {
+				state.Settings.ProxyMode = logic.ToggleMITMProxyMode(state.Settings.ProxyMode, &p.restoreProxy)
+			},
+		}.build(c, theme)
 		label, tooltip, icon, color := locales.WorkspaceWebsocketClientConnect(), locales.WorkspaceWebsocketClientConnect(), lucide.Link(), nui.Primary
 		switch state.ConnectionStatus {
 		case socketStatusConnecting:
@@ -205,9 +206,7 @@ func (p *socketPane) connectionLine(c *ui.Context, theme nui.Theme) {
 		case socketStatusConnected:
 			label, tooltip, icon, color = locales.WorkspaceWebsocketClientDisconnect(), locales.WorkspaceWebsocketClientDisconnect(), lucide.CircleStop(), nui.Error
 		}
-		button := nui.Button(c.Key("connect"), theme, label, nui.ButtonOptions{Color: color, Size: nui.MD, Leading: icon})
-		button.OnClick(p.toggleConnection)
-		nui.Tooltip(c, theme, button, tooltip, nui.TooltipOptions{})
+		primaryAction(c, theme, label, tooltip, icon, color, nil, p.toggleConnection)
 	})
 }
 
@@ -221,8 +220,8 @@ func (p *socketPane) leftPanel(c *ui.Context, theme nui.Theme) {
 		{ID: socketTabSettings, Label: locales.WorkspaceWebsocketClientSettings()},
 	}
 	ui.Column(c.Key("left-panel")).Fill().MinHeight(0).Children(func() {
-		ui.Box(c).FillWidth().Shrink(0).PaddingX(6).Children(func() {
-			nui.Tabs(c.Key("left-tabs"), theme, &state.ActiveLeftTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientMessage(), Size: nui.SM, Content: nui.Set(false)})
+		ui.ScrollHorizontal(c).FillWidth().Shrink(0).PaddingX(10).Scrollbars(false).Children(func() {
+			nui.Tabs(c.Key("left-tabs"), theme, &state.ActiveLeftTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientMessage(), Content: nui.Set(false), Underline: true})
 		})
 		ui.Column(c.Key(state.ActiveLeftTab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch state.ActiveLeftTab {
@@ -252,7 +251,7 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 	binary := state.DraftType == draftTypeBinaryFile
 	ui.Row(c.Key("draft-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceWebsocketClientDraftType()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceWebsocketClientDraftType()).FontSize(14).TextColor(theme.Muted)
 			ui.Box(c).Width(150).Children(func() {
 				nui.Select(c, theme, &state.DraftType, options, nui.SelectOptions{Label: locales.WorkspaceWebsocketClientDraftType(), Size: nui.SM})
 			})
@@ -337,7 +336,7 @@ func (p *socketPane) rightPanel(c *ui.Context, theme nui.Theme) {
 		case state.ConnectionStatus == socketStatusConnecting:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.WorkspaceWebsocketClientConnectionStatusConnecting()).FontSize(13).TextColor(theme.Muted)
+				ui.Text(c, locales.WorkspaceWebsocketClientConnectionStatusConnecting()).FontSize(14).TextColor(theme.Muted)
 			})
 			return
 		case !hasResult:
@@ -392,9 +391,9 @@ func (p *socketPane) rightTabs(c *ui.Context, theme nui.Theme, visible string, f
 		items = append(items, nui.TabItem{ID: socketTabResponse, Label: locales.WorkspaceWebsocketClientResponse()})
 	}
 	p.rightTab = visible
-	ui.Row(c.Key("right-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).PaddingX(6).Children(func() {
-		ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Tabs(c.Key("right-tabs"), theme, &p.rightTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientResponse(), Size: nui.SM, Content: nui.Set(false)})
+	ui.Row(c.Key("right-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).PaddingX(10).Children(func() {
+		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
+			nui.Tabs(c.Key("right-tabs"), theme, &p.rightTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientResponse(), Content: nui.Set(false), Underline: true})
 		})
 		ui.Row(c.Key("chips")).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
 			nui.Badge(c.Key("count"), theme, strconv.Itoa(len(state.Messages)), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft})

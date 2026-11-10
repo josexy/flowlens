@@ -5,7 +5,6 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
-	"github.com/josexy/nuxt-ui-go/icons/lucide"
 )
 
 func proxyModeOptions() []nui.Option[string] {
@@ -37,7 +36,7 @@ func tlsProfileOptions() []nui.Option[string] {
 
 func settingRow(c *ui.Context, theme nui.Theme, key, label string, control func()) {
 	ui.Row(c.Key(key)).FillWidth().AlignItems(ui.Center).Gap(10).MinHeight(36).Children(func() {
-		ui.Text(c, label).Width(170).Shrink(0).FontSize(13).TextColor(theme.Toned)
+		ui.Text(c, label).Width(170).Shrink(0).FontSize(14).TextColor(theme.Toned)
 		ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(control)
 	})
 }
@@ -69,15 +68,4 @@ func (f *numberField) build(c *ui.Context, theme nui.Theme, key, label, placehol
 		*target = int64(f.value.Value)
 		f.seen = *target
 	}
-}
-
-func mitmButton(c *ui.Context, theme nui.Theme, active bool, toggle func()) {
-	label := locales.WorkspaceHttpRequestEnableMitmProxy()
-	color := nui.Neutral
-	if active {
-		label, color = locales.WorkspaceHttpRequestDisableMitmProxy(), nui.Primary
-	}
-	button := nui.Button(c.Key("mitm"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: color, Size: nui.SM, Square: true, Leading: lucide.ShieldCheck(), AccessibleLabel: label})
-	button.OnClick(toggle)
-	nui.Tooltip(c, theme, button, label, nui.TooltipOptions{})
 }

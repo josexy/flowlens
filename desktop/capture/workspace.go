@@ -114,11 +114,14 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	if label == "" {
 		label = locales.MenuCapture()
 	}
-	row := ui.Row(c.Key("capture-item")).FillWidth().Height(40).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
-	if active {
-		row.Background(theme.Accented).Border(1, theme.BorderAccented)
-	} else {
-		row.Border(1, ui.Transparent)
+	row := ui.Row(c.Key("capture-item")).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
+	switch {
+	case active:
+		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
+	case row.Hovered():
+		row.Background(theme.Elevated).Border(1, ui.Transparent)
+	default:
+		row.Background(theme.Elevated.Mix(theme.Background, 0.12)).Border(1, ui.Transparent)
 	}
 	row.OnClick(func() { w.selectItem(store.CaptureItemLive) })
 	row.ContextMenu(func(menu *ui.Menu) {
@@ -137,16 +140,34 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		}
 	})
 	row.Children(func() {
-		color := theme.Muted
+		color := theme.Muted.Alpha(0.7)
 		if active {
 			color = theme.Primary
 		}
 		ui.Icon(c, lucide.Radio()).Size(16, 16).Shrink(0).TextColor(color)
-		ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).Bold().TextColor(theme.Text)
+		ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Text)
 		restart := nui.Button(c.Key("restart"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.SkipForward(), AccessibleLabel: locales.CaptureRestart()})
 		restart.OnClick(w.Restart)
 		nui.Tooltip(c, theme, restart, locales.CaptureRestart(), nui.TooltipOptions{})
-		nui.Badge(c, theme, strconv.FormatInt(w.Data.Traffic.Statistics.Total, 10), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+		CountPill(c, theme, strconv.FormatInt(w.Data.Traffic.Statistics.Total, 10), false)
+	})
+}
+
+// SidebarSelectedColor fills the chosen item of a sidebar list: a tint of the
+// accent over the accented background.
+func SidebarSelectedColor(theme nui.Theme) ui.Color {
+	return theme.Primary.Alpha(0.12).Over(theme.Accented)
+}
+
+// CountPill is the rounded count at the end of a sidebar item, in the accent
+// on the chosen item.
+func CountPill(c *ui.Context, theme nui.Theme, count string, active bool) ui.Element {
+	background, foreground := theme.Elevated.Alpha(0.88), theme.Muted
+	if active {
+		background, foreground = theme.Primary.Alpha(0.14).Over(theme.Elevated), theme.Primary
+	}
+	return ui.Box(c).Height(20).MinWidth(22).PaddingX(7).Radius(10).Center().Shrink(0).Background(background).Children(func() {
+		ui.Text(c, count).SingleLine().FontSize(14).LineHeight(20.0 / 14.0).TextColor(foreground)
 	})
 }
 
@@ -155,14 +176,16 @@ func (w *Workspace) Content(c *ui.Context, theme nui.Theme) {
 	w.declareShortcuts()
 	w.pruneHistoryTab()
 	w.syncTabs()
+	// The proxy toolbar heads every tab, above the tab strip.
+	w.buildToolbar(c, theme)
 	if w.TabBar != nil {
 		w.TabBar(c, theme)
 	}
 	if tab := w.requestTab(); tab != nil && w.RequestTab != nil {
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() { w.RequestTab(c, theme, tab) })
+		w.alias.build(c, theme, w)
 		return
 	}
-	w.buildToolbar(c, theme)
 	ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 		if _, open := w.selectedHistory(); open {
 			w.historyPane(c, theme)

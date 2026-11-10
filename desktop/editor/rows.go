@@ -129,7 +129,7 @@ func serializeRows(rows []logic.EditableRow) string {
 
 func paneHeader(c *ui.Context, theme nui.Theme, title string, actions func()) {
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Text(c, title).FontSize(13).TextColor(theme.Muted)
+		ui.Text(c, title).FontSize(14).TextColor(theme.Muted)
 		ui.Row(c).Gap(4).Children(actions)
 	})
 }
@@ -279,7 +279,7 @@ func (e *Editor) fileControl(c *ui.Context, theme nui.Theme, job string, file **
 	area.Children(func() {
 		if *file == nil {
 			ui.Icon(c, lucide.FileText()).Size(28, 28).TextColor(theme.Muted)
-			ui.Text(c, locales.WorkspaceHttpRequestFileDropHint()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestFileDropHint()).FontSize(14).TextColor(theme.Muted)
 			nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() { e.pickFile(job, begin(), apply) })
 			return

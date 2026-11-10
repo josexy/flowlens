@@ -158,7 +158,7 @@ func (m *MessageStream) row(c *ui.Context, theme nui.Theme, index int) {
 	row.OnClick(func() { m.open_(message) })
 	row.Children(func() {
 		ui.Icon(c, directionIcon(message.Direction)).Size(14, 14).Shrink(0).TextColor(color)
-		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(13).TextColor(theme.Text)
+		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(14).TextColor(theme.Text)
 		ui.Text(c, logic.FormatFileSize(int64(message.DataSize))).Shrink(0).FontSize(12).TextColor(theme.Muted)
 	})
 }
@@ -176,7 +176,7 @@ func (m *MessageStream) bubble(c *ui.Context, theme nui.Theme, index int) {
 		}
 		bubble := ui.Box(c).MaxWidth(520).Padding(8).Radius(10).Background(background)
 		bubble.OnClick(func() { m.open_(message) })
-		bubble.Children(func() { ui.Text(c, m.preview(message)).FontSize(13).TextColor(theme.Text) })
+		bubble.Children(func() { ui.Text(c, m.preview(message)).FontSize(14).TextColor(theme.Text) })
 	})
 }
 
@@ -212,7 +212,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 			warningAlert(c, palette, active.Error)
 		}
 		if binary {
-			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(13).TextColor(palette.Muted)
+			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(14).TextColor(palette.Muted)
 			ui.Box(c).FillWidth().Height(320).Children(func() { m.hex.Build(c, palette, 1, active.Data, "base64") })
 			return
 		}

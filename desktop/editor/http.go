@@ -128,27 +128,20 @@ func (p *httpPane) build(c *ui.Context, theme nui.Theme) {
 
 func (p *httpPane) requestLine(c *ui.Context, theme nui.Theme) {
 	state := p.state
-	ui.Row(c.Key("request-line")).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(8, 10).Children(func() {
-		ui.Box(c.Key("method")).Width(112).Shrink(0).Children(func() {
-			options := make([]nui.Option[string], 0, len(requestMethods)+1)
-			for _, method := range requestMethods {
-				options = append(options, nui.Option[string]{Value: method, Label: method})
-			}
-			if !containsString(requestMethods, state.Method) {
-				options = append(options, nui.Option[string]{Value: state.Method, Label: state.Method})
-			}
-			nui.Select(c, theme, &state.Method, options, nui.SelectOptions{Label: "Method", Size: nui.MD})
-		})
-		ui.Box(c.Key("url")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, theme, &state.URL, nui.InputOptions{Label: locales.WorkspaceHttpRequestUrlPlaceholder(), Placeholder: locales.WorkspaceHttpRequestUrlPlaceholder(), Size: nui.MD, OnSubmit: func(string) {
+	requestLine(c, theme, "request-line", func() {
+		urlField{
+			url: &state.URL, label: locales.WorkspaceHttpRequestUrlPlaceholder(), placeholder: locales.WorkspaceHttpRequestUrlPlaceholder(),
+			method: func() { methodSelect(c, theme, &state.Method) },
+			mitm:   state.Settings.ProxyMode == logic.ProxyModeMITM,
+			toggleMITM: func() {
+				state.Settings.ProxyMode = logic.ToggleMITMProxyMode(state.Settings.ProxyMode, &p.restoreProxy)
+			},
+			submit: func(string) {
 				if !p.busy() {
 					p.send()
 				}
-			}}).FillWidth()
-		})
-		mitmButton(c, theme, state.Settings.ProxyMode == logic.ProxyModeMITM, func() {
-			state.Settings.ProxyMode = logic.ToggleMITMProxyMode(state.Settings.ProxyMode, &p.restoreProxy)
-		})
+			},
+		}.build(c, theme)
 		p.pluginsSwitch(c, theme)
 		p.primaryButton(c, theme)
 	})
@@ -163,16 +156,16 @@ func (p *httpPane) pluginsSwitch(c *ui.Context, theme nui.Theme) {
 	} else if enabled {
 		tooltip = locales.WorkspaceHttpRequestPluginsBypassed()
 	}
-	row := ui.Row(c.Key("plugins")).AlignItems(ui.Center).Gap(4).Shrink(0)
-	row.Children(func() {
+	box := requestLineBox(c, theme, "plugins").Gap(8).PaddingX(10)
+	box.Children(func() {
 		color := theme.Muted
 		if enabled && state.PluginsEnabled {
 			color = theme.Primary
 		}
-		ui.Icon(c, lucide.FileCode()).Size(16, 16).TextColor(color)
+		ui.Icon(c, lucide.FileCode()).Size(16, 16).Shrink(0).TextColor(color)
 		nui.Switch(c.Key("switch"), theme, &state.PluginsEnabled, nui.SwitchOptions{Disabled: !enabled || p.busy(), Size: nui.SM}).Label(locales.WorkspaceHttpRequestPluginsToggle())
 	})
-	nui.Tooltip(c, theme, row, tooltip, nui.TooltipOptions{})
+	nui.Tooltip(c, theme, box, tooltip, nui.TooltipOptions{})
 }
 
 func (p *httpPane) primaryButton(c *ui.Context, theme nui.Theme) {
@@ -187,9 +180,7 @@ func (p *httpPane) primaryButton(c *ui.Context, theme nui.Theme) {
 	default:
 		kbds = p.editor.kbds(shortcuts.RequestEditorSend)
 	}
-	button := nui.Button(c.Key("primary"), theme, label, nui.ButtonOptions{Color: color, Size: nui.MD, Leading: icon})
-	button.OnClick(run)
-	nui.Tooltip(c, theme, button, tooltip, nui.TooltipOptions{Kbds: kbds})
+	primaryAction(c, theme, label, tooltip, icon, color, kbds, run)
 }
 
 func containsString(values []string, value string) bool {
@@ -218,8 +209,8 @@ func (p *httpPane) requestPanel(c *ui.Context, theme nui.Theme) {
 			script,
 			{ID: logic.RequestTabSettings, Label: locales.WorkspaceHttpRequestSettings()},
 		}
-		ui.Box(c).FillWidth().Shrink(0).PaddingX(6).Children(func() {
-			nui.Tabs(c.Key("request-tabs"), theme, &state.ActiveRequestTab, items, nui.TabsOptions{Label: locales.WorkspaceHttpRequestRequestHeaders(), Size: nui.SM, Content: nui.Set(false)})
+		ui.ScrollHorizontal(c).FillWidth().Shrink(0).PaddingX(10).Scrollbars(false).Children(func() {
+			nui.Tabs(c.Key("request-tabs"), theme, &state.ActiveRequestTab, items, nui.TabsOptions{Label: locales.WorkspaceHttpRequestRequestHeaders(), Content: nui.Set(false), Underline: true})
 		})
 		ui.Column(c.Key(state.ActiveRequestTab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch state.ActiveRequestTab {
@@ -264,7 +255,7 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 	text := state.RequestBodyType == logic.BodyTypeJSON || state.RequestBodyType == logic.BodyTypeText || state.RequestBodyType == logic.BodyTypeXML
 	ui.Row(c.Key("body-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestBodyType()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestBodyType()).FontSize(14).TextColor(theme.Muted)
 			ui.Box(c).Width(150).Children(func() {
 				nui.Select(c, theme, &state.RequestBodyType, options, nui.SelectOptions{Label: locales.WorkspaceHttpRequestBodyType(), Size: nui.SM})
 			})
@@ -306,7 +297,7 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
 	ui.Row(c.Key("script-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestInlineScriptEnable()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestInlineScriptEnable()).FontSize(14).TextColor(theme.Muted)
 			nui.Switch(c.Key("script-enabled"), theme, &state.InlineScriptEnabled, nui.SwitchOptions{Disabled: p.busy(), Size: nui.SM}).Label(locales.WorkspaceHttpRequestInlineScriptEnable())
 		})
 		ui.Row(c).Gap(4).Children(func() {
@@ -445,7 +436,7 @@ func (v *formDataView) row(c *ui.Context, theme nui.Theme, e *Editor, key string
 			chip.OnClick(func() { e.pickFile(key+":"+id, v.begin(id), setFile) })
 			chip.Children(func() {
 				ui.Icon(c, lucide.FileText()).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-				ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(color)
+				ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
 			})
 		})
 		state := v.menu(id)

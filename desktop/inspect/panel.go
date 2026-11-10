@@ -3,6 +3,7 @@ package inspect
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
@@ -175,7 +176,7 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 	if entry == nil {
 		p.entryID = 0
 		ui.Column(c).Fill().Center().Children(func() {
-			nui.Empty(c, theme, nui.EmptyOptions{Icon: lucide.MousePointerClick(), Title: locales.DetailSelectRequest(), Variant: nui.Ghost})
+			widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.MousePointerClick(), Title: locales.DetailSelectRequest()})
 		})
 		return
 	}
@@ -199,8 +200,8 @@ func countLabel(label string, count int) string { return label + "(" + strconv.I
 
 func (p *Panel) tabBar(c *ui.Context, theme nui.Theme, key string, value *string, items []nui.TabItem, trailing func()) {
 	ui.Row(c.Key(key)).FillWidth().Height(38).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Children(func() {
-		ui.Scroll(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Tabs(c, theme, value, items, nui.TabsOptions{Label: key, Size: nui.SM, Content: nui.Set(false), Underline: true})
+		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
+			nui.Tabs(c, theme, value, items, nui.TabsOptions{Label: key, Content: nui.Set(false), Underline: true})
 		})
 		if trailing != nil {
 			trailing()
@@ -275,34 +276,48 @@ func (p *Panel) responseItems(entry *logic.TrafficEntry) []nui.TabItem {
 	return append(items, nui.TabItem{ID: tabResponseBody, Label: locales.DetailResponseBody()})
 }
 
+// summaryChip is a small label beside the response tabs.
+func summaryChip(c *ui.Context, text string, foreground, background ui.Color) ui.Element {
+	return ui.Box(c).MinHeight(20).PaddingX(8).Radius(6).Center().Shrink(0).Background(background).Children(func() {
+		ui.Text(c, text).SingleLine().FontSize(14).Bold().TextColor(foreground)
+	})
+}
+
+// statusChipColors are the text and background of a status code's chip.
+func statusChipColors(theme nui.Theme, status int) (ui.Color, ui.Color) {
+	switch {
+	case status >= 500:
+		return ui.Hex("#dc2626"), ui.RGBA(239, 68, 68, 0.14)
+	case status >= 400:
+		return ui.Hex("#b45309"), ui.RGBA(245, 158, 11, 0.16)
+	case status >= 300:
+		return ui.Hex("#0284c7"), ui.RGBA(14, 165, 233, 0.14)
+	case status >= 200:
+		return ui.Hex("#16a34a"), ui.RGBA(34, 197, 94, 0.14)
+	default:
+		return theme.Muted, theme.Elevated
+	}
+}
+
 func (p *Panel) responseChips(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry) {
 	if entry.Error != nil {
 		return
 	}
 	ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
-		color, status := nui.Neutral, "-"
+		status := "-"
 		if entry.StatusCode != 0 {
 			status = strconv.Itoa(entry.StatusCode)
-			switch {
-			case entry.StatusCode >= 500:
-				color = nui.Error
-			case entry.StatusCode >= 400:
-				color = nui.Warning
-			case entry.StatusCode >= 300:
-				color = nui.Info
-			case entry.StatusCode >= 200:
-				color = nui.Success
-			}
 		}
-		chip := nui.Badge(c, theme, status, nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
-		if tip := entry.Status; tip != "" {
+		foreground, background := statusChipColors(theme, entry.StatusCode)
+		chip := summaryChip(c, status, foreground, background)
+		if tip := strings.TrimSpace(entry.Status); tip != "" {
 			nui.Tooltip(c, theme, chip, tip, nui.TooltipOptions{})
 		}
 		protocol := "-"
 		if entry.Response != nil && entry.Response.Proto != "" {
 			protocol = entry.Response.Proto
 		}
-		nui.Badge(c, theme, protocol, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Subtle, Size: nui.SM})
+		summaryChip(c, protocol, theme.Muted, theme.Elevated)
 	})
 }
 
@@ -352,8 +367,8 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 
 func (p *Panel) errorPane(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry) {
 	ui.Column(c).FillWidth().Padding(16).Gap(8).Children(func() {
-		ui.Text(c, logic.FormatTimeRFC3339(entry.Error.Timestamp)).FontSize(13).TextColor(theme.Muted)
-		ui.Text(c, entry.Error.Error).Selectable().FontSize(13).TextColor(theme.Error)
+		ui.Text(c, logic.FormatTimeRFC3339(entry.Error.Timestamp)).FontSize(14).TextColor(theme.Muted)
+		ui.Text(c, entry.Error.Error).Selectable().FontSize(14).TextColor(theme.Error)
 	})
 }
 

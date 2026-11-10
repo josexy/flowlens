@@ -77,7 +77,7 @@ func (r *responseView) build(c *ui.Context, theme nui.Theme) {
 		case state.IsSending && visible != logic.ResponseTabConsole:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.WorkspaceHttpRequestResponseSendingTitle()).FontSize(13).TextColor(theme.Muted)
+				ui.Text(c, locales.WorkspaceHttpRequestResponseSendingTitle()).FontSize(14).TextColor(theme.Muted)
 			})
 		case !hasResponse && !hasConsole && !cancelled:
 			emptyPane(c, theme, lucide.Send(), locales.WorkspaceHttpRequestRequestNotStarted(), "")
@@ -92,7 +92,7 @@ func (r *responseView) build(c *ui.Context, theme nui.Theme) {
 
 func emptyPane(c *ui.Context, theme nui.Theme, icon *ui.SVG, title, description string) {
 	ui.Column(c).Fill().Center().Children(func() {
-		nui.Empty(c, theme, nui.EmptyOptions{Icon: icon, Title: title, Description: description, Variant: nui.Ghost})
+		widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: icon, Title: title, Description: description})
 	})
 }
 
@@ -122,9 +122,9 @@ func (r *responseView) tabItems(hasCookies bool) []nui.TabItem {
 
 func (r *responseView) tabs(c *ui.Context, theme nui.Theme, visible string, hasCookies bool) {
 	r.tab = visible
-	ui.Row(c.Key("response-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).PaddingX(6).Children(func() {
-		ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Tabs(c.Key("response-tabs"), theme, &r.tab, r.tabItems(hasCookies), nui.TabsOptions{Label: locales.WorkspaceHttpRequestResponseBody(), Size: nui.SM, Content: nui.Set(false)})
+	ui.Row(c.Key("response-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).PaddingX(10).Children(func() {
+		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
+			nui.Tabs(c.Key("response-tabs"), theme, &r.tab, r.tabItems(hasCookies), nui.TabsOptions{Label: locales.WorkspaceHttpRequestResponseBody(), Content: nui.Set(false), Underline: true})
 		})
 		r.chips(c, theme)
 	})
@@ -271,7 +271,7 @@ func errorCard(c *ui.Context, theme nui.Theme, e *Editor, title, description, he
 					ui.Text(c, heading).FontSize(12).TextColor(theme.Muted)
 					iconAction(c, theme, "copy-error", lucide.Copy(), copyLabel, false, func() { e.copy(details, copied) })
 				})
-				ui.Text(c, details).FontSize(13).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
+				ui.Text(c, details).FontSize(14).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
 			})
 		})
 	})

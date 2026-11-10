@@ -67,13 +67,13 @@ func warningAlert(c *ui.Context, theme nui.Theme, message string) {
 
 func emptyState(c *ui.Context, theme nui.Theme, icon *ui.SVG, title string) {
 	ui.Column(c).Fill().Center().Children(func() {
-		nui.Empty(c, theme, nui.EmptyOptions{Icon: icon, Title: title, Variant: nui.Ghost})
+		widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: icon, Title: title})
 	})
 }
 
 func paneTitle(c *ui.Context, theme nui.Theme, title string, actions func()) {
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(10, 10, 8, 10).Children(func() {
-		ui.Text(c, title).FontSize(13).TextColor(theme.Muted)
+		ui.Text(c, title).FontSize(14).TextColor(theme.Muted)
 		ui.Row(c).Gap(4).Children(actions)
 	})
 }
@@ -181,8 +181,8 @@ func (p *Panel) responseCookie(c *ui.Context, theme nui.Theme, index int, cookie
 	}
 	ui.Column(c.Key(index)).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).Padding(6, 8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, name).FontSize(13).Bold().Selectable().Shrink(0).MaxWidth(240)
-			ui.Text(c, cookie.Value).FontSize(13).Selectable().Grow(1).Basis(0).MinWidth(0)
+			ui.Text(c, name).FontSize(14).Bold().Selectable().Shrink(0).MaxWidth(240)
+			ui.Text(c, cookie.Value).FontSize(14).Selectable().Grow(1).Basis(0).MinWidth(0)
 			count := strconv.Itoa(len(cookie.Attributes))
 			open := p.cookieOpen(index)
 			label := locales.DetailCookieViewAttributes(count, name)
@@ -194,8 +194,8 @@ func (p *Panel) responseCookie(c *ui.Context, theme nui.Theme, index int, cookie
 				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(12).TextColor(palette.Muted)
 				for position, attribute := range cookie.Attributes {
 					ui.Row(c.Key(position)).FillWidth().Gap(8).Children(func() {
-						ui.Text(c, attribute.Name).FontSize(13).Bold().Width(120).Shrink(0).Selectable()
-						ui.Text(c, attribute.Value).FontSize(13).Grow(1).Basis(0).MinWidth(0).Selectable()
+						ui.Text(c, attribute.Name).FontSize(14).Bold().Width(120).Shrink(0).Selectable()
+						ui.Text(c, attribute.Value).FontSize(14).Grow(1).Basis(0).MinWidth(0).Selectable()
 					})
 				}
 				nui.Button(c.Key("copy-header"), palette, locales.DetailCopySetCookieHeader(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).

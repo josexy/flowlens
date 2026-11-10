@@ -138,22 +138,22 @@ func (h *Help) content(c *ui.Context, theme nui.Theme) {
 }
 
 func (h *Help) quickstart(c *ui.Context, theme nui.Theme, scope string, messages *pythonapi.Messages) {
-	ui.Text(c.Key("hint"), messages.Start.AIHint).FontSize(13).TextColor(theme.Muted).FillWidth()
+	ui.Text(c.Key("hint"), messages.Start.AIHint).FontSize(14).TextColor(theme.Muted).FillWidth()
 	edit, enable := messages.Start.Global.Edit, messages.Start.Global.Enable
 	if scope == pythonapi.ScopeInline {
 		edit, enable = messages.Start.Inline.Edit, messages.Start.Inline.Enable
 	}
 	for index, step := range []pythonapi.Step{messages.Start.Runtime, edit, enable} {
 		ui.Row(c.Key(index)).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, strconv.Itoa(index+1)).Shrink(0).FontSize(13).Bold().TextColor(theme.Primary)
+			ui.Text(c, strconv.Itoa(index+1)).Shrink(0).FontSize(14).Bold().TextColor(theme.Primary)
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, step.Title).FontSize(13).Bold().TextColor(theme.Highlighted)
+				ui.Text(c, step.Title).FontSize(14).Bold().TextColor(theme.Highlighted)
 				ui.Text(c, step.Text).FontSize(12).TextColor(theme.Muted).FillWidth()
 			})
 		})
 	}
 	ui.Column(c.Key("essentials")).FillWidth().Gap(4).Children(func() {
-		ui.Text(c, messages.Start.EssentialsTitle).FontSize(13).Bold().TextColor(theme.Highlighted)
+		ui.Text(c, messages.Start.EssentialsTitle).FontSize(14).Bold().TextColor(theme.Highlighted)
 		for index, text := range messages.Start.Essentials {
 			ui.Text(c.Key(index), "• "+text).FontSize(12).TextColor(theme.Toned).FillWidth()
 		}
@@ -181,7 +181,7 @@ func (h *Help) reference(c *ui.Context, theme nui.Theme, locale string, messages
 	groups := pythonapi.Groups(locale, h.query)
 	if len(groups) == 0 {
 		ui.Column(c.Key("none")).FillWidth().Padding(16).Center().Gap(4).Children(func() {
-			ui.Text(c, messages.NoResults).FontSize(13).Bold().TextColor(theme.Text)
+			ui.Text(c, messages.NoResults).FontSize(14).Bold().TextColor(theme.Text)
 			ui.Text(c, messages.NoResultsHint).FontSize(12).TextColor(theme.Muted)
 		})
 		return

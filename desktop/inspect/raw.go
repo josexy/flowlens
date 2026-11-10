@@ -174,7 +174,7 @@ func (p *Panel) connectHeaders(c *ui.Context, theme nui.Theme, entry *logic.Traf
 			ui.Text(c, locales.DetailRawTcpOuterConnectHeaders()).FontSize(14).Bold()
 		})
 		if entry.Request == nil || len(entry.Request.HeaderFields) == 0 {
-			ui.Text(c, locales.DetailNoHeaders()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailNoHeaders()).FontSize(14).TextColor(theme.Muted)
 			return
 		}
 		rows := make([]widgets.KeyValue, len(entry.Request.HeaderFields))

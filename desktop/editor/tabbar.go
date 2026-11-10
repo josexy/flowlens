@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	tabBarHeight  float32 = 34
-	tabWidth      float32 = 176
+	tabBarHeight float32 = 34
+	tabMinWidth  float32 = 124
+	tabMaxWidth  float32 = 220
+	// tabWidth is how far a dragged tab moves to pass a neighbor.
+	tabWidth      float32 = 172
 	tabScrollStep float32 = 220
 	dragThreshold float32 = 4
 )
@@ -29,13 +32,14 @@ func (e *Editor) TabBar(c *ui.Context, theme nui.Theme) {
 	e.declareShortcuts()
 	e.prune()
 	workspace := e.Data.Workspace
-	bar := ui.Row(c.Key("workspace-tabs")).FillWidth().Height(tabBarHeight).Shrink(0).AlignItems(ui.Center)
-	bar.Background(theme.MutedBackground).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
+	bar := ui.Row(c.Key("workspace-tabs")).FillWidth().Height(tabBarHeight).Shrink(0).AlignItems(ui.Stretch)
+	bar.Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	bar.Children(func() {
 		if e.tabScroll.X > 0 {
 			e.scrollButton(c, theme, "tabs-left", lucide.ChevronLeft(), -tabScrollStep)
 		}
-		ui.ScrollHorizontal(c.Key("tab-scroll")).TrackScroll(&e.tabScroll).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() {
+		// The strip is as wide as its tabs, so the new tab button follows them.
+		ui.ScrollHorizontal(c.Key("tab-scroll")).TrackScroll(&e.tabScroll).Shrink(1).MinWidth(0).FillHeight().Scrollbars(false).Children(func() {
 			ui.Row(c).FillHeight().Children(func() {
 				for index, tab := range workspace.Tabs {
 					e.tab(c, theme, index, tab)
@@ -52,31 +56,58 @@ func (e *Editor) TabBar(c *ui.Context, theme nui.Theme) {
 	}
 }
 
+// tabStripButton is a full-height icon button of the tab strip.
+func tabStripButton(c *ui.Context, theme nui.Theme, key, label string, icon *ui.SVG, width float32) ui.Element {
+	button := ui.ButtonBase(c.Key(key)).Width(width).FillHeight().Shrink(0).Center().Label(label)
+	color := theme.Muted
+	if button.Hovered() || button.Pressed() || button.FocusVisible() {
+		button.Background(theme.Elevated)
+		color = theme.Text
+	}
+	button.Children(func() { ui.Icon(c, icon).Size(14, 14).TextColor(color) })
+	return button
+}
+
 func (e *Editor) scrollButton(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, delta float32) {
-	nui.Button(c.Key(key), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: icon, AccessibleLabel: key}).
-		OnClick(func() { e.tabScroll.ScrollTo(max(0, e.tabScroll.X+delta), e.tabScroll.Y, ui.Smooth) })
+	button := tabStripButton(c, theme, key, key, icon, 26)
+	if delta < 0 {
+		button.BorderWidth(0, 1, 0, 0)
+	} else {
+		button.BorderWidth(0, 1, 0, 1)
+	}
+	button.BorderColor(theme.Border).OnClick(func() { e.tabScroll.ScrollTo(max(0, e.tabScroll.X+delta), e.tabScroll.Y, ui.Smooth) })
 }
 
 func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	workspace := e.Data.Workspace
-	anchor := nui.Button(c.Key("tabs-new"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Plus(), AccessibleLabel: locales.WorkspaceTabBarNew()})
+	anchor := tabStripButton(c, theme, "tabs-new", locales.WorkspaceTabBarNew(), lucide.Plus(), 30)
 	anchor.OnClick(func() { e.newMenu.Open = !e.newMenu.Open })
 	nui.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, []nui.MenuItem{
 		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
 		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
-	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew()})
+	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)})
+}
+
+// tabDividerColor separates the tabs.
+func tabDividerColor(theme nui.Theme) ui.Color {
+	if theme.Dark {
+		return theme.Border
+	}
+	return ui.RGBA(0, 0, 0, 0.16)
 }
 
 func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.WorkspaceTab) {
 	workspace := e.Data.Workspace
 	active := workspace.ActiveKey == tab.Key
 	title := DisplayTitle(tab)
-	box := ui.Row(c.Key(tab.Key)).Width(tabWidth).FillHeight().Shrink(0).AlignItems(ui.Center).Gap(6).PaddingX(10).Role(ui.RoleTab).Label(title)
-	box.BorderWidth(2, 1, 0, 0).BorderColor(theme.Border)
-	if active {
-		box.Background(theme.Background).BorderColor(theme.Primary)
-	} else if box.Hovered() {
-		box.Background(theme.Elevated)
+	box := ui.Row(c.Key(tab.Key)).MinWidth(tabMinWidth).MaxWidth(tabMaxWidth).FillHeight().Shrink(0).AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
+	box.BorderWidth(0, 1, 0, 0).BorderColor(tabDividerColor(theme))
+	hovered := box.Hovered()
+	switch {
+	case active:
+		box.Background(theme.Background)
+	case hovered:
+		box.Background(theme.Elevated.Alpha(0.82))
 	}
 	if tab.Closable {
 		e.dragTab(box, tab.Key)
@@ -90,21 +121,43 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	})
 	box.ContextMenu(func(menu *ui.Menu) { e.tabMenu(menu, index, tab) })
 	box.Children(func() {
-		color := theme.Muted
 		if active {
-			color = theme.Primary
+			ui.Box(c.Key("active-line")).Absolute().Top(0).Left(0).Right(0).Height(2).Background(theme.Primary).IgnoreInput(true)
 		}
-		ui.Icon(c, tabIcon(tab.Type)).Size(14, 14).Shrink(0).TextColor(color)
-		ui.Text(c, title).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(theme.Text)
+		iconColor := theme.Muted.Alpha(0.72)
+		if active {
+			iconColor = theme.Toned
+		}
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(6).PaddingX(12).Children(func() {
+			ui.Icon(c, tabIcon(tab.Type)).Size(14, 14).Shrink(0).TextColor(iconColor)
+			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(14).FontWeight(500).TextColor(theme.Toned)
+		})
 		if tab.Closable && workspace.IsDirty(tab.Key) {
-			dot := ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary).Label(locales.WorkspaceTabBarUnsavedChanges())
+			dot := ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Margin(0, 4, 0, 0).Background(theme.Primary).Label(locales.WorkspaceTabBarUnsavedChanges())
 			nui.Tooltip(c, theme, dot, locales.WorkspaceTabBarUnsavedChanges(), nui.TooltipOptions{})
 		}
 		if tab.Closable {
-			nui.Button(c.Key("close"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.X(), AccessibleLabel: locales.WorkspaceTabContextCloseCurrent() + " " + title}).
-				OnClick(func() { e.closeWithPrompt(tab.Key) })
+			e.closeButton(c, theme, tab, title, active || hovered)
 		}
 	})
+}
+
+// closeButton shows on the active tab and the tab under the pointer.
+func (e *Editor) closeButton(c *ui.Context, theme nui.Theme, tab *logic.WorkspaceTab, title string, shown bool) {
+	button := ui.ButtonBase(c.Key("close")).Size(18, 18).Shrink(0).Radius(9).Margin(0, 6, 0, 0).Center().
+		Label(locales.WorkspaceTabContextCloseCurrent() + " " + title)
+	color := theme.Muted
+	opacity := float32(0)
+	switch {
+	case button.Hovered() || button.Pressed():
+		button.Background(theme.Accented)
+		color, opacity = theme.Text, 1
+	case shown || button.FocusVisible():
+		opacity = 0.72
+	}
+	button.Opacity(opacity).OnClick(func() { e.closeWithPrompt(tab.Key) })
+	button.Children(func() { ui.Icon(c, lucide.X()).Size(12, 12).TextColor(color) })
+	nui.Tooltip(c, theme, button, locales.WorkspaceClose(), nui.TooltipOptions{})
 }
 
 // dragTab moves a tab past its neighbors while it is dragged.

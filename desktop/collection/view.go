@@ -255,9 +255,10 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRo
 		}
 		nui.Tooltip(c, theme, button, label, nui.TooltipOptions{})
 	}
-	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Text(c, locales.ApiCollectionTitle()).FontSize(13).Bold().TextColor(theme.Text).SingleLine()
-		ui.Row(c).Gap(2).Children(func() {
+	header := ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).MinHeight(40).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(0, 10, 0, 12).Background(theme.Elevated)
+	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Text(c, locales.ApiCollectionTitle()).FontSize(14).FontWeight(600).TextColor(theme.Muted).SingleLine().Shrink(1)
+		ui.Row(c).Gap(6).Shrink(0).Children(func() {
 			action("refresh", lucide.RefreshCw(), locales.ApiCollectionRefresh(), collection.Loading, false, v.refresh)
 			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), false, false, func() { v.beginCreate("") })
 			label, icon := locales.ApiCollectionExpandAll(), lucide.ListChevronsUpDown()
@@ -287,7 +288,7 @@ func (v *View) area(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) 
 	collection := v.Data.Collection
 	status := func(text string) {
 		ui.Column(c).Fill().Center().Padding(16).Children(func() {
-			ui.Text(c, text).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, text).FontSize(14).TextColor(theme.Muted)
 		})
 	}
 	switch {
@@ -344,7 +345,7 @@ func (v *View) rootZone(c *ui.Context, theme nui.Theme, area ui.Element) {
 		}
 		zone.Children(func() {
 			ui.Icon(c, lucide.FolderOpen()).Size(14, 14).TextColor(theme.Muted)
-			ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(13).TextColor(theme.Text)
+			ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(14).TextColor(theme.Text)
 		})
 	})
 }
@@ -401,7 +402,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 		}
 		if !row.Folder {
 			v.requestBadge(c, theme, row)
-			ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(theme.Text)
+			ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
 			return
 		}
 		arrow := lucide.ChevronRight()
@@ -418,7 +419,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 			icon = lucide.FolderOpen()
 		}
 		ui.Icon(c, icon).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-		ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(theme.Text)
+		ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
 	})
 }
 

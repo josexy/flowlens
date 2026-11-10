@@ -221,7 +221,8 @@ func TestOverviewUnknownValues(t *testing.T) {
 	f.has(locales.DetailMetricStateFailed())
 	f.has(logic.UnknownValue)
 	f.click(locales.DetailMessageSize())
-	f.has(locales.DetailTotalSize())
+	// Overview labels show in capitals.
+	f.has(strings.ToUpper(locales.DetailTotalSize()))
 }
 
 func TestLegacyEntryHasNoMetrics(t *testing.T) {

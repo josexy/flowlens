@@ -98,7 +98,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("rewrite-sidebar")).Fill().MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-				ui.Text(c, locales.RewriteRulesTitle()).FontSize(13).Bold().TextColor(theme.Highlighted)
+				ui.Text(c, locales.RewriteRulesTitle()).FontSize(14).FontWeight(600).TextColor(theme.Highlighted)
 				ui.Row(c).Gap(2).Children(func() {
 					refresh := nui.Button(c.Key("refresh"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.RefreshCw(), AccessibleLabel: locales.RewriteRulesRefresh(), Loading: rewrite.Loading, Disabled: rewrite.Busy()})
 					if !rewrite.Busy() {
@@ -139,12 +139,12 @@ func (v *View) emptyList(c *ui.Context, theme nui.Theme) {
 	switch {
 	case v.Data.Rewrite.Loading:
 		ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() {
-			ui.Text(c, locales.RewriteRulesLoading()).FontSize(13).TextColor(theme.Muted)
+			ui.Text(c, locales.RewriteRulesLoading()).FontSize(14).TextColor(theme.Muted)
 		})
 	case strings.TrimSpace(v.search) != "":
-		nui.Empty(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesNoSearchResults(), Variant: nui.Ghost})
+		widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesNoSearchResults()})
 	default:
-		nui.Empty(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesNoRules(), Variant: nui.Ghost})
+		widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesNoRules()})
 	}
 }
 
@@ -177,7 +177,7 @@ func actionLabel(rule *store.RewriteRule) string {
 }
 
 // Rule row height, used to place a dragged row.
-const ruleRowHeight float32 = 112
+const ruleRowHeight float32 = 92
 
 func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteRow, rows []store.RewriteRow) {
 	rewrite := v.Data.Rewrite
@@ -197,7 +197,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
 			v.gripHandle(c, theme, index, row, rows)
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, name).SingleLine().FontSize(13).Bold().TextColor(theme.Highlighted).MinWidth(0)
+				ui.Text(c, name).SingleLine().Shrink(1).FontSize(14).FontWeight(500).TextColor(theme.Highlighted).MinWidth(0)
 				if rewrite.IsDirty(row.Key) {
 					ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary).Label(locales.RewriteRulesUnsaved())
 				}
@@ -206,12 +206,12 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 		})
 		ui.Text(c, row.Rule.URLPattern).SingleLine().FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(4).Children(func() {
-			nui.Badge(c.Key("method"), theme, row.Rule.Method, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
+			nui.Badge(c.Key("method"), theme, row.Rule.Method, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Subtle, Size: nui.SM})
 			color := nui.Neutral
 			if row.Rule.UnavailableReason != "" {
 				color = nui.Error
 			}
-			nui.Badge(c.Key("action"), theme, actionLabel(row.Rule), nui.BadgeOptions{Color: color, Variant: nui.Soft, Size: nui.SM})
+			nui.Badge(c.Key("action"), theme, actionLabel(row.Rule), nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
 			if row.Saved == nil {
 				ui.Text(c, locales.RewriteRulesDraft()).FontSize(12).TextColor(theme.Muted)
 			}
@@ -440,7 +440,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 		case rewrite.Loading:
 			ui.Row(c.Key("loading")).FillWidth().Grow(1).Basis(0).Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.RewriteRulesLoading()).FontSize(13).TextColor(theme.Muted)
+				ui.Text(c, locales.RewriteRulesLoading()).FontSize(14).TextColor(theme.Muted)
 			})
 		default:
 			v.emptyPage(c, theme)
@@ -451,19 +451,23 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 
 func pageAlert(c *ui.Context, theme nui.Theme, key, text string, color nui.Color) {
 	ui.Box(c.Key(key)).FillWidth().Shrink(0).Children(func() {
-		nui.Alert(c, theme, nui.AlertOptions{Description: text, Color: color, Variant: nui.Soft})
+		nui.Alert(c, theme, nui.AlertOptions{Description: text, Color: color, Variant: nui.Subtle})
 	})
 }
 
 func (v *View) emptyPage(c *ui.Context, theme nui.Theme) {
 	rewrite := v.Data.Rewrite
-	ui.Column(c.Key("empty")).FillWidth().Grow(1).Basis(0).Center().Gap(12).Children(func() {
-		nui.Empty(c, theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesEmptyTitle(), Description: locales.RewriteRulesEmptyDescription(), Variant: nui.Ghost})
-		disabled := rewrite.Busy() || !rewrite.Ready()
-		button := nui.Button(c.Key("create"), theme, locales.RewriteRulesNewRule(), nui.ButtonOptions{Leading: lucide.Plus(), Disabled: disabled})
-		if !disabled {
-			button.OnClick(v.create)
-		}
+	ui.Column(c.Key("empty")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		nui.Empty(c, theme, nui.EmptyOptions{
+			Icon: lucide.Repeat2(), Title: locales.RewriteRulesEmptyTitle(), Description: locales.RewriteRulesEmptyDescription(),
+			Actions: func() {
+				disabled := rewrite.Busy() || !rewrite.Ready()
+				button := nui.Button(c.Key("create"), theme, locales.RewriteRulesNewRule(), nui.ButtonOptions{Leading: lucide.Plus(), Disabled: disabled})
+				if !disabled {
+					button.OnClick(v.create)
+				}
+			},
+		}).Grow(1).Basis(0)
 	})
 }
 
@@ -506,7 +510,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 func (v *View) conflictBanner(c *ui.Context, theme nui.Theme) {
 	rewrite := v.Data.Rewrite
 	ui.Column(c.Key("conflict")).FillWidth().Shrink(0).Gap(8).Padding(12).Background(theme.Warning.Alpha(0.1)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Warning.Alpha(0.3)).Children(func() {
-		ui.Text(c, locales.RewriteRulesConflict()).FontSize(13).TextColor(theme.Warning).FillWidth()
+		ui.Text(c, locales.RewriteRulesConflict()).FontSize(14).TextColor(theme.Warning).FillWidth()
 		ui.Row(c).Gap(8).Children(func() {
 			keep := nui.Button(c.Key("keep"), theme, locales.RewriteRulesKeepDraft(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.XS, Disabled: rewrite.Busy()})
 			load := nui.Button(c.Key("load"), theme, locales.RewriteRulesLoadSaved(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.XS, Disabled: rewrite.Busy()})

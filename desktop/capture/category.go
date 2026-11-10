@@ -163,35 +163,47 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 	}
 	source := w.categoryDataset()
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		ui.Box(c).FillWidth().Padding(8).Shrink(0).Children(func() {
+		header := ui.Row(c.Key("category-header")).FillWidth().Shrink(0).MinHeight(40).AlignItems(ui.Center).PaddingX(12).Background(theme.Elevated)
+		header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+			if source != nil {
+				ui.Text(c, source.label).SingleLine().Shrink(1).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+			}
+		})
+		ui.Column(c.Key("category-body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+			w.categoryBody(c, theme, view, source)
+		})
+		search := ui.Box(c.Key("category-search")).FillWidth().Shrink(0).Padding(10).Background(theme.Elevated)
+		search.BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 			nui.Input(c, theme, &view.search, nui.InputOptions{
 				Label: locales.CategorySearchPlaceholder(), Placeholder: locales.CategorySearchPlaceholder(),
-				Leading: lucide.Search(), Size: nui.SM, Clearable: true, ClearLabel: locales.ToolbarClear(),
+				Leading: lucide.Search(), Clearable: true, ClearLabel: locales.ToolbarClear(),
 			})
 		})
-		if source == nil {
-			ui.Column(c).Fill().Center().Padding(16).Children(func() {
-				ui.Text(c, locales.CategoryUnsupported()).FontSize(14).TextColor(theme.Muted)
-			})
-			return
-		}
-		ui.Text(c, source.label).FontSize(12).TextColor(theme.Muted).Padding(0, 10, 6, 10)
-		view.refresh(c, source)
-		if len(view.entries) == 0 {
-			ui.Column(c).Fill().Center().Padding(16).Children(func() {
-				ui.Text(c, locales.CategoryEmpty()).FontSize(14).TextColor(theme.Muted)
-			})
-			return
-		}
-		rows := view.rows(source.filter)
-		if strings.TrimSpace(view.search) != "" && len(rows) == 3 {
-			ui.Column(c).Fill().Center().Padding(16).Children(func() {
-				ui.Text(c, locales.CategoryEmptyFiltered()).FontSize(14).TextColor(theme.Muted)
-			})
-			return
-		}
-		ui.List(c.Key("category-tree"), &view.list, len(rows), func(index int) { w.categoryRow(c, theme, rows[index], source) }).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.CategoryTitle())
 	})
+}
+
+// categoryBody is the tree of the sidebar, or why there is none.
+func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryView, source *categorySource) {
+	status := func(text string) {
+		ui.Column(c).Fill().Center().Padding(16).Children(func() {
+			ui.Text(c, text).FontSize(14).TextAlign(ui.Center).TextColor(theme.Muted)
+		})
+	}
+	if source == nil {
+		status(locales.CategoryUnsupported())
+		return
+	}
+	view.refresh(c, source)
+	if len(view.entries) == 0 {
+		status(locales.CategoryEmpty())
+		return
+	}
+	rows := view.rows(source.filter)
+	if strings.TrimSpace(view.search) != "" && len(rows) == 3 {
+		status(locales.CategoryEmptyFiltered())
+		return
+	}
+	ui.List(c.Key("category-tree"), &view.list, len(rows), func(index int) { w.categoryRow(c, theme, rows[index], source) }).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.CategoryTitle())
 }
 
 func leafIcon(node *logic.StructureNode) *ui.SVG {
@@ -259,7 +271,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 				chevron = lucide.ChevronRight()
 			}
 			ui.Icon(c, chevron).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-			ui.Text(c, row.label).FontSize(13).Bold().TextColor(theme.Muted)
+			ui.Text(c, row.label).FontSize(14).Bold().TextColor(theme.Muted)
 			return
 		}
 		if row.kind == categoryStructure && len(row.node.Children) > 0 {
@@ -274,7 +286,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 		} else if icon != nil {
 			ui.Icon(c, icon).Size(15, 15).Shrink(0).TextColor(theme.Muted)
 		}
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(13).TextColor(theme.Text)
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
 		ui.Text(c, strconv.Itoa(row.count)).Shrink(0).FontSize(12).TextColor(theme.Muted)
 	})
 }
