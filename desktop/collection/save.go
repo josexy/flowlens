@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 )
@@ -117,7 +118,7 @@ func (v *View) Dialogs(c *ui.Context, theme nui.Theme) {
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.ApiCollectionRequestName()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.ApiCollectionRequestName(), Placeholder: locales.ApiCollectionRequestNamePlaceholder(), Disabled: d.saving, OnSubmit: func(string) { v.submitSave() }}).FillWidth()
+				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.ApiCollectionRequestName(), Placeholder: locales.ApiCollectionRequestNamePlaceholder(), Disabled: d.saving, OnSubmit: func(string) { v.submitSave() }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			nui.FormField(c.Key("folder"), palette, nui.FormFieldOptions{Label: locales.ApiCollectionDestinationFolder()}, func(field nui.Theme) {
 				options := v.Data.Collection.FolderOptions()

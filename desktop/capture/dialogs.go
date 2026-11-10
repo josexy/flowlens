@@ -32,6 +32,8 @@ type hostFilterDialog struct {
 	open             bool
 	include, exclude []hostFilterRow
 	nextID           int
+	// focusID is the row added last, whose input takes the focus.
+	focusID int
 }
 
 func (d *hostFilterDialog) rows(values []string) []hostFilterRow {
@@ -44,12 +46,13 @@ func (d *hostFilterDialog) rows(values []string) []hostFilterRow {
 }
 
 func (d *hostFilterDialog) show(config *settingservice.ProxyConfig) {
-	d.include, d.exclude = d.rows(config.IncludeHosts), d.rows(config.ExcludeHosts)
+	d.include, d.exclude, d.focusID = d.rows(config.IncludeHosts), d.rows(config.ExcludeHosts), 0
 	d.open = true
 }
 
 func (d *hostFilterDialog) add(rows *[]hostFilterRow) {
 	d.nextID++
+	d.focusID = d.nextID
 	*rows = append(*rows, hostFilterRow{id: d.nextID})
 }
 
@@ -83,10 +86,14 @@ func (d *hostFilterDialog) section(c *ui.Context, theme nui.Theme, key, title st
 				id := row.id
 				ui.Row(c.Key(id)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-						nui.Input(c, theme, &row.value, nui.InputOptions{
+						options := nui.InputOptions{
 							Label: title, Placeholder: locales.SettingsHostFilterPlaceholder(), Disabled: saving,
 							OnSubmit: func(string) { d.add(rows) },
-						})
+						}
+						if id == d.focusID {
+							options.Style = widgets.AutoFocus()
+						}
+						nui.Input(c, theme, &row.value, options)
 					})
 					remove := nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveDomainFilter(), Disabled: saving})
 					if !saving {
@@ -196,7 +203,7 @@ func (d *aliasDialog) build(c *ui.Context, theme nui.Theme, w *Workspace) {
 	}, func(palette nui.Theme) {
 		nui.Input(c.Key("alias-input"), palette, &d.draft, nui.InputOptions{
 			Label: locales.CaptureSetAlias(), Placeholder: locales.CaptureAliasPlaceholder(), MaxLength: maxAliasLength, Disabled: saving,
-			OnSubmit: func(string) { d.save(w) },
+			OnSubmit: func(string) { d.save(w) }, Style: widgets.AutoFocus(),
 		})
 	})
 }

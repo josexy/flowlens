@@ -83,6 +83,21 @@ func optionalRow(c *ui.Context, theme nui.Theme, key, label, value string) {
 	}
 }
 
+// listRow shows values one per line, as 1.0.5 listed supported TLS values.
+func listRow(c *ui.Context, theme nui.Theme, key, label string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	overviewRow(c, theme, key).Children(func() {
+		overviewLabel(c, theme, label)
+		ui.Column(c.Key("values")).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
+			for index, value := range values {
+				overviewValue(c.Key(index), theme, value).LineHeight(1.45)
+			}
+		})
+	})
+}
+
 func timeRow(c *ui.Context, theme nui.Theme, key, label string, value time.Time) {
 	if !value.IsZero() {
 		detailRow(c, theme, key, label, logic.FormatTimeLocal(value))
@@ -250,8 +265,7 @@ func (p *Panel) processSection(c *ui.Context, theme nui.Theme, entry *logic.Traf
 			overviewLabel(c, theme, locales.DetailProcessExecutablePath())
 			overviewValue(c, theme, orDash(process.ExecutablePath))
 			if process.ExecutablePath != "" {
-				nui.Button(c.Key("copy-path"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.Copy(), AccessibleLabel: locales.DetailCopyProcessPath()}).
-					OnClick(func() { p.copyText(process.ExecutablePath, locales.DetailProcessPathCopied()) })
+				iconButton(c, theme, "copy-path", lucide.Copy(), locales.DetailCopyProcessPath(), false, func() { p.copyText(process.ExecutablePath, locales.DetailProcessPathCopied()) })
 			}
 		})
 	})
@@ -265,11 +279,11 @@ func (p *Panel) tlsSection(c *ui.Context, theme nui.Theme, entry *logic.TrafficE
 	section(c, theme, "tls", locales.DetailTlsInfo(), &p.overview.tls, func() {
 		optionalRow(c, theme, "sni", locales.DetailTlsServerName(), tls.ServerName)
 		optionalRow(c, theme, "version", locales.DetailTlsVersion(), tls.SelectedVersion)
-		optionalRow(c, theme, "alpn", "ALPN", tls.SelectedALPN)
-		optionalRow(c, theme, "cipher", "Cipher Suite", tls.SelectedCipherSuite)
-		optionalRow(c, theme, "supported-versions", "Supported Versions", strings.Join(tls.SupportedVersion, ", "))
-		optionalRow(c, theme, "supported-alpn", "Supported ALPN", strings.Join(tls.SupportedALPN, ", "))
-		optionalRow(c, theme, "supported-ciphers", "Supported Cipher Suites", strings.Join(tls.SupportedCipherSuites, ", "))
+		optionalRow(c, theme, "alpn", locales.DetailAlpn(), tls.SelectedALPN)
+		optionalRow(c, theme, "cipher", locales.DetailCipherSuite(), tls.SelectedCipherSuite)
+		listRow(c, theme, "supported-versions", locales.DetailSupportedTlsVersions(), tls.SupportedVersion)
+		listRow(c, theme, "supported-alpn", locales.DetailSupportedAlpns(), tls.SupportedALPN)
+		listRow(c, theme, "supported-ciphers", locales.DetailSupportedCipherSuites(), tls.SupportedCipherSuites)
 	})
 }
 
@@ -319,8 +333,8 @@ func (p *Panel) certificateSection(c *ui.Context, theme nui.Theme, entry *logic.
 		optionalRow(c, theme, "ips", locales.DetailCertIps(), strings.Join(cert.IPAddresses, ", "))
 		optionalRow(c, theme, "serial", locales.DetailCertSerialNumber(), cert.SerialNumber)
 		optionalRow(c, theme, "algorithm", locales.DetailCertSignatureAlgorithm(), cert.SignatureAlgorithm)
-		optionalRow(c, theme, "sha1", "SHA-1", cert.Sha1Fingerprint)
-		optionalRow(c, theme, "sha256", "SHA-256", cert.Sha256Fingerprint)
+		optionalRow(c, theme, "sha1", locales.DetailCertSha1Fingerprint(), cert.Sha1Fingerprint)
+		optionalRow(c, theme, "sha256", locales.DetailCertSha256Fingerprint(), cert.Sha256Fingerprint)
 	})
 }
 

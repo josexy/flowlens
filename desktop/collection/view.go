@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	rowHeight        float32 = 30
+	rowHeight        float32 = 32
 	rootZoneHeight   float32 = 32
 	dragThreshold    float32 = 4
 	dragExpandDelay          = 600 * time.Millisecond
@@ -339,7 +339,7 @@ func (v *View) rootZone(c *ui.Context, theme nui.Theme, area ui.Element) {
 	ui.Overlay(c, func() {
 		bounds := area.Bounds()
 		zone := ui.Row(c.Key("root-zone")).Absolute().Left(bounds.X + 6).Top(bounds.Y).Width(bounds.W - 12).Height(rootZoneHeight).AlignItems(ui.Center).Gap(6).PaddingX(10).IgnoreInput(true)
-		zone.Radius(theme.Radius).Border(1, theme.BorderAccented).Background(theme.Elevated)
+		zone.Radius(theme.Radius).Border(1, theme.BorderAccented).BorderStyle(ui.BorderDashed).Background(theme.Elevated)
 		if v.drag.root {
 			zone.Background(theme.Accented).Border(1, theme.Primary)
 		}
@@ -354,27 +354,32 @@ func (v *View) createRow(c *ui.Context, theme nui.Theme, depth int) {
 	ui.Row(c.Key("create-folder")).FillWidth().Height(36).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(depth)*14+6).Children(func() {
 		ui.Icon(c, lucide.Folder()).Size(14, 14).Shrink(0).TextColor(theme.Muted)
 		ui.Box(c.Key("name")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, theme, &v.folderName, nui.InputOptions{Label: locales.ApiCollectionFolderNamePlaceholder(), Placeholder: locales.ApiCollectionFolderNamePlaceholder(), Size: nui.XS, OnSubmit: func(string) { v.submitCreate() }}).FillWidth()
+			widgets.InlineInput(c, theme, &v.folderName, widgets.InlineInputOptions{Label: locales.ApiCollectionFolderNamePlaceholder(), Placeholder: locales.ApiCollectionFolderNamePlaceholder(), Size: nui.XS, OnSubmit: func(string) { v.submitCreate() }, OnCancel: v.cancelCreate}).FillWidth()
 		})
 		nui.Button(c.Key("create"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Primary, Size: nui.XS, Square: true, Leading: lucide.Check(), AccessibleLabel: locales.ApiCollectionCreate()}).OnClick(v.submitCreate)
 		nui.Button(c.Key("cancel"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.X(), AccessibleLabel: locales.ApiCollectionCancel()}).OnClick(v.cancelCreate)
 	})
 }
 
+// row shows a tree row as 1.0.5 did: 32 px and rounded, with a grip shown
+// on hover that alone drags the row, a 20 px icon, a request's method, the
+// name with a tooltip of it, a folder's child count, and an end-aligned
+// chevron that turns when the folder opens.
 func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.CollectionRow, rows []store.CollectionRow) {
 	collection := v.Data.Collection
 	selected := collection.SelectedNodeID == row.ID
-	line := ui.Row(c.Key(row.ID)).FillWidth().Height(rowHeight).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(row.Depth)*14+6).Label(row.Name)
+	line := ui.Row(c.Key(row.ID)).FillWidth().Height(rowHeight).AlignItems(ui.Center).Gap(6).Radius(6).Padding(0, 10, 0, float32(row.Depth)*14+10).Label(row.Name)
+	hovered := line.Hovered()
 	switch {
 	case v.drag.active && v.drag.target == row.ID:
-		line.Background(theme.Accented).Border(1, theme.Primary)
+		line.Background(theme.Primary.Alpha(0.1)).Border(1, theme.Primary)
 	case selected:
 		line.Background(theme.Accented)
-	case line.Hovered():
+	case hovered:
 		line.Background(theme.Elevated)
 	}
-	if !v.dragDisabled() {
-		v.dragRow(line, index, row, rows)
+	if v.drag.active && v.drag.id == row.ID {
+		line.Opacity(0.5)
 	}
 	line.OnClick(func() {
 		if v.suppress == row.ID {
@@ -392,6 +397,9 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 		}
 	})
 	line.ContextMenu(func(menu *ui.Menu) { v.menu(menu, row) })
+	// The full name shows to the right of the row, for names the sidebar
+	// cuts short.
+	nui.Tooltip(c, theme, line, row.Name, nui.TooltipOptions{Placement: nui.Set(nui.RightCenter)})
 	line.Children(func() {
 		if v.multi {
 			checked := v.checked[row.ID]
@@ -400,27 +408,64 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 				v.toggleChecked(row.ID)
 			}
 		}
-		if !row.Folder {
-			v.requestBadge(c, theme, row)
-			ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
-			return
+		if !v.dragDisabled() {
+			v.grip(c, theme, index, row, hovered)
 		}
-		arrow := lucide.ChevronRight()
-		if row.Expanded {
-			arrow = lucide.ChevronDown()
+		ui.Icon(c, rowIcon(row)).Size(20, 20).Shrink(0).TextColor(theme.Muted)
+		label := ui.Row(c.Key("label")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6)
+		label.Children(func() {
+			if !row.Folder {
+				v.requestMethod(c, theme, row)
+			}
+			ui.Text(c, row.Name).SingleLine().Shrink(1).MinWidth(0).FontSize(14).LineHeight(20.0 / 14).TextColor(theme.Text)
+			if row.Folder {
+				ui.Row(c.Key("count")).Shrink(0).Height(20).MinWidth(20).PaddingX(6).Radius(10).Center().Background(theme.Elevated.Alpha(0.92)).
+					Label("child-count").Children(func() {
+					ui.Text(c, strconv.Itoa(row.Children)).FontSize(14).TextColor(theme.Muted)
+				})
+			}
+		})
+		if row.Folder && row.Children > 0 {
+			chevron := lucide.ChevronDown()
+			if row.Expanded {
+				chevron = lucide.ChevronUp()
+			}
+			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).MarginStart(4).TextColor(theme.Muted)
 		}
-		if row.HasChildren {
-			ui.Icon(c, arrow).Size(12, 12).Shrink(0).TextColor(theme.Muted)
-		} else {
-			ui.Box(c).Size(12, 12).Shrink(0)
-		}
-		icon := lucide.Folder()
-		if row.Expanded && row.HasChildren {
-			icon = lucide.FolderOpen()
-		}
-		ui.Icon(c, icon).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-		ui.Text(c, row.Name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
 	})
+}
+
+func rowIcon(row store.CollectionRow) *ui.SVG {
+	switch {
+	case row.Folder && row.Expanded:
+		return lucide.FolderOpen()
+	case row.Folder:
+		return lucide.Folder()
+	case row.Request != nil && row.Request.WebSocket != nil:
+		return lucide.Radio()
+	default:
+		return lucide.FileText()
+	}
+}
+
+// grip is the handle that drags its row, shown while the row is hovered or
+// dragged, as 1.0.5's.
+func (v *View) grip(c *ui.Context, theme nui.Theme, index int, row store.CollectionRow, hovered bool) {
+	dragging := v.drag.active && v.drag.id == row.ID
+	// Hidden from assistive technology, as 1.0.5's; a click on it does not
+	// reach the row.
+	handle := ui.Box(c.Key("grip")).Size(14, 14).Shrink(0).Center().Cursor(ui.CursorGrab).OnClick(func() {})
+	if handle.Pressed() {
+		handle.Cursor(ui.CursorGrabbing)
+	}
+	opacity := float32(0)
+	if hovered || dragging {
+		opacity = 1
+	}
+	handle.Opacity(opacity).Children(func() {
+		ui.Icon(c, lucide.GripVertical()).Size(14, 14).TextColor(theme.Dimmed)
+	})
+	v.dragRow(handle, index, row, v.Data.Collection.Rows())
 }
 
 func (v *View) toggleChecked(id string) {
@@ -431,7 +476,8 @@ func (v *View) toggleChecked(id string) {
 	v.checked[id] = true
 }
 
-func (v *View) requestBadge(c *ui.Context, theme nui.Theme, row store.CollectionRow) {
+// requestMethod is a request's method, or WS, in 14 px semibold in its color.
+func (v *View) requestMethod(c *ui.Context, theme nui.Theme, row store.CollectionRow) {
 	method := "WS"
 	if row.Request != nil && row.Request.WebSocket == nil {
 		method = "GET"
@@ -441,9 +487,9 @@ func (v *View) requestBadge(c *ui.Context, theme nui.Theme, row store.Collection
 	}
 	color, ok := methodColors[method]
 	if !ok {
-		color = theme.Muted
+		color = ui.Hex("#64748b")
 	}
-	ui.Text(c, method).Shrink(0).Width(48).SingleLine().FontSize(11).Bold().TextColor(color)
+	ui.Text(c, method).Shrink(0).SingleLine().FontSize(14).FontWeight(600).LineHeight(1).TextColor(color)
 }
 
 func (v *View) menu(menu *ui.Menu, row store.CollectionRow) {
@@ -605,6 +651,6 @@ func (d *renameDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 			nui.Button(c.Key("rename"), palette, locales.ApiCollectionRename(), nui.ButtonOptions{Color: nui.Primary, Disabled: strings.TrimSpace(d.name) == "" || d.busy, Loading: d.busy}).OnClick(func() { d.submit(v) })
 		})
 	}}, func(palette nui.Theme) {
-		nui.Input(c.Key("name"), palette, &d.name, nui.InputOptions{Label: locales.ApiCollectionRenameNamePlaceholder(), Placeholder: locales.ApiCollectionRenameNamePlaceholder(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }}).FillWidth()
+		nui.Input(c.Key("name"), palette, &d.name, nui.InputOptions{Label: locales.ApiCollectionRenameNamePlaceholder(), Placeholder: locales.ApiCollectionRenameNamePlaceholder(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
 	})
 }

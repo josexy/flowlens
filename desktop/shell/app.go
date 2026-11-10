@@ -101,7 +101,7 @@ func (a *App) View(c *ui.Context) {
 		a.statusBar(c, theme)
 	})
 	a.Notifier.Show(c, theme)
-	nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 3})
+	widgets.ToastViewport(c, theme)
 	if a.Confirm.Open() {
 		a.Dispatcher.NoteModal()
 	}
@@ -176,10 +176,16 @@ func (a *App) shutdownOverlay(c *ui.Context, theme nui.Theme) {
 	if !a.Store.ShuttingDown {
 		return
 	}
-	ui.Overlay(c, func() {
-		ui.Column(c).Absolute().Top(0).Left(0).Fill().Center().Gap(8).Background(theme.Background.Alpha(0.85)).Children(func() {
-			ui.Text(c, locales.AppShutdownTitle()).Bold().TextColor(theme.Highlighted)
-			ui.Text(c, locales.AppLoading()).TextColor(theme.Muted)
+	// As 1.0.5's: a modal the user cannot dismiss, with the title, what is
+	// happening, and a spinner, over a workbench that takes no input.
+	a.Dispatcher.NoteModal()
+	open := true
+	nui.ModalWithOptions(c.Key("shutdown"), theme, &open, nui.ModalOptions{
+		Title: locales.AppShutdownTitle(), Description: locales.AppShutdownDescription(),
+		Width: nui.Set[float32](384), Dismissible: nui.Set(false), CloseButton: nui.Set(false),
+	}, func(palette nui.Theme) {
+		ui.Row(c.Key("shutdown-progress")).FillWidth().Justify(ui.Center).Padding(8).Children(func() {
+			ui.Spinner(c).Size(32, 32).TextColor(palette.Primary).Label(locales.AppShutdownTitle())
 		})
 	})
 	if !a.shutdownUI {

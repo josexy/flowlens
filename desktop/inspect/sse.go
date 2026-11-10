@@ -109,10 +109,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 				ui.Text(c, locales.DetailSseParsing()).FontSize(12).TextColor(theme.Muted)
 			}
 			ui.Box(c).Grow(1)
-			if !s.atLatest() {
-				nui.Button(c.Key("latest"), theme, locales.DetailSseJumpToLatest(), nui.ButtonOptions{Variant: nui.Soft, Size: nui.XS, Leading: lucide.ArrowDownToLine()}).
-					OnClick(s.list.ScrollToEnd)
-			}
+			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.list.ScrollToEnd)
 		})
 		if s.parser.HasPendingEvent() {
 			warningAlert(c, theme, locales.DetailSseIncomplete())
@@ -125,8 +122,6 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 	})
 	s.detail(c, theme)
 }
-
-func (s *SSEView) atLatest() bool { return len(s.events) == 0 || s.list.AtEnd() }
 
 func (s *SSEView) row(c *ui.Context, theme nui.Theme, index int) {
 	event := s.events[index]

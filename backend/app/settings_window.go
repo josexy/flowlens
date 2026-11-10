@@ -34,14 +34,30 @@ func newSettingsWindowController(all *services, data *store.Store, restart func(
 	return &settingsWindowController{all: all, data: data, restart: restart}
 }
 
+// dialogOptions opens picker's dialog over the Settings window.
+func (s *settingsWindowController) dialogOptions(picker settings.FilePicker, multiple bool) mygo.OpenDialogOptions {
+	options := openDialogOptions(picker, multiple)
+	options.Parent = s.window
+	return options
+}
+
+// openDialogOptions is a Settings file dialog: its title, its message where
+// the platform shows one, and picker's files, named as picker names them,
+// before all files.
+func openDialogOptions(picker settings.FilePicker, multiple bool) mygo.OpenDialogOptions {
+	options := mygo.OpenDialogOptions{Title: picker.Title, Message: picker.Message, Multiple: multiple}
+	if len(picker.Patterns) > 0 {
+		name := picker.FilterName
+		if name == "" {
+			name = locales.SettingsCertificateFileFilter()
+		}
+		options.Filters = []mygo.FileFilter{{Name: name, Extensions: picker.Patterns}, {Name: locales.SettingsAllFilesFilter(), Extensions: []string{"*"}}}
+	}
+	return options
+}
+
 func (s *settingsWindowController) host() settings.Host {
 	all := s.all
-	filters := func(patterns []string) []mygo.FileFilter {
-		if len(patterns) == 0 {
-			return nil
-		}
-		return []mygo.FileFilter{{Name: locales.SettingsCertificateFileFilter(), Extensions: patterns}, {Name: locales.SettingsAllFilesFilter(), Extensions: []string{"*"}}}
-	}
 	return settings.Host{
 		ListFonts: all.setting.ListSystemFonts,
 		CAInfo:    all.setting.GetCACertificateInfo,
@@ -58,15 +74,15 @@ func (s *settingsWindowController) host() settings.Host {
 			_, err := all.setting.UninstallCurrentCACertificate(fingerprint)
 			return err
 		},
-		PickFile: func(title string, patterns ...string) (string, error) {
-			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: s.window, Title: title, Filters: filters(patterns)})
+		PickFile: func(picker settings.FilePicker) (string, error) {
+			paths, err := mygo.Dialog.Open(s.dialogOptions(picker, false))
 			if err != nil || len(paths) == 0 {
 				return "", err
 			}
 			return paths[0], nil
 		},
-		PickFiles: func(title string, patterns ...string) ([]string, error) {
-			return mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: s.window, Title: title, Multiple: true, Filters: filters(patterns)})
+		PickFiles: func(picker settings.FilePicker) ([]string, error) {
+			return mygo.Dialog.Open(s.dialogOptions(picker, true))
 		},
 		RestartProxy: s.restart,
 		LogStatus:    all.logging.GetLogStatus,

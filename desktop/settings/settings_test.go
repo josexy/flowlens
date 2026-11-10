@@ -61,6 +61,7 @@ type fixture struct {
 	tester    *ui.Tester
 	view      *View
 	notifier  *widgets.Notifier
+	pickers   []FilePicker
 	confirm   *widgets.ConfirmDialog
 	dispatch  *shortcuts.Dispatcher
 	proxy     *proxyApplier
@@ -158,8 +159,14 @@ func newFixture(t *testing.T) *fixture {
 			f.trust = &settingservice.CACertificateTrustStatus{Supported: true, SHA256Fingerprint: fingerprint}
 			return nil
 		},
-		PickFile:     func(string, ...string) (string, error) { return f.picked, nil },
-		PickFiles:    func(string, ...string) ([]string, error) { return []string{"/ca/a.pem", "/ca/a.pem", "/ca/b.pem"}, nil },
+		PickFile: func(picker FilePicker) (string, error) {
+			f.pickers = append(f.pickers, picker)
+			return f.picked, nil
+		},
+		PickFiles: func(picker FilePicker) ([]string, error) {
+			f.pickers = append(f.pickers, picker)
+			return []string{"/ca/a.pem", "/ca/a.pem", "/ca/b.pem"}, nil
+		},
 		RestartProxy: func() { f.restarts++ },
 		LogStatus:    func() (*logger.LogStatus, error) { copied := f.log; return &copied, nil },
 		SetLog: func(enabled bool) (*logger.LogStatus, error) {

@@ -25,6 +25,14 @@ import (
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 )
 
+// FilePicker describes a file dialog: its title, the message the platform
+// shows where it has one (macOS), and the files it offers by extension
+// under FilterName, besides all files.
+type FilePicker struct {
+	Title, Message, FilterName string
+	Patterns                   []string
+}
+
 // Host is what the window needs from the services.
 type Host struct {
 	ListFonts   func() []settingservice.FontOption
@@ -33,8 +41,8 @@ type Host struct {
 	GenerateCA  func(overwrite bool) error
 	InstallCA   func(fingerprint string) error
 	UninstallCA func(fingerprint string) error
-	PickFile    func(title string, patterns ...string) (string, error)
-	PickFiles   func(title string, patterns ...string) ([]string, error)
+	PickFile    func(FilePicker) (string, error)
+	PickFiles   func(FilePicker) ([]string, error)
 	// RestartProxy restarts a running proxy so that saved changes take effect.
 	RestartProxy func()
 
@@ -425,7 +433,7 @@ func (v *View) Build(c *ui.Context) {
 		})
 	})
 	v.Notifier.Show(c, theme)
-	nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 3, Position: nui.ToastTopRight})
+	widgets.ToastViewport(c, theme)
 	if v.Confirm.Open() {
 		v.Dispatcher.NoteModal()
 	}

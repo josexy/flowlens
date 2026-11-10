@@ -101,15 +101,16 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Children(func() {
-			nui.Button(c.Key("filter"), theme, m.filterLabel(), nui.ButtonOptions{Variant: nui.Soft, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Funnel()}).OnClick(m.cycleFilter)
-			label := locales.WorkspaceWebsocketClientViewModeList()
-			if m.Conversation {
-				label = locales.WorkspaceWebsocketClientViewModeConversation()
-			}
+			ui.Box(c).Grow(1)
+			iconButton(c, theme, "filter", lucide.ArrowUpDown(), m.filterLabel(), false, m.cycleFilter)
 			if m.OnClear != nil {
-				nui.Button(c.Key("clear"), theme, locales.WorkspaceWebsocketClientClearMessages(), nui.ButtonOptions{Variant: nui.Soft, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Trash(), Disabled: len(m.source) == 0}).OnClick(m.OnClear)
+				iconButton(c, theme, "clear", lucide.Trash(), locales.WorkspaceWebsocketClientClearMessages(), len(m.source) == 0, m.OnClear)
 			}
-			nui.Button(c.Key("mode"), theme, label, nui.ButtonOptions{Variant: nui.Soft, Color: nui.Neutral, Size: nui.XS, Leading: lucide.MessagesSquare()}).OnClick(func() { m.Conversation = !m.Conversation })
+			label, icon := locales.WorkspaceWebsocketClientViewModeList(), lucide.List()
+			if m.Conversation {
+				label, icon = locales.WorkspaceWebsocketClientViewModeConversation(), lucide.MessagesSquare()
+			}
+			iconButton(c, theme, "mode", icon, label, false, func() { m.Conversation = !m.Conversation })
 		})
 		if truncated {
 			warningAlert(c, theme, locales.TrafficWsMsgsTruncated())

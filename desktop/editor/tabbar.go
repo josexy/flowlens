@@ -2,6 +2,8 @@ package editor
 
 import (
 	"slices"
+	"strconv"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
@@ -12,19 +14,22 @@ import (
 )
 
 const (
-	tabBarHeight float32 = 34
-	tabMinWidth  float32 = 124
-	tabMaxWidth  float32 = 220
-	// tabWidth is how far a dragged tab moves to pass a neighbor.
-	tabWidth      float32 = 172
+	tabBarHeight  float32 = 34
+	tabMinWidth   float32 = 124
+	tabMaxWidth   float32 = 220
 	tabScrollStep float32 = 220
-	dragThreshold float32 = 4
 )
 
+// tabDrag is a workspace tab being dragged along the strip.
 type tabDrag struct {
-	key   string
-	x     float32
-	moved bool
+	key string
+	// from is where the tab was among the workspace's tabs, target where it
+	// would drop now.
+	from, target int
+	// width is the dragged tab's width, which its neighbors slide by.
+	width float32
+	// scrolled is how far the strip was scrolled when the drag began.
+	scrolled float32
 }
 
 // TabBar builds the strip of workspace tabs.
@@ -39,7 +44,13 @@ func (e *Editor) TabBar(c *ui.Context, theme nui.Theme) {
 			e.scrollButton(c, theme, "tabs-left", lucide.ChevronLeft(), -tabScrollStep)
 		}
 		// The strip is as wide as its tabs, so the new tab button follows them.
-		ui.ScrollHorizontal(c.Key("tab-scroll")).TrackScroll(&e.tabScroll).Shrink(1).MinWidth(0).FillHeight().Scrollbars(false).Children(func() {
+		strip := widgets.HorizontalWheel(c, ui.ScrollHorizontal(c.Key("tab-scroll")).Shrink(1).MinWidth(0).FillHeight().Scrollbars(false), &e.tabScroll, func() {
+			// The user scrolling the strip ends bringing the active tab
+			// into view.
+			e.revealUntil = time.Time{}
+		})
+		e.strip = strip.Bounds()
+		strip.Children(func() {
 			ui.Row(c).FillHeight().Children(func() {
 				for index, tab := range workspace.Tabs {
 					e.tab(c, theme, index, tab)
@@ -100,7 +111,9 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	workspace := e.Data.Workspace
 	active := workspace.ActiveKey == tab.Key
 	title := DisplayTitle(tab)
-	box := ui.Row(c.Key(tab.Key)).MinWidth(tabMinWidth).MaxWidth(tabMaxWidth).FillHeight().Shrink(0).AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
+	// A dropped tab takes a new key, so it shows in its new place at once
+	// rather than gliding from where it was let go.
+	box := ui.Row(c.Key(tab.Key + "#" + strconv.Itoa(e.dropped[tab.Key]))).MinWidth(tabMinWidth).MaxWidth(tabMaxWidth).FillHeight().Shrink(0).AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
 	box.BorderWidth(0, 1, 0, 0).BorderColor(tabDividerColor(theme))
 	hovered := box.Hovered()
 	switch {
@@ -109,16 +122,16 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	case hovered:
 		box.Background(theme.Elevated.Alpha(0.82))
 	}
-	if tab.Closable {
-		e.dragTab(box, tab.Key)
+	if active {
+		e.reveal(c, box, tab.Key)
 	}
-	box.OnClick(func() {
-		if e.drag.moved && e.drag.key == tab.Key {
-			e.drag = tabDrag{}
-			return
-		}
-		workspace.Activate(tab.Key)
-	})
+	if tab.Closable {
+		e.dragTab(c, theme, box, index, tab.Key)
+	} else if shift := e.slide(index); shift != 0 {
+		box.Translate(shift, 0)
+	}
+	// A press the drag took is no click: one that does not move activates.
+	box.OnClick(func() { workspace.Activate(tab.Key) })
 	box.ContextMenu(func(menu *ui.Menu) { e.tabMenu(menu, index, tab) })
 	box.Children(func() {
 		if active {
@@ -142,6 +155,46 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	})
 }
 
+// revealTime bounds how long a newly active tab is brought into view.
+const revealTime = 2 * time.Second
+
+// reveal brings the active tab fully into view, by the least scrolling, as
+// 1.0.5's scrollIntoView({inline: 'nearest'}), however it became active. The
+// scroll buttons come and go as the strip scrolls, which moves where the tab
+// must scroll to, so it is revealed until it shows whole and the strip rests,
+// or the user scrolls the strip.
+func (e *Editor) reveal(c *ui.Context, box ui.Element, key string) {
+	now := c.Now()
+	if e.revealed != key {
+		e.revealed, e.revealUntil = key, now.Add(revealTime)
+		if e.tabScroll.Scrolling() {
+			// Turn a glide toward a tab active before back to where the
+			// strip is.
+			e.tabScroll.ScrollTo(e.tabScroll.X, e.tabScroll.Y, ui.Smooth)
+		}
+	}
+	if !now.Before(e.revealUntil) {
+		return
+	}
+	tab, strip := box.Bounds(), e.strip
+	if tab.W <= 0 || strip.W <= 0 {
+		return
+	}
+	var delta float32
+	switch {
+	case tab.X < strip.X:
+		delta = tab.X - strip.X
+	case tab.X+tab.W > strip.X+strip.W:
+		delta = min(tab.X+tab.W-strip.X-strip.W, tab.X-strip.X)
+	}
+	switch {
+	case delta < -0.5 || delta > 0.5:
+		e.tabScroll.ScrollTo(max(0, e.tabScroll.X+delta), e.tabScroll.Y, ui.Smooth)
+	case !e.tabScroll.Scrolling():
+		e.revealUntil = time.Time{}
+	}
+}
+
 // closeButton shows on the active tab and the tab under the pointer.
 func (e *Editor) closeButton(c *ui.Context, theme nui.Theme, tab *logic.WorkspaceTab, title string, shown bool) {
 	button := ui.ButtonBase(c.Key("close")).Size(18, 18).Shrink(0).Radius(9).Margin(0, 6, 0, 0).Center().
@@ -160,49 +213,108 @@ func (e *Editor) closeButton(c *ui.Context, theme nui.Theme, tab *logic.Workspac
 	nui.Tooltip(c, theme, button, locales.WorkspaceClose(), nui.TooltipOptions{})
 }
 
-// dragTab moves a tab past its neighbors while it is dragged.
-func (e *Editor) dragTab(box ui.Element, key string) {
-	if box.PressedInside() {
-		e.drag = tabDrag{key: key}
+// tabEdgeScroll is how far the strip scrolls in a frame while a dragged tab
+// is at its edge, and tabEdge how near the edge that starts.
+const (
+	tabEdgeScroll float32 = 8
+	tabEdge       float32 = 32
+)
+
+// dragTab lets the pointer drag a tab along the strip, as 1.0.5 did: the tab
+// follows the pointer, its neighbors slide aside to open the slot it would
+// drop in, and the strip scrolls while the tab is at its edge. Letting go
+// moves the tab there; the Capture tab stays first.
+func (e *Editor) dragTab(c *ui.Context, theme nui.Theme, box ui.Element, index int, key string) {
+	box.Draggable(nil, ui.DraggableOptions{Axis: ui.Horizontal, Snap: func(ui.Point) ui.Point { return ui.Point{} }})
+	if bounds := box.Bounds(); bounds.W > 0 && e.drag.key != key {
+		e.widths[key] = bounds.W
 	}
-	dx, _, moved := box.Dragged()
-	if !moved || e.drag.key != key {
+	if !box.Dragging() {
+		if e.drag.key == key {
+			e.drop()
+		} else if shift := e.slide(index); shift != 0 {
+			box.Translate(shift, 0)
+		}
 		return
 	}
-	e.drag.x += dx
-	if !e.drag.moved && e.drag.x > -dragThreshold && e.drag.x < dragThreshold {
-		return
+	if e.drag.key != key {
+		e.drag = tabDrag{key: key, from: index, target: index, width: e.widths[key], scrolled: e.tabScroll.X}
 	}
-	e.drag.moved = true
-	for e.drag.x > tabWidth/2 || e.drag.x < -tabWidth/2 {
-		direction := 1
-		if e.drag.x < 0 {
-			direction = -1
+	// The tab stays under the pointer as the strip scrolls under it.
+	scrolled := e.tabScroll.X - e.drag.scrolled
+	box.Translate(scrolled, 0).ZIndex(1).Background(theme.Background).Opacity(0.92)
+	e.drag.target = e.dropTarget(box.DragOffset().X + scrolled)
+	e.edgeScroll(c, box.Bounds())
+}
+
+// dropTarget returns where the dragged tab drops, moved by offset from its
+// place: past every neighbor whose middle it passed, never before Capture.
+func (e *Editor) dropTarget(offset float32) int {
+	tabs := e.Data.Workspace.Tabs
+	target := e.drag.from
+	if offset > 0 {
+		for moved := offset; target+1 < len(tabs) && moved >= e.widths[tabs[target+1].Key]/2; target++ {
+			moved -= e.widths[tabs[target+1].Key]
 		}
-		if !e.moveTab(key, direction) {
-			e.drag.x = 0
-			break
-		}
-		e.drag.x -= float32(direction) * tabWidth
+		return target
+	}
+	for moved := -offset; target-1 >= 1 && moved >= e.widths[tabs[target-1].Key]/2; target-- {
+		moved -= e.widths[tabs[target-1].Key]
+	}
+	return target
+}
+
+// slide is how far the tab at index moves aside for the dragged tab.
+func (e *Editor) slide(index int) float32 {
+	switch drag := e.drag; {
+	case drag.key == "":
+		return 0
+	case drag.from < drag.target && index > drag.from && index <= drag.target:
+		return -drag.width
+	case drag.target < drag.from && index >= drag.target && index < drag.from:
+		return drag.width
+	default:
+		return 0
 	}
 }
 
-func (e *Editor) moveTab(key string, direction int) bool {
-	workspace := e.Data.Workspace
-	keys := make([]string, 0, len(workspace.Tabs))
-	for _, tab := range workspace.Tabs {
-		if tab.Key != logic.CaptureTabKey {
+// edgeScroll scrolls the strip while the dragged tab is at its edge.
+func (e *Editor) edgeScroll(c *ui.Context, tab ui.Rect) {
+	strip := e.strip
+	if strip.W <= 0 || tab.W <= 0 {
+		return
+	}
+	switch {
+	case tab.X+tab.W > strip.X+strip.W-tabEdge:
+		if widgets.ScrollStripBy(&e.tabScroll, tabEdgeScroll) {
+			c.Invalidate()
+		}
+	case tab.X < strip.X+tabEdge:
+		if widgets.ScrollStripBy(&e.tabScroll, -tabEdgeScroll) {
+			c.Invalidate()
+		}
+	}
+}
+
+// drop moves the dragged tab where it was let go.
+func (e *Editor) drop() {
+	drag := e.drag
+	e.drag = tabDrag{}
+	tabs := e.Data.Workspace.Tabs
+	if drag.target == drag.from || drag.from >= len(tabs) || tabs[drag.from].Key != drag.key {
+		return
+	}
+	keys := make([]string, 0, len(tabs))
+	for _, tab := range tabs {
+		if tab.Key != logic.CaptureTabKey && tab.Key != drag.key {
 			keys = append(keys, tab.Key)
 		}
 	}
-	index := slices.Index(keys, key)
-	target := index + direction
-	if index < 0 || target < 0 || target >= len(keys) {
-		return false
-	}
-	keys[index], keys[target] = keys[target], keys[index]
-	workspace.Reorder(keys)
-	return true
+	// Among the request tabs, Capture being first.
+	at := min(max(drag.target-1, 0), len(keys))
+	keys = slices.Insert(keys, at, drag.key)
+	e.Data.Workspace.Reorder(keys)
+	e.dropped[drag.key]++
 }
 
 func (e *Editor) closeWithPrompt(key string) {

@@ -43,7 +43,9 @@ type CollectionRow struct {
 	Depth              int
 	Expanded           bool
 	HasChildren        bool
-	Request            *CollectionRequest
+	// Children counts a folder's own folders and requests.
+	Children int
+	Request  *CollectionRequest
 }
 
 // CollectionFolderOption is a folder that can receive a request.
@@ -197,7 +199,7 @@ func (s *CollectionStore) Rows() []CollectionRow {
 	visit = func(folder *CollectionFolder, parent string, depth int) {
 		folders, requests := sortedFolders(folder.Folders), sortedRequests(folder.Requests)
 		expanded := s.Expanded[folder.ID]
-		rows = append(rows, CollectionRow{ID: folder.ID, ParentID: parent, Name: folder.Name, Folder: true, Depth: depth, Expanded: expanded, HasChildren: len(folders)+len(requests) > 0})
+		rows = append(rows, CollectionRow{ID: folder.ID, ParentID: parent, Name: folder.Name, Folder: true, Depth: depth, Expanded: expanded, HasChildren: len(folders)+len(requests) > 0, Children: len(folders) + len(requests)})
 		if !expanded {
 			return
 		}

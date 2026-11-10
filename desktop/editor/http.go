@@ -24,9 +24,8 @@ type httpPane struct {
 	tab    *logic.WorkspaceTab
 	state  *logic.HTTPEditorState
 	requestRows
-	urlEncoded rowsView
-	formData   formDataView
-	bodyGuard  int
+	formData  formDataView
+	bodyGuard int
 
 	body, script         *widgets.CodeView
 	bodyText, scriptText string
@@ -209,13 +208,11 @@ func (p *httpPane) requestPanel(c *ui.Context, theme nui.Theme) {
 			script,
 			{ID: logic.RequestTabSettings, Label: locales.WorkspaceHttpRequestSettings()},
 		}
-		ui.ScrollHorizontal(c).FillWidth().Shrink(0).PaddingX(10).Scrollbars(false).Children(func() {
-			nui.Tabs(c.Key("request-tabs"), theme, &state.ActiveRequestTab, items, nui.TabsOptions{Label: locales.WorkspaceHttpRequestRequestHeaders(), Content: nui.Set(false), Underline: true})
-		})
+		widgets.TabStrip(c.Key("request-tabs"), theme, &state.ActiveRequestTab, items, widgets.TabStripOptions{Label: locales.WorkspaceHttpRequestRequestHeaders(), PaddingX: 10})
 		ui.Column(c.Key(state.ActiveRequestTab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch state.ActiveRequestTab {
 			case logic.RequestTabQuery:
-				p.editor.queryPane(c, theme, &p.query, &state.Params)
+				p.editor.queryPane(c, theme, &state.Params)
 			case logic.RequestTabCookies:
 				p.editor.cookiesPane(c, theme, &p.requestRows, &state.Headers)
 			case logic.RequestTabBody:
@@ -225,7 +222,7 @@ func (p *httpPane) requestPanel(c *ui.Context, theme nui.Theme) {
 			case logic.RequestTabSettings:
 				p.settingsPane(c, theme)
 			default:
-				p.editor.headersPane(c, theme, &p.headers, &state.Headers, logic.RequestProtocol(state.Settings.Protocol))
+				p.editor.headersPane(c, theme, &state.Headers, logic.RequestProtocol(state.Settings.Protocol))
 			}
 		})
 	})
@@ -282,14 +279,14 @@ func (p *httpPane) urlEncodedPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		paneHeader(c, theme, locales.WorkspaceHttpRequestBodyTypeUrlencoded(), func() {
-			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestFormDataClearAll(), false, func() {
+			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestUrlencodedClearAll(), false, func() {
 				state.RequestBodyURLEncoded = []logic.EditableRow{{Enabled: true}}
 			})
-			iconAction(c, theme, "add", lucide.Plus(), locales.WorkspaceHttpRequestFormDataAddRow(), false, func() {
+			iconAction(c, theme, "add", lucide.Plus(), locales.WorkspaceHttpRequestUrlencodedAddRow(), false, func() {
 				state.RequestBodyURLEncoded = append(state.RequestBodyURLEncoded, logic.EditableRow{Enabled: true})
 			})
 		})
-		p.urlEncoded.build(c, theme, &state.RequestBodyURLEncoded, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestFormDataNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestFormDataValuePlaceholder()})
+		editableRows(c, theme, &state.RequestBodyURLEncoded, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestUrlencodedNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestUrlencodedValuePlaceholder()})
 	})
 }
 
@@ -353,7 +350,6 @@ func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
 
 // formDataView edits Form Data rows.
 type formDataView struct {
-	list   ui.ListState
 	menus  map[string]*nui.MenuState
 	guards map[string]int
 }
@@ -391,80 +387,98 @@ func (v *formDataView) build(c *ui.Context, theme nui.Theme, e *Editor, key stri
 				*items = append(*items, logic.NewFormDataRow())
 			})
 		})
-		ui.List(c.Key("form-rows"), &v.list, len(*items), func(index int) {
-			if index < len(*items) {
-				v.row(c, theme, e, key, items, index)
-			}
-		}).Fill().MinHeight(0)
+		number := func(index int) string { return strconv.Itoa(index + 1) }
+		gridPane(c, func() {
+			widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
+				Label: locales.WorkspaceHttpRequestBodyTypeFormData(), Rows: len(*items),
+				RowKey:  func(i int) any { return (*items)[i].ID },
+				Enabled: func(i int) *bool { return &(*items)[i].Enabled },
+				Key:     func(i int) *string { return &(*items)[i].Name },
+				Value: func(i int) *string {
+					if (*items)[i].ItemType == logic.FormDataItemFile {
+						return nil
+					}
+					return &(*items)[i].Value
+				},
+				EnabledLabel:     func(i int) string { return locales.WorkspaceHttpRequestFormDataColEnabled() + " " + number(i) },
+				KeyLabel:         func(i int) string { return locales.WorkspaceHttpRequestFormDataNamePlaceholder() + " " + number(i) },
+				ValueLabel:       func(i int) string { return locales.WorkspaceHttpRequestFormDataValuePlaceholder() + " " + number(i) },
+				KeyPlaceholder:   locales.WorkspaceHttpRequestFormDataNamePlaceholder(),
+				ValuePlaceholder: locales.WorkspaceHttpRequestFormDataValuePlaceholder(),
+				Row: func(i int, row ui.Element) {
+					id := (*items)[i].ID
+					if row.FileDragOver() {
+						row.Background(theme.Accented).Border(1, theme.Primary)
+					}
+					if dropped := row.DroppedFiles(); len(dropped) > 0 {
+						e.useDroppedFile(key+":"+id, dropped, v.begin(id), v.setFile(items, id))
+					}
+				},
+				ValueCell: func(i int) { v.fileCell(c, theme, e, key, items, i) },
+				Actions:   func(i int) { v.rowMenu(c, theme, e, key, items, i) },
+			})
+		})
 	})
 }
 
-func (v *formDataView) row(c *ui.Context, theme nui.Theme, e *Editor, key string, items *[]logic.FormDataItem, index int) {
-	item := &(*items)[index]
+// setFile returns how the row id takes a chosen file.
+func (v *formDataView) setFile(items *[]logic.FormDataItem, id string) func(*logic.RequestFileValue) {
+	return func(file *logic.RequestFileValue) {
+		v.mutate(items, id, func(row *logic.FormDataItem) {
+			row.File, row.ItemType, row.Value = file, logic.FormDataItemFile, ""
+		})
+	}
+}
+
+// fileCell is a file row's value: a chip naming the file, which picks one
+// when clicked.
+func (v *formDataView) fileCell(c *ui.Context, theme nui.Theme, e *Editor, key string, items *[]logic.FormDataItem, index int) {
+	item := (*items)[index]
 	id := item.ID
-	number := strconv.Itoa(index + 1)
-	setFile := func(file *logic.RequestFileValue) {
-		for position := range *items {
-			if (*items)[position].ID == id {
-				(*items)[position].File, (*items)[position].ItemType, (*items)[position].Value = file, logic.FormDataItemFile, ""
-			}
-		}
+	name, color := locales.WorkspaceHttpRequestFormDataFilePlaceholder(), theme.Muted
+	if item.File != nil {
+		name, color = item.File.Name, theme.Text
 	}
-	line := ui.Row(c.Key(id)).FillWidth().Height(editableRowHeight).AlignItems(ui.Center).Gap(6).PaddingX(10)
-	line.BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderMuted)
-	if line.FileDragOver() {
-		line.Background(theme.Accented).Border(1, theme.Primary)
-	}
-	if dropped := line.DroppedFiles(); len(dropped) > 0 {
-		e.useDroppedFile(key+":"+id, dropped, v.begin(id), setFile)
-	}
-	line.Children(func() {
-		nui.Checkbox(c.Key("enabled"), theme, &item.Enabled, nui.CheckboxOptions{}).Label(locales.WorkspaceHttpRequestFormDataColEnabled() + " " + number)
-		ui.Box(c.Key("name")).Grow(2).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, theme, &item.Name, nui.InputOptions{Label: locales.WorkspaceHttpRequestFormDataNamePlaceholder() + " " + number, Placeholder: locales.WorkspaceHttpRequestFormDataNamePlaceholder(), Size: nui.SM}).FillWidth()
-		})
-		ui.Box(c.Key("value")).Grow(3).Basis(0).MinWidth(0).Children(func() {
-			if item.ItemType != logic.FormDataItemFile {
-				nui.Input(c, theme, &item.Value, nui.InputOptions{Label: locales.WorkspaceHttpRequestFormDataValuePlaceholder() + " " + number, Placeholder: locales.WorkspaceHttpRequestFormDataValuePlaceholder(), Size: nui.SM}).FillWidth()
-				return
-			}
-			name, color := locales.WorkspaceHttpRequestFormDataFilePlaceholder(), theme.Muted
-			if item.File != nil {
-				name, color = item.File.Name, theme.Text
-			}
-			chip := ui.Row(c.Key("file")).FillWidth().Height(28).AlignItems(ui.Center).Gap(6).PaddingX(8).Border(1, theme.Border).Radius(theme.Radius).Role(ui.RoleButton).Label(locales.WorkspaceHttpRequestFormDataRowMenuUpload() + " " + number)
-			chip.OnClick(func() { e.pickFile(key+":"+id, v.begin(id), setFile) })
-			chip.Children(func() {
-				ui.Icon(c, lucide.FileText()).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-				ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
-			})
-		})
-		state := v.menu(id)
-		anchor := nui.Button(c.Key("row-menu"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.EllipsisVertical(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuActions() + " " + number})
-		anchor.OnClick(func() { state.Open = !state.Open })
-		nui.DropdownMenu(c.Key("row-menu-items"), theme, anchor, state, []nui.MenuItem{
-			{ID: "text", Label: locales.WorkspaceHttpRequestFormDataRowMenuText(), OnSelect: func() {
-				v.begin(id)
-				v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.File = logic.FormDataItemText, nil })
-			}},
-			{ID: "file", Label: locales.WorkspaceHttpRequestFormDataRowMenuFile(), OnSelect: func() {
-				v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.Value = logic.FormDataItemFile, "" })
-			}},
-			{ID: "upload", Label: locales.WorkspaceHttpRequestFormDataRowMenuUpload(), OnSelect: func() { e.pickFile(key+":"+id, v.begin(id), setFile) }},
-			{ID: "delete", Label: locales.WorkspaceHttpRequestFormDataRowMenuDelete(), OnSelect: func() {
-				v.begin(id)
-				if position := indexOfFormRow(*items, id); position >= 0 {
-					if len(*items) <= 1 {
-						*items = []logic.FormDataItem{logic.NewFormDataRow()}
-						return
-					}
-					next := make([]logic.FormDataItem, 0, len(*items)-1)
-					next = append(next, (*items)[:position]...)
-					*items = append(next, (*items)[position+1:]...)
-				}
-			}},
-		}, nui.MenuOptions{Label: locales.WorkspaceHttpRequestFormDataRowMenuActions()})
+	chip := ui.Row(c.Key("file")).FillWidth().Height(28).AlignItems(ui.Center).Gap(6).PaddingX(10).Border(1, theme.Border).Radius(999).Role(ui.RoleButton).Label(locales.WorkspaceHttpRequestFormDataRowMenuUpload() + " " + strconv.Itoa(index+1))
+	chip.OnClick(func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) })
+	chip.Children(func() {
+		ui.Icon(c, lucide.File()).Size(16, 16).Shrink(0).TextColor(color)
+		ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
 	})
+	if item.File != nil {
+		nui.Tooltip(c, theme, chip, item.File.Path, nui.TooltipOptions{})
+	}
+}
+
+// rowMenu is a row's actions: text or file, upload, and delete.
+func (v *formDataView) rowMenu(c *ui.Context, theme nui.Theme, e *Editor, key string, items *[]logic.FormDataItem, index int) {
+	id := (*items)[index].ID
+	number := strconv.Itoa(index + 1)
+	state := v.menu(id)
+	anchor := nui.Button(c.Key("row-menu"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Ellipsis(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuActions() + " " + number})
+	anchor.OnClick(func() { state.Open = !state.Open })
+	nui.DropdownMenu(c.Key("row-menu-items"), theme, anchor, state, []nui.MenuItem{
+		{ID: "text", Label: locales.WorkspaceHttpRequestFormDataRowMenuText(), OnSelect: func() {
+			v.begin(id)
+			v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.File = logic.FormDataItemText, nil })
+		}},
+		{ID: "file", Label: locales.WorkspaceHttpRequestFormDataRowMenuFile(), OnSelect: func() {
+			v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.Value = logic.FormDataItemFile, "" })
+		}},
+		{ID: "upload", Label: locales.WorkspaceHttpRequestFormDataRowMenuUpload(), OnSelect: func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) }},
+		{ID: "delete", Label: locales.WorkspaceHttpRequestFormDataRowMenuDelete(), OnSelect: func() {
+			v.begin(id)
+			if position := indexOfFormRow(*items, id); position >= 0 {
+				if len(*items) <= 1 {
+					*items = []logic.FormDataItem{logic.NewFormDataRow()}
+					return
+				}
+				next := make([]logic.FormDataItem, 0, len(*items)-1)
+				next = append(next, (*items)[:position]...)
+				*items = append(next, (*items)[position+1:]...)
+			}
+		}},
+	}, nui.MenuOptions{Label: locales.WorkspaceHttpRequestFormDataRowMenuActions()})
 }
 
 func (v *formDataView) mutate(items *[]logic.FormDataItem, id string, change func(*logic.FormDataItem)) {

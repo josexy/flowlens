@@ -187,10 +187,10 @@ func (v *consoleView) detailModal(c *ui.Context, theme nui.Theme) {
 	entry := v.detail
 	nui.ModalWithOptions(c.Key("console-detail"), theme, &v.open, nui.ModalOptions{Title: locales.WorkspaceHttpRequestConsoleEntryDetail(), Width: nui.Set[float32](720), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("copy"), palette, locales.WorkspaceHttpRequestConsoleCopyEntry(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).
-				OnClick(func() { v.editor.copy(entry.Message, locales.WorkspaceHttpRequestConsoleEntryCopied()) })
-			nui.Button(c.Key("save"), palette, locales.WorkspaceHttpRequestConsoleSaveEntry(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).
-				OnClick(func() { v.save(fmt.Sprintf("flowlens-console-entry-%d.log", entry.EventID), entry.Message) })
+			iconAction(c, palette, "copy", lucide.Copy(), locales.WorkspaceHttpRequestConsoleCopyEntry(), false, func() { v.editor.copy(entry.Message, locales.WorkspaceHttpRequestConsoleEntryCopied()) })
+			iconAction(c, palette, "save", lucide.Download(), locales.WorkspaceHttpRequestConsoleSaveEntry(), false, func() {
+				v.save(fmt.Sprintf("flowlens-console-entry-%d.log", entry.EventID), entry.Message)
+			})
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(8).Children(func() {

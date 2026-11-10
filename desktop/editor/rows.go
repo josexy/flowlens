@@ -6,15 +6,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
-)
-
-const (
-	editableRowHeight  float32 = 36
-	minKeyColumnWidth  float32 = 140
-	minValueColumnSize float32 = 252
 )
 
 type rowsOptions struct {
@@ -23,14 +18,9 @@ type rowsOptions struct {
 	Protocol                         logic.RequestProtocol
 }
 
-// rowsView edits an ordered list of name and value rows.
-type rowsView struct {
-	list     ui.ListState
-	keyWidth float32
-	width    float32
-}
-
-func (v *rowsView) build(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, options rowsOptions) {
+// editableRows edits an ordered list of name and value rows in a grid, as
+// 1.0.5's EditableKeyValueTable.
+func editableRows(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, options rowsOptions) {
 	if len(*rows) == 0 {
 		*rows = []logic.EditableRow{{Enabled: true}}
 	}
@@ -40,59 +30,43 @@ func (v *rowsView) build(c *ui.Context, theme nui.Theme, rows *[]logic.EditableR
 	if options.ValuePlaceholder == "" {
 		options.ValuePlaceholder = locales.WorkspaceHttpRequestHeaderValuePlaceholder()
 	}
-	element := ui.List(c.Key("rows"), &v.list, len(*rows), func(index int) {
-		if index < len(*rows) {
-			v.row(c, theme, rows, index, options)
+	number := func(index int) string { return strconv.Itoa(index + 1) }
+	invalidName := func(index int) string {
+		row := (*rows)[index]
+		name := strings.TrimSpace(row.Key)
+		if options.ValidateHeaders && row.Enabled && name != "" && !logic.IsValidRequestHeaderName(name, options.Protocol) {
+			return name
 		}
-	}).Fill().MinHeight(0)
-	if bounds := element.Bounds(); bounds.W > 0 {
-		v.width = bounds.W
+		return ""
 	}
-}
-
-func (v *rowsView) row(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, index int, options rowsOptions) {
-	row := &(*rows)[index]
-	number := strconv.Itoa(index + 1)
-	line := ui.Row(c.Key(index)).FillWidth().Height(editableRowHeight).AlignItems(ui.Center).Gap(6).PaddingX(10)
-	line.BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderMuted)
-	line.Children(func() {
-		nui.Checkbox(c.Key("enabled"), theme, &row.Enabled, nui.CheckboxOptions{}).Label(options.KeyPlaceholder + " " + number + " enabled")
-		key := ui.Row(c.Key("key-cell")).AlignItems(ui.Center).Gap(4).MinWidth(0)
-		if v.keyWidth > 0 {
-			key.Width(v.keyWidth).Shrink(0)
-		} else {
-			key.Grow(2).Basis(0)
-		}
-		key.Children(func() {
-			name := strings.TrimSpace(row.Key)
-			invalid := options.ValidateHeaders && row.Enabled && name != "" && !logic.IsValidRequestHeaderName(name, options.Protocol)
-			nui.Input(c.Key("key"), theme, &row.Key, nui.InputOptions{Label: options.KeyPlaceholder + " " + number, Placeholder: options.KeyPlaceholder, Size: nui.SM, Invalid: invalid}).Grow(1).Basis(0).MinWidth(0)
-			if invalid {
-				icon := ui.Icon(c.Key("invalid"), lucide.CircleX()).Size(14, 14).Shrink(0).TextColor(theme.Error)
-				nui.Tooltip(c, theme, icon, locales.WorkspaceHttpRequestHeaderInvalidName(name), nui.TooltipOptions{})
-			}
+	gridPane(c, func() {
+		widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
+			Label: options.KeyPlaceholder, Rows: len(*rows), Resizable: true,
+			Enabled:          func(i int) *bool { return &(*rows)[i].Enabled },
+			Key:              func(i int) *string { return &(*rows)[i].Key },
+			Value:            func(i int) *string { return &(*rows)[i].Value },
+			EnabledLabel:     func(i int) string { return options.KeyPlaceholder + " " + number(i) + " enabled" },
+			KeyLabel:         func(i int) string { return options.KeyPlaceholder + " " + number(i) },
+			ValueLabel:       func(i int) string { return options.ValuePlaceholder + " " + number(i) },
+			KeyPlaceholder:   options.KeyPlaceholder,
+			ValuePlaceholder: options.ValuePlaceholder,
+			KeyTrailing: func(i int) {
+				if name := invalidName(i); name != "" {
+					icon := ui.Icon(c.Key("invalid"), lucide.CircleX()).Size(16, 16).Shrink(0).TextColor(theme.Error).Label(locales.WorkspaceHttpRequestHeaderInvalidName(name))
+					nui.Tooltip(c, theme, icon, locales.WorkspaceHttpRequestHeaderInvalidName(name), nui.TooltipOptions{})
+				}
+			},
+			Actions: func(i int) {
+				nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.CircleMinus(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuDelete() + " " + number(i)}).
+					OnClick(func() { *rows = removeEditableRow(*rows, i) })
+			},
 		})
-		v.resizeHandle(c, theme, key)
-		ui.Box(c.Key("value-cell")).Grow(3).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c.Key("value"), theme, &row.Value, nui.InputOptions{Label: options.ValuePlaceholder + " " + number, Placeholder: options.ValuePlaceholder, Size: nui.SM}).FillWidth()
-		})
-		nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.CircleMinus(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuDelete() + " " + number}).
-			OnClick(func() { *rows = removeEditableRow(*rows, index) })
 	})
 }
 
-func (v *rowsView) resizeHandle(c *ui.Context, theme nui.Theme, key ui.Element) {
-	handle := ui.Box(c.Key("resize")).Width(4).Height(22).Shrink(0).Cursor(ui.CursorResizeEW)
-	if handle.Hovered() {
-		handle.Background(theme.Accented)
-	}
-	if dx, _, moved := handle.Dragged(); moved {
-		if v.keyWidth == 0 {
-			v.keyWidth = key.Bounds().W
-		}
-		limit := max(minKeyColumnWidth, v.width-minValueColumnSize)
-		v.keyWidth = min(limit, max(minKeyColumnWidth, v.keyWidth+dx))
-	}
+// gridPane holds a grid with 1.0.5's px-2.5 pb-2.5 around it.
+func gridPane(c *ui.Context, grid func()) {
+	ui.Column(c.Key("grid")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(grid)
 }
 
 func removeEditableRow(rows []logic.EditableRow, index int) []logic.EditableRow {
@@ -146,11 +120,10 @@ func iconAction(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, label 
 // requestRows is the state shared by editors with query, cookie, and header
 // tables.
 type requestRows struct {
-	headers, query, cookies rowsView
-	lastURL, lastParams     string
-	cookieRows              []logic.EditableRow
-	cookieSignature         string
-	cookieRowsSeen          string
+	lastURL, lastParams string
+	cookieRows          []logic.EditableRow
+	cookieSignature     string
+	cookieRowsSeen      string
 }
 
 func hasURLQuery(raw string) bool {
@@ -203,7 +176,7 @@ func (r *requestRows) syncCookies(headers *[]logic.EditableRow) {
 	}
 }
 
-func (e *Editor) headersPane(c *ui.Context, theme nui.Theme, view *rowsView, headers *[]logic.EditableRow, protocol logic.RequestProtocol) {
+func (e *Editor) headersPane(c *ui.Context, theme nui.Theme, headers *[]logic.EditableRow, protocol logic.RequestProtocol) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		paneHeader(c, theme, locales.WorkspaceHttpRequestRequestHeaderList(), func() {
 			iconAction(c, theme, "copy-json", lucide.Code(), locales.WorkspaceHttpRequestCopyRequestHeadersJson(), false, func() {
@@ -220,11 +193,11 @@ func (e *Editor) headersPane(c *ui.Context, theme nui.Theme, view *rowsView, hea
 				*headers = append(*headers, logic.EditableRow{Enabled: true})
 			})
 		})
-		view.build(c, theme, headers, rowsOptions{ValidateHeaders: true, Protocol: protocol})
+		editableRows(c, theme, headers, rowsOptions{ValidateHeaders: true, Protocol: protocol})
 	})
 }
 
-func (e *Editor) queryPane(c *ui.Context, theme nui.Theme, view *rowsView, params *[]logic.EditableRow) {
+func (e *Editor) queryPane(c *ui.Context, theme nui.Theme, params *[]logic.EditableRow) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		paneHeader(c, theme, locales.WorkspaceHttpRequestQueryList(), func() {
 			iconAction(c, theme, "copy", lucide.Copy(), locales.WorkspaceHttpRequestCopyQuery(), false, func() {
@@ -238,7 +211,7 @@ func (e *Editor) queryPane(c *ui.Context, theme nui.Theme, view *rowsView, param
 				*params = append(*params, logic.EditableRow{Enabled: true})
 			})
 		})
-		view.build(c, theme, params, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestQueryKeyPlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestQueryValuePlaceholder()})
+		editableRows(c, theme, params, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestQueryKeyPlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestQueryValuePlaceholder()})
 	})
 }
 
@@ -256,7 +229,7 @@ func (e *Editor) cookiesPane(c *ui.Context, theme nui.Theme, shared *requestRows
 				shared.cookieRows = append(shared.cookieRows, logic.EditableRow{Enabled: true})
 			})
 		})
-		shared.cookies.build(c, theme, &shared.cookieRows, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestCookieNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestCookieValuePlaceholder()})
+		editableRows(c, theme, &shared.cookieRows, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestCookieNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestCookieValuePlaceholder()})
 	})
 }
 
@@ -280,8 +253,9 @@ func (e *Editor) fileControl(c *ui.Context, theme nui.Theme, job string, file **
 		if *file == nil {
 			ui.Icon(c, lucide.FileText()).Size(28, 28).TextColor(theme.Muted)
 			ui.Text(c, locales.WorkspaceHttpRequestFileDropHint()).FontSize(14).TextColor(theme.Muted)
-			nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
+			choose := nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() { e.pickFile(job, begin(), apply) })
+			nui.Tooltip(c, theme, choose, locales.WorkspaceHttpRequestFileChoose(), nui.TooltipOptions{})
 			return
 		}
 		chosen := *file
@@ -290,8 +264,9 @@ func (e *Editor) fileControl(c *ui.Context, theme nui.Theme, job string, file **
 		ui.Text(c, locales.WorkspaceHttpRequestFilePath()+": "+chosen.Path).FontSize(12).TextColor(theme.Muted).Selectable()
 		ui.Text(c, locales.WorkspaceHttpRequestFileSize()+": "+logic.FormatFileSize(chosen.Size)).FontSize(12).TextColor(theme.Muted)
 		ui.Row(c).Gap(8).Children(func() {
-			nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
+			choose := nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() { e.pickFile(job, begin(), apply) })
+			nui.Tooltip(c, theme, choose, locales.WorkspaceHttpRequestFileChoose(), nui.TooltipOptions{})
 			nui.Button(c.Key("clear"), theme, locales.WorkspaceHttpRequestFileClear(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() {
 					*guard++

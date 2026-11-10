@@ -734,7 +734,7 @@ func (d *pluginDialog) build(c *ui.Context, theme nui.Theme, v *View, title, con
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsName()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }}).FillWidth()
+				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			nui.FormField(c.Key("description"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsDescription()}, func(field nui.Theme) {
 				nui.Textarea(c, field, &d.description, nui.TextareaOptions{InputOptions: nui.InputOptions{Label: locales.PythonPluginsDescription(), Disabled: busy}, Rows: 3}).FillWidth()
@@ -795,7 +795,7 @@ func (d *fileDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("path"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsFilePath(), Hint: locales.PythonPluginsFilePathHint()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), OnSubmit: func(string) { d.submit(v) }}).FillWidth()
+				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})

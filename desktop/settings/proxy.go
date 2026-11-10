@@ -211,8 +211,8 @@ func (v *View) generateCA(overwrite bool) {
 	})
 }
 
-func (v *View) pickPath(job, title string, patterns []string, done func(string)) {
-	run(v, "pick:"+job, func() (string, error) { return v.Host.PickFile(title, patterns...) }, func(path string, err error) {
+func (v *View) pickPath(job string, picker FilePicker, done func(string)) {
+	run(v, "pick:"+job, func() (string, error) { return v.Host.PickFile(picker) }, func(path string, err error) {
 		if err != nil {
 			v.Notifier.Error(locales.SettingsErrorSelectCertificateFile(err.Error()))
 			return
@@ -228,14 +228,30 @@ var (
 	keyPatterns         = []string{"key", "pem"}
 )
 
-func (v *View) fileInput(c *ui.Context, palette nui.Theme, key, label, placeholder, title string, patterns []string, target *string) {
+// certificatePicker and keyPicker describe the dialogs that choose
+// certificate and private key files, as 1.0.5's.
+func certificatePicker(title, message string) FilePicker {
+	return FilePicker{Title: title, Message: message, FilterName: locales.SettingsCertificateFileFilter(), Patterns: certificatePatterns}
+}
+
+func keyPicker(title, message string) FilePicker {
+	return FilePicker{Title: title, Message: message, FilterName: locales.SettingsPrivateKeyFileFilter(), Patterns: keyPatterns}
+}
+
+// fileInput is a path field with a browse button. buttonTitle names the
+// button; "" uses the generic Select File, as 1.0.5 did for root CA and
+// client certificate paths. picker describes the file dialog.
+func (v *View) fileInput(c *ui.Context, palette nui.Theme, key, label, placeholder, buttonTitle string, picker FilePicker, target *string) {
+	if buttonTitle == "" {
+		buttonTitle = locales.SettingsSelectFile()
+	}
 	ui.Row(c.Key(key)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
 			nui.Input(c, palette, target, nui.InputOptions{Label: label, Placeholder: placeholder, Size: nui.SM}).FillWidth()
 		})
-		browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: title})
-		browse.OnClick(func() { v.pickPath(key, title, patterns, func(path string) { *target = path }) })
-		nui.Tooltip(c, palette, browse, title, nui.TooltipOptions{})
+		browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: picker.Title})
+		browse.OnClick(func() { v.pickPath(key, picker, func(path string) { *target = path }) })
+		nui.Tooltip(c, palette, browse, buttonTitle, nui.TooltipOptions{})
 	})
 }
 
@@ -400,10 +416,10 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 		})
 		if !proxy.UseBuiltinCA {
 			row(c, palette, "ca-cert", locales.ToolbarCaCertPath(), "", func() {
-				v.fileInput(c, palette, "ca-cert-file", locales.ToolbarCaCertPath(), "", locales.SettingsSelectCaCertFile(), certificatePatterns, &proxy.CACertPath)
+				v.fileInput(c, palette, "ca-cert-file", locales.ToolbarCaCertPath(), "", locales.SettingsSelectCaCertFile(), certificatePicker(locales.SettingsSelectCaCertFile(), locales.SettingsSelectCaCertFileMessage()), &proxy.CACertPath)
 			})
 			row(c, palette, "ca-key", locales.ToolbarCaKeyPath(), "", func() {
-				v.fileInput(c, palette, "ca-key-file", locales.ToolbarCaKeyPath(), "", locales.SettingsSelectCaKeyFile(), keyPatterns, &proxy.CAKeyPath)
+				v.fileInput(c, palette, "ca-key-file", locales.ToolbarCaKeyPath(), "", locales.SettingsSelectCaKeyFile(), keyPicker(locales.SettingsSelectCaKeyFile(), locales.SettingsSelectCaKeyFileMessage()), &proxy.CAKeyPath)
 			})
 		}
 		v.certificateDetails(c, palette)
@@ -461,7 +477,7 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 		ui.Row(c.Key("root-" + number)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, number).Width(20).Shrink(0).FontSize(14).TextColor(palette.Muted)
 			ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				v.fileInput(c, palette, "file", locales.SettingsRootCaPathPlaceholder()+" "+number, locales.SettingsRootCaPathPlaceholder(), locales.SettingsSelectRootCaFile(), certificatePatterns, &proxy.RootCAPaths[index])
+				v.fileInput(c, palette, "file", locales.SettingsRootCaPathPlaceholder()+" "+number, locales.SettingsRootCaPathPlaceholder(), "", certificatePicker(locales.SettingsSelectRootCaFile(), locales.SettingsSelectRootCaFileMessage()), &proxy.RootCAPaths[index])
 			})
 			position := index
 			nui.Button(c.Key("remove"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveRootCa() + " " + number}).OnClick(func() {
@@ -474,7 +490,7 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 
 func (v *View) pickRoots(proxy *settingservice.ProxyConfig) {
 	run(v, "pick-roots", func() ([]string, error) {
-		return v.Host.PickFiles(locales.SettingsSelectRootCaFiles(), certificatePatterns...)
+		return v.Host.PickFiles(certificatePicker(locales.SettingsSelectRootCaFiles(), locales.SettingsSelectRootCaFilesMessage()))
 	}, func(paths []string, err error) {
 		if err != nil {
 			v.Notifier.Error(locales.SettingsErrorSelectCertificateFile(err.Error()))
@@ -574,10 +590,10 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 				nui.Input(c.Key("input"), palette, &cert.Hostname, nui.InputOptions{Label: locales.SettingsClientCertTargetHost() + " " + number, Placeholder: locales.SettingsClientCertTargetHostPlaceholder(), Size: nui.SM}).FillWidth()
 			})
 			row(c, palette, "cert", locales.SettingsClientCertFile(), "", func() {
-				v.fileInput(c, palette, "file", locales.SettingsClientCertFile()+" "+number, locales.SettingsClientCertPathPlaceholder(), locales.SettingsSelectClientCertFile(), certificatePatterns, &cert.CertPath)
+				v.fileInput(c, palette, "file", locales.SettingsClientCertFile()+" "+number, locales.SettingsClientCertPathPlaceholder(), "", certificatePicker(locales.SettingsSelectClientCertFile(), locales.SettingsSelectClientCertFileMessage()), &cert.CertPath)
 			})
 			row(c, palette, "key", locales.SettingsClientKeyFile(), "", func() {
-				v.fileInput(c, palette, "file", locales.SettingsClientKeyFile()+" "+number, locales.SettingsClientKeyPathPlaceholder(), locales.SettingsSelectClientKeyFile(), keyPatterns, &cert.KeyPath)
+				v.fileInput(c, palette, "file", locales.SettingsClientKeyFile()+" "+number, locales.SettingsClientKeyPathPlaceholder(), "", keyPicker(locales.SettingsSelectClientKeyFile(), locales.SettingsSelectClientKeyFileMessage()), &cert.KeyPath)
 			})
 			if warning := certificateWarning(cert); warning != "" {
 				ui.Row(c.Key("warning")).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {

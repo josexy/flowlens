@@ -162,7 +162,9 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 				if !blocked {
 					browse.OnClick(func() {
 						state.picking = true
-						run(v, "python-pick", func() (string, error) { return v.Host.PickFile(locales.SettingsPythonInterpreterPickerTitle()) }, func(path string, err error) {
+						run(v, "python-pick", func() (string, error) {
+							return v.Host.PickFile(FilePicker{Title: locales.SettingsPythonInterpreterPickerTitle(), Message: locales.SettingsPythonInterpreterPickerMessage()})
+						}, func(path string, err error) {
 							state.picking = false
 							if err != nil {
 								v.Notifier.Error(locales.SettingsPythonInterpreterPickerFailed(err.Error()))
@@ -727,10 +729,12 @@ func (v *View) commandRow(c *ui.Context, palette nui.Theme, config *settingservi
 		if resolved.Binding != nil {
 			clear.OnClick(func() { v.applyOverride(config, command, nil, scopeOf(config, command)) })
 		}
+		nui.Tooltip(c, palette, clear, locales.ShortcutsClearFor(label), nui.TooltipOptions{})
 		_, overridden := config.Overrides[command.ID]
 		restore := nui.Button(c.Key("restore"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.RotateCcw(), AccessibleLabel: locales.ShortcutsResetFor(label), Disabled: !overridden})
 		if overridden {
 			restore.OnClick(func() { delete(config.Overrides, command.ID) })
 		}
+		nui.Tooltip(c, palette, restore, locales.ShortcutsResetFor(label), nui.TooltipOptions{})
 	})
 }

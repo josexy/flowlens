@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
@@ -50,13 +51,23 @@ type Editor struct {
 	sockets   map[string]*socketPane
 	newMenu   nui.MenuState
 	tabScroll ui.ScrollState
-	drag      tabDrag
+	// revealed is the active tab last scrolled into view, and revealUntil
+	// when bringing it into view gives up.
+	revealed    string
+	revealUntil time.Time
+	// strip is where the tab strip showed in the last frame.
+	strip ui.Rect
+	drag  tabDrag
+	// widths are the tabs' widths in the last frame, and dropped counts each
+	// tab's drops, which key its element anew.
+	widths    map[string]float32
+	dropped   map[string]int
 	clipboard *string
 }
 
 // New returns the editors of a window.
 func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifier *widgets.Notifier, confirm *widgets.ConfirmDialog) *Editor {
-	return &Editor{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm, https: map[string]*httpPane{}, sockets: map[string]*socketPane{}}
+	return &Editor{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm, https: map[string]*httpPane{}, sockets: map[string]*socketPane{}, widths: map[string]float32{}, dropped: map[string]int{}}
 }
 
 func (e *Editor) pythonEnabled() bool { return e.Host.PythonEnabled != nil && e.Host.PythonEnabled() }
@@ -71,6 +82,12 @@ func (e *Editor) prune() {
 	for key := range e.sockets {
 		if workspace.FindTab(key) == nil {
 			delete(e.sockets, key)
+		}
+	}
+	for key := range e.widths {
+		if workspace.FindTab(key) == nil {
+			delete(e.widths, key)
+			delete(e.dropped, key)
 		}
 	}
 }

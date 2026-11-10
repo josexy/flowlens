@@ -145,9 +145,21 @@ func (f *fixture) menu(row string, path ...string) {
 	f.settle()
 }
 
-func (f *fixture) drag(from string, x, y float32) {
+// grip returns the center of the drag handle of the row named label, at
+// depth in the tree: rows are inset 10 px and 14 px a level, and the grip
+// is the first thing in them.
+func (f *fixture) grip(label string, depth int) (float32, float32) {
 	f.t.Helper()
-	startX, startY := f.center(from)
+	rect, ok := f.tester.Find(label)
+	if !ok {
+		f.t.Fatalf("no %q in %v", label, f.tester.Texts())
+	}
+	return rect.X + 10 + float32(depth)*14 + 7, rect.Y + rect.H/2
+}
+
+func (f *fixture) drag(from string, depth int, x, y float32) {
+	f.t.Helper()
+	startX, startY := f.grip(from, depth)
 	f.tester.Press(startX, startY)
 	f.tester.Frame()
 	const steps = 8
@@ -328,7 +340,7 @@ func TestDragMovesRequestIntoFolder(t *testing.T) {
 	f.data.Collection.Expanded[source] = true
 	f.settle()
 	x, y := f.center("B-Target")
-	f.drag("Moved", x, y)
+	f.drag("Moved", 1, x, y)
 	if got := f.data.Collection.ParentOf(request); got != target {
 		t.Fatalf("parent %q", got)
 	}
@@ -343,7 +355,7 @@ func TestDragRejectsMoveIntoDescendant(t *testing.T) {
 	f.settle()
 	x, y := f.center("Child")
 	before := f.data.Collection.Version
-	f.drag("Parent", x, y)
+	f.drag("Parent", 0, x, y)
 	if f.data.Collection.ParentOf(parent) != "" || f.data.Collection.ParentOf(child) != parent {
 		t.Fatal("tree changed")
 	}
@@ -364,7 +376,7 @@ func TestDragFolderToRoot(t *testing.T) {
 	f.data.Collection.Expanded[parent] = true
 	f.settle()
 	x, y := f.center("Parent")
-	f.drag("Child", x, y-14)
+	f.drag("Child", 1, x, y-14)
 	if got := f.data.Collection.ParentOf(child); got != "" {
 		t.Fatalf("parent %q", got)
 	}
@@ -392,7 +404,7 @@ func TestHoveringFolderOpensIt(t *testing.T) {
 	f.reload()
 	f.data.Collection.Expanded[source] = true
 	f.settle()
-	startX, startY := f.center("Moved")
+	startX, startY := f.grip("Moved", 1)
 	x, y := f.center("B-Target")
 	f.tester.Press(startX, startY)
 	f.tester.Frame()

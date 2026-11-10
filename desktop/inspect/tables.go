@@ -78,13 +78,15 @@ func paneTitle(c *ui.Context, theme nui.Theme, title string, actions func()) {
 	})
 }
 
-func fieldsTable(c *ui.Context, theme nui.Theme, fields []logic.HeaderField) {
+// fieldsTable shows fields in a compact grid, as 1.0.5's HeadersTable.
+// trailing, when set, builds a control after a row's value.
+func fieldsTable(c *ui.Context, theme nui.Theme, label string, fields []logic.HeaderField, trailing func(row int)) {
 	rows := make([]widgets.KeyValue, len(fields))
 	for index, field := range fields {
 		rows[index] = widgets.KeyValue{Key: field.Name, Value: field.Value}
 	}
-	ui.Scroll(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Box(c).FillWidth().Padding(0, 10, 10, 10).Children(func() { widgets.KeyValueTable(c, theme, rows) })
+	ui.Column(c.Key("fields")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+		widgets.FieldGrid(c, theme, rows, widgets.FieldGridOptions{Label: label, ValueTrailing: trailing})
 	})
 }
 
@@ -107,7 +109,7 @@ func (p *Panel) headersPane(c *ui.Context, theme nui.Theme, options headersPaneO
 			emptyState(c, theme, lucide.Rows3(), locales.DetailNoHeaders())
 			return
 		}
-		fieldsTable(c, theme, display)
+		fieldsTable(c, theme, options.title, display, nil)
 	})
 }
 
@@ -124,7 +126,7 @@ func (p *Panel) queryPane(c *ui.Context, theme nui.Theme, query logic.ParsedURLQ
 			emptyState(c, theme, lucide.ListFilter(), locales.DetailNoQueryParameters())
 			return
 		}
-		fieldsTable(c, theme, fields)
+		fieldsTable(c, theme, locales.DetailQueryList(), fields, nil)
 	})
 }
 
@@ -139,7 +141,7 @@ func (p *Panel) requestCookiesPane(c *ui.Context, theme nui.Theme, headers []log
 			emptyState(c, theme, lucide.Cookie(), locales.DetailNoCookies())
 			return
 		}
-		fieldsTable(c, theme, cookies)
+		fieldsTable(c, theme, locales.DetailCookieList(), cookies, nil)
 	})
 }
 
@@ -155,12 +157,12 @@ func (p *Panel) responseCookiesPane(c *ui.Context, theme nui.Theme, headers []lo
 			emptyState(c, theme, lucide.Cookie(), locales.DetailNoCookies())
 			return
 		}
-		ui.Scroll(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Padding(0, 10, 10, 10).Gap(8).Children(func() {
-				for index := range cookies {
-					p.responseCookie(c, theme, index, cookies[index])
-				}
-			})
+		fields := make([]logic.HeaderField, len(cookies))
+		for index, cookie := range cookies {
+			fields[index] = logic.HeaderField{Name: cookie.Name, Value: cookie.Value}
+		}
+		fieldsTable(c, theme, locales.DetailCookieList(), fields, func(index int) {
+			p.cookieAttributes(c, theme, index, cookies[index])
 		})
 	})
 }
@@ -174,37 +176,98 @@ func (p *Panel) cookieOpen(index int) *bool {
 	return open
 }
 
-func (p *Panel) responseCookie(c *ui.Context, theme nui.Theme, index int, cookie logic.ResponseCookie) {
-	name := cookie.Name
+func cookieName(name string) string {
 	if name == "" {
-		name = locales.DetailCookieUnnamed()
+		return locales.DetailCookieUnnamed()
 	}
-	ui.Column(c.Key(index)).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-		ui.Row(c).FillWidth().Gap(8).Padding(6, 8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, name).FontSize(14).Bold().Selectable().Shrink(0).MaxWidth(240)
-			ui.Text(c, cookie.Value).FontSize(14).Selectable().Grow(1).Basis(0).MinWidth(0)
-			count := strconv.Itoa(len(cookie.Attributes))
-			open := p.cookieOpen(index)
-			label := locales.DetailCookieViewAttributes(count, name)
-			anchor := nui.Button(c.Key("attributes"), theme, count, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Trailing: lucide.ChevronDown(), AccessibleLabel: label})
-			anchor.OnClick(func() { *open = !*open })
-			nui.Tooltip(c, theme, anchor, locales.DetailCookieAttributes(), nui.TooltipOptions{})
-			nui.Popover(c.Key("popover"), theme, anchor, open, nui.PopoverOptions{Label: label, Width: nui.Set[float32](384)}, func(palette nui.Theme) {
-				ui.Text(c, name).FontSize(14).Bold().TextColor(palette.Highlighted)
-				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(12).TextColor(palette.Muted)
-				for position, attribute := range cookie.Attributes {
-					ui.Row(c.Key(position)).FillWidth().Gap(8).Children(func() {
-						ui.Text(c, attribute.Name).FontSize(14).Bold().Width(120).Shrink(0).Selectable()
-						ui.Text(c, attribute.Value).FontSize(14).Grow(1).Basis(0).MinWidth(0).Selectable()
+	return name
+}
+
+// cookieAttributes is a cookie's attributes button and popover, as 1.0.5's
+// ResponseCookieTable: the name and count, a grid of attributes, and the raw
+// Set-Cookie line with a copy button.
+func (p *Panel) cookieAttributes(c *ui.Context, theme nui.Theme, index int, cookie logic.ResponseCookie) {
+	name := cookieName(cookie.Name)
+	count := strconv.Itoa(len(cookie.Attributes))
+	open := p.cookieOpen(index)
+	label := locales.DetailCookieViewAttributes(count, name)
+	chevron := lucide.ChevronDown()
+	if *open {
+		chevron = lucide.ChevronUp()
+	}
+	anchor := nui.Button(c.Key("attributes"), theme, count, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Trailing: chevron, AccessibleLabel: label})
+	anchor.FontFeatures("tnum").OnClick(func() { *open = !*open })
+	nui.Tooltip(c, theme, anchor, locales.DetailCookieAttributes(), nui.TooltipOptions{})
+	nui.Popover(c.Key("popover"), theme, anchor, open, nui.PopoverOptions{Label: label, Placement: nui.BottomEnd, Width: nui.Set[float32](384), MaxHeight: nui.Set[float32](420)}, func(palette nui.Theme) {
+		ui.Column(c).FillWidth().Children(func() {
+			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 12).BorderWidth(0, 0, 1, 0).BorderColor(palette.Border).Children(func() {
+				ui.Text(c, name).FontSize(14).FontWeight(500).TextColor(palette.Text).Grow(1).Basis(0).MinWidth(0).Selectable()
+				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(12).TextColor(palette.Muted).Shrink(0)
+			})
+			ui.Scroll(c.Key("body")).FillWidth().MaxHeight(320).Children(func() {
+				ui.Column(c).FillWidth().Padding(12).Children(func() {
+					cookieAttributeGrid(c, palette, cookie.Attributes)
+					ui.Column(c.Key("raw")).FillWidth().MarginY(0).Padding(8, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(palette.Border).Gap(4).Children(func() {
+						ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+							ui.Text(c, locales.DetailCookieRawHeader()).FontSize(12).TextColor(palette.Muted)
+							iconButton(c, palette, "copy-header", lucide.Copy(), locales.DetailCopySetCookieHeader(), false, func() {
+								p.copyText(logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header}), locales.DetailSetCookieHeaderCopied())
+							})
+						})
+						ui.Text(c, logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header})).FillWidth().FontSize(12).Font(palette.MonoFont).TextColor(palette.Text).Selectable()
 					})
-				}
-				nui.Button(c.Key("copy-header"), palette, locales.DetailCopySetCookieHeader(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
-					OnClick(func() {
-						p.copyText(logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header}), locales.DetailSetCookieHeaderCopied())
-					})
+				})
 			})
 		})
 	})
+}
+
+// How a cookie attribute's value is shown.
+type attributeShown int
+
+const (
+	attributeValue attributeShown = iota
+	attributeEmpty                // "Name=" with nothing after it
+	attributeFlag                 // "Name" without "="
+)
+
+func cookieAttributeShown(attribute logic.CookieAttribute) attributeShown {
+	switch {
+	case !attribute.HasEquals:
+		return attributeFlag
+	case attribute.Value == "":
+		return attributeEmpty
+	default:
+		return attributeValue
+	}
+}
+
+// cookieAttributeGrid lists attributes by name and value. An attribute with
+// "=" but no value shows "Empty value"; a flag without "=" shows a check.
+func cookieAttributeGrid(c *ui.Context, theme nui.Theme, attributes []logic.CookieAttribute) {
+	if len(attributes) == 0 {
+		ui.Text(c.Key("no-attributes"), locales.DetailCookieNoAttributes()).FontSize(12).TextColor(theme.Muted).MarginY(0)
+		ui.Box(c).Height(12)
+		return
+	}
+	ui.Column(c.Key("attributes")).FillWidth().Gap(8).Children(func() {
+		for position, attribute := range attributes {
+			ui.Row(c.Key(position)).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
+				ui.Text(c, cookieName(attribute.Name)).Grow(1).Basis(0).MinWidth(0).FontSize(12).TextColor(theme.Muted).Selectable()
+				ui.Row(c.Key("value")).Grow(2).Basis(0).MinWidth(0).Children(func() {
+					switch cookieAttributeShown(attribute) {
+					case attributeFlag:
+						ui.Icon(c, lucide.Check()).Size(14, 14).TextColor(theme.Text)
+					case attributeEmpty:
+						ui.Text(c, locales.DetailCookieEmptyValue()).FontSize(12).TextColor(theme.Muted)
+					default:
+						ui.Text(c, attribute.Value).FillWidth().FontSize(12).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
+					}
+				})
+			})
+		}
+	})
+	ui.Box(c).Height(12)
 }
 
 // CookieList shows the cookies of Set-Cookie headers.

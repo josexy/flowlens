@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 func TestRequiresPlainText(t *testing.T) {
@@ -129,5 +130,42 @@ func TestLanguageByID(t *testing.T) {
 	}
 	if languageByID("plaintext") != nil {
 		t.Error("plain text has no language")
+	}
+}
+
+func TestScrollingStopsAtTheLastLine(t *testing.T) {
+	for _, readOnly := range []bool{true, false} {
+		view := NewCodeView("text", readOnly)
+		lines := make([]string, 100)
+		for index := range lines {
+			lines[index] = "line"
+		}
+		view.SetText(strings.Join(lines, "\n"))
+		tester := codeViewTester(view)
+		tester.Frame()
+		for range 40 {
+			tester.Scroll(200, 150, 0, 400)
+			tester.Frame()
+		}
+		state := view.State()
+		// The last line's bottom, where it shows in the editor.
+		bottom := state.LineTop(len(lines)) - state.ScrollY()
+		if viewport := state.ViewportHeight(); bottom < viewport-1 || bottom > viewport+1 {
+			t.Fatalf("read-only=%v: last line ends at %v in a %v-high view", readOnly, bottom, viewport)
+		}
+	}
+}
+
+func TestReadOnlyViewsDrawNoWhitespace(t *testing.T) {
+	if got := NewCodeView("json", true).State().Whitespace; got != editor.WhitespaceNone {
+		t.Fatalf("read-only whitespace %v", got)
+	}
+	view := NewCodeView("json", false)
+	if view.State().Whitespace != editor.WhitespaceSelection {
+		t.Fatal("editable views show whitespace in selections")
+	}
+	view.SetReadOnly(true)
+	if view.State().Whitespace != editor.WhitespaceNone {
+		t.Fatal("a view made read-only keeps whitespace markers")
 	}
 }

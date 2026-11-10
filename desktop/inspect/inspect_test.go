@@ -433,7 +433,13 @@ func TestImageZoomBounds(t *testing.T) {
 	if preview.scale != logic.ImageScaleMax {
 		t.Fatal(preview.scale)
 	}
-	f.click(locales.DetailImageReset())
+	area, _ := f.tester.Find("image-area")
+	f.tester.RightClickAt(area.X+area.W/2, area.Y+area.H/2)
+	f.settle()
+	if err := f.tester.ChooseMenuItem(locales.DetailImageReset()); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
 	if preview.scale != 1 {
 		t.Fatal(preview.scale)
 	}

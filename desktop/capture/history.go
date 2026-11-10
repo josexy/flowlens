@@ -236,6 +236,13 @@ func (w *Workspace) askClearHistories() {
 	})
 }
 
+// How long HAR import results stay, as in FlowLens 1.0.5: longer when a file
+// failed, so its reason can be read.
+const (
+	harImportResultTime = 5 * time.Second
+	harImportFailedTime = 8 * time.Second
+)
+
 // ImportHAR imports paths, or asks for files when paths is nil.
 func (w *Workspace) ImportHAR(paths []string) {
 	history := w.Data.History
@@ -279,15 +286,16 @@ func (w *Workspace) finishImport(summary store.HARImportSummary) {
 		}
 		first = locales.HarImportFileFailed(reason, summary.FirstFailedFile)
 	}
+	failed, finished := w.Notifier.WithTimeout(harImportFailedTime), w.Notifier.WithTimeout(harImportResultTime)
 	switch {
 	case summary.Failed > 0 && summary.Files == 0:
-		w.Notifier.Error(first)
+		failed.Error(first)
 	case summary.Failed > 0:
-		w.Notifier.Titled(widgets.SeverityWarning, first, result)
+		failed.Titled(widgets.SeverityWarning, first, result)
 	case summary.Skipped > 0 || summary.Missing > 0:
-		w.Notifier.Warning(result)
+		finished.Warning(result)
 	default:
-		w.Notifier.Success(result)
+		finished.Success(result)
 	}
 }
 

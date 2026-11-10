@@ -220,15 +220,13 @@ func (p *socketPane) leftPanel(c *ui.Context, theme nui.Theme) {
 		{ID: socketTabSettings, Label: locales.WorkspaceWebsocketClientSettings()},
 	}
 	ui.Column(c.Key("left-panel")).Fill().MinHeight(0).Children(func() {
-		ui.ScrollHorizontal(c).FillWidth().Shrink(0).PaddingX(10).Scrollbars(false).Children(func() {
-			nui.Tabs(c.Key("left-tabs"), theme, &state.ActiveLeftTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientMessage(), Content: nui.Set(false), Underline: true})
-		})
+		widgets.TabStrip(c.Key("left-tabs"), theme, &state.ActiveLeftTab, items, widgets.TabStripOptions{Label: locales.WorkspaceWebsocketClientMessage(), PaddingX: 10})
 		ui.Column(c.Key(state.ActiveLeftTab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch state.ActiveLeftTab {
 			case socketTabHeaders:
-				p.editor.headersPane(c, theme, &p.headers, &state.Headers, logic.ProtocolAuto)
+				p.editor.headersPane(c, theme, &state.Headers, logic.ProtocolAuto)
 			case socketTabQuery:
-				p.editor.queryPane(c, theme, &p.query, &state.Params)
+				p.editor.queryPane(c, theme, &state.Params)
 			case socketTabCookies:
 				p.editor.cookiesPane(c, theme, &p.requestRows, &state.Headers)
 			case socketTabSettings:
@@ -391,14 +389,11 @@ func (p *socketPane) rightTabs(c *ui.Context, theme nui.Theme, visible string, f
 		items = append(items, nui.TabItem{ID: socketTabResponse, Label: locales.WorkspaceWebsocketClientResponse()})
 	}
 	p.rightTab = visible
-	ui.Row(c.Key("right-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).PaddingX(10).Children(func() {
-		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
-			nui.Tabs(c.Key("right-tabs"), theme, &p.rightTab, items, nui.TabsOptions{Label: locales.WorkspaceWebsocketClientResponse(), Content: nui.Set(false), Underline: true})
-		})
-		ui.Row(c.Key("chips")).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
+	widgets.TabStrip(c.Key("right-head"), theme, &p.rightTab, items, widgets.TabStripOptions{
+		Label: locales.WorkspaceWebsocketClientResponse(), PaddingX: 10, Trailing: func() {
 			nui.Badge(c.Key("count"), theme, strconv.Itoa(len(state.Messages)), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft})
 			nui.Badge(c.Key("status"), theme, p.statusLabel(), nui.BadgeOptions{Color: p.statusColor(), Variant: nui.Soft})
-		})
+		},
 	})
 	if p.rightTab != visible {
 		state.ActiveRightTab = p.rightTab

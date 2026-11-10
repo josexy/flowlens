@@ -122,11 +122,8 @@ func (r *responseView) tabItems(hasCookies bool) []nui.TabItem {
 
 func (r *responseView) tabs(c *ui.Context, theme nui.Theme, visible string, hasCookies bool) {
 	r.tab = visible
-	ui.Row(c.Key("response-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).PaddingX(10).Children(func() {
-		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
-			nui.Tabs(c.Key("response-tabs"), theme, &r.tab, r.tabItems(hasCookies), nui.TabsOptions{Label: locales.WorkspaceHttpRequestResponseBody(), Content: nui.Set(false), Underline: true})
-		})
-		r.chips(c, theme)
+	widgets.TabStrip(c.Key("response-head"), theme, &r.tab, r.tabItems(hasCookies), widgets.TabStripOptions{
+		Label: locales.WorkspaceHttpRequestResponseBody(), PaddingX: 10, Trailing: func() { r.chips(c, theme) },
 	})
 	if r.tab != visible {
 		r.state.ActiveResponseTab = r.tab
@@ -225,12 +222,12 @@ func fieldsPane(c *ui.Context, theme nui.Theme, e *Editor, title string, fields 
 			emptyPane(c, theme, lucide.Rows3(), locales.DetailNoHeaders(), "")
 			return
 		}
-		ui.Scroll(c.Key("fields")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		ui.Column(c.Key("fields")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			rows := make([]widgets.KeyValue, len(fields))
 			for index, field := range fields {
 				rows[index] = widgets.KeyValue{Key: field.Name, Value: field.Value}
 			}
-			widgets.KeyValueTable(c, theme, rows).FillWidth()
+			widgets.FieldGrid(c, theme, rows, widgets.FieldGridOptions{Label: title})
 		})
 	})
 }

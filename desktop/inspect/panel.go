@@ -199,13 +199,8 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 func countLabel(label string, count int) string { return label + "(" + strconv.Itoa(count) + ")" }
 
 func (p *Panel) tabBar(c *ui.Context, theme nui.Theme, key string, value *string, items []nui.TabItem, trailing func()) {
-	ui.Row(c.Key(key)).FillWidth().Height(38).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Children(func() {
-		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
-			nui.Tabs(c, theme, value, items, nui.TabsOptions{Label: key, Content: nui.Set(false), Underline: true})
-		})
-		if trailing != nil {
-			trailing()
-		}
+	ui.Box(c.Key(key)).FillWidth().Shrink(0).Children(func() {
+		widgets.TabStrip(c, theme, value, items, widgets.TabStripOptions{Label: key, PaddingX: 10, Trailing: trailing})
 	})
 }
 

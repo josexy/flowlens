@@ -11,7 +11,6 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
-	desktoptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -35,7 +34,7 @@ type columnDefinition struct {
 
 var columnDefinitions = []columnDefinition{
 	{key: logic.ColumnID, title: locales.TrafficId, width: 80, minWidth: 60},
-	{key: logic.ColumnMethod, title: locales.TrafficMethod, width: 80, minWidth: 70},
+	{key: logic.ColumnMethod, title: locales.TrafficMethod, width: 100, minWidth: 70},
 	{key: logic.ColumnHost, title: locales.TrafficHost, width: 200, minWidth: 120},
 	{key: logic.ColumnPath, title: locales.TrafficPath, width: 0, minWidth: 120},
 	{key: logic.ColumnProcess, title: locales.TrafficProcess, width: 160, minWidth: 120},
@@ -388,11 +387,14 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 		}
 	}
 	t.list.CellMenu = func(menu *ui.Menu, row, _ int) { t.rowMenu(c, menu, row) }
+	t.list.HeaderCell = t.headerCell(c, theme, visible)
+	order := t.displayOrder(visible)
 	var element ui.Element
 	ui.Themed(c, tableTheme(theme)).Fill().MinHeight(0).Children(func() {
 		element = ui.Table(c.Key("traffic-table"), &t.list, columns, len(t.rows), func(row, col int) {
 			t.CellBuilds++
-			t.cellBackground(c, theme, row, col)
+			key := string(visible[col].key)
+			t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
 			t.cell(c, theme, t.rows[row], visible[col].key)
 		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns())
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {
@@ -418,39 +420,17 @@ func (t *Table) newRequestsButton(c *ui.Context, theme nui.Theme, count int) {
 	})
 }
 
-func (t *Table) statusTone(theme nui.Theme, status int) ui.Color {
-	switch {
-	case status >= 500:
-		return ui.Hex("#dc2626")
-	case status >= 400:
-		return ui.Hex("#b45309")
-	case status >= 300:
-		return ui.Hex("#0284c7")
-	case status >= 200:
-		return ui.Hex("#16a34a")
-	default:
-		return theme.Muted
-	}
-}
-
-// tableTheme is the table's theme: chosen rows take a tint of the accent,
-// keeping their text and badges in their own colors.
-func tableTheme(theme nui.Theme) *ui.Theme {
-	native := theme.Native()
-	native.Background = theme.Background
-	chosen := theme.Primary.Alpha(0.12).Over(theme.Accented)
-	native.Accent, native.InactiveAccent, native.AccentText = chosen, chosen, theme.Text
-	return native
-}
-
 // cellFill fills a cell's box behind its content.
 func cellFill(c *ui.Context, key string) ui.Element {
 	return ui.Box(c.Key(key)).Absolute().Top(0).Bottom(0).Left(0).Right(0).ZIndex(-1).IgnoreInput(true)
 }
 
 // cellBackground stripes every other row, colors highlighted rows, and marks
-// the entry the detail panel shows with a bar along the row's start.
-func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row, col int) {
+// the entry the detail panel shows, and highlighted rows, with a bar along
+// the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
+// stronger in the dark theme. first and last say whether the cell starts or
+// ends the row as shown.
+func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, last bool) {
 	entry := t.rows[row]
 	chosen := t.selection.Has(entry.ID)
 	highlight := t.source.Highlight(entry.ID)
@@ -465,33 +445,40 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row, col int) {
 	case row%2 == 0:
 		cellFill(c, "stripe").Background(theme.Elevated.Alpha(0.52))
 	}
-	if col != 0 {
-		return
-	}
-	var bar ui.Color
+	var bar, outline ui.Color
 	switch {
 	case t.source.SelectedEntry() != nil && t.source.SelectedEntry().ID == entry.ID:
-		bar = theme.Primary
+		alpha := float32(0.22)
+		if theme.Dark {
+			alpha = 0.35
+		}
+		bar, outline = theme.Primary, theme.Primary.Alpha(alpha)
 	case !chosen && highlight != "":
-		bar = ui.Hex(highlight)
+		alpha := float32(0.25)
+		if theme.Dark {
+			alpha = 0.45
+		}
+		bar, outline = ui.Hex(highlight), ui.Hex(highlight).Alpha(alpha)
 	default:
 		return
 	}
-	ui.Box(c.Key("marker")).Absolute().Top(0).Bottom(0).Left(0).Width(3).Background(bar).IgnoreInput(true)
+	rowOutline(c, outline, first, last)
+	if first {
+		ui.Box(c.Key("marker")).Absolute().Top(0).Bottom(0).Left(0).Width(3).Background(bar).IgnoreInput(true).Label("row-marker")
+	}
 }
 
 func cellText(c *ui.Context, theme nui.Theme, text string) ui.Element {
 	return ui.Text(c, text).SingleLine().Shrink(1).FontSize(14).TextColor(theme.Text)
 }
 
-func mutedText(c *ui.Context, theme nui.Theme, text string) ui.Element {
-	return ui.Text(c, text).SingleLine().FontSize(14).TextColor(theme.Muted)
+// numericText is a cell of numbers that line up across rows.
+func numericText(c *ui.Context, theme nui.Theme, text string) ui.Element {
+	return cellText(c, theme, text).FontFeatures("tnum")
 }
 
-func badge(c *ui.Context, text string, color ui.Color) {
-	ui.Box(c).PaddingX(8).MinWidth(36).Radius(10).Background(color.Alpha(0.14)).Border(1, color.Alpha(0.1)).Height(20).Center().Children(func() {
-		ui.Text(c, text).SingleLine().FontSize(12).Bold().TextColor(color)
-	})
+func mutedText(c *ui.Context, theme nui.Theme, text string) ui.Element {
+	return ui.Text(c, text).SingleLine().FontSize(14).TextColor(theme.Muted)
 }
 
 func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, key logic.TrafficColumnKey) {
@@ -505,7 +492,7 @@ func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, 
 			mutedText(c, theme, logic.UnknownValue)
 			return
 		}
-		badge(c, logic.TrafficMethodLabel(entry), desktoptheme.MethodColor(entry.Method))
+		badge(c, theme, logic.TrafficMethodLabel(entry), methodTone(entry.Method))
 	case logic.ColumnHost:
 		target := logic.TrafficTarget(entry)
 		if target == "" {
@@ -517,9 +504,10 @@ func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, 
 	case logic.ColumnStatusCode:
 		switch {
 		case entry.Error != nil:
-			badge(c, "ERR", ui.Hex("#dc2626"))
+			badge(c, theme, "ERR", toneError)
 		case entry.StatusCode != 0:
-			badge(c, strconv.Itoa(entry.StatusCode), t.statusTone(theme, entry.StatusCode))
+			tone, _ := statusTone(entry.StatusCode)
+			badge(c, theme, strconv.Itoa(entry.StatusCode), tone)
 		default:
 			mutedText(c, theme, logic.UnknownValue)
 		}
@@ -534,9 +522,9 @@ func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, 
 		}
 		cellText(c, theme, protocol)
 	case logic.ColumnDuration:
-		cellText(c, theme, durationLabel(entry))
+		numericText(c, theme, durationLabel(entry))
 	case logic.ColumnSize:
-		cellText(c, theme, sizeLabel(entry))
+		numericText(c, theme, sizeLabel(entry))
 	}
 }
 

@@ -48,6 +48,8 @@ func NewCodeView(language string, readOnly bool) *CodeView {
 	view := &CodeView{language: language}
 	view.state.Buffer = editor.NewBuffer("")
 	view.state.ReadOnly = readOnly
+	// As 1.0.5's Monaco: scrolling stops at the last line.
+	view.state.NoScrollPastEnd = true
 	view.applyLanguage()
 	return view
 }
@@ -64,6 +66,12 @@ func languageByID(id string) *editor.Language {
 }
 
 func (v *CodeView) applyLanguage() {
+	// Read-only text shows no whitespace markers, even when selected.
+	if v.state.ReadOnly {
+		v.state.Whitespace = editor.WhitespaceNone
+	} else {
+		v.state.Whitespace = editor.WhitespaceSelection
+	}
 	if v.state.ReadOnly && v.large {
 		v.state.Buffer.SetLanguage(nil)
 		v.state.NoFolding = true

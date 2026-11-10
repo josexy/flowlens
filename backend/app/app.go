@@ -581,7 +581,7 @@ func openMainWindow(
 			if err := clearResetMarker(); err != nil {
 				logger.G().Warnf("Remove completed reset marker: %v", err)
 			}
-			app.Notifier.Success(locales.SettingsResetApplicationSuccess())
+			app.Notifier.WithTimeout(5 * time.Second).Success(locales.SettingsResetApplicationSuccess())
 		}
 		go startGlobalShortcuts(all.shortcut)
 	})

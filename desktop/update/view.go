@@ -489,6 +489,6 @@ func (v *View) Build(c *ui.Context) {
 		v.footer(c, theme)
 	})
 	v.Notifier.Show(c, theme)
-	nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 3, Position: nui.ToastTopRight})
+	widgets.ToastViewport(c, theme)
 	v.closeDialog(c, theme)
 }

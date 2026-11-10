@@ -1,7 +1,6 @@
 package capture
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
@@ -240,54 +239,88 @@ func structureIcon(node *logic.StructureNode, expanded bool) *ui.SVG {
 	}
 }
 
+// categoryRow shows a row as 1.0.5's CategoryNavigationTree: section
+// headers are full-width bands with an end-aligned chevron; other rows are
+// rounded, with 20 px icons, an accent check mark on chosen hosts and
+// processes, and an end-aligned chevron on folders. Rows show no counts.
 func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow, source *categorySource) {
+	if row.kind == categorySection {
+		w.categorySectionRow(c, theme, row)
+		return
+	}
 	view := &w.category
-	selected := false
+	checked, active := false, false
 	indent := float32(10)
-	var icon *ui.SVG
 	switch row.kind {
 	case categoryHost:
-		selected = toSet(source.filter.SelectedHosts)[row.host]
-		icon = lucide.Globe()
+		checked = toSet(source.filter.SelectedHosts)[row.host]
 	case categoryProcess:
-		selected = toSet(source.filter.SelectedProcessKeys)[row.process.ProcessKey]
+		checked = toSet(source.filter.SelectedProcessKeys)[row.process.ProcessKey]
 	case categoryStructure:
-		selected = row.node.Key == view.activeLeaf
+		active = row.node.Key == view.activeLeaf
 		indent += float32(row.node.Depth) * structureIndent
-		icon = structureIcon(row.node, view.expanded[row.node.Key])
 	}
-	element := ui.Row(c.Key(row.key)).FillWidth().Height(32).AlignItems(ui.Center).Gap(6).Padding(0, 10, 0, indent).Label(row.label)
-	if selected {
+	element := ui.Row(c.Key(row.key)).FillWidth().Height(32).AlignItems(ui.Center).Gap(6).Radius(6).Padding(0, 10, 0, indent).Label(row.label)
+	switch {
+	case active:
 		element.Background(theme.Accented)
+	case element.Hovered():
+		element.Background(theme.Elevated)
+	}
+	if row.kind == categoryHost || row.kind == categoryProcess {
+		// The check mark is drawn; assistive technology hears the choice.
+		element.Checked(checked)
 	}
 	element.OnClick(func() { w.activateCategoryRow(row, source) })
 	if row.kind == categoryStructure && row.node.Type == logic.StructureLeaf && len(row.node.EntryIDs) > 0 {
 		element.ContextMenu(func(menu *ui.Menu) { w.categoryLeafMenu(c, menu, row.node) })
 	}
 	element.Children(func() {
-		if row.kind == categorySection {
+		switch {
+		case row.kind == categoryHost:
+			ui.Icon(c, lucide.Globe()).Size(20, 20).Shrink(0).TextColor(theme.Muted)
+		case row.kind == categoryProcess && row.process.Kind == logic.ProcessResolved && w.Table.deps.Icons != nil:
+			widgets.ProcessIcon(c, w.Table.deps.Icons, row.process.IconKey, 20, theme.Muted).Shrink(0)
+		case row.kind == categoryProcess:
+			ui.Icon(c, lucide.AppWindow()).Size(20, 20).Shrink(0).TextColor(theme.Muted)
+		default:
+			ui.Icon(c, structureIcon(row.node, view.expanded[row.node.Key])).Size(20, 20).Shrink(0).TextColor(theme.Muted)
+		}
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(20.0 / 14).TextColor(theme.Text)
+		switch {
+		case checked:
+			ui.Icon(c.Key("check"), lucide.Check()).Size(20, 20).Shrink(0).TextColor(theme.Primary)
+		case row.kind == categoryStructure && len(row.node.Children) > 0:
 			chevron := lucide.ChevronDown()
-			if view.collapsed[row.section] {
-				chevron = lucide.ChevronRight()
-			}
-			ui.Icon(c, chevron).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-			ui.Text(c, row.label).FontSize(14).Bold().TextColor(theme.Muted)
-			return
-		}
-		if row.kind == categoryStructure && len(row.node.Children) > 0 {
-			chevron := lucide.ChevronRight()
 			if view.expanded[row.node.Key] {
-				chevron = lucide.ChevronDown()
+				chevron = lucide.ChevronUp()
 			}
-			ui.Icon(c, chevron).Size(12, 12).Shrink(0).TextColor(theme.Muted)
+			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).TextColor(theme.Muted)
 		}
-		if row.kind == categoryProcess && row.process.Kind == logic.ProcessResolved && w.Table.deps.Icons != nil {
-			widgets.ProcessIcon(c, w.Table.deps.Icons, row.process.IconKey, 16, theme.Muted).Shrink(0)
-		} else if icon != nil {
-			ui.Icon(c, icon).Size(15, 15).Shrink(0).TextColor(theme.Muted)
+	})
+}
+
+// categorySectionRow is a section's header band.
+func (w *Workspace) categorySectionRow(c *ui.Context, theme nui.Theme, row categoryRow) {
+	view := &w.category
+	band := theme.Elevated.Alpha(0.88).Over(theme.Background)
+	element := ui.Row(c.Key(row.key)).FillWidth().Height(32).AlignItems(ui.Center).Gap(6).PaddingX(12).Background(band).Label(row.label)
+	top := float32(0)
+	if row.section != sectionHost {
+		top = 1
+	}
+	element.BorderWidth(top, 0, 1, 0).BorderColor(theme.Border)
+	if element.Hovered() {
+		element.Background(ui.RGBA(128, 128, 128, 0.06).Over(band))
+	}
+	element.OnClick(func() { view.collapsed[row.section] = !view.collapsed[row.section] })
+	element.Children(func() {
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+		chevron := lucide.ChevronDown()
+		if view.collapsed[row.section] {
+			chevron = lucide.ChevronRight()
 		}
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text)
-		ui.Text(c, strconv.Itoa(row.count)).Shrink(0).FontSize(12).TextColor(theme.Muted)
+		ui.Icon(c.Key("chevron"), chevron).Size(12, 12).Shrink(0).TextColor(theme.Muted).Label("section-chevron")
 	})
 }
 
