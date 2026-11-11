@@ -1,12 +1,15 @@
 package inspect
 
 import (
+	"encoding/base64"
 	"testing"
+	"time"
 
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/locales"
 )
 
 // renderEntry is the reference screenshot's inspected request, with
@@ -57,4 +60,32 @@ func TestRenderDetailHeaders(t *testing.T) {
 	f.panel.requestTab, f.panel.responseTab = tabRequestHeaders, tabResponseCookies
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "detail-headers", f.setDark)
+}
+
+func TestRenderWebSocketMessageDetails(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "ws"
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
+		{Direction: "receive", MsgType: "text", Data: `{"type":"hello","payload":"a received text message"}`, DataSize: 53},
+		{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte("\x00\x01binary frame\xff")), DataSize: 16},
+	}})
+	f.tester.SetSize(rendertest.Width, rendertest.Height)
+	f.settle()
+	f.openMessage(`{"type":"hello","payload":"a received text message"}`)
+	rendertest.ShootThemes(t, f.tester, "ws-detail-receive-text", f.setDark)
+	f.panel.messages.open = false
+	f.settle()
+	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("16"))
+	rendertest.ShootThemes(t, f.tester, "ws-detail-send-binary", f.setDark)
+}
+
+func TestRenderSSEMessageDetail(t *testing.T) {
+	f := sseFixture(t, "id: 41\nevent: update\ndata: {\"status\":\"ok\",\"items\":[1,2,3],\"message\":\"an SSE message with a JSON payload\"}\n\n")
+	f.tester.SetSize(rendertest.Width, rendertest.Height)
+	f.settle()
+	f.click(locales.DetailSseOpenMessage("1"))
+	f.tester.Advance(time.Second)
+	f.settle()
+	f.click(locales.DetailFormatted())
+	rendertest.ShootThemes(t, f.tester, "sse-detail-formatted", f.setDark)
 }

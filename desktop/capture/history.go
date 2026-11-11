@@ -192,8 +192,8 @@ func (w *Workspace) historyMenu(menu *ui.Menu, metadata *proxyservice.HistoryMet
 				w.exporter.Export(format, ExportOptions{HistoryKey: metadata.Key, FilenameHint: hint})
 			}
 		}
-	})
-	if menu.Item(locales.HistoryDelete()).Danger().Chosen() {
+	}).Icon(widgets.ExportMenuIcon())
+	if menu.Item(locales.HistoryDelete()).Icon(widgets.DeleteMenuIcon()).Danger().Chosen() {
 		w.askDeleteHistory(metadata)
 	}
 }

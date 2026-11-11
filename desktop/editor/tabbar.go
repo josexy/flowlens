@@ -3,10 +3,12 @@ package editor
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -94,8 +96,8 @@ func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	anchor := tabStripButton(c, theme, "tabs-new", locales.WorkspaceTabBarNew(), lucide.Plus(), 30)
 	anchor.OnClick(func() { e.newMenu.Open = !e.newMenu.Open })
 	nui.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, []nui.MenuItem{
-		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
-		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
+		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewHTTPRequest), "+"), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
+		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewWebSocket), "+"), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
 	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)})
 }
 
@@ -346,12 +348,12 @@ func (e *Editor) closeSeveral(keys []string, title, message string) {
 func (e *Editor) tabMenu(menu *ui.Menu, index int, tab *logic.WorkspaceTab) {
 	workspace := e.Data.Workspace
 	if tab.HTTP != nil || tab.WebSocket != nil {
-		if menu.Item(locales.WorkspaceTabContextSaveApi()).Disabled(e.Host.SaveTab == nil).Chosen() {
+		if e.menuShortcut(menu.Item(locales.WorkspaceTabContextSaveApi()), shortcuts.AppSave).Disabled(e.Host.SaveTab == nil).Chosen() {
 			e.Host.SaveTab(tab.Key)
 		}
 		menu.Separator()
 	}
-	if menu.Item(locales.WorkspaceTabContextCloseCurrent()).Disabled(!tab.Closable).Chosen() {
+	if e.menuShortcut(menu.Item(locales.WorkspaceTabContextCloseCurrent()), shortcuts.WorkspaceCloseTab).Disabled(!tab.Closable).Chosen() {
 		e.closeWithPrompt(tab.Key)
 	}
 	if menu.Item(locales.WorkspaceTabContextForceCloseCurrent()).Disabled(!tab.Closable).Chosen() {

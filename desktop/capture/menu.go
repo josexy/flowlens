@@ -122,8 +122,15 @@ func (t *Table) exportSelection(format logic.TrafficExportFormat, entries []*log
 	for index, entry := range entries {
 		ids[index] = entry.ID
 	}
+	// As 1.0.5: a saved session's alias names the file, else the count.
+	hint := "flowlens-selection-" + strconv.Itoa(len(entries))
+	if t.HistoryAlias != nil {
+		if alias := t.HistoryAlias(); alias != "" {
+			hint = alias + "-selection"
+		}
+	}
 	t.deps.Exporter.Export(format, ExportOptions{
-		HistoryKey: t.historyKey(), IDs: ids, Entry: entries[0], FilenameHint: "flowlens-selection-" + strconv.Itoa(len(entries)),
+		HistoryKey: t.historyKey(), IDs: ids, Entry: entries[0], FilenameHint: hint,
 	})
 }
 
@@ -364,7 +371,7 @@ func (t *Table) highlightMenu(menu *ui.Menu, entries []*logic.TrafficEntry) {
 	}
 	menu.Submenu(locales.ContextMenuTrafficTableHighlight(), func(sub *ui.Menu) {
 		for _, option := range highlightColors {
-			if sub.Item(option.label()).Chosen() {
+			if sub.Item(option.label()).Icon(widgets.SwatchMenuIcon(option.color)).Chosen() {
 				apply(option.color)
 			}
 		}

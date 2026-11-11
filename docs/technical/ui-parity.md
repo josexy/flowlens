@@ -13,6 +13,10 @@ FlowLens 1.0.5, the last Wails build, is the visual and interaction reference fo
 | "Use pointer cursor" setting | Removed | The native app does not need it. |
 | Method column 80 px wide by default | 100 px | The native fonts are wider than the WebView's: at 80 px, `OPTIONS` and `CONNECT` badges did not fit. A saved width still applies. |
 | API Collection name tooltip anchored on the name | Anchored on the whole row, shown to its right | A hover-tracking anchor inside the row would take the row's clicks in MyGo's hit testing. |
+| Menu item icons and highlight swatches in every menu | Shown in context menus on every platform and in macOS menu-bar menus; Windows and Linux menu-bar menus show none | Those menu bars draw no item icons. |
+| No API Collection menu item to move a nested folder to the root | Move to Root in a nested folder's menu | It gives a path without dragging to the drop zone's action. |
+| Error toasts when writing to the clipboard fails | No such toasts | Native clipboard writes cannot fail. |
+| No keys in the traffic table | Up, Down, Home, and End move the selection, and Cmd+A (Ctrl+A on Windows and Linux) selects all rows, while the table has the keyboard focus; the detail panel stays as it was | MyGo's list provides them, and they do not conflict with the 1.0.5 click model. |
 
 ## Render review
 
@@ -26,10 +30,36 @@ The renders were compared with `assets/screenshots/flowlens-{light,dark}.png` of
 
 - Font rendering. The headless tester draws with its bundled font, which is wider than Segoe UI, SF Pro, or Noto Sans, and has no CJK glyphs; Chinese layouts were checked by tests rather than by eye.
 - Process icons are blank in renders, because the tests have no icon cache. Rows otherwise match.
-- The capture render shows the table without the detail panel: the test backend serves no bodies. The detail panel has its own renders (`detail-headers`).
+- The capture render shows the table without the detail panel; `capture-detail` shows it open beside the inspected row, as Ctrl-click leaves it. The test backend serves no bodies, so its body tab is empty. The detail panel has its own renders (`detail-headers`).
 - Native scroll bars, as listed above.
 
+The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatted`, `ws-detail-receive-text`, `ws-detail-send-binary`, `python-console`, `python-console-detail`, `menu-highlight`, `menu-history`, `tab-menu`, `settings-root-ca-add`) match the 1.0.5 templates and the `restore-ui-behavior-parity` design, except:
+
+- The Python console table's header has no elevated background, and its rows no line between them: MyGo's `ui.Table` draws its own header and rows.
+- The console's Output column fills the room the others leave, at least 240 px rather than 1.0.5's 260 px. Once the user resizes it, it keeps that width rather than filling the rest.
+- WebSocket text messages and console entries show in a read-only code view with line numbers, where 1.0.5 had a plain text area.
+- Menu renders draw the menus in the window (`SetMenuPresentation`); the app shows the system's menus, which still need the desktop pass.
+
 Interaction that renders cannot show (focus, wheel scrolling of strips, grid editing with an input method, drag feedback, and notifications) is covered by Tester cases, and still needs a desktop pass on each platform.
+
+## Behavior review
+
+The `restore-ui-behavior-parity` change compared what each surface does with 1.0.5: its actions, modifier keys, enabled states, copied text, and default file names. These surfaces were found to match and were left as they are:
+
+- Proxy toolbar, quick settings, DNS cache, host filter, and the resend dialog.
+- Shortcuts catalog and handlers.
+- Filter logic.
+- Category sidebar and its leaf menu.
+- Capture and history sidebar, HAR import (including dropped files), and restart capture.
+- Overview, process, TLS, certificate, Raw, Raw TCP, and body and hex panes.
+- WebSocket Client.
+- HTTP editor request, settings, script, and response panes.
+- Workspace tab close semantics.
+- API Collection.
+- Rewrite Rules and Python Plugins, including reordering.
+- Settings, with its save, reset, and quit guard.
+- Update, Memory Statistics, and Reset Startup.
+- Shell, status bar, title bar, and Python help docking.
 
 ## Tooltips
 

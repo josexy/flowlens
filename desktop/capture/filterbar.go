@@ -49,12 +49,14 @@ func filterTabLabel(tab string) string {
 	}
 }
 
-// BuildFilterBar builds the type tabs and the search box.
+// BuildFilterBar builds the type tabs and the search box. The tabs scroll
+// sideways when they overflow, with a vertical wheel too.
 func BuildFilterBar(c *ui.Context, theme nui.Theme, filter *store.FilterStore, focus *ui.Handle) {
 	row := ui.Row(c).FillWidth().Shrink(0).MinHeight(36).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Background(theme.Background)
 	row.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	row.Children(func() {
-		ui.ScrollHorizontal(c).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Children(func() {
+		strip := ui.ScrollHorizontal(c.Key("filter-tabs")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false)
+		widgets.WheelScroll(c, strip).Children(func() {
 			items := make([]widgets.PillTab, len(logic.TrafficFilterTabs))
 			for index, tab := range logic.TrafficFilterTabs {
 				items[index] = widgets.PillTab{ID: tab, Label: filterTabLabel(tab)}

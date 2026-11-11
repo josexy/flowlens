@@ -40,6 +40,7 @@ type SSEView struct {
 	detailTab  string
 	formatted  string
 	detailView *widgets.CodeView
+	wrap       widgets.DetailWrap
 	exporting  bool
 	clipboard  *string
 }
@@ -98,6 +99,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		s.clipboard = nil
 	}
 	s.update(content)
+	s.detail(c, theme)
 	if content.Encoding == "base64" {
 		emptyState(c, theme, lucide.Binary(), locales.DetailSseUnavailable())
 		return
@@ -120,7 +122,6 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		}
 		ui.List(c.Key("sse-list"), &s.list, len(s.events), func(row int) { s.row(c, theme, row) }).Grow(1).Basis(0).MinHeight(0).FillWidth()
 	})
-	s.detail(c, theme)
 }
 
 func (s *SSEView) row(c *ui.Context, theme nui.Theme, index int) {
@@ -131,7 +132,11 @@ func (s *SSEView) row(c *ui.Context, theme nui.Theme, index int) {
 		ui.Text(c, strconv.Itoa(event.Sequence)).Width(48).Shrink(0).FontSize(12).TextColor(theme.Muted)
 		ui.Text(c, event.EventType).Width(120).Shrink(0).FontSize(13).SingleLine().TextColor(theme.Primary)
 		ui.Text(c, orDash(event.LastEventID)).Width(100).Shrink(0).FontSize(13).SingleLine().TextColor(theme.Toned)
-		ui.Text(c, event.Preview).Grow(1).Basis(0).MinWidth(0).FontSize(13).SingleLine().TextColor(theme.Text)
+		preview := event.Preview
+		if preview == "" {
+			preview = locales.DetailSseEmptyData()
+		}
+		ui.Text(c, preview).Grow(1).Basis(0).MinWidth(0).FontSize(13).SingleLine().TextColor(theme.Text)
 	})
 }
 
@@ -166,39 +171,50 @@ func (s *SSEView) detailContent() string {
 	}
 }
 
+// detail shows the open message as 1.0.5 did: its sequence and event type
+// as badges and its ID, then the Data, Formatted and Raw Event views.
 func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
-	if !s.open || s.selected == nil {
-		return
+	if s.selected == nil {
+		s.open = false
 	}
-	nui.ModalWithOptions(c.Key("sse-detail"), theme, &s.open, nui.ModalOptions{Title: locales.DetailSseMessageDetail(), Width: nui.Set[float32](720), Footer: func(c *ui.Context, palette nui.Theme) {
-		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("sse-copy"), palette, locales.DetailSseCopyMessage(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(func() {
+	widgets.DetailDialog(c.Key("sse-detail"), theme, &s.open, widgets.DetailDialogOptions{
+		Title: locales.DetailSseMessageDetail(),
+		Lead: func(c *ui.Context, palette nui.Theme) {
+			nui.Badge(c, palette, "#"+strconv.Itoa(s.selected.Sequence), nui.BadgeOptions{Color: nui.Neutral}).Shrink(0)
+			nui.Badge(c, palette, s.selected.EventType, nui.BadgeOptions{Color: nui.Info}).MinWidth(0)
+			ui.Text(c, locales.DetailSseId()+": "+orDash(s.selected.LastEventID)).FontSize(14).MinWidth(0).TextColor(palette.Muted)
+		},
+		Header: func(c *ui.Context, palette nui.Theme) {
+			items := []widgets.PillTab{{ID: "data", Label: locales.DetailSseData()}}
+			if s.formatted != "" {
+				items = append(items, widgets.PillTab{ID: "formatted", Label: locales.DetailFormatted()})
+			}
+			items = append(items, widgets.PillTab{ID: "raw", Label: locales.DetailSseRawEvent()})
+			widgets.PillTabs(c.Key("sse-tabs"), palette, &s.detailTab, items, locales.DetailSseMessageDetail()).Shrink(0)
+		},
+		Actions: []widgets.DetailAction{
+			s.wrap.Action(locales.DetailWrapBody()),
+			{Key: "copy", Icon: lucide.Copy(), Label: locales.DetailSseCopyMessage(), Run: func() {
 				text := s.detailContent()
 				s.clipboard = &text
 				s.deps.Notifier.Success(locales.DetailBodyCopied())
-			})
-			nui.Button(c.Key("sse-save"), palette, locales.DetailSseSaveMessage(), nui.ButtonOptions{Disabled: s.exporting}).OnClick(s.saveMessage)
-		})
-	}}, func(palette nui.Theme) {
-		detailRow(c, palette, "event", locales.DetailSseEventType(), s.selected.EventType)
-		detailRow(c, palette, "id", locales.DetailSseId(), orDash(s.selected.LastEventID))
-		items := []nui.TabItem{{ID: "data", Label: locales.DetailSseData()}}
-		if s.formatted != "" {
-			items = append(items, nui.TabItem{ID: "formatted", Label: locales.DetailFormatted()})
-		}
-		items = append(items, nui.TabItem{ID: "raw", Label: locales.DetailSseRawEvent()})
-		nui.Tabs(c.Key("sse-tabs"), palette, &s.detailTab, items, nui.TabsOptions{Label: locales.DetailSseMessageDetail(), Size: nui.XS, Content: nui.Set(false)})
-		text := s.detailContent()
-		if text == "" {
-			ui.Text(c, locales.DetailSseEmptyData()).FontSize(14).TextColor(palette.Muted)
-			return
-		}
-		if s.detailView.Text() != text {
-			s.detailView.SetText(text)
-		}
-		ui.Box(c).FillWidth().Height(320).Children(func() {
+			}},
+			{Key: "save", Icon: lucide.Download(), Label: locales.DetailSseSaveMessage(), Disabled: s.exporting, Run: s.saveMessage},
+		},
+		Wrap:          &s.wrap,
+		SquareContent: true,
+		Content: func(c *ui.Context, palette nui.Theme) {
+			language := "plaintext"
+			if s.detailTab == "formatted" {
+				language = "json"
+			}
+			s.detailView.SetLanguage(language)
+			if text := s.detailContent(); s.detailView.Text() != text {
+				s.detailView.SetText(text)
+			}
+			s.detailView.SetWordWrap(s.wrap.On())
 			s.detailView.Build(c, ui.Font{Family: palette.MonoFont, Size: 13}).Fill()
-		})
+		},
 	})
 	if !s.open {
 		s.closeDetail()
@@ -209,9 +225,12 @@ func (s *SSEView) saveMessage() {
 	if s.selected == nil {
 		return
 	}
-	name, contentType := fmt.Sprintf("sse-message-%d.txt", s.selected.Sequence), "text/plain"
-	if s.detailTab == "formatted" {
-		name, contentType = fmt.Sprintf("sse-message-%d.json", s.selected.Sequence), "application/json"
+	name, contentType := "sse-message.txt", "text/plain"
+	switch s.detailTab {
+	case "raw":
+		name = "sse-event.txt"
+	case "formatted":
+		name, contentType = "sse-message.json", "application/json"
 	}
 	saveToFile(s.deps, &s.exporting, name, proxyservice.SaveBodyToFileRequest{Body: s.detailContent(), ContentType: contentType})
 }

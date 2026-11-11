@@ -1115,7 +1115,6 @@
   "detailCertSubjectStreet": "Subject Street",
   "detailCertVersion": "Cert Version",
   "detailCipherSuite": "Cipher Suite",
-  "detailClosePanel": "Close details",
   "detailCookieAttributeCount": "{count} attributes",
   "detailCookieAttributes": "Attributes",
   "detailCookieEmptyValue": "Empty value",

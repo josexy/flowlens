@@ -78,8 +78,6 @@ const (
 type Panel struct {
 	data Data
 	deps Dependencies
-	// OnClose, when set, shows a control that closes the panel.
-	OnClose func()
 
 	entryID        uint64
 	requestTab     string
@@ -325,9 +323,6 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.tabBar(c, theme, "response-tabs", &p.responseTab, p.responseItems(entry), func() {
 			p.responseChips(c, theme, entry)
-			if p.OnClose != nil {
-				iconButton(c, theme, "close-detail", lucide.X(), locales.DetailClosePanel(), false, p.OnClose)
-			}
 		})
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch p.responseTab {

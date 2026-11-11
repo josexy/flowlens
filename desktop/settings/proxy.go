@@ -458,8 +458,8 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 		anchor := nui.Button(c.Key("add"), palette, locales.SettingsAddRootCa(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.Plus(), Trailing: lucide.ChevronDown(), AccessibleLabel: locales.SettingsAddRootCaAction()})
 		anchor.OnClick(func() { state.rootMenu.Open = !state.rootMenu.Open })
 		nui.DropdownMenu(c.Key("add-menu"), palette, anchor, &state.rootMenu, []nui.MenuItem{
-			{ID: "files", Label: locales.SettingsSelectFiles(), OnSelect: func() { v.pickRoots(proxy) }},
-			{ID: "manual", Label: locales.SettingsAddPathManually(), OnSelect: func() {
+			{ID: "files", Label: locales.SettingsSelectFiles(), Icon: lucide.FolderOpen(), OnSelect: func() { v.pickRoots(proxy) }},
+			{ID: "manual", Label: locales.SettingsAddPathManually(), Icon: lucide.Pencil(), OnSelect: func() {
 				proxy.RootCAPaths = append(proxy.RootCAPaths, "")
 				state.rootsOpen = true
 			}},

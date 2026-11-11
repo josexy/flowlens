@@ -220,16 +220,29 @@ func tabIcon(kind string) *ui.SVG {
 	}
 }
 
+// shortcutConfig returns the user's shortcut overrides, or nil.
+func (e *Editor) shortcutConfig() *settingservice.ShortcutConfig {
+	if e.Data.Settings != nil && e.Data.Settings.Current != nil {
+		return e.Data.Settings.Current.Shortcuts
+	}
+	return nil
+}
+
+// menuShortcut shows the binding of a command by a menu item, as 1.0.5's
+// menus showed theirs.
+func (e *Editor) menuShortcut(item *ui.MenuItem, commandID string) *ui.MenuItem {
+	if mods, key, ok := shortcuts.MenuShortcut(commandID, e.shortcutConfig()); ok {
+		item.Shortcut(mods, key)
+	}
+	return item
+}
+
 func (e *Editor) kbds(commandID string) []string {
 	command, ok := shortcuts.CommandByID(commandID)
 	if !ok {
 		return nil
 	}
-	var config *settingservice.ShortcutConfig
-	if e.Data.Settings != nil && e.Data.Settings.Current != nil {
-		config = e.Data.Settings.Current.Shortcuts
-	}
-	resolved := shortcuts.ResolveCommand(command, config)
+	resolved := shortcuts.ResolveCommand(command, e.shortcutConfig())
 	if resolved.Binding == nil {
 		return nil
 	}

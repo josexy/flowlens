@@ -2,7 +2,6 @@ package editor
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -18,20 +18,59 @@ import (
 
 const consolePreviewLength = 240
 
+// consoleRowHeight is 1.0.5's console row: 40 px, with the cells' padding.
+const consoleRowHeight = 40
+
+// File names 1.0.5 suggested for the console and for one entry.
+const (
+	consoleFilename      = "flowlens-python-console.log"
+	consoleEntryFilename = "flowlens-python-console-entry.log"
+)
+
+// Console columns, with 1.0.5's starting widths and bounds. Output takes
+// the room the others leave.
+const (
+	consoleColumnTime   = "time"
+	consoleColumnType   = "type"
+	consoleColumnSource = "source"
+	consoleColumnOutput = "output"
+)
+
+// consoleColumnIDs are the console's columns in the order consoleColumns
+// gives them.
+var consoleColumnIDs = []string{consoleColumnTime, consoleColumnType, consoleColumnSource, consoleColumnOutput}
+
+func consoleColumns() []ui.TableColumn {
+	return []ui.TableColumn{
+		{ID: consoleColumnTime, Title: locales.WorkspaceHttpRequestConsoleColumnTime(), Width: 152, MinWidth: 120, MaxWidth: 360},
+		{ID: consoleColumnType, Title: locales.WorkspaceHttpRequestConsoleColumnType(), Width: 96, MinWidth: 80, MaxWidth: 260},
+		{ID: consoleColumnSource, Title: locales.WorkspaceHttpRequestConsoleColumnSource(), Width: 120, MinWidth: 96, MaxWidth: 420},
+		{ID: consoleColumnOutput, Title: locales.WorkspaceHttpRequestConsoleColumnOutput(), MinWidth: 240, MaxWidth: 900},
+	}
+}
+
 type consoleView struct {
 	editor *Editor
 	key    string
 	state  *logic.HTTPEditorState
+	// list keeps the column widths while the tab is open; they are not
+	// saved, as in 1.0.5.
 	list   ui.ListState
-	detail *logic.PluginLogEntry
-	open   bool
-	wrap   bool
-	saving bool
+	chosen int
+	// clicked is set by a click on the table, which opens the row it
+	// chooses; the keys choose nothing.
+	clicked bool
+	detail  *logic.PluginLogEntry
+	open    bool
+	wrap    widgets.DetailWrap
+	view    *widgets.CodeView
+	saving  bool
 }
 
 func newConsoleView(e *Editor, key string, state *logic.HTTPEditorState) *consoleView {
-	view := &consoleView{editor: e, key: key, state: state}
+	view := &consoleView{editor: e, key: key, state: state, chosen: -1, view: widgets.NewCodeView("plaintext", true)}
 	view.list.FollowEnd = true
+	view.list.Selected = &view.chosen
 	return view
 }
 
@@ -39,8 +78,8 @@ func consoleSource(entry *logic.PluginLogEntry) string {
 	switch {
 	case entry.PluginID == logic.CurrentRequestScriptPluginID:
 		return locales.WorkspaceHttpRequestConsoleCurrentScript()
-	case entry.PluginName != "":
-		return entry.PluginName
+	case strings.TrimSpace(entry.PluginName) != "":
+		return strings.TrimSpace(entry.PluginName)
 	case entry.PluginID != "":
 		return entry.PluginID
 	default:
@@ -68,21 +107,44 @@ func consoleStreamLabel(stream string) string {
 	return locales.WorkspaceHttpRequestConsoleTypeStdout()
 }
 
-func consoleEntryText(entry *logic.PluginLogEntry) string {
-	return fmt.Sprintf("[%s] %s %s %s\n%s", logic.FormatUnixMicrosLocal(entry.Timestamp), consoleSource(entry), consoleStreamLabel(entry.Stream), consoleLevelLabel(entry.Level), entry.Message)
+func consoleStreamIcon(stream string) *ui.SVG {
+	if logic.PythonLogStreamKey(stream) == "stderr" {
+		return lucide.TriangleAlert()
+	}
+	return lucide.Terminal()
+}
+
+// consoleTone returns the badge color of a tone, as 1.0.5's tone classes:
+// neutral, the accent, warning and error.
+func consoleTone(tone string) nui.Color {
+	switch tone {
+	case logic.PythonToneError:
+		return nui.Error
+	case logic.PythonToneWarning:
+		return nui.Warning
+	case logic.PythonToneNeutral:
+		return nui.Neutral
+	default:
+		return nui.Primary
+	}
+}
+
+// consolePill is an entry's level, or its stream and level, in a round
+// pill of its tone.
+func consolePill(c *ui.Context, theme nui.Theme, entry *logic.PluginLogEntry, label string, icon *ui.SVG) ui.Element {
+	return nui.Badge(c, theme, label, nui.BadgeOptions{
+		Color: consoleTone(logic.PythonLogTone(entry.Stream, entry.Level)), Variant: nui.Soft, Size: nui.SM, Leading: icon,
+		Decoration: nui.Decoration{Style: func(_ nui.Slot, element ui.Element) { element.Radius(999) }},
+	}).MinWidth(0)
 }
 
 func (v *consoleView) allText() string {
-	parts := make([]string, len(v.state.ScriptConsoleEntries))
-	for index := range v.state.ScriptConsoleEntries {
-		parts[index] = consoleEntryText(&v.state.ScriptConsoleEntries[index])
-	}
-	return strings.Join(parts, "\n\n")
+	return logic.PythonConsoleText(v.state.ScriptConsoleEntries, consoleSource)
 }
 
 func (v *consoleView) save(filename, text string) {
 	deps := v.editor.Host.Inspect
-	if deps.PickSavePath == nil || deps.SaveBody == nil || v.saving {
+	if deps.PickSavePath == nil || deps.SaveBody == nil || v.saving || text == "" {
 		return
 	}
 	v.saving = true
@@ -100,30 +162,38 @@ func (v *consoleView) save(filename, text string) {
 	})
 }
 
+// clear empties the console and closes the entry detail.
+func (v *consoleView) clear() {
+	v.open, v.detail = false, nil
+	v.editor.Data.Workspace.ClearScriptConsole(v.key)
+}
+
+// closeGoneDetail closes the detail of an entry no longer in the console, as
+// after Clear or a new send.
+func (v *consoleView) closeGoneDetail(entries []logic.PluginLogEntry) {
+	if v.detail == nil {
+		return
+	}
+	for index := range entries {
+		if entries[index].EventID == v.detail.EventID {
+			return
+		}
+	}
+	v.open, v.detail = false, nil
+}
+
 func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 	entries := v.state.ScriptConsoleEntries
 	running := v.state.IsSending
+	v.closeGoneDetail(entries)
 	ui.Column(c.Key("console")).Fill().MinHeight(0).Children(func() {
-		ui.Row(c.Key("console-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 10).Children(func() {
-			status := locales.WorkspaceHttpRequestConsoleEntries(strconv.Itoa(len(entries)))
-			if running {
-				status = locales.WorkspaceHttpRequestConsoleRunning()
-			}
-			ui.Text(c, status).FontSize(12).TextColor(theme.Muted)
-			ui.Row(c).Gap(4).Children(func() {
-				color := nui.Neutral
-				if v.wrap {
-					color = nui.Primary
-				}
-				wrap := nui.Button(c.Key("wrap"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: color, Size: nui.SM, Square: true, Leading: lucide.TextWrap(), AccessibleLabel: locales.WorkspaceHttpRequestConsoleWrap()})
-				wrap.OnClick(func() { v.wrap = !v.wrap })
-				nui.Tooltip(c, theme, wrap, locales.WorkspaceHttpRequestConsoleWrap(), nui.TooltipOptions{})
+		ui.Row(c.Key("console-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(8, 10).Children(func() {
+			v.status(c, theme, running, len(entries))
+			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
 				empty := len(entries) == 0
 				iconAction(c, theme, "copy-all", lucide.Copy(), locales.WorkspaceHttpRequestConsoleCopyAll(), empty, func() { v.editor.copy(v.allText(), locales.WorkspaceHttpRequestConsoleCopied()) })
-				iconAction(c, theme, "save-all", lucide.Download(), locales.WorkspaceHttpRequestConsoleSave(), empty, func() {
-					v.save(fmt.Sprintf("flowlens-console-%s.log", time.Now().Format("20060102-150405")), v.allText())
-				})
-				iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestConsoleClear(), empty, func() { v.editor.Data.Workspace.ClearScriptConsole(v.key) })
+				iconAction(c, theme, "save-all", lucide.Download(), locales.WorkspaceHttpRequestConsoleSave(), empty, func() { v.save(consoleFilename, v.allText()) })
+				iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestConsoleClear(), empty, v.clear)
 			})
 		})
 		if len(entries) == 0 {
@@ -134,71 +204,98 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 			emptyPane(c, theme, lucide.Terminal(), title, "")
 			return
 		}
-		ui.List(c.Key("console-list"), &v.list, len(entries), func(index int) {
-			if index < len(entries) {
-				v.row(c, theme, index, &entries[index])
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+			table := ui.Table(c.Key("console-table"), &v.list, consoleColumns(), len(entries), func(row, col int) {
+				if row < len(entries) {
+					v.cell(c, theme, &entries[row], col)
+				}
+			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.WorkspaceHttpRequestConsole())
+			table.ObserveInput(func(ev ui.InputEvent) {
+				if ev.Kind == ui.InputPointerUp && ev.Button == 0 && !ev.Canceled {
+					v.clicked = true
+				}
+			})
+			if table.Changed() && v.clicked && v.chosen >= 0 && v.chosen < len(entries) {
+				chosen := entries[v.chosen]
+				v.detail, v.open = &chosen, true
 			}
-		}).Fill().MinHeight(0)
+			v.clicked, v.chosen = false, -1
+		})
 	})
-	v.detailModal(c, theme)
+	v.detailDialog(c, theme)
 }
 
-func toneColor(theme nui.Theme, tone string) ui.Color {
-	switch tone {
-	case logic.PythonToneError:
-		return theme.Error
-	case logic.PythonToneWarning:
-		return theme.Warning
-	case logic.PythonToneNeutral:
-		return theme.Muted
-	default:
-		return theme.Info
-	}
-}
-
-func (v *consoleView) row(c *ui.Context, theme nui.Theme, index int, entry *logic.PluginLogEntry) {
-	preview := logic.PythonLogPreview(entry.Message, consolePreviewLength)
-	line := ui.Row(c.Key(entry.EventID)).FillWidth().AlignItems(ui.Center).Gap(8).PaddingX(10).MinHeight(28).Role(ui.RoleButton).Label(preview)
-	line.BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderMuted)
-	line.OnClick(func() {
-		chosen := *entry
-		v.detail, v.open = &chosen, true
-	})
-	line.Children(func() {
-		ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).Width(152).Shrink(0).SingleLine().FontSize(12).TextColor(theme.Muted)
-		ui.Text(c, consoleStreamLabel(entry.Stream)+" "+consoleLevelLabel(entry.Level)).Width(96).Shrink(0).SingleLine().FontSize(12).TextColor(toneColor(theme, logic.PythonLogTone(entry.Stream, entry.Level)))
-		ui.Text(c, consoleSource(entry)).Width(120).Shrink(0).SingleLine().FontSize(12).TextColor(theme.Toned)
-		message := ui.Text(c, preview).Grow(1).Basis(0).MinWidth(0).FontSize(12).Font(theme.MonoFont).TextColor(theme.Text)
-		if v.wrap {
-			message.PaddingY(4)
+// status shows a dot, pulsing in the accent color while a send runs, and the
+// console's state.
+func (v *consoleView) status(c *ui.Context, theme nui.Theme, running bool, count int) {
+	ui.Row(c).MinWidth(0).AlignItems(ui.Center).Gap(8).Children(func() {
+		dot := ui.Box(c.Key("status-dot")).Size(8, 8).Shrink(0).Radius(4).Role(ui.RoleNone)
+		text := locales.WorkspaceHttpRequestConsoleEntries(strconv.Itoa(count))
+		if running {
+			text = locales.WorkspaceHttpRequestConsoleRunning()
+			// Tailwind's animate-pulse: half opacity halfway through 2 s.
+			ease := ui.CubicBezier(0.4, 0, 0.6, 1)
+			opacity := dot.Keyframes("pulse", []ui.Keyframe{{At: 0, Value: 1}, {At: time.Second, Value: 0.5, Ease: ease}, {At: 2 * time.Second, Value: 1, Ease: ease}}, ui.KeyframeOptions{Repeat: ui.RepeatForever, NonMotion: true})
+			dot.Background(theme.Primary).Opacity(opacity)
 		} else {
-			message.SingleLine()
+			dot.Background(theme.Muted)
 		}
-		if count := logic.PythonLogLineCount(entry.Message); count > 1 {
-			ui.Text(c, locales.WorkspaceHttpRequestConsoleLines(strconv.Itoa(count))).Shrink(0).FontSize(11).TextColor(theme.Muted)
+		ui.Text(c, text).SingleLine().FontSize(14).TextColor(theme.Muted)
+	})
+}
+
+// cell builds a console row's column on one line, 40 px high with the
+// cell's padding.
+func (v *consoleView) cell(c *ui.Context, theme nui.Theme, entry *logic.PluginLogEntry, col int) {
+	ui.Row(c).FillWidth().MinWidth(0).Height(consoleRowHeight - 12).AlignItems(ui.Center).Gap(6).Children(func() {
+		switch consoleColumnIDs[col] {
+		case consoleColumnTime:
+			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).SingleLine().MinWidth(0).FontSize(14).FontFeatures("tnum").TextColor(theme.Toned)
+		case consoleColumnType:
+			ui.Icon(c, consoleStreamIcon(entry.Stream)).Size(14, 14).Shrink(0).TextColor(theme.Text).Label(consoleStreamLabel(entry.Stream))
+			consolePill(c, theme, entry, consoleLevelLabel(entry.Level), nil)
+		case consoleColumnSource:
+			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Toned)
+		default:
+			ui.Text(c, logic.PythonLogPreview(entry.Message, consolePreviewLength)).SingleLine().Shrink(1).MinWidth(0).FontSize(14).TextColor(theme.Text)
+			if count := logic.PythonLogLineCount(entry.Message); count > 1 {
+				ui.Text(c, locales.WorkspaceHttpRequestConsoleLines(strconv.Itoa(count))).SingleLine().Shrink(0).FontSize(12).TextColor(theme.Muted)
+			}
 		}
 	})
 }
 
-func (v *consoleView) detailModal(c *ui.Context, theme nui.Theme) {
+// detailDialog shows an entry as 1.0.5 did: its time, a pill of its stream
+// and level, and its source, above its message.
+func (v *consoleView) detailDialog(c *ui.Context, theme nui.Theme) {
 	if v.detail == nil {
-		return
+		v.open = false
 	}
 	entry := v.detail
-	nui.ModalWithOptions(c.Key("console-detail"), theme, &v.open, nui.ModalOptions{Title: locales.WorkspaceHttpRequestConsoleEntryDetail(), Width: nui.Set[float32](720), Footer: func(c *ui.Context, palette nui.Theme) {
-		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			iconAction(c, palette, "copy", lucide.Copy(), locales.WorkspaceHttpRequestConsoleCopyEntry(), false, func() { v.editor.copy(entry.Message, locales.WorkspaceHttpRequestConsoleEntryCopied()) })
-			iconAction(c, palette, "save", lucide.Download(), locales.WorkspaceHttpRequestConsoleSaveEntry(), false, func() {
-				v.save(fmt.Sprintf("flowlens-console-entry-%d.log", entry.EventID), entry.Message)
-			})
-		})
-	}}, func(palette nui.Theme) {
-		ui.Column(c).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, consoleSource(entry)+" · "+consoleStreamLabel(entry.Stream)+" · "+consoleLevelLabel(entry.Level)).FontSize(12).TextColor(palette.Muted)
-			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).FontSize(12).TextColor(palette.Muted)
-			ui.Scroll(c.Key("message")).FillWidth().MaxHeight(420).Children(func() {
-				ui.Text(c, entry.Message).FontSize(13).Font(palette.MonoFont).TextColor(palette.Text).Selectable().FillWidth()
-			})
-		})
+	widgets.DetailDialog(c.Key("console-detail"), theme, &v.open, widgets.DetailDialogOptions{
+		Title: locales.WorkspaceHttpRequestConsoleEntryDetail(),
+		Header: func(c *ui.Context, palette nui.Theme) {
+			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).Shrink(0).FontSize(14).FontWeight(500).TextColor(palette.Toned)
+			consolePill(c, palette, entry, consoleStreamLabel(entry.Stream)+" · "+consoleLevelLabel(entry.Level), consoleStreamIcon(entry.Stream)).Shrink(0)
+			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(14).TextColor(palette.Muted)
+		},
+		Actions: []widgets.DetailAction{
+			v.wrap.Action(locales.WorkspaceHttpRequestConsoleWrap()),
+			{Key: "copy", Icon: lucide.Copy(), Label: locales.WorkspaceHttpRequestConsoleCopyEntry(), Run: func() {
+				v.editor.copy(entry.Message, locales.WorkspaceHttpRequestConsoleEntryCopied())
+			}},
+			{Key: "save", Icon: lucide.Download(), Label: locales.WorkspaceHttpRequestConsoleSaveEntry(), Disabled: v.saving, Run: func() { v.save(consoleEntryFilename, entry.Message) }},
+		},
+		Wrap: &v.wrap,
+		Content: func(c *ui.Context, palette nui.Theme) {
+			if v.view.Text() != entry.Message {
+				v.view.SetText(entry.Message)
+			}
+			v.view.SetWordWrap(v.wrap.On())
+			v.view.Build(c, ui.Font{Family: palette.Font, Size: 14}).Fill()
+		},
 	})
+	if !v.open {
+		v.detail = nil
+	}
 }

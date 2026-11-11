@@ -38,6 +38,7 @@ type MessageStream struct {
 	open      bool
 	active    *logic.WebSocketDisplayMessage
 	view      *widgets.CodeView
+	wrap      widgets.DetailWrap
 	exporting bool
 	clipboard *string
 	hex       *HexView
@@ -47,6 +48,7 @@ type MessageStream struct {
 // NewMessageStream returns an empty stream.
 func NewMessageStream(deps Dependencies) *MessageStream {
 	stream := &MessageStream{deps: deps, Filter: DirectionAll, view: widgets.NewCodeView("plaintext", true), hex: NewHexView(deps)}
+	stream.hex.SelectionFilename = "websocket-selection.bin"
 	stream.list.FollowEnd = true
 	return stream
 }
@@ -116,7 +118,7 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 			warningAlert(c, theme, locales.TrafficWsMsgsTruncated())
 		}
 		if len(m.filtered) == 0 {
-			emptyState(c, theme, lucide.MessagesSquare(), locales.CommonNoContent())
+			emptyState(c, theme, lucide.MessagesSquare(), locales.WorkspaceWebsocketClientNoMessages())
 			return
 		}
 		ui.List(c.Key("messages"), &m.list, len(m.filtered), func(index int) {
@@ -191,39 +193,60 @@ func (m *MessageStream) detailTitle() string {
 	return locales.WorkspaceWebsocketClientMessageDetailReceive()
 }
 
+// detail shows the open message as 1.0.5 did: its direction, type and size,
+// then its text, or a hex view of a binary message.
 func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
-	if !m.open || m.active == nil {
-		return
+	if m.active == nil {
+		m.open = false
 	}
 	active := m.active
-	binary := active.MsgType == "binary"
-	nui.ModalWithOptions(c.Key("ws-detail"), theme, &m.open, nui.ModalOptions{Title: m.detailTitle(), Width: nui.Set[float32](720), Footer: func(c *ui.Context, palette nui.Theme) {
-		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			if !binary {
-				nui.Button(c.Key("ws-copy"), palette, locales.DetailCopyBody(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(func() {
-					text := active.Data
-					m.clipboard = &text
-					m.deps.Notifier.Success(locales.DetailBodyCopied())
-				})
+	binary := active != nil && active.MsgType == "binary"
+	saving := m.exporting || m.hex.exporting
+	var actions []widgets.DetailAction
+	if !binary {
+		actions = append(actions, m.wrap.Action(locales.DetailWrapBody()), widgets.DetailAction{Key: "copy", Icon: lucide.Copy(), Label: locales.DetailCopyBody(), Run: func() {
+			text := active.Data
+			m.clipboard = &text
+			m.deps.Notifier.Success(locales.DetailBodyCopied())
+		}})
+	}
+	actions = append(actions, widgets.DetailAction{Key: "save", Icon: lucide.Download(), Label: locales.DetailSaveBody(), Disabled: saving, Run: func() { m.save(active) }})
+	options := widgets.DetailDialogOptions{
+		Title:   m.detailTitle(),
+		Actions: actions,
+		Wrap:    &m.wrap,
+		Header: func(c *ui.Context, palette nui.Theme) {
+			direction, color := locales.WorkspaceWebsocketClientFilterReceive(), nui.Info
+			if active.Direction == DirectionSend {
+				direction, color = locales.WorkspaceWebsocketClientFilterSend(), nui.Warning
 			}
-			nui.Button(c.Key("ws-save"), palette, locales.DetailSaveBody(), nui.ButtonOptions{Disabled: m.exporting}).OnClick(func() { m.save(active) })
-		})
-	}}, func(palette nui.Theme) {
-		if active.Error != "" {
-			warningAlert(c, palette, active.Error)
+			nui.Badge(c, palette, direction, nui.BadgeOptions{Color: color, Size: nui.LG}).Shrink(0)
+			kind := locales.WorkspaceWebsocketClientDraftTypeText()
+			if binary {
+				kind = locales.WorkspaceWebsocketClientDraftTypeBinaryFile()
+			}
+			nui.Badge(c, palette, kind, nui.BadgeOptions{Color: nui.Neutral, Size: nui.LG}).Shrink(0)
+			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(14).MinWidth(0).TextColor(palette.Muted)
+		},
+		Content: func(c *ui.Context, palette nui.Theme) {
+			if binary {
+				m.hex.Build(c, palette, 1, active.Data, "base64")
+				return
+			}
+			if m.view.Text() != active.Data {
+				m.view.SetText(active.Data)
+			}
+			m.view.SetWordWrap(m.wrap.On())
+			m.view.Build(c, ui.Font{Family: palette.Font, Size: 14}).Fill()
+		},
+	}
+	if active != nil && active.Error != "" {
+		// Native messages carry their send error, which 1.0.5's had not.
+		options.Lead = func(c *ui.Context, palette nui.Theme) {
+			nui.Alert(c, palette, nui.AlertOptions{Description: active.Error, Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()}).FillWidth()
 		}
-		if binary {
-			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(14).TextColor(palette.Muted)
-			ui.Box(c).FillWidth().Height(320).Children(func() { m.hex.Build(c, palette, 1, active.Data, "base64") })
-			return
-		}
-		if m.view.Text() != active.Data {
-			m.view.SetText(active.Data)
-		}
-		ui.Box(c).FillWidth().Height(320).Children(func() {
-			m.view.Build(c, ui.Font{Family: palette.MonoFont, Size: 13}).Fill()
-		})
-	})
+	}
+	widgets.DetailDialog(c.Key("ws-detail"), theme, &m.open, options)
 	if !m.open {
 		m.active = nil
 	}

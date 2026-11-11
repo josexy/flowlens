@@ -5,6 +5,7 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 ## Workspaces and Request Editing
 
 - Capture, history, categories, API collections, rewrite rules, Python plugins, and memory statistics share the same workbench shell.
+- In the capture and history traffic table, a click selects a row, Shift-click adds or removes a row, and Ctrl-click (Cmd-click on macOS) opens or closes that row's details, which the row menu's **Show** also opens.
 - HTTP Request Editor and WebSocket Client tabs can be saved into API Collection folders from the tab context menu.
 - Saving an editor tab already linked to an API Collection entry updates that request directly.
 - HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.

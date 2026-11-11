@@ -11,7 +11,9 @@ import (
 	"image/png"
 	"iter"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +54,16 @@ type fixture struct {
 	service  *settingservice.SettingService
 	saved    []proxyservice.SaveBodyToFileRequest
 	path     string
+	// picked are the names the save dialog suggested, in order.
+	mu     sync.Mutex
+	picked []string
+}
+
+// pickedNames returns the names the save dialog suggested.
+func (f *fixture) pickedNames() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.picked)
 }
 
 func (f *fixture) settle() {
@@ -92,7 +104,12 @@ func newFixture(t testing.TB, entry *logic.TrafficEntry, body *proxyservice.Traf
 	notifier := &widgets.Notifier{}
 	f.panel = NewPanel(f.data, Dependencies{
 		Runtime: rt, Settings: settings, Notifier: notifier,
-		PickSavePath: func(name string) (string, error) { return f.path, nil },
+		PickSavePath: func(name string) (string, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.picked = append(f.picked, name)
+			return f.path, nil
+		},
 		SaveBody: func(request proxyservice.SaveBodyToFileRequest) error {
 			f.saved = append(f.saved, request)
 			return nil
@@ -145,6 +162,19 @@ func TestApplicableTabs(t *testing.T) {
 		f.has(label)
 	}
 	f.lacks("Trailers")
+}
+
+func TestNoCloseButton(t *testing.T) {
+	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
+	// The response tab strip ends with the summary chips.
+	f.has("200")
+	f.has("HTTP/2.0")
+	if _, ok := f.tester.Find("Close details"); ok {
+		t.Fatal("the panel offers a close button")
+	}
+	if _, ok := f.tester.Access("Close details"); ok {
+		t.Fatal("the panel offers a close button")
+	}
 }
 
 func TestErrorTab(t *testing.T) {
@@ -211,6 +241,105 @@ func TestWebSocketDetailAndFilter(t *testing.T) {
 	if len(f.saved) != 1 || f.saved[0].Body != "incoming" {
 		t.Fatalf("%+v", f.saved)
 	}
+}
+
+// wsFixture shows a WebSocket entry with messages.
+func wsFixture(t testing.TB, messages ...*proxyservice.WebSocketMessage) *fixture {
+	entry := httpEntry()
+	entry.Type = "ws"
+	return newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: messages})
+}
+
+// openMessage opens the detail of the message shown as label and lets the
+// dialog's opening transition end.
+func (f *fixture) openMessage(label string) {
+	f.t.Helper()
+	f.click(label)
+	f.tester.Advance(time.Second)
+	f.settle()
+}
+
+func TestWebSocketMessageDetailContent(t *testing.T) {
+	f := wsFixture(t,
+		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello, world", DataSize: 12},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
+	)
+	f.openMessage("hello, world")
+	f.has(locales.WorkspaceWebsocketClientMessageDetailReceive())
+	for _, text := range []string{locales.WorkspaceWebsocketClientFilterReceive(), locales.WorkspaceWebsocketClientDraftTypeText(), locales.WorkspaceWebsocketClientBinarySize("12")} {
+		f.has(text)
+	}
+	if got := f.panel.messages.view.Text(); got != "hello, world" {
+		t.Fatalf("text %q", got)
+	}
+	for _, label := range []string{locales.DetailWrapBody(), locales.DetailCopyBody(), locales.DetailSaveBody()} {
+		if _, ok := f.tester.Access(label); !ok {
+			t.Fatalf("text message without %q", label)
+		}
+	}
+	f.click(locales.DetailCopyBody())
+	if got := f.tester.Clipboard(); got != "hello, world" {
+		t.Fatalf("clipboard %q", got)
+	}
+	f.panel.messages.open = false
+	f.settle()
+
+	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
+	f.has(locales.WorkspaceWebsocketClientMessageDetailSend())
+	f.has(locales.WorkspaceWebsocketClientFilterSend())
+	f.has(locales.WorkspaceWebsocketClientDraftTypeBinaryFile())
+	f.has("01 02 03")
+	// Only Save is offered for a binary message.
+	for _, label := range []string{locales.DetailWrapBody(), locales.DetailCopyBody()} {
+		if _, ok := f.tester.Access(label); ok {
+			t.Fatalf("binary message offers %q", label)
+		}
+	}
+	if _, ok := f.tester.Access(locales.DetailSaveBody()); !ok {
+		t.Fatal("binary message without Save")
+	}
+}
+
+func TestWebSocketMessageFileNames(t *testing.T) {
+	f := wsFixture(t,
+		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello", DataSize: 5},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
+	)
+	f.openMessage("hello")
+	f.click(locales.DetailSaveBody())
+	f.panel.messages.open = false
+	f.settle()
+	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
+	f.click(locales.DetailSaveBody())
+
+	// Exporting a selection of the hex view.
+	hex := f.panel.messages.hex
+	hex.anchor, hex.focus, hex.hasChoice = 0, 1, true
+	f.settle()
+	row, ok := f.tester.Find("01 02 03")
+	if !ok {
+		t.Fatalf("no hex row in %v", f.tester.Texts())
+	}
+	f.tester.RightClickAt(row.X+row.W/2, row.Y+row.H/2)
+	f.settle()
+	if err := f.tester.ChooseMenuItem(locales.DetailHexExport()); err != nil {
+		t.Fatalf("%v: %v", err, f.tester.Menu())
+	}
+	f.settle()
+	if got, want := f.pickedNames(), []string{"websocket-message.txt", "websocket-message.bin", "websocket-selection.bin"}; !slices.Equal(got, want) {
+		t.Fatalf("suggested %v, want %v", got, want)
+	}
+	if last := f.saved[len(f.saved)-1]; last.Body != base64.StdEncoding.EncodeToString([]byte{1, 2}) {
+		t.Fatalf("exported %+v", last)
+	}
+}
+
+func TestEmptyWebSocketMessageStream(t *testing.T) {
+	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "incoming", DataSize: 8})
+	f.click(locales.WorkspaceWebsocketClientFilterAll())
+	f.lacks("incoming")
+	f.has(locales.WorkspaceWebsocketClientNoMessages())
+	f.lacks(locales.CommonNoContent())
 }
 
 func TestOverviewUnknownValues(t *testing.T) {
@@ -618,6 +747,56 @@ func TestSSEDetailCopiesAndSavesSelectedView(t *testing.T) {
 	f.click(locales.DetailSseSaveMessage())
 	if len(f.saved) != 1 || f.saved[0].Body != "{\n  \"a\": 1\n}" || f.saved[0].ContentType != "application/json" {
 		t.Fatalf("%+v", f.saved)
+	}
+}
+
+func TestSSEMessageDetailContent(t *testing.T) {
+	f := sseFixture(t, "data: a\n\ndata: b\n\ndata: c\n\nid: abc\nevent: update\ndata: {\"k\":1}\n\n")
+	f.click(locales.DetailSseOpenMessage("4"))
+	f.tester.Advance(time.Second)
+	f.settle()
+	for _, text := range []string{"#4", "update", locales.DetailSseId() + ": abc"} {
+		f.has(text)
+	}
+	f.has(locales.DetailFormatted())
+	if view := f.panel.responseBody.sse; view.detailView.WordWrap() {
+		t.Fatal("wrap starts on")
+	}
+
+	// Turning on wrap wraps the text and shows Wrap as pressed.
+	f.click(locales.DetailWrapBody())
+	if info, ok := f.tester.Access(locales.DetailWrapBody()); !ok || !info.Checked || !f.panel.responseBody.sse.detailView.WordWrap() {
+		t.Fatalf("wrap %+v", info)
+	}
+
+	// The Formatted view highlights JSON.
+	f.click(locales.DetailFormatted())
+	if view := f.panel.responseBody.sse; view.detailTab != "formatted" || view.detailView.State().Buffer.Language() == nil {
+		t.Fatalf("tab %q", view.detailTab)
+	}
+	f.panel.responseBody.sse.open = false
+	f.settle()
+
+	f.click(locales.DetailSseOpenMessage("1"))
+	f.has("#1")
+	f.has(locales.DetailSseId() + ": —")
+	if f.panel.responseBody.sse.detailView.WordWrap() {
+		t.Fatal("wrap stayed on for the next message")
+	}
+}
+
+func TestSSEMessageFileNames(t *testing.T) {
+	f := sseFixture(t, "id: 1\ndata: {\"a\":1}\n\n")
+	f.click(locales.DetailSseOpenMessage("1"))
+	f.tester.Advance(time.Second)
+	f.settle()
+	f.click(locales.DetailSseSaveMessage())
+	f.click(locales.DetailFormatted())
+	f.click(locales.DetailSseSaveMessage())
+	f.click(locales.DetailSseRawEvent())
+	f.click(locales.DetailSseSaveMessage())
+	if got, want := f.pickedNames(), []string{"sse-message.txt", "sse-message.json", "sse-event.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("suggested %v, want %v", got, want)
 	}
 }
 

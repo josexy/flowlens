@@ -166,6 +166,10 @@ type fixture struct {
 	showCategories bool
 	pickedName     string
 	savePath       string
+	// afterBuild, when set, runs at the end of each build of the view.
+	afterBuild func()
+	// drawnMenus draws the window's popup menus in it, for renders.
+	drawnMenus bool
 }
 
 func (f *fixture) settle() {
@@ -241,6 +245,9 @@ func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height 
 	f.workspace = workspace
 	view := func(c *ui.Context) {
 		theme := nui.App(c, data.Settings.Theme().Config)
+		if f.drawnMenus {
+			c.SetMenuPresentation(ui.PopoverMenus)
+		}
 		dispatch.Begin()
 		ui.Row(c).Fill().Children(func() {
 			ui.Box(c).Width(240).FillHeight().Shrink(0).Children(func() {
@@ -259,6 +266,9 @@ func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height 
 		}
 		confirm.Build(c, theme)
 		dispatch.Install(c)
+		if f.afterBuild != nil {
+			f.afterBuild()
+		}
 	}
 	f.tester = ui.NewTester(view, width, height)
 	f.tester.SetLocale("en")
@@ -692,31 +702,180 @@ func TestHeaderMenuHidesColumn(t *testing.T) {
 	}
 }
 
-func TestSingleSelectionOpensDetail(t *testing.T) {
-	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
-	f.click("b.test")
-	if f.data.Traffic.Selected == nil || f.data.Traffic.Selected.ID != 2 || !f.data.Traffic.ShowDetailPanel || f.data.Traffic.SelectedCount != 1 {
-		t.Fatalf("%+v %v", f.data.Traffic.Selected, f.data.Traffic.ShowDetailPanel)
+// clickRow clicks the row of host with mods.
+func (f *fixture) clickRow(mods ui.Modifiers, host string) {
+	f.t.Helper()
+	if err := f.tester.ClickWith(mods, host); err != nil {
+		f.t.Fatalf("click %q: %v", host, err)
+	}
+	f.settle()
+}
+
+// selectedIDs returns the IDs of the rows selected, in table order.
+func selectedIDs(table *Table) []uint64 {
+	var ids []uint64
+	for _, entry := range table.selectedEntries() {
+		ids = append(ids, entry.ID)
+	}
+	return ids
+}
+
+// requireSelection checks the rows selected, the entry focused (0 for none),
+// and whether the detail panel is open.
+func (f *fixture) requireSelection(ids []uint64, focused uint64, detail bool) {
+	f.t.Helper()
+	table := f.workspace.Table
+	got := selectedIDs(table)
+	var focus uint64
+	if f.data.Traffic.Selected != nil {
+		focus = f.data.Traffic.Selected.ID
+	}
+	if !slices.Equal(got, ids) || focus != focused || f.data.Traffic.ShowDetailPanel != detail || f.data.Traffic.SelectedCount != len(ids) {
+		f.t.Fatalf("selected %v focused %d detail %v count %d, want %v %d %v", got, focus, f.data.Traffic.ShowDetailPanel, f.data.Traffic.SelectedCount, ids, focused, detail)
 	}
 }
 
-func TestModifierSelection(t *testing.T) {
-	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"), entry(3, "c.test"))
-	f.click("a.test")
-	if err := f.tester.ClickWith(ui.Cmd, "c.test"); err != nil {
-		t.Fatal(err)
-	}
+func TestClickSelectsWithoutOpeningDetails(t *testing.T) {
+	f := newFixture(t, manyEntries(3)...)
+	f.clickRow(0, "host2.test")
+	f.requireSelection([]uint64{2}, 2, false)
+}
+
+func TestClickWhileDetailsAreOpenMovesThem(t *testing.T) {
+	f := newFixture(t, manyEntries(3)...)
+	f.clickRow(ui.Cmd, "host1.test")
+	f.requireSelection([]uint64{1}, 1, true)
+	f.clickRow(0, "host3.test")
+	f.requireSelection([]uint64{3}, 3, true)
+}
+
+func TestClickingTheOnlySelectedRowClearsIt(t *testing.T) {
+	f := newFixture(t, manyEntries(3)...)
+	f.clickRow(ui.Cmd, "host2.test")
+	f.requireSelection([]uint64{2}, 2, true)
+	f.clickRow(0, "host2.test")
+	f.requireSelection(nil, 0, false)
+}
+
+func TestShiftClickAddsAndRemovesRows(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	f.clickRow(0, "host2.test")
+	f.clickRow(ui.Shift, "host5.test")
+	f.clickRow(ui.Shift, "host8.test")
+	f.requireSelection([]uint64{2, 5, 8}, 8, false)
+
+	// Removing the focused row focuses the first left in table order.
+	f.clickRow(ui.Shift, "host8.test")
+	f.requireSelection([]uint64{2, 5}, 2, false)
+
+	// Removing a row that is not focused keeps the focus.
+	f.clickRow(ui.Shift, "host5.test")
+	f.requireSelection([]uint64{2}, 2, false)
+}
+
+func TestShiftClickRemovingTheLastRowClosesDetails(t *testing.T) {
+	f := newFixture(t, manyEntries(3)...)
+	f.clickRow(ui.Cmd, "host3.test")
+	f.requireSelection([]uint64{3}, 3, true)
+	f.clickRow(ui.Shift, "host3.test")
+	f.requireSelection(nil, 0, false)
+}
+
+func TestCtrlClickKeepsAMultipleSelection(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	f.clickRow(0, "host2.test")
+	f.clickRow(ui.Shift, "host5.test")
+	f.clickRow(ui.Shift, "host8.test")
+	f.clickRow(ui.Cmd, "host5.test")
+	f.requireSelection([]uint64{2, 5, 8}, 5, true)
+}
+
+func TestCtrlClickOpensClosesAndMovesDetails(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	// Opening with Ctrl-click.
+	f.clickRow(ui.Cmd, "host5.test")
+	f.requireSelection([]uint64{5}, 5, true)
+	// Closing with Ctrl-click.
+	f.clickRow(ui.Cmd, "host5.test")
+	f.requireSelection([]uint64{5}, 5, false)
+	// Ctrl-click on another row while the panel shows row 5.
+	f.clickRow(ui.Cmd, "host5.test")
+	f.clickRow(ui.Cmd, "host7.test")
+	f.requireSelection([]uint64{7}, 7, true)
+}
+
+func TestKeyboardSelectionLeavesDetailsAsTheyWere(t *testing.T) {
+	f := newFixture(t, manyEntries(5)...)
+	f.clickRow(0, "host2.test")
+	f.tester.Key(0, ui.KeyDown)
 	f.settle()
-	if f.data.Traffic.SelectedCount != 2 {
-		t.Fatalf("count %d", f.data.Traffic.SelectedCount)
-	}
-	if err := f.tester.ClickWith(ui.Shift, "b.test"); err != nil {
-		t.Fatal(err)
-	}
+	f.requireSelection([]uint64{3}, 3, false)
+
+	f.clickRow(ui.Cmd, "host3.test")
+	f.requireSelection([]uint64{3}, 3, true)
+	f.tester.Key(0, ui.KeyDown)
 	f.settle()
-	if f.data.Traffic.SelectedCount < 2 {
-		t.Fatalf("count %d", f.data.Traffic.SelectedCount)
+	f.requireSelection([]uint64{4}, 4, true)
+}
+
+func TestShiftPressShowsTheEarlierSelectionUntilRelease(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	table := f.workspace.Table
+	f.clickRow(0, "host2.test")
+	f.clickRow(ui.Shift, "host5.test")
+	var held [][]uint64
+	f.afterBuild = func() {
+		if table.gesture.press.down {
+			held = append(held, selectedIDs(table))
+		}
 	}
+	f.clickRow(ui.Shift, "host8.test")
+	f.afterBuild = nil
+	if len(held) == 0 {
+		t.Fatal("no frame while the press was down")
+	}
+	for _, ids := range held {
+		if !slices.Equal(ids, []uint64{2, 5}) {
+			t.Fatalf("a frame during the press showed %v", ids)
+		}
+	}
+	f.requireSelection([]uint64{2, 5, 8}, 8, false)
+}
+
+func TestClickAfterTheTableScrollsUnderAStillPointer(t *testing.T) {
+	f := newFixture(t, manyEntries(200)...)
+	table := f.workspace.Table
+	table.list.ScrollTo(0, ui.Start)
+	f.settle()
+	row, ok := f.tester.Find("host5.test")
+	if !ok {
+		t.Fatal("row 5")
+	}
+	x, y := row.X+row.W/2, row.Y+row.H/2
+	f.tester.Move(x, y)
+	f.settle()
+	table.list.ScrollTo(40, ui.Start)
+	f.settle()
+	var under uint64
+	for _, entry := range table.rows {
+		if r, ok := f.tester.Find(fmt.Sprintf("host%d.test", entry.ID)); ok && y >= r.Y && y < r.Y+r.H {
+			under = entry.ID
+			break
+		}
+	}
+	if under == 0 || under == 5 {
+		t.Fatalf("row under the pointer %d", under)
+	}
+	f.tester.ClickAt(x, y)
+	f.settle()
+	f.requireSelection([]uint64{under}, under, false)
+}
+
+func TestPressOnAHeaderSelectsNothing(t *testing.T) {
+	f := newFixture(t, manyEntries(3)...)
+	f.clickRow(0, "host2.test")
+	f.click("Host")
+	f.requireSelection([]uint64{2}, 2, false)
 }
 
 func TestEvictedSelectionIsRemoved(t *testing.T) {
@@ -812,11 +971,18 @@ func (f *fixture) choose(path ...string) {
 }
 
 func TestRowMenuShowDetails(t *testing.T) {
-	f := newFixture(t, entry(1, "a.test"))
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
+	f.clickRow(0, "a.test")
+	f.requireSelection([]uint64{1}, 1, false)
 	openRowMenu(t, f, "a.test")
 	f.choose("Show")
-	if !f.data.Traffic.ShowDetailPanel || f.data.Traffic.Selected.ID != 1 {
-		t.Fatal("details")
+	f.requireSelection([]uint64{1}, 1, true)
+
+	// Show is unavailable while several rows are selected.
+	f.clickRow(ui.Shift, "b.test")
+	openRowMenu(t, f, "b.test")
+	if err := f.tester.ChooseMenuItem("Show"); err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("Show with two rows selected: %v", err)
 	}
 }
 
@@ -1034,6 +1200,33 @@ func TestExportSelection(t *testing.T) {
 	if !slices.Equal(f.exported, []string{"har:/tmp/x.har:[1]"}) {
 		t.Fatal(f.exported)
 	}
+
+	// Live capture: the file is named for the count.
+	f = newFixture(t, entry(1, "a.test"), entry(2, "b.test"), entry(3, "c.test"))
+	f.clickRow(0, "a.test")
+	f.clickRow(ui.Shift, "b.test")
+	f.clickRow(ui.Shift, "c.test")
+	openRowMenu(t, f, "b.test")
+	f.choose("Export", exportFormatLabel(logic.ExportCSV))
+	if f.pickedName != "flowlens-selection-3-csv.csv" {
+		t.Fatalf("suggested %q", f.pickedName)
+	}
+
+	// A saved history with an alias: the file is named for the alias.
+	backend := &fakeHistoryBackend{
+		list:    []*proxyservice.HistoryMetadata{{Key: "k1", Alias: "login-flow", CreatedAt: 1700000000000, Total: 3, FormatVersion: 2}},
+		entries: map[string][]*logic.TrafficEntry{"k1": {entry(11, "one.test"), entry(12, "two.test"), entry(13, "three.test")}},
+	}
+	h := newFixtureSized(t, nil, 1400, 800, backend)
+	h.click("login-flow")
+	h.clickRow(0, "one.test")
+	h.clickRow(ui.Shift, "two.test")
+	h.clickRow(ui.Shift, "three.test")
+	openRowMenu(t, h, "two.test")
+	h.choose("Export", exportFormatLabel(logic.ExportHAR))
+	if h.pickedName != "login-flow-selection.har" {
+		t.Fatalf("suggested %q", h.pickedName)
+	}
 }
 
 func TestProcessColumnStates(t *testing.T) {
@@ -1151,34 +1344,56 @@ func manyEntries(count int) []*logic.TrafficEntry {
 	return entries
 }
 
-func TestDragSelectsRangeOfRows(t *testing.T) {
-	f := newFixture(t, manyEntries(5)...)
-	from, ok := f.tester.Find("host1.test")
+// drag presses the row of from and drags to the row of to, running during
+// each frame of the drag.
+func (f *fixture) drag(from, to string, during func()) {
+	f.t.Helper()
+	start, ok := f.tester.Find(from)
 	if !ok {
-		t.Fatal("row 1")
+		f.t.Fatalf("row %s", from)
 	}
-	to, ok := f.tester.Find("host4.test")
+	end, ok := f.tester.Find(to)
 	if !ok {
-		t.Fatal("row 4")
+		f.t.Fatalf("row %s", to)
 	}
-	x, y := from.X+from.W/2, from.Y+from.H/2
+	x, y := start.X+start.W/2, start.Y+start.H/2
 	f.tester.Press(x, y)
 	f.tester.Frame()
 	f.tester.Move(x, y+8)
 	f.tester.Frame()
-	f.tester.Move(to.X+to.W/2, to.Y+to.H/2)
+	if during != nil {
+		during()
+	}
+	f.tester.Move(end.X+end.W/2, end.Y+end.H/2)
 	f.tester.Frame()
-	f.tester.Release(to.X+to.W/2, to.Y+to.H/2)
+	f.tester.Release(end.X+end.W/2, end.Y+end.H/2)
 	f.settle()
-	if f.data.Traffic.SelectedCount != 4 {
-		t.Fatalf("selected %d", f.data.Traffic.SelectedCount)
-	}
-	if f.data.Traffic.Selected == nil || f.data.Traffic.Selected.ID != 4 {
-		t.Fatalf("focus %+v", f.data.Traffic.Selected)
-	}
-	if f.data.Traffic.ShowDetailPanel {
-		t.Fatal("a range selection should not open the detail panel")
-	}
+}
+
+func TestDragSelectsRangeOfRows(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	f.clickRow(0, "host2.test")
+	f.clickRow(ui.Shift, "host9.test")
+	f.drag("host4.test", "host6.test", nil)
+	f.requireSelection([]uint64{4, 5, 6}, 6, false)
+}
+
+func TestDragReplacesTheSelectionWhateverMyGoAdds(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	table := f.workspace.Table
+	f.clickRow(ui.Cmd, "host2.test")
+	f.clickRow(ui.Shift, "host9.test")
+	f.requireSelection([]uint64{2, 9}, 9, true)
+	// A drag that began with Cmd held keeps the rows selected before it in
+	// MyGo's model; 1.0.5 replaced them.
+	f.drag("host4.test", "host6.test", func() {
+		if !table.list.DragSelecting() {
+			t.Fatal("the drag did not start")
+		}
+		table.selection.Add(2)
+		table.selection.Add(9)
+	})
+	f.requireSelection([]uint64{4, 5, 6}, 6, true)
 }
 
 func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
@@ -1186,6 +1401,7 @@ func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
 	table := f.workspace.Table
 	table.list.ScrollTo(0, ui.Start)
 	f.settle()
+	f.clickRow(0, "host1.test")
 	first, last := table.list.Visible()
 	if first != 0 {
 		t.Fatalf("first %d", first)
@@ -1209,8 +1425,12 @@ func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
 	if now, _ := table.list.Visible(); now == 0 {
 		t.Fatal("the table did not scroll")
 	}
-	if f.data.Traffic.SelectedCount < 4 {
-		t.Fatalf("selected %d", f.data.Traffic.SelectedCount)
+	ids := selectedIDs(table)
+	if len(ids) < 4 || ids[0] != uint64(last-2) || f.data.Traffic.SelectedCount != len(ids) {
+		t.Fatalf("selected %v, want the rows from %d on alone", ids, last-2)
+	}
+	if focus := f.data.Traffic.Selected; focus == nil || focus.ID != ids[len(ids)-1] || f.data.Traffic.ShowDetailPanel {
+		t.Fatalf("focus %+v detail %v", focus, f.data.Traffic.ShowDetailPanel)
 	}
 }
 
@@ -1256,6 +1476,8 @@ func TestDetailPanelOpensBesideTheTable(t *testing.T) {
 	f.settle()
 	f.requireNoText("detail-content")
 	f.click("a.test")
+	f.requireNoText("detail-content")
+	f.clickRow(ui.Cmd, "a.test")
 	f.requireText("detail-content")
 	f.data.Traffic.SetShowDetailPanel(false)
 	f.settle()

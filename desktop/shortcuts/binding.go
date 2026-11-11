@@ -308,3 +308,27 @@ func Conflicts(id string, binding *Binding, config *settingservice.ShortcutConfi
 	}
 	return conflicts
 }
+
+// MenuShortcut returns the keys of a command's binding in use, with the
+// user's override, for a menu item to show (ui.MenuItem.Shortcut). It
+// reports false for a command without a binding, as one an override
+// disables.
+func MenuShortcut(commandID string, config *settingservice.ShortcutConfig) (ui.Modifiers, ui.Key, bool) {
+	return menuShortcut(commandID, config, IsMacOS())
+}
+
+func menuShortcut(commandID string, config *settingservice.ShortcutConfig, macOS bool) (ui.Modifiers, ui.Key, bool) {
+	command, ok := CommandByID(commandID)
+	if !ok {
+		return 0, ui.KeyUnknown, false
+	}
+	binding, ok := Resolve(ResolveCommand(command, config).Binding, macOS)
+	if !ok {
+		return 0, ui.KeyUnknown, false
+	}
+	key, ok := uiKey(binding.Key)
+	if !ok {
+		return 0, ui.KeyUnknown, false
+	}
+	return uiModifiers(binding), key, true
+}

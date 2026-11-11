@@ -245,9 +245,9 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 		{Value: logic.BodyTypeJSON, Label: locales.WorkspaceHttpRequestBodyTypeJson()},
 		{Value: logic.BodyTypeText, Label: locales.WorkspaceHttpRequestBodyTypeText()},
 		{Value: logic.BodyTypeXML, Label: locales.WorkspaceHttpRequestBodyTypeXml()},
-		{Value: logic.BodyTypeURLEncoded, Label: locales.WorkspaceHttpRequestBodyTypeUrlencoded()},
-		{Value: logic.BodyTypeFormData, Label: locales.WorkspaceHttpRequestBodyTypeFormData()},
 		{Value: logic.BodyTypeFile, Label: locales.WorkspaceHttpRequestBodyTypeFile()},
+		{Value: logic.BodyTypeFormData, Label: locales.WorkspaceHttpRequestBodyTypeFormData()},
+		{Value: logic.BodyTypeURLEncoded, Label: locales.WorkspaceHttpRequestBodyTypeUrlencoded()},
 	}
 	text := state.RequestBodyType == logic.BodyTypeJSON || state.RequestBodyType == logic.BodyTypeText || state.RequestBodyType == logic.BodyTypeXML
 	ui.Row(c.Key("body-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {

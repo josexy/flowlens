@@ -92,6 +92,15 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 	if data.History != nil {
 		w.HistoryTable = NewTable(HistorySource{History: data.History}, deps)
 		w.HistoryTable.HistoryKey = func() string { return data.History.Traffic.Key }
+		w.HistoryTable.HistoryAlias = func() string {
+			key := data.History.Traffic.Key
+			for _, metadata := range data.History.Metadata {
+				if metadata.Key == key {
+					return metadata.Alias
+				}
+			}
+			return ""
+		}
 		w.History = w.historySidebar
 	}
 	return w
@@ -133,9 +142,9 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 						w.exporter.Export(format, ExportOptions{FilenameHint: alias})
 					}
 				}
-			})
+			}).Icon(widgets.ExportMenuIcon())
 		}
-		if menu.Item(locales.CaptureSetAlias()).Chosen() {
+		if menu.Item(locales.CaptureSetAlias()).Icon(widgets.AliasMenuIcon()).Chosen() {
 			w.ShowAliasDialog()
 		}
 	})

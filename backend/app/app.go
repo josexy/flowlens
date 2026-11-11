@@ -360,7 +360,6 @@ func openMainWindow(
 		},
 		SaveBody: all.proxy.SaveBodyToFile,
 	})
-	detail.OnClose = func() { data.Traffic.SetShowDetailPanel(false) }
 	captureWorkspace.Detail = detail.Build
 	historyDetail := inspect.NewPanel(store.HistoryDetailData{History: data.History}, inspect.Dependencies{
 		Runtime: data.Runtime, Settings: data.Settings, Notifier: &app.Notifier, Icons: icons,
@@ -369,7 +368,6 @@ func openMainWindow(
 		},
 		SaveBody: all.proxy.SaveBodyToFile,
 	})
-	historyDetail.OnClose = func() { data.History.Traffic.SetShowDetailPanel(false) }
 	captureWorkspace.HistoryDetail = historyDetail.Build
 	collections := collection.New(data, &app.Notifier, &app.Confirm)
 	requestEditor := editor.New(data, editor.Host{

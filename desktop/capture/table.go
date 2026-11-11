@@ -5,7 +5,6 @@ import (
 	"maps"
 	"slices"
 	"strconv"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
@@ -20,9 +19,6 @@ import (
 // revealFrames is how many frames scrolling to the newest requests does not
 // count as the user moving away from them.
 const revealFrames = 3
-
-// dragAfterPress is how soon after a press a drag counts as the same gesture.
-const dragAfterPress = 500 * time.Millisecond
 
 type columnDefinition struct {
 	key      logic.TrafficColumnKey
@@ -85,16 +81,19 @@ type Table struct {
 	wasAtEdge bool
 	lastFirst int
 	revealing int
-	dragging  bool
-	// detailOpenedAt is when choosing a row opened the detail panel.
-	detailOpenedAt time.Time
-	resend         resendDialog
+	// gesture applies the 1.0.5 click model over MyGo's selection.
+	gesture  rowGesture
+	observer func(ui.InputEvent)
+	resend   resendDialog
 	// clipboard is text waiting for the next build to copy, for work that
 	// finishes outside one.
 	clipboard *string
 
 	// HistoryKey, when set, names the saved session the table shows.
 	HistoryKey func() string
+	// HistoryAlias, when set, returns the alias of the saved session the
+	// table shows, "" for none.
+	HistoryAlias func() string
 
 	// CellBuilds counts built cells, to verify that a frame's work follows
 	// the rows in view.
@@ -115,6 +114,7 @@ func NewTable(source Source, deps TableDependencies) *Table {
 		return uint64(0)
 	}
 	t.list.HeaderMenu = t.headerMenu
+	t.observer = t.observePointer
 	return t
 }
 
@@ -269,44 +269,6 @@ func (t *Table) applyPendingFocus() {
 	t.source.ClearPendingFocus()
 }
 
-// syncChoice follows the table's selection. A press chooses its row at once
-// and opens the detail panel; a drag that starts from that press selects a
-// range instead, so it closes the panel the press opened.
-func (t *Table) syncChoice(now time.Time, changed bool) {
-	dragging := t.list.DragSelecting()
-	count := t.selection.Len()
-	t.source.SetSelectedCount(count)
-	finishedDrag := t.dragging && !dragging
-	startedDrag := dragging && !t.dragging
-	t.dragging = dragging
-	if startedDrag && !t.detailOpenedAt.IsZero() && now.Sub(t.detailOpenedAt) < dragAfterPress {
-		t.source.SetShowDetail(false)
-	}
-	if dragging || finishedDrag {
-		t.detailOpenedAt = time.Time{}
-	}
-	if (!changed && !finishedDrag) || dragging {
-		return
-	}
-	if count == 0 {
-		t.source.SelectEntry(nil)
-		return
-	}
-	if t.selectedRow < 0 || t.selectedRow >= len(t.rows) {
-		return
-	}
-	entry := t.rows[t.selectedRow]
-	if !t.selection.Has(entry.ID) {
-		return
-	}
-	t.source.SelectEntry(entry)
-	t.detailOpenedAt = time.Time{}
-	if count == 1 && !finishedDrag && !t.source.ShowDetail() {
-		t.source.SetShowDetail(true)
-		t.detailOpenedAt = now
-	}
-}
-
 func (t *Table) atLatestEdge(first, last int) bool {
 	return logic.IsAtLatestEdge(t.rowsSort, first, last, len(t.rows))
 }
@@ -389,19 +351,24 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.list.CellMenu = func(menu *ui.Menu, row, _ int) { t.rowMenu(c, menu, row) }
 	t.list.HeaderCell = t.headerCell(c, theme, visible)
 	order := t.displayOrder(visible)
+	t.beginSelection()
 	var element ui.Element
 	ui.Themed(c, tableTheme(theme)).Fill().MinHeight(0).Children(func() {
 		element = ui.Table(c.Key("traffic-table"), &t.list, columns, len(t.rows), func(row, col int) {
 			t.CellBuilds++
 			key := string(visible[col].key)
+			if key == order[0] {
+				t.noteRowSpan(cellFill(c, "row-span"), row)
+			}
 			t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
 			t.cell(c, theme, t.rows[row], visible[col].key)
-		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns())
+		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns()).ObserveInput(t.observer)
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}
 	})
-	t.syncChoice(c.Now(), element.Changed())
+	handled := t.resolveSelection(element)
+	t.syncChoice(!handled && element.Changed())
 	t.syncLayout(visible)
 	t.holdWhileReading(element)
 	t.resend.build(c, theme, t)
@@ -604,7 +571,7 @@ func (t *Table) headerMenu(menu *ui.Menu, _ int) {
 		}
 	}
 	menu.Separator()
-	if menu.Item(locales.TrafficShowAllColumns()).Disabled(saving || len(visible) == len(columnDefinitions)).Chosen() {
+	if menu.Item(locales.TrafficShowAllColumns()).Icon(widgets.ShowAllMenuIcon()).Disabled(saving || len(visible) == len(columnDefinitions)).Chosen() {
 		settings.ShowAllTrafficColumns(onFailure)
 	}
 }

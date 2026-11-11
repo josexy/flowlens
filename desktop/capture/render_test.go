@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/josexy/flowlens/desktop/inspect"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/theme"
 )
@@ -55,4 +56,19 @@ func TestRenderCaptureWorkspace(t *testing.T) {
 			t.Fatalf("%s: %v", path, err)
 		}
 	}
+}
+
+// TestRenderCaptureWithDetail renders the table with the inspected row
+// selected and its detail panel open beside it, as Ctrl-click leaves them.
+func TestRenderCaptureWithDetail(t *testing.T) {
+	f := newRenderFixture(t)
+	panel := inspect.NewPanel(inspect.LiveData{Traffic: f.data.Traffic}, inspect.Dependencies{Runtime: f.data.Runtime, Settings: f.data.Settings, Notifier: f.notifier})
+	f.workspace.Detail = panel.Build
+	table := f.workspace.Table
+	table.replaceSelection(table.rowIndex(rendertest.Inspected))
+	f.settle()
+	if !f.data.Traffic.ShowDetailPanel || table.selection.Len() != 1 {
+		t.Fatal("the inspected row is not shown")
+	}
+	rendertest.ShootThemes(t, f.tester, "capture-detail", f.setDark)
 }

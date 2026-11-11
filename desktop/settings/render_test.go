@@ -2,6 +2,7 @@ package settings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/store"
@@ -26,4 +27,25 @@ func TestRenderSettings(t *testing.T) {
 		f.open(tab)
 		rendertest.ShootThemes(t, f.tester, "settings-"+tab, func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
 	}
+}
+
+func TestRenderRootCAAddMenu(t *testing.T) {
+	f := newFixture(t)
+	f.open(locales.SettingsTabProxy())
+	// The section's own name is "Add Root CA" too: open the menu as its
+	// button does.
+	f.view.proxy.rootMenu.Open = true
+	f.settle()
+	for _, label := range []string{locales.SettingsSelectFiles(), locales.SettingsAddPathManually()} {
+		if !f.has(label) {
+			t.Fatalf("no %q in %v", label, f.tester.Texts())
+		}
+	}
+	rendertest.ShootThemes(t, f.tester, "settings-root-ca-add", func(dark bool) {
+		setRenderTheme(t, f.data, dark)
+		f.view.proxy.rootMenu.Open = true
+		f.settle()
+		f.tester.Advance(time.Second)
+		f.settle()
+	})
 }

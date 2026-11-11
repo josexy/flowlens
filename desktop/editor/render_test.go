@@ -33,3 +33,20 @@ func TestRenderRequestEditor(t *testing.T) {
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "request-editor", f.setDark)
 }
+
+func TestRenderPythonConsole(t *testing.T) {
+	f, state, _ := consoleFixture(t,
+		consoleEntry(1, logic.CurrentRequestScriptPluginID, "stdout", "info", "request prepared for https://example.com/api"),
+		consoleEntry(2, "Auth signer", "stdout", "debug", "signature computed"),
+		consoleEntry(3, "Auth signer", "stdout", "warning", "token expires in 30 s"),
+		consoleEntry(4, "Rate limiter", "stderr", "", "Traceback (most recent call last):\n  File \"plugin.py\", line 3\nValueError: limit"),
+	)
+	f.tester.SetSize(rendertest.Width, rendertest.Height)
+	state.ScriptExecutionID = "render"
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "python-console", f.setDark)
+	f.click("Traceback (most recent call last): File \"plugin.py\", line 3 ValueError: limit")
+	f.tester.Advance(2e9)
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "python-console-detail", f.setDark)
+}

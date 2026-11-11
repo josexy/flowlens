@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
@@ -109,6 +110,26 @@ type fixture struct {
 	dispatch *shortcuts.Dispatcher
 	editor   *Editor
 	python   bool
+	// drawnMenus draws the window's popup menus in it.
+	drawnMenus bool
+	// picked are the names the save dialog suggested, in order.
+	pickedMu sync.Mutex
+	picked   []string
+	saved    []string
+}
+
+// savedBodies returns the bodies saved, in order.
+func (f *fixture) savedBodies() []string {
+	f.pickedMu.Lock()
+	defer f.pickedMu.Unlock()
+	return slices.Clone(f.saved)
+}
+
+// pickedNames returns the names the save dialog suggested.
+func (f *fixture) pickedNames() []string {
+	f.pickedMu.Lock()
+	defer f.pickedMu.Unlock()
+	return slices.Clone(f.picked)
 }
 
 func newFixture(t testing.TB, backend store.RequestBackend, requests *fakeRequests) *fixture {
@@ -145,10 +166,26 @@ func newFixture(t testing.TB, backend store.RequestBackend, requests *fakeReques
 		},
 		PickFile:      func() (string, error) { return "/tmp/picked.bin", nil },
 		PythonEnabled: func() bool { return f.python },
-		Inspect:       inspect.Dependencies{Runtime: data.Runtime, Settings: data.Settings, Notifier: f.notifier},
+		Inspect: inspect.Dependencies{Runtime: data.Runtime, Settings: data.Settings, Notifier: f.notifier,
+			PickSavePath: func(name string) (string, error) {
+				f.pickedMu.Lock()
+				defer f.pickedMu.Unlock()
+				f.picked = append(f.picked, name)
+				return "/tmp/out", nil
+			},
+			SaveBody: func(request proxyservice.SaveBodyToFileRequest) error {
+				f.pickedMu.Lock()
+				defer f.pickedMu.Unlock()
+				f.saved = append(f.saved, request.Body)
+				return nil
+			},
+		},
 	}, f.dispatch, f.notifier, f.confirm)
 	view := func(c *ui.Context) {
 		theme := nui.App(c, data.Settings.Theme().Config)
+		if f.drawnMenus {
+			c.SetMenuPresentation(ui.PopoverMenus)
+		}
 		f.dispatch.Begin()
 		ui.Column(c).Fill().Children(func() {
 			f.editor.TabBar(c, theme)
@@ -658,7 +695,7 @@ func TestPythonSwitchesConsoleAndScript(t *testing.T) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
 	f.click("line one line two")
-	if !f.tester.HasText("line one\nline two") {
+	if console := f.editor.https[tab.Key].response.console; !f.tester.HasText(locales.WorkspaceHttpRequestConsoleEntryDetail()) || console.view.Text() != "line one\nline two" {
 		t.Fatalf("%v", f.tester.Texts())
 	}
 	reopened := logic.BuildHTTPEditorStateFromSaved(logic.BuildSavedHTTPRequest(state), "again")
@@ -730,6 +767,61 @@ func TestSavedTabsTrackDirtyState(t *testing.T) {
 	workspace.CloseAPITabs([]string{"saved"})
 	if workspace.FindTab(tab.Key) != nil {
 		t.Fatal("deleted API closes its tab")
+	}
+}
+
+func TestWebSocketClientMessageStream(t *testing.T) {
+	f := newFake(t)
+	key := f.data.Workspace.CreateWebSocketClientTab(logic.DraftNew, nil)
+	state := f.data.Workspace.FindTab(key).WebSocket
+	state.URL = "ws://example.com/socket"
+	f.settle()
+	f.click(locales.WorkspaceWebsocketClientConnect())
+	state.ActiveRightTab = socketTabResponse
+	f.settle()
+	if !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
+		t.Fatalf("no empty state in %v", f.tester.Texts())
+	}
+	state.Messages = []logic.WebSocketDisplayMessage{
+		{ID: "m1", Direction: "receive", MsgType: "text", Data: "hello, world", DataSize: 12},
+		{ID: "m2", Direction: "send", MsgType: "binary", Data: "AQID", DataSize: 3},
+	}
+	f.settle()
+
+	// Message detail content.
+	f.click("hello, world")
+	f.tester.Advance(time.Second)
+	f.settle()
+	for _, text := range []string{locales.WorkspaceWebsocketClientMessageDetailReceive(), locales.WorkspaceWebsocketClientFilterReceive(), locales.WorkspaceWebsocketClientDraftTypeText(), locales.WorkspaceWebsocketClientBinarySize("12")} {
+		if !f.tester.HasText(text) {
+			t.Fatalf("missing %q in %v", text, f.tester.Texts())
+		}
+	}
+	f.click(locales.DetailSaveBody())
+	f.tester.Key(0, ui.KeyEscape)
+	f.settle()
+	f.click(locales.WorkspaceWebsocketClientBinarySize("3"))
+	f.tester.Advance(time.Second)
+	f.settle()
+	if !f.tester.HasText(locales.WorkspaceWebsocketClientDraftTypeBinaryFile()) || !f.tester.HasText(locales.WorkspaceWebsocketClientFilterSend()) {
+		t.Fatalf("binary message detail: %v", f.tester.Texts())
+	}
+	if _, ok := f.tester.Access(locales.DetailCopyBody()); ok {
+		t.Fatal("a binary message offers Copy")
+	}
+	f.click(locales.DetailSaveBody())
+	f.tester.Key(0, ui.KeyEscape)
+	f.settle()
+	if got, want := f.pickedNames(), []string{"websocket-message.txt", "websocket-message.bin"}; !slices.Equal(got, want) {
+		t.Fatalf("suggested %v, want %v", got, want)
+	}
+
+	// A direction filter that hides every message.
+	state.Messages = state.Messages[:1]
+	state.DirectionFilter = "send"
+	f.settle()
+	if f.tester.HasText("hello, world") || !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
+		t.Fatalf("filtered stream: %v", f.tester.Texts())
 	}
 }
 

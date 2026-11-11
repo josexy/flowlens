@@ -96,3 +96,26 @@ func AppendPythonLogBatch(target, batch []PluginLogEntry, maxEntries int) []Plug
 	}
 	return target
 }
+
+// PythonConsoleText returns entries as 1.0.5's Copy All and Save All wrote
+// them: `[time] [source] [stream] message` per entry, one entry per line,
+// where stream is the entry's raw stream, else its level, else "log".
+// sourceLabel names an entry's source.
+func PythonConsoleText(entries []PluginLogEntry, sourceLabel func(*PluginLogEntry) string) string {
+	var text strings.Builder
+	for index := range entries {
+		entry := &entries[index]
+		if index > 0 {
+			text.WriteByte('\n')
+		}
+		stream := entry.Stream
+		if stream == "" {
+			stream = entry.Level
+		}
+		if stream == "" {
+			stream = "log"
+		}
+		text.WriteString("[" + FormatUnixMicrosLocal(entry.Timestamp) + "] [" + sourceLabel(entry) + "] [" + stream + "] " + entry.Message)
+	}
+	return text.String()
+}

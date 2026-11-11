@@ -26,6 +26,9 @@ const (
 // HexView shows bytes in offset, hexadecimal, and text columns.
 type HexView struct {
 	deps Dependencies
+	// SelectionFilename is the name Export suggests for the bytes selected,
+	// hex-selection.bin when empty.
+	SelectionFilename string
 
 	identity uint64
 	body     string
@@ -304,5 +307,9 @@ func (h *HexView) exportSelection() {
 		data.Write(piece)
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(data.String()))
-	saveToFile(h.deps, &h.exporting, "hex-selection.bin", proxyservice.SaveBodyToFileRequest{Body: encoded, BodyEncoding: "base64", ContentType: "application/octet-stream"})
+	name := h.SelectionFilename
+	if name == "" {
+		name = "hex-selection.bin"
+	}
+	saveToFile(h.deps, &h.exporting, name, proxyservice.SaveBodyToFileRequest{Body: encoded, BodyEncoding: "base64", ContentType: "application/octet-stream"})
 }

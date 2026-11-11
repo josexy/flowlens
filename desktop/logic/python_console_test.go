@@ -34,3 +34,25 @@ func TestPythonConsoleBatches(t *testing.T) {
 		t.Fatalf("%+v", target)
 	}
 }
+
+func TestPythonConsoleText(t *testing.T) {
+	const micros = int64(1_700_000_000_123_456)
+	stamp := FormatUnixMicrosLocal(micros)
+	source := func(entry *PluginLogEntry) string { return "src-" + entry.PluginID }
+	for _, tc := range []struct {
+		name    string
+		entries []PluginLogEntry
+		want    string
+	}{
+		{"stdout", []PluginLogEntry{{PluginID: "a", Stream: "stdout", Level: "info", Message: "hello", Timestamp: micros}}, "[" + stamp + "] [src-a] [stdout] hello"},
+		{"stderr", []PluginLogEntry{{PluginID: "a", Stream: "stderr", Message: "boom", Timestamp: micros}}, "[" + stamp + "] [src-a] [stderr] boom"},
+		{"level only", []PluginLogEntry{{PluginID: "b", Level: "warning", Message: "careful", Timestamp: micros}}, "[" + stamp + "] [src-b] [warning] careful"},
+		{"no stream or level", []PluginLogEntry{{PluginID: "c", Message: "plain", Timestamp: micros}}, "[" + stamp + "] [src-c] [log] plain"},
+		{"multi-line", []PluginLogEntry{{PluginID: "a", Stream: "stdout", Message: "one\ntwo", Timestamp: micros}, {PluginID: "b", Stream: "STDERR", Message: "three", Timestamp: micros}}, "[" + stamp + "] [src-a] [stdout] one\ntwo\n[" + stamp + "] [src-b] [STDERR] three"},
+		{"empty", nil, ""},
+	} {
+		if got := PythonConsoleText(tc.entries, source); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
