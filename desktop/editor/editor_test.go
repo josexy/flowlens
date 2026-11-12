@@ -885,3 +885,52 @@ func TestSaveShortcutNeedsADirtyRequestTab(t *testing.T) {
 		t.Fatalf("%v", saved)
 	}
 }
+
+// clickTab clicks the first tab named label.
+func (f *fixture) clickTab(label string) {
+	f.t.Helper()
+	tab, ok := f.tester.AccessByRole(ui.RoleTab, label)
+	if !ok {
+		f.t.Fatalf("no tab %q in %v", label, f.tester.Texts())
+	}
+	f.tester.ClickAt(tab.Bounds.X+tab.Bounds.W/2, tab.Bounds.Y+tab.Bounds.H/2)
+	f.settle()
+}
+
+// The response tabs, which follow the state each build, switch on a click
+// once a response has come.
+func TestResponseTabsSwitchOnClick(t *testing.T) {
+	f := newFake(t)
+	tab := f.newHTTP()
+	state := tab.HTTP
+	state.URL = "https://example.com/"
+	f.settle()
+	f.click(locales.WorkspaceHttpRequestSend())
+	if state.Response == nil || logic.VisibleResponseTab(state, false) != logic.ResponseTabHeaders {
+		t.Fatalf("%+v", state.Response)
+	}
+	f.clickTab(locales.WorkspaceHttpRequestConsole())
+	if state.ActiveResponseTab != logic.ResponseTabConsole {
+		t.Fatalf("console click left %q", state.ActiveResponseTab)
+	}
+	f.clickTab(locales.WorkspaceHttpRequestResponseHeaders() + "(1)")
+	if state.ActiveResponseTab != logic.ResponseTabHeaders || !f.tester.HasText("Content-Type") {
+		t.Fatalf("headers click left %q: %v", state.ActiveResponseTab, f.tester.Texts())
+	}
+}
+
+func TestWebSocketResponseTabsSwitchOnClick(t *testing.T) {
+	f := newFake(t)
+	key := f.data.Workspace.CreateWebSocketClientTab(logic.DraftNew, nil)
+	state := f.data.Workspace.FindTab(key).WebSocket
+	state.URL = "ws://example.com/socket"
+	f.settle()
+	f.click(locales.WorkspaceWebsocketClientConnect())
+	if state.ConnectionStatus != "connected" {
+		t.Fatal(state.ConnectionStatus)
+	}
+	f.clickTab(locales.WorkspaceWebsocketClientResponse())
+	if state.ActiveRightTab != socketTabResponse || !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
+		t.Fatalf("response click left %q: %v", state.ActiveRightTab, f.tester.Texts())
+	}
+}

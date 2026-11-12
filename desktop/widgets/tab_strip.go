@@ -14,6 +14,10 @@ type TabStripOptions struct {
 	PaddingX float32
 	// Trailing builds what sits at the strip's end, such as response chips.
 	Trailing func()
+	// OnChange, when set, reports the tab the user chooses. It runs after
+	// the build, so a view that derives value afresh each build records
+	// the choice here rather than by comparing value after TabStrip.
+	OnChange func(id string)
 }
 
 // TabStrip is a row of underlined tabs whose bottom border runs across the
@@ -29,7 +33,7 @@ func TabStrip(c *ui.Context, theme nui.Theme, value *string, items []nui.TabItem
 		strip := ui.ScrollHorizontal(c.Key("strip")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Margin(0, 0, -1, 0)
 		WheelScroll(c, strip).Children(func() {
 			nui.Tabs(c, theme, value, items, nui.TabsOptions{
-				Label: o.Label, Content: nui.Set(false), Underline: true,
+				Label: o.Label, Content: nui.Set(false), Underline: true, OnChange: o.OnChange,
 				Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
 					if slot == nui.List {
 						element.BorderColor(ui.Transparent)

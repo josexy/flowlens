@@ -121,10 +121,15 @@ func (r *responseView) tabItems(hasCookies bool) []nui.TabItem {
 }
 
 func (r *responseView) tabs(c *ui.Context, theme nui.Theme, visible string, hasCookies bool) {
+	// The tab shown is derived from the state each build, so a click, which
+	// lands after the build, is recorded in the state by OnChange.
 	r.tab = visible
 	widgets.TabStrip(c.Key("response-head"), theme, &r.tab, r.tabItems(hasCookies), widgets.TabStripOptions{
 		Label: locales.WorkspaceHttpRequestResponseBody(), PaddingX: 10, Trailing: func() { r.chips(c, theme) },
+		OnChange: func(id string) { r.state.ActiveResponseTab = id },
 	})
+	// Tabs falls back to the first tab while building when visible is not
+	// among them.
 	if r.tab != visible {
 		r.state.ActiveResponseTab = r.tab
 	}

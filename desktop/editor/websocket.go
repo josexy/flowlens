@@ -388,12 +388,15 @@ func (p *socketPane) rightTabs(c *ui.Context, theme nui.Theme, visible string, f
 		}
 		items = append(items, nui.TabItem{ID: socketTabResponse, Label: locales.WorkspaceWebsocketClientResponse()})
 	}
+	// As the HTTP response's tabs: a click lands after the build, so
+	// OnChange records it.
 	p.rightTab = visible
 	widgets.TabStrip(c.Key("right-head"), theme, &p.rightTab, items, widgets.TabStripOptions{
 		Label: locales.WorkspaceWebsocketClientResponse(), PaddingX: 10, Trailing: func() {
 			nui.Badge(c.Key("count"), theme, strconv.Itoa(len(state.Messages)), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft})
 			nui.Badge(c.Key("status"), theme, p.statusLabel(), nui.BadgeOptions{Color: p.statusColor(), Variant: nui.Soft})
 		},
+		OnChange: func(id string) { state.ActiveRightTab = id },
 	})
 	if p.rightTab != visible {
 		state.ActiveRightTab = p.rightTab
