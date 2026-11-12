@@ -1126,3 +1126,78 @@ func TestUnsupportedRuleStaysVisibleAndLocked(t *testing.T) {
 		t.Fatal("locked")
 	}
 }
+
+// While dragged, a row follows the pointer above the others, which make room
+// for it; where it drops follows the pointer's whole travel, so a drag past
+// the end and back lands where the pointer is.
+func TestDraggedRowFollowsThePointer(t *testing.T) {
+	f := newFixture(t, store.RewriteState{Revision: 1, Rules: []store.RewriteRule{testRule("a"), testRule("b"), testRule("c")}})
+	x, y := f.center("drag a")
+	start, _ := f.tester.Find("a")
+	f.tester.Press(x, y)
+	f.tester.Frame()
+	move := func(dy float32) {
+		for step := 1; step <= 8; step++ {
+			f.tester.Move(x, y+dy*float32(step)/8)
+			f.tester.Frame()
+		}
+	}
+	move(ruleRowHeight * 0.4)
+	if row, _ := f.tester.Find("a"); row.Y-start.Y < ruleRowHeight*0.4-1 || row.Y-start.Y > ruleRowHeight*0.4+1 {
+		t.Fatalf("row at %v, moved %v from %v", row.Y, ruleRowHeight*0.4, start.Y)
+	}
+	if keys := rowKeys(f.view.rows()); keys != "a,b,c" {
+		t.Fatalf("moved early: %s", keys)
+	}
+	// Past the end, then back over c: it drops between b and c.
+	move(ruleRowHeight * 4)
+	if keys := rowKeys(f.view.rows()); keys != "b,c,a" {
+		t.Fatalf("past the end: %s", keys)
+	}
+	move(ruleRowHeight * 1.2)
+	if keys := rowKeys(f.view.rows()); keys != "b,a,c" {
+		t.Fatalf("back: %s", keys)
+	}
+	if row, _ := f.tester.Find("a"); row.Y-start.Y < ruleRowHeight*1.2-1 || row.Y-start.Y > ruleRowHeight*1.2+1 {
+		t.Fatalf("row at %v, want %v below %v", row.Y, ruleRowHeight*1.2, start.Y)
+	}
+	f.tester.Release(x, y+ruleRowHeight*1.2)
+	f.tester.Frame()
+	f.idle()
+	if f.ids() != "b,a,c" {
+		t.Fatal(f.ids())
+	}
+}
+
+// A press the system cancels puts the rows back and writes nothing.
+func TestCanceledDragRestoresTheRows(t *testing.T) {
+	f := newFixture(t)
+	writes := 0
+	f.backend.reorder = func(ids []string, _ int64) (store.RewriteState, error) {
+		writes++
+		return f.backend.applyOrder(ids)
+	}
+	x, y := f.center("drag a")
+	f.tester.Press(x, y)
+	f.tester.Frame()
+	for step := 1; step <= 6; step++ {
+		f.tester.Move(x, y+ruleRowHeight*float32(step)/6)
+		f.tester.Frame()
+	}
+	if keys := rowKeys(f.view.rows()); keys != "b,a" {
+		t.Fatalf("drag shows %s", keys)
+	}
+	f.tester.CancelPress()
+	f.settle()
+	if keys := rowKeys(f.view.rows()); keys != "a,b" || writes != 0 || f.view.drag.active {
+		t.Fatalf("rows %s, writes %d, drag %+v", keys, writes, f.view.drag)
+	}
+}
+
+func rowKeys(rows []store.RewriteRow) string {
+	keys := make([]string, len(rows))
+	for index, row := range rows {
+		keys[index] = row.Key
+	}
+	return strings.Join(keys, ",")
+}

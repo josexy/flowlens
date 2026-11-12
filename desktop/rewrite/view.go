@@ -3,6 +3,7 @@ package rewrite
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -187,10 +188,20 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 		name = locales.RewriteRulesNewName()
 	}
 	box := ui.Column(c.Key(row.Key)).FillWidth().Height(ruleRowHeight-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).Label(name)
-	if selected {
+	dragged := v.drag.active && v.drag.key == row.Key
+	switch {
+	case selected:
 		box.Border(1, theme.Primary.Alpha(0.4)).Background(theme.Primary.Alpha(0.1))
-	} else if box.Hovered() {
+	case dragged || box.Hovered():
 		box.Background(theme.Elevated)
+	}
+	if dragged {
+		// The row follows the pointer above the others, which make room
+		// for it where it would drop, as 1.0.5's sortable list did.
+		box.Translate(0, v.drag.offset(index)).ZIndex(1).Shadow(0, 6, 16, 0, ui.RGBA(15, 23, 42, 0.18))
+		if !selected {
+			box.Border(1, theme.Border)
+		}
 	}
 	box.OnClick(func() { v.selectRule(row.Key) })
 	box.Children(func() {
@@ -261,11 +272,24 @@ func (v *View) arrow(c *ui.Context, theme nui.Theme, row store.RewriteRow, rows 
 	}
 }
 
+// ruleDragThreshold is how far the pointer moves before a press on a grip
+// drags its row, as 1.0.5's fallback tolerance.
+const ruleDragThreshold float32 = 3
+
 type ruleDrag struct {
-	key      string
-	y        float32
+	key string
+	// from is where the row was among the rows when the press began.
+	from int
+	// travel is how far the pointer has moved since the press.
+	travel   float32
 	revision int64
 	active   bool
+}
+
+// offset is how far the dragged row, now at index, is drawn from its place,
+// so that it stays under the pointer.
+func (d ruleDrag) offset(index int) float32 {
+	return d.travel - float32(index-d.from)*ruleRowHeight
 }
 
 func (v *View) gripHandle(c *ui.Context, theme nui.Theme, index int, row store.RewriteRow, rows []store.RewriteRow) {
@@ -277,46 +301,52 @@ func (v *View) gripHandle(c *ui.Context, theme nui.Theme, index int, row store.R
 	}
 	grip.Cursor(ui.CursorGrab).OnClick(func() {})
 	if grip.PressedInside() {
-		v.drag = ruleDrag{key: row.Key, revision: rewrite.State.Revision}
+		v.drag = ruleDrag{key: row.Key, from: index, revision: rewrite.State.Revision}
 	}
 	if v.drag.key != row.Key {
 		return
 	}
-	if _, dy, moved := grip.Dragged(); moved {
-		if v.localOrder == nil {
+	if v.drag.active {
+		grip.Cursor(ui.CursorGrabbing)
+	}
+	_, dy, held := grip.Dragged()
+	if held && dy != 0 {
+		v.drag.travel += dy
+		if !v.drag.active && (v.drag.travel >= ruleDragThreshold || v.drag.travel <= -ruleDragThreshold) {
+			v.drag.active = true
 			v.localOrder = make([]string, len(rows))
 			for position := range rows {
 				v.localOrder[position] = rows[position].Key
 			}
 		}
-		v.drag.active = true
-		v.drag.y += dy
-		for v.drag.y > ruleRowHeight/2 || v.drag.y < -ruleRowHeight/2 {
-			direction := 1
-			if v.drag.y < 0 {
-				direction = -1
-			}
-			if !v.shiftLocal(row.Key, direction) {
-				v.drag.y = 0
-				break
-			}
-			v.drag.y -= float32(direction) * ruleRowHeight
+		if v.drag.active {
+			v.placeDragged(row.Key)
 		}
 	}
 	if _, _, ended := grip.DragEnded(); ended && v.drag.active {
 		v.finishDrag()
+		return
+	}
+	if !held && v.drag.active {
+		// The press was canceled, as by the window losing the pointer:
+		// the rows go back.
+		v.drag, v.localOrder = ruleDrag{}, nil
 	}
 }
 
-// shiftLocal moves a saved row past a saved neighbor, leaving drafts last.
-func (v *View) shiftLocal(key string, direction int) bool {
-	index := slices.Index(v.localOrder, key)
-	target := index + direction
-	if index < 0 || target < 0 || target >= len(v.localOrder) || v.Data.Rewrite.Draft(v.localOrder[target]) != nil && v.isUnsaved(v.localOrder[target]) {
-		return false
+// placeDragged moves the dragged row to the slot under the pointer, among
+// the saved rows: drafts stay last.
+func (v *View) placeDragged(key string) {
+	order := slices.DeleteFunc(slices.Clone(v.localOrder), func(other string) bool { return other == key })
+	saved := 0
+	for _, other := range order {
+		if !v.isUnsaved(other) {
+			saved++
+		}
 	}
-	v.localOrder[index], v.localOrder[target] = v.localOrder[target], v.localOrder[index]
-	return true
+	target := v.drag.from + int(math.Round(float64(v.drag.travel/ruleRowHeight)))
+	target = min(max(target, 0), saved)
+	v.localOrder = slices.Insert(order, target, key)
 }
 
 func (v *View) isUnsaved(key string) bool {
