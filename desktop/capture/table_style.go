@@ -71,6 +71,9 @@ func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefin
 		column := visible[col]
 		x, _, over := cell.PointerPosition()
 		bounds := cell.Bounds()
+		if bounds.H > 0 {
+			t.headerBottom = bounds.Y + bounds.H
+		}
 		resizable := t.resizable(column, visible)
 		onEdge := resizable && over && x >= bounds.W-headerResizeGrip
 		overlay := ui.Row(c.Key("header-face")).Absolute().Top(0).Bottom(0).Left(0).Right(0).IgnoreInput(true).

@@ -46,6 +46,9 @@ type BodyViewer struct {
 	hex   *HexView
 	sse   *SSEView
 	image imagePreview
+	// imageMenu is the image's context menu, kept apart from image, which
+	// is reset as a whole.
+	imageMenu widgets.PointMenu
 
 	exporting bool
 	clipboard *string

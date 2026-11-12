@@ -21,17 +21,18 @@ const (
 )
 
 type highlightColor struct {
+	name  string
 	color string
 	label func() string
 }
 
 var highlightColors = []highlightColor{
-	{"#ef4444", locales.ContextMenuTrafficTableHighlightRed},
-	{"#f97316", locales.ContextMenuTrafficTableHighlightOrange},
-	{"#eab308", locales.ContextMenuTrafficTableHighlightYellow},
-	{"#22c55e", locales.ContextMenuTrafficTableHighlightGreen},
-	{"#3b82f6", locales.ContextMenuTrafficTableHighlightBlue},
-	{"#a855f7", locales.ContextMenuTrafficTableHighlightPurple},
+	{"red", "#ef4444", locales.ContextMenuTrafficTableHighlightRed},
+	{"orange", "#f97316", locales.ContextMenuTrafficTableHighlightOrange},
+	{"yellow", "#eab308", locales.ContextMenuTrafficTableHighlightYellow},
+	{"green", "#22c55e", locales.ContextMenuTrafficTableHighlightGreen},
+	{"blue", "#3b82f6", locales.ContextMenuTrafficTableHighlightBlue},
+	{"purple", "#a855f7", locales.ContextMenuTrafficTableHighlightPurple},
 }
 
 var errRequestBodyUnavailable = errors.New("request body unavailable")
@@ -55,59 +56,111 @@ func anyOf(entries []*logic.TrafficEntry, match func(*logic.TrafficEntry) bool) 
 	return slices.ContainsFunc(entries, match)
 }
 
-func (t *Table) rowMenu(c *ui.Context, menu *ui.Menu, row int) {
-	if row >= len(t.rows) {
-		return
-	}
-	entries := t.selectedEntries()
-	if !t.selection.Has(t.rows[row].ID) {
-		entries = []*logic.TrafficEntry{t.rows[row]}
-	}
-	if len(entries) == 0 {
-		return
-	}
-	t.entriesMenu(c, menu, entries)
+// tableMenuTarget is what the table's context menu acts on: the header, or
+// rows, or nothing, which opens no menu.
+type tableMenuTarget struct {
+	header bool
+	ids    []uint64
 }
 
-// entriesMenu adds the actions on entries to menu.
-func (t *Table) entriesMenu(c *ui.Context, menu *ui.Menu, entries []*logic.TrafficEntry) {
+// resolveMenu finds what a right-click pressed, once the table has built,
+// as 1.0.5 did: a row not selected becomes the selection, and its entry the
+// focus, a row selected keeps the selection, the header has the column menu,
+// and the space past the rows has none. The Menu key and Shift+F10 open the
+// menu of the selection.
+func (t *Table) resolveMenu(table ui.Element) {
+	opened := t.menu.Open && !t.menuShown
+	t.menuShown = t.menu.Open
+	if press := t.menuPress; press != nil {
+		t.menuPress = nil
+		top := table.Bounds().Y
+		switch id := t.rowAt(top, *press); {
+		case id != 0:
+			if index := t.rowIndex(id); index >= 0 && !t.selection.Has(id) {
+				t.replaceSelection(index)
+				t.focusEntry(t.rows[index])
+			}
+			t.menuTarget = tableMenuTarget{ids: t.selectedIDs()}
+		case t.headerBottom > 0 && top+*press < t.headerBottom:
+			t.menuTarget = tableMenuTarget{header: true}
+		default:
+			t.menuTarget = tableMenuTarget{}
+		}
+		return
+	}
+	if opened {
+		t.menuTarget = tableMenuTarget{ids: t.selectedIDs()}
+	}
+}
+
+// selectedIDs returns the IDs of the rows selected, in table order.
+func (t *Table) selectedIDs() []uint64 {
+	entries := t.selectedEntries()
+	ids := make([]uint64, len(entries))
+	for index, entry := range entries {
+		ids[index] = entry.ID
+	}
+	return ids
+}
+
+// menuItems returns the items of the table's context menu.
+func (t *Table) menuItems() []nui.MenuItem {
+	if t.menuTarget.header {
+		return t.columnMenuItems()
+	}
+	entries := make([]*logic.TrafficEntry, 0, len(t.menuTarget.ids))
+	for _, id := range t.menuTarget.ids {
+		if index := t.rowIndex(id); index >= 0 {
+			entries = append(entries, t.rows[index])
+		}
+	}
+	return t.entryMenuItems(entries)
+}
+
+// menuLabel names the column menu; the rows' menu, as 1.0.5's, has no name.
+func (t *Table) menuLabel() string {
+	if t.menuTarget.header {
+		return locales.TrafficColumns()
+	}
+	return ""
+}
+
+// entryMenuItems returns the actions on entries, as 1.0.5's traffic menu
+// listed them, or none without entries.
+func (t *Table) entryMenuItems(entries []*logic.TrafficEntry) []nui.MenuItem {
+	if len(entries) == 0 {
+		return nil
+	}
 	first := entries[0]
 	multiple := len(entries) > 1
-
-	if menu.Item(locales.ContextMenuTrafficTableShowDetails()).Disabled(multiple).Chosen() {
-		t.source.SelectEntry(first)
-		t.source.SetShowDetail(true)
-	}
+	items := []nui.MenuItem{{
+		ID: "show-details", Label: locales.ContextMenuTrafficTableShowDetails(), Disabled: multiple,
+		OnSelect: func() {
+			t.source.SelectEntry(first)
+			t.source.SetShowDetail(true)
+		},
+	}}
 	if t.deps.Exporter != nil {
-		t.exportMenu(menu, entries)
+		items = append(items, t.exportMenuItem(entries))
 	}
-
 	canCurl := func(entry *logic.TrafficEntry) bool { return logic.CapabilitiesOf(entry).CanCopyCurl }
 	if anyOf(entries, canCurl) {
-		menu.Separator()
-		if menu.Item(locales.ContextMenuTrafficTableCopyCurl()).Chosen() {
-			t.copyCurl(entries)
-		}
+		items = append(items, widgets.MenuSeparator("d1"),
+			nui.MenuItem{ID: "copy-curl", Label: locales.ContextMenuTrafficTableCopyCurl(), OnSelect: func() { t.copyCurl(entries) }})
 	}
-	menu.Separator()
-	t.copyMenu(c, menu, entries)
-
-	canEdit := allOf(entries, func(entry *logic.TrafficEntry) bool { return logic.CapabilitiesOf(entry).CanEditRequest })
-	if canEdit {
-		menu.Separator()
-		if menu.Item(locales.ContextMenuTrafficTableEdit()).Chosen() {
-			t.editEntries(entries)
-		}
+	items = append(items, widgets.MenuSeparator("d2"), t.copyMenuItem(entries))
+	if allOf(entries, func(entry *logic.TrafficEntry) bool { return logic.CapabilitiesOf(entry).CanEditRequest }) {
+		items = append(items, widgets.MenuSeparator("d3"),
+			nui.MenuItem{ID: "edit", Label: locales.ContextMenuTrafficTableEdit(), OnSelect: func() { t.editEntries(entries) }})
 	}
 	if !multiple && logic.CapabilitiesOf(first).CanResend {
-		t.resendMenu(menu, first)
+		items = append(items, t.resendMenuItem(first))
 	}
-	menu.Separator()
-	t.highlightMenu(menu, entries)
-	menu.Separator()
-	if menu.Item(locales.ContextMenuTrafficTableDelete()).Danger().Chosen() {
-		t.requestDelete(entries)
-	}
+	return append(items,
+		widgets.MenuSeparator("d4"), t.highlightMenuItem(entries),
+		widgets.MenuSeparator("d5"),
+		nui.MenuItem{ID: "delete", Label: locales.ContextMenuTrafficTableDelete(), Color: nui.Error, OnSelect: func() { t.requestDelete(entries) }},
+	)
 }
 
 func (t *Table) historyKey() string {
@@ -134,59 +187,65 @@ func (t *Table) exportSelection(format logic.TrafficExportFormat, entries []*log
 	})
 }
 
-func (t *Table) exportMenu(menu *ui.Menu, entries []*logic.TrafficEntry) {
+func (t *Table) exportMenuItem(entries []*logic.TrafficEntry) nui.MenuItem {
 	exporting := t.deps.Exporter.Exporting
-	menu.Submenu(locales.TrafficExportTitle(), func(sub *ui.Menu) {
-		for index, group := range logic.TrafficExportGroups {
-			if index > 0 {
-				sub.Separator()
-			}
-			for _, format := range group {
-				unavailable := exporting || !anyOf(entries, func(entry *logic.TrafficEntry) bool { return logic.CanExportTraffic(entry, format) })
-				if sub.Item(exportFormatLabel(format)).Disabled(unavailable).Chosen() {
-					t.exportSelection(format, entries)
-				}
-			}
+	var children []nui.MenuItem
+	for index, group := range logic.TrafficExportGroups {
+		if index > 0 {
+			children = append(children, widgets.MenuSeparator("export-separator-"+strconv.Itoa(index)))
 		}
-	})
+		for _, format := range group {
+			unavailable := exporting || !anyOf(entries, func(entry *logic.TrafficEntry) bool { return logic.CanExportTraffic(entry, format) })
+			children = append(children, nui.MenuItem{
+				ID: "export-" + string(format), Label: exportFormatLabel(format), Disabled: unavailable,
+				OnSelect: func() { t.exportSelection(format, entries) },
+			})
+		}
+	}
+	return nui.MenuItem{ID: "export", Label: locales.TrafficExportTitle(), Children: children}
 }
 
-func (t *Table) copyMenu(c *ui.Context, menu *ui.Menu, entries []*logic.TrafficEntry) {
+func (t *Table) copyMenuItem(entries []*logic.TrafficEntry) nui.MenuItem {
 	copyValues := func(values []string) {
-		c.WriteClipboard(strings.Join(values, "\n"))
+		text := strings.Join(values, "\n")
+		t.clipboard = &text
 		t.deps.Notifier.Success(locales.ContextMenuTrafficTableCopied())
 	}
-	field := func(sub *ui.Menu, label string, name logic.CopyField) {
-		if sub.Item(label).Chosen() {
+	field := func(id, label string, name logic.CopyField) nui.MenuItem {
+		return nui.MenuItem{ID: id, Label: label, OnSelect: func() {
 			values := make([]string, len(entries))
 			for index, entry := range entries {
 				values[index] = logic.TrafficCopyValue(entry, name)
 			}
 			copyValues(values)
-		}
+		}}
 	}
-	menu.Submenu(locales.ContextMenuTrafficTableCopy(), func(sub *ui.Menu) {
-		if allOf(entries, logic.IsRawTCP) {
-			field(sub, locales.ContextMenuTrafficTableCopyTarget(), logic.CopyTarget)
-		} else {
-			field(sub, locales.ContextMenuTrafficTableCopyUrl(), logic.CopyURL)
-			field(sub, locales.ContextMenuTrafficTableCopyDomain(), logic.CopyDomain)
-			field(sub, locales.ContextMenuTrafficTableCopyPath(), logic.CopyPath)
-			sub.Separator()
-		}
-		field(sub, locales.ContextMenuTrafficTableCopyServerip(), logic.CopyServerIP)
-		field(sub, locales.ContextMenuTrafficTableCopyClientip(), logic.CopyClientIP)
-		field(sub, locales.ContextMenuTrafficTableCopyServeraddr(), logic.CopyServerAddr)
-		field(sub, locales.ContextMenuTrafficTableCopyClientaddr(), logic.CopyClientAddr)
-		sub.Separator()
-		if sub.Item(locales.ContextMenuTrafficTableCopyRow()).Chosen() {
+	var children []nui.MenuItem
+	if allOf(entries, logic.IsRawTCP) {
+		children = append(children, field("copy-target", locales.ContextMenuTrafficTableCopyTarget(), logic.CopyTarget))
+	} else {
+		children = append(children,
+			field("copy-url", locales.ContextMenuTrafficTableCopyUrl(), logic.CopyURL),
+			field("copy-domain", locales.ContextMenuTrafficTableCopyDomain(), logic.CopyDomain),
+			field("copy-path", locales.ContextMenuTrafficTableCopyPath(), logic.CopyPath),
+			widgets.MenuSeparator("copy-separator-1"),
+		)
+	}
+	children = append(children,
+		field("copy-server-ip", locales.ContextMenuTrafficTableCopyServerip(), logic.CopyServerIP),
+		field("copy-client-ip", locales.ContextMenuTrafficTableCopyClientip(), logic.CopyClientIP),
+		field("copy-server-addr", locales.ContextMenuTrafficTableCopyServeraddr(), logic.CopyServerAddr),
+		field("copy-client-addr", locales.ContextMenuTrafficTableCopyClientaddr(), logic.CopyClientAddr),
+		widgets.MenuSeparator("copy-separator-2"),
+		nui.MenuItem{ID: "copy-row", Label: locales.ContextMenuTrafficTableCopyRow(), OnSelect: func() {
 			values := make([]string, len(entries))
 			for index, entry := range entries {
 				values[index] = t.rowText(entry)
 			}
 			copyValues(values)
-		}
-	})
+		}},
+	)
+	return nui.MenuItem{ID: "copy", Label: locales.ContextMenuTrafficTableCopy(), Children: children}
 }
 
 // rowText returns the visible columns of a row, separated by tabs.
@@ -336,18 +395,17 @@ func (t *Table) editEntries(entries []*logic.TrafficEntry) {
 	open(0)
 }
 
-func (t *Table) resendMenu(menu *ui.Menu, entry *logic.TrafficEntry) {
-	menu.Submenu(locales.ContextMenuTrafficTableResend(), func(sub *ui.Menu) {
-		for count := 1; count <= quickResendCount; count++ {
-			if sub.Item(locales.ContextMenuTrafficTableResendN(strconv.Itoa(count))).Chosen() {
-				t.quickResend(entry, count)
-			}
-		}
-		sub.Separator()
-		if sub.Item(locales.ContextMenuTrafficTableResendTimes()).Chosen() {
-			t.resend.show(entry.ID)
-		}
-	})
+func (t *Table) resendMenuItem(entry *logic.TrafficEntry) nui.MenuItem {
+	children := make([]nui.MenuItem, 0, quickResendCount+2)
+	for count := 1; count <= quickResendCount; count++ {
+		children = append(children, nui.MenuItem{
+			ID: "resend-" + strconv.Itoa(count), Label: locales.ContextMenuTrafficTableResendN(strconv.Itoa(count)),
+			OnSelect: func() { t.quickResend(entry, count) },
+		})
+	}
+	children = append(children, widgets.MenuSeparator("resend-separator"),
+		nui.MenuItem{ID: "resend-times", Label: locales.ContextMenuTrafficTableResendTimes(), OnSelect: func() { t.resend.show(entry.ID) }})
+	return nui.MenuItem{ID: "resend", Label: locales.ContextMenuTrafficTableResend(), Children: children}
 }
 
 func (t *Table) quickResend(entry *logic.TrafficEntry, count int) {
@@ -363,23 +421,19 @@ func (t *Table) quickResend(entry *logic.TrafficEntry, count int) {
 	})
 }
 
-func (t *Table) highlightMenu(menu *ui.Menu, entries []*logic.TrafficEntry) {
+func (t *Table) highlightMenuItem(entries []*logic.TrafficEntry) nui.MenuItem {
 	apply := func(color string) {
 		for _, entry := range entries {
 			t.source.SetHighlight(entry.ID, color)
 		}
 	}
-	menu.Submenu(locales.ContextMenuTrafficTableHighlight(), func(sub *ui.Menu) {
-		for _, option := range highlightColors {
-			if sub.Item(option.label()).Icon(widgets.SwatchMenuIcon(option.color)).Chosen() {
-				apply(option.color)
-			}
-		}
-		sub.Separator()
-		if sub.Item(locales.ContextMenuTrafficTableHighlightClear()).Chosen() {
-			apply("")
-		}
-	})
+	children := make([]nui.MenuItem, 0, len(highlightColors)+2)
+	for _, option := range highlightColors {
+		children = append(children, widgets.SwatchMenuItem("highlight-"+option.name, option.label(), option.color, func() { apply(option.color) }))
+	}
+	children = append(children, widgets.MenuSeparator("highlight-separator"),
+		nui.MenuItem{ID: "highlight-clear", Label: locales.ContextMenuTrafficTableHighlightClear(), OnSelect: func() { apply("") }})
+	return nui.MenuItem{ID: "highlight", Label: locales.ContextMenuTrafficTableHighlight(), Children: children}
 }
 
 func (t *Table) requestDelete(entries []*logic.TrafficEntry) {

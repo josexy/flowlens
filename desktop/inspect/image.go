@@ -164,6 +164,8 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 		held := widgets.HeldModifiers(c)
 		area.HandleInput(func(ev ui.InputEvent) bool {
 			switch {
+			case b.imageMenu.Take(ev):
+				return true
 			case ev.Kind == ui.InputScroll && (ev.Mods|held)&ui.Ctrl != 0 && ev.DY != 0:
 				if ev.DY < 0 {
 					i.zoom(logic.ImageScaleStep)
@@ -191,23 +193,22 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 		case i.scale > 1:
 			area.Cursor(ui.CursorGrab)
 		}
-		area.ContextMenu(func(menu *ui.Menu) {
-			if menu.Item(locales.DetailImageZoomIn()).Disabled(i.scale >= logic.ImageScaleMax).Chosen() {
-				i.zoom(logic.ImageScaleStep)
-			}
-			if menu.Item(locales.DetailImageZoomOut()).Disabled(i.scale <= logic.ImageScaleMin).Chosen() {
-				i.zoom(-logic.ImageScaleStep)
-			}
-			if menu.Item(locales.DetailImageReset()).Disabled(!i.canReset()).Chosen() {
-				i.resetView()
-			}
-			menu.Separator()
-			if menu.Item(locales.DetailImageSave()).Chosen() {
-				b.saveCurrent()
-			}
+		area.Children(func() {
+			i.picture(c, theme)
+			b.imageMenu.Build(c, theme, func() []nui.MenuItem { return i.menuItems(b) }, nui.MenuOptions{})
 		})
-		area.Children(func() { i.picture(c, theme) })
 	})
+}
+
+// menuItems are the actions on the image, as 1.0.5's.
+func (i *imagePreview) menuItems(b *BodyViewer) []nui.MenuItem {
+	return []nui.MenuItem{
+		{ID: "zoom-in", Label: locales.DetailImageZoomIn(), Disabled: i.scale >= logic.ImageScaleMax, OnSelect: func() { i.zoom(logic.ImageScaleStep) }},
+		{ID: "zoom-out", Label: locales.DetailImageZoomOut(), Disabled: i.scale <= logic.ImageScaleMin, OnSelect: func() { i.zoom(-logic.ImageScaleStep) }},
+		{ID: "reset", Label: locales.DetailImageReset(), Disabled: !i.canReset(), OnSelect: i.resetView},
+		widgets.MenuSeparator("save-separator"),
+		{ID: "save", Label: locales.DetailImageSave(), OnSelect: b.saveCurrent},
+	}
 }
 
 func (i *imagePreview) picture(c *ui.Context, theme nui.Theme) {

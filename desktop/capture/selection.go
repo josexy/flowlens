@@ -75,8 +75,14 @@ type rowGesture struct {
 }
 
 // observePointer notes presses and releases of the primary button over the
-// table. It runs between frames, before MyGo handles them.
+// table, and where the secondary button went down, for the context menu. It
+// runs between frames, before MyGo handles them.
 func (t *Table) observePointer(ev ui.InputEvent) {
+	if ev.Button == 1 && ev.Kind == ui.InputPointerDown {
+		y := ev.Y
+		t.menuPress = &y
+		return
+	}
 	if ev.Button != 0 {
 		return
 	}
@@ -122,9 +128,10 @@ func (t *Table) beginSelection() {
 }
 
 // noteRowSpan records where row was in the last frame while a build resolves
-// a press. anchor is a box of the row that every frame builds.
+// a press or a right-click. anchor is a box of the row that every frame
+// builds.
 func (t *Table) noteRowSpan(anchor ui.Element, row int) {
-	if t.gesture.probing {
+	if t.gesture.probing || t.menuPress != nil {
 		t.gesture.spans = append(t.gesture.spans, rowSpan{id: t.rows[row].ID, bounds: anchor.Bounds()})
 	}
 }

@@ -3,7 +3,6 @@ package editor
 import (
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -57,6 +56,7 @@ func (e *Editor) TabBar(c *ui.Context, theme nui.Theme) {
 				for index, tab := range workspace.Tabs {
 					e.tab(c, theme, index, tab)
 				}
+				e.tabMenus.Sweep()
 			})
 		})
 		if e.tabScroll.X < e.tabScroll.MaxX {
@@ -97,8 +97,8 @@ func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	// toggling it here as well would undo each click.
 	anchor := tabStripButton(c, theme, "tabs-new", locales.WorkspaceTabBarNew(), lucide.Plus(), 30)
 	nui.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, []nui.MenuItem{
-		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewHTTPRequest), "+"), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
-		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewWebSocket), "+"), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
+		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewHTTPRequest), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
+		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewWebSocket), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
 	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)})
 }
 
@@ -135,7 +135,6 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	}
 	// A press the drag took is no click: one that does not move activates.
 	box.OnClick(func() { workspace.Activate(tab.Key) })
-	box.ContextMenu(func(menu *ui.Menu) { e.tabMenu(menu, index, tab) })
 	box.Children(func() {
 		if active {
 			ui.Box(c.Key("active-line")).Absolute().Top(0).Left(0).Right(0).Height(2).Background(theme.Primary).IgnoreInput(true)
@@ -156,6 +155,7 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 			e.closeButton(c, theme, tab, title, active || hovered)
 		}
 	})
+	widgets.ContextMenu(c.Key("menu:"+tab.Key), theme, box, e.tabMenus.For(tab.Key), func() []nui.MenuItem { return e.tabMenuItems(index, tab) }, nui.MenuOptions{Label: title})
 }
 
 // revealTime bounds how long a newly active tab is brought into view.
@@ -346,40 +346,37 @@ func (e *Editor) closeSeveral(keys []string, title, message string) {
 	})
 }
 
-func (e *Editor) tabMenu(menu *ui.Menu, index int, tab *logic.WorkspaceTab) {
+// tabMenuItems are the actions on a workspace tab, as 1.0.5's tab menu.
+func (e *Editor) tabMenuItems(index int, tab *logic.WorkspaceTab) []nui.MenuItem {
 	workspace := e.Data.Workspace
+	var items []nui.MenuItem
 	if tab.HTTP != nil || tab.WebSocket != nil {
-		if e.menuShortcut(menu.Item(locales.WorkspaceTabContextSaveApi()), shortcuts.AppSave).Disabled(e.Host.SaveTab == nil).Chosen() {
-			e.Host.SaveTab(tab.Key)
-		}
-		menu.Separator()
+		items = append(items, nui.MenuItem{
+			ID: "save-api", Label: locales.WorkspaceTabContextSaveApi(), Shortcut: e.menuShortcut(shortcuts.AppSave), Disabled: e.Host.SaveTab == nil,
+			OnSelect: func() { e.Host.SaveTab(tab.Key) },
+		}, widgets.MenuSeparator("save-separator"))
 	}
-	if e.menuShortcut(menu.Item(locales.WorkspaceTabContextCloseCurrent()), shortcuts.WorkspaceCloseTab).Disabled(!tab.Closable).Chosen() {
-		e.closeWithPrompt(tab.Key)
-	}
-	if menu.Item(locales.WorkspaceTabContextForceCloseCurrent()).Disabled(!tab.Closable).Chosen() {
-		workspace.CloseTab(tab.Key)
-	}
-	menu.Separator()
 	others := workspace.ClosableKeys(func(_ int, other *logic.WorkspaceTab) bool { return other.Key != tab.Key })
 	right := workspace.ClosableKeys(func(position int, _ *logic.WorkspaceTab) bool { return position > index })
 	all := workspace.ClosableKeys(func(int, *logic.WorkspaceTab) bool { return true })
-	if menu.Item(locales.WorkspaceTabContextCloseOther()).Disabled(len(others) == 0).Chosen() {
-		e.closeSeveral(others, locales.WorkspaceTabContextCloseOtherConfirmTitle(), locales.WorkspaceTabContextCloseOtherConfirmContent())
-	}
-	if menu.Item(locales.WorkspaceTabContextForceCloseOther()).Disabled(len(others) == 0).Chosen() {
-		workspace.CloseTabs(others, true)
-	}
-	if menu.Item(locales.WorkspaceTabContextCloseRight()).Disabled(len(right) == 0).Chosen() {
-		e.closeSeveral(right, locales.WorkspaceTabContextCloseRightConfirmTitle(), locales.WorkspaceTabContextCloseRightConfirmContent())
-	}
-	if menu.Item(locales.WorkspaceTabContextForceCloseRight()).Disabled(len(right) == 0).Chosen() {
-		workspace.CloseTabs(right, true)
-	}
-	if menu.Item(locales.WorkspaceTabContextCloseAll()).Disabled(len(all) == 0).Chosen() {
-		e.closeSeveral(all, locales.WorkspaceTabContextCloseAllConfirmTitle(), locales.WorkspaceTabContextCloseAllConfirmContent())
-	}
-	if menu.Item(locales.WorkspaceTabContextForceCloseAll()).Disabled(len(all) == 0).Chosen() {
-		workspace.CloseTabs(all, true)
-	}
+	return append(items,
+		nui.MenuItem{
+			ID: "close", Label: locales.WorkspaceTabContextCloseCurrent(), Shortcut: e.menuShortcut(shortcuts.WorkspaceCloseTab), Disabled: !tab.Closable,
+			OnSelect: func() { e.closeWithPrompt(tab.Key) },
+		},
+		nui.MenuItem{ID: "force-close", Label: locales.WorkspaceTabContextForceCloseCurrent(), Disabled: !tab.Closable, OnSelect: func() { workspace.CloseTab(tab.Key) }},
+		widgets.MenuSeparator("close-separator"),
+		nui.MenuItem{ID: "close-others", Label: locales.WorkspaceTabContextCloseOther(), Disabled: len(others) == 0, OnSelect: func() {
+			e.closeSeveral(others, locales.WorkspaceTabContextCloseOtherConfirmTitle(), locales.WorkspaceTabContextCloseOtherConfirmContent())
+		}},
+		nui.MenuItem{ID: "force-close-others", Label: locales.WorkspaceTabContextForceCloseOther(), Disabled: len(others) == 0, OnSelect: func() { workspace.CloseTabs(others, true) }},
+		nui.MenuItem{ID: "close-right", Label: locales.WorkspaceTabContextCloseRight(), Disabled: len(right) == 0, OnSelect: func() {
+			e.closeSeveral(right, locales.WorkspaceTabContextCloseRightConfirmTitle(), locales.WorkspaceTabContextCloseRightConfirmContent())
+		}},
+		nui.MenuItem{ID: "force-close-right", Label: locales.WorkspaceTabContextForceCloseRight(), Disabled: len(right) == 0, OnSelect: func() { workspace.CloseTabs(right, true) }},
+		nui.MenuItem{ID: "close-all", Label: locales.WorkspaceTabContextCloseAll(), Disabled: len(all) == 0, OnSelect: func() {
+			e.closeSeveral(all, locales.WorkspaceTabContextCloseAllConfirmTitle(), locales.WorkspaceTabContextCloseAllConfirmContent())
+		}},
+		nui.MenuItem{ID: "force-close-all", Label: locales.WorkspaceTabContextForceCloseAll(), Disabled: len(all) == 0, OnSelect: func() { workspace.CloseTabs(all, true) }},
+	)
 }

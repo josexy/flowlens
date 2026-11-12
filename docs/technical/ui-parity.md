@@ -13,7 +13,7 @@ FlowLens 1.0.5, the last Wails build, is the visual and interaction reference fo
 | "Use pointer cursor" setting | Removed | The native app does not need it. |
 | Method column 80 px wide by default | 100 px | The native fonts are wider than the WebView's: at 80 px, `OPTIONS` and `CONNECT` badges did not fit. A saved width still applies. |
 | API Collection name tooltip anchored on the name | Anchored on the whole row, shown to its right | A hover-tracking anchor inside the row would take the row's clicks in MyGo's hit testing. |
-| Menu item icons and highlight swatches in every menu | Shown in context menus on every platform and in macOS menu-bar menus; Windows and Linux menu-bar menus show none | Those menu bars draw no item icons. |
+| Menu item icons and highlight swatches in every menu | Shown in context menus, which are `nui.ContextMenu` drawn in the window as 1.0.5's `UContextMenu` was, and in macOS menu-bar menus; Windows and Linux menu-bar menus show none | Those menu bars draw no item icons. |
 | No API Collection menu item to move a nested folder to the root | Move to Root in a nested folder's menu | It gives a path without dragging to the drop zone's action. |
 | Error toasts when writing to the clipboard fails | No such toasts | Native clipboard writes cannot fail. |
 | No keys in the traffic table | Up, Down, Home, and End move the selection, and Cmd+A (Ctrl+A on Windows and Linux) selects all rows, while the table has the keyboard focus; the detail panel stays as it was | MyGo's list provides them, and they do not conflict with the 1.0.5 click model. |
@@ -42,7 +42,7 @@ The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatte
 - The Python console and SSE message tables' headers have no elevated background, and their rows no line between them: MyGo's `ui.Table` draws its own header and rows.
 - The console's Output column fills the room the others leave, at least 240 px rather than 1.0.5's 260 px. Once the user resizes it, it keeps that width rather than filling the rest.
 - WebSocket text messages and console entries show in a read-only code view with line numbers, where 1.0.5 had a plain text area.
-- Menu renders draw the menus in the window (`SetMenuPresentation`); the app shows the system's menus, which still need the desktop pass.
+- Context menus are `nui.ContextMenu`, drawn in the window as in the app; the menu bar's menus are the system's, which still need the desktop pass.
 
 Interaction that renders cannot show (focus, wheel scrolling of strips, grid editing with an input method, drag feedback, and notifications) is covered by Tester cases, and still needs a desktop pass on each platform.
 

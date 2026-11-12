@@ -13,6 +13,7 @@ import (
 	apicollectionservice "github.com/josexy/flowlens/backend/services/api_collection_service"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/desktop/store"
@@ -135,12 +136,11 @@ func (f *fixture) center(label string) (float32, float32) {
 
 func (f *fixture) menu(row string, path ...string) {
 	f.t.Helper()
-	if err := f.tester.RightClick(row); err != nil {
+	if err := menutest.Open(f.tester, f.settle, row); err != nil {
 		f.t.Fatal(err)
 	}
-	f.tester.Frame()
-	if err := f.tester.ChooseMenuItem(path...); err != nil {
-		f.t.Fatal(err)
+	if err := menutest.Choose(f.tester, f.settle, path...); err != nil {
+		f.t.Fatalf("%v: %v", err, f.tester.Texts())
 	}
 	f.settle()
 }
@@ -591,5 +591,34 @@ func TestOlderSavedRequestUsesDefaults(t *testing.T) {
 	}
 	if state.InlineScriptSource != logic.DefaultHTTPRequestPythonScript {
 		t.Fatalf("%q", state.InlineScriptSource)
+	}
+}
+
+// Opening a row's menu selects the row, and a folder's menu lists the
+// folder's actions.
+func TestRowMenuSelectsItsRow(t *testing.T) {
+	f := newFixture(t)
+	parent := f.folder("", "Parent")
+	child := f.folder(parent, "Child")
+	f.reload()
+	f.data.Collection.Expanded[parent] = true
+	f.settle()
+	if err := menutest.Open(f.tester, f.settle, "Child"); err != nil {
+		t.Fatal(err)
+	}
+	if f.data.Collection.SelectedNodeID != child {
+		t.Fatalf("selected %q, want %q", f.data.Collection.SelectedNodeID, child)
+	}
+	for _, label := range []string{locales.ApiCollectionNewChildFolder(), locales.ApiCollectionRename(), locales.ApiCollectionMoveToRoot(), locales.ApiCollectionDelete()} {
+		if _, ok := menutest.Item(f.tester, label); !ok {
+			t.Fatalf("no %q in %v", label, f.tester.Texts())
+		}
+	}
+	if _, ok := menutest.Item(f.tester, locales.ApiCollectionCopy()); ok {
+		t.Fatal("a folder offers Copy")
+	}
+	menutest.Close(f.tester, f.settle)
+	if menutest.Shown(f.tester) {
+		t.Fatal("Escape leaves the menu open")
 	}
 }

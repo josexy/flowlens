@@ -50,6 +50,7 @@ type Editor struct {
 	https     map[string]*httpPane
 	sockets   map[string]*socketPane
 	newMenu   nui.MenuState
+	tabMenus  widgets.MenuStates
 	tabScroll ui.ScrollState
 	// revealed is the active tab last scrolled into view, and revealUntil
 	// when bringing it into view gives up.
@@ -228,13 +229,10 @@ func (e *Editor) shortcutConfig() *settingservice.ShortcutConfig {
 	return nil
 }
 
-// menuShortcut shows the binding of a command by a menu item, as 1.0.5's
-// menus showed theirs.
-func (e *Editor) menuShortcut(item *ui.MenuItem, commandID string) *ui.MenuItem {
-	if mods, key, ok := shortcuts.MenuShortcut(commandID, e.shortcutConfig()); ok {
-		item.Shortcut(mods, key)
-	}
-	return item
+// menuShortcut returns the binding of a command as a menu item shows it, as
+// 1.0.5's menus showed theirs, "" for none.
+func (e *Editor) menuShortcut(commandID string) string {
+	return strings.Join(e.kbds(commandID), "+")
 }
 
 func (e *Editor) kbds(commandID string) []string {

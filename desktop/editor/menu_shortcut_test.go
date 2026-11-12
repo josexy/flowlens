@@ -8,55 +8,74 @@ import (
 	"time"
 
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
-// openTabMenu right-clicks the tab titled title, with menus drawn in the
-// window so that their shortcut hints are text.
+// openTabMenu right-clicks the tab titled title, and waits for its menu to
+// pop in.
 func openTabMenu(t *testing.T, f *fixture, title string) {
 	t.Helper()
-	f.drawnMenus = true
-	f.settle()
-	if err := f.tester.RightClick(title); err != nil {
+	menutest.Close(f.tester, f.settle)
+	if err := menutest.Open(f.tester, f.settle, title); err != nil {
 		t.Fatal(err)
 	}
+	f.tester.Advance(time.Second)
 	f.settle()
-	if len(f.tester.Menu()) == 0 {
-		t.Fatal("no menu")
+}
+
+// capsAfter returns, lowercased, the texts on show after label: an item's
+// shortcut caps follow its label.
+func capsAfter(t *testing.T, f *fixture, label string) string {
+	t.Helper()
+	texts := f.tester.Texts()
+	at := slices.Index(texts, label)
+	if at < 0 {
+		t.Fatalf("no %q in %v", label, texts)
 	}
+	return strings.ToLower(strings.Join(texts[at+1:min(at+4, len(texts))], " "))
 }
 
 func TestTabMenuShowsShortcuts(t *testing.T) {
-	if shortcuts.IsMacOS() {
-		t.Skip("the drawn hints read Ctrl+ on Windows and Linux")
-	}
 	f := newFake(t)
-	f.newHTTP()
+	tab := f.newHTTP()
 	openTabMenu(t, f, locales.WorkspaceTabBarUntitled())
-	for _, hint := range []string{"Ctrl+S", "Ctrl+W"} {
-		if !f.tester.HasText(hint) {
-			t.Fatalf("no %q in %v", hint, f.tester.Texts())
+	index := slices.Index(f.tabKeys(), tab.Key)
+	byID := func() map[string]nui.MenuItem {
+		items := map[string]nui.MenuItem{}
+		for _, item := range f.editor.tabMenuItems(index, tab) {
+			items[item.ID] = item
+		}
+		return items
+	}
+	items := byID()
+	for id, command := range map[string]string{"save-api": shortcuts.AppSave, "close": shortcuts.WorkspaceCloseTab} {
+		keys := f.editor.kbds(command)
+		if len(keys) == 0 || items[id].Shortcut != strings.Join(keys, "+") {
+			t.Fatalf("%s shows %q, want %v", id, items[id].Shortcut, keys)
+		}
+		after := capsAfter(t, f, items[id].Label)
+		for _, key := range keys {
+			if !strings.Contains(after, strings.ToLower(nui.FormatKey(key, runtime.GOOS))) {
+				t.Fatalf("no %q cap after %q: %q", key, items[id].Label, after)
+			}
 		}
 	}
 	rendertest.ShootThemes(t, f.tester, "tab-menu", func(dark bool) {
 		f.setDark(dark)
-		f.tester.CloseMenu()
-		f.settle()
 		openTabMenu(t, f, locales.WorkspaceTabBarUntitled())
 	})
-	f.tester.CloseMenu()
-	f.settle()
+	menutest.Close(f.tester, f.settle)
 
 	// Disabling Close Tab removes its hint.
 	f.data.Settings.Current.Shortcuts = &settingservice.ShortcutConfig{Overrides: map[string]settingservice.ShortcutOverride{
 		shortcuts.WorkspaceCloseTab: {Binding: nil},
 	}}
-	openTabMenu(t, f, locales.WorkspaceTabBarUntitled())
-	if f.tester.HasText("Ctrl+W") || !f.tester.HasText("Ctrl+S") {
-		t.Fatalf("hints %v", f.tester.Texts())
+	if items = byID(); items["close"].Shortcut != "" || items["save-api"].Shortcut == "" {
+		t.Fatalf("close %q, save %q", items["close"].Shortcut, items["save-api"].Shortcut)
 	}
 }
 

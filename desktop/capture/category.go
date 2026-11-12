@@ -203,6 +203,7 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 		return
 	}
 	ui.List(c.Key("category-tree"), &view.list, len(rows), func(index int) { w.categoryRow(c, theme, rows[index], source) }).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.CategoryTitle())
+	w.categoryMenus.Sweep()
 }
 
 func leafIcon(node *logic.StructureNode) *ui.SVG {
@@ -272,9 +273,6 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 		element.Checked(checked)
 	}
 	element.OnClick(func() { w.activateCategoryRow(row, source) })
-	if row.kind == categoryStructure && row.node.Type == logic.StructureLeaf && len(row.node.EntryIDs) > 0 {
-		element.ContextMenu(func(menu *ui.Menu) { w.categoryLeafMenu(c, menu, row.node) })
-	}
 	element.Children(func() {
 		switch {
 		case row.kind == categoryHost:
@@ -298,6 +296,10 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).TextColor(theme.Muted)
 		}
 	})
+	if row.kind == categoryStructure && row.node.Type == logic.StructureLeaf && len(row.node.EntryIDs) > 0 {
+		node := row.node
+		widgets.ContextMenu(c.Key("leaf-menu"), theme, element, w.categoryMenus.For(row.key), func() []nui.MenuItem { return w.categoryLeafMenuItems(node) }, nui.MenuOptions{Label: row.label})
+	}
 }
 
 // categorySectionRow is a section's header band.
@@ -345,21 +347,21 @@ func (w *Workspace) activateCategoryRow(row categoryRow, source *categorySource)
 	}
 }
 
-func (w *Workspace) categoryLeafMenu(c *ui.Context, menu *ui.Menu, node *logic.StructureNode) {
+// categoryLeafMenuItems are the actions on a leaf's entries, as the
+// traffic menu's.
+func (w *Workspace) categoryLeafMenuItems(node *logic.StructureNode) []nui.MenuItem {
 	table := w.activeTable()
-	entries := make([]*logic.TrafficEntry, 0, len(node.EntryIDs))
 	wanted := make(map[uint64]bool, len(node.EntryIDs))
 	for _, id := range node.EntryIDs {
 		wanted[id] = true
 	}
+	entries := make([]*logic.TrafficEntry, 0, len(node.EntryIDs))
 	for _, entry := range table.rows {
 		if wanted[entry.ID] {
 			entries = append(entries, entry)
 		}
 	}
-	if len(entries) > 0 {
-		table.entriesMenu(c, menu, entries)
-	}
+	return table.entryMenuItems(entries)
 }
 
 func (w *Workspace) activeTable() *Table {

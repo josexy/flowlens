@@ -18,6 +18,7 @@ import (
 	historyservice "github.com/josexy/flowlens/backend/services/history_service"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/desktop/shortcuts"
@@ -168,8 +169,6 @@ type fixture struct {
 	savePath       string
 	// afterBuild, when set, runs at the end of each build of the view.
 	afterBuild func()
-	// drawnMenus draws the window's popup menus in it, for renders.
-	drawnMenus bool
 }
 
 func (f *fixture) settle() {
@@ -245,9 +244,6 @@ func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height 
 	f.workspace = workspace
 	view := func(c *ui.Context) {
 		theme := nui.App(c, data.Settings.Theme().Config)
-		if f.drawnMenus {
-			c.SetMenuPresentation(ui.PopoverMenus)
-		}
 		dispatch.Begin()
 		ui.Row(c).Fill().Children(func() {
 			ui.Box(c).Width(240).FillHeight().Shrink(0).Children(func() {
@@ -689,16 +685,19 @@ func TestColumnLayoutPersists(t *testing.T) {
 
 func TestHeaderMenuHidesColumn(t *testing.T) {
 	f := newFixture(t, entry(1, "a.test"))
-	if err := f.tester.RightClick("Protocol"); err != nil {
+	if err := menutest.Open(f.tester, f.settle, "Protocol"); err != nil {
 		t.Fatal(err)
 	}
-	f.settle()
-	if err := f.tester.ChooseMenuItem("Protocol"); err != nil {
-		t.Fatalf("%v %v", err, f.tester.Menu())
-	}
-	f.settle()
+	f.choose("Protocol")
 	if !slices.Contains(f.data.Settings.HiddenTrafficColumns(), "protocol") {
 		t.Fatalf("%v", f.data.Settings.HiddenTrafficColumns())
+	}
+	// As 1.0.5's, the menu stays open to choose another column.
+	if !menutest.Shown(f.tester) {
+		t.Fatal("the column menu closed")
+	}
+	if item, ok := menutest.Item(f.tester, "Protocol"); !ok || item.Checked {
+		t.Fatalf("Protocol %+v", item)
 	}
 }
 
@@ -1073,19 +1072,16 @@ func TestHoldWhileReadingAndShowNew(t *testing.T) {
 
 func openRowMenu(t *testing.T, f *fixture, label string) {
 	t.Helper()
-	if err := f.tester.RightClick(label); err != nil {
-		t.Fatal(err)
-	}
-	f.settle()
-	if len(f.tester.Menu()) == 0 {
-		t.Fatal("no menu")
+	menutest.Close(f.tester, f.settle)
+	if err := menutest.Open(f.tester, f.settle, label); err != nil {
+		t.Fatalf("%v: %v", err, f.tester.Texts())
 	}
 }
 
 func (f *fixture) choose(path ...string) {
 	f.t.Helper()
-	if err := f.tester.ChooseMenuItem(path...); err != nil {
-		f.t.Fatalf("%v: %v", err, f.tester.Menu())
+	if err := menutest.Choose(f.tester, f.settle, path...); err != nil {
+		f.t.Fatalf("%v: %v", err, f.tester.Texts())
 	}
 	f.settle()
 }
@@ -1101,7 +1097,7 @@ func TestRowMenuShowDetails(t *testing.T) {
 	// Show is unavailable while several rows are selected.
 	f.clickRow(ui.Shift, "b.test")
 	openRowMenu(t, f, "b.test")
-	if err := f.tester.ChooseMenuItem("Show"); err == nil || !strings.Contains(err.Error(), "disabled") {
+	if err := menutest.Choose(f.tester, f.settle, "Show"); err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("Show with two rows selected: %v", err)
 	}
 }
@@ -1189,10 +1185,9 @@ func TestRawTCPHasNoRequestActions(t *testing.T) {
 	item.RawTCP = &proxyservice.RawTCPTunnelInfo{HostPort: "a.test:443"}
 	f := newFixture(t, item)
 	openRowMenu(t, f, "a.test:443")
-	menu := strings.Join(f.tester.Menu(), "|")
 	for _, absent := range []string{"Copy as cURL", "Edit", "Resend"} {
-		if strings.Contains(menu, absent) {
-			t.Fatalf("%q in %s", absent, menu)
+		if _, ok := menutest.Item(f.tester, absent); ok {
+			t.Fatalf("%q in %v", absent, f.tester.Texts())
 		}
 	}
 }
@@ -1434,10 +1429,9 @@ func TestSidebarRestartAndAlias(t *testing.T) {
 	if !slices.Equal(f.backend.restarts, []bool{false}) {
 		t.Fatal(f.backend.restarts)
 	}
-	if err := f.tester.RightClick("Capture"); err != nil {
+	if err := menutest.Open(f.tester, f.settle, "Capture"); err != nil {
 		t.Fatal(err)
 	}
-	f.settle()
 	f.choose("Set Alias")
 	if !f.workspace.alias.open {
 		t.Fatal("alias dialog should open")
@@ -1711,13 +1705,11 @@ func TestRequestTabReplacesTrafficContent(t *testing.T) {
 
 func TestHistoryDeleteAndUnsupportedFormatStaysListed(t *testing.T) {
 	f := newHistoryFixture(t)
-	if err := f.tester.RightClick("old format"); err != nil {
+	if err := menutest.Open(f.tester, f.settle, "old format"); err != nil {
 		t.Fatal(err)
 	}
-	f.settle()
-	menu := strings.Join(f.tester.Menu(), "|")
-	if !strings.Contains(menu, "Delete") {
-		t.Fatal(menu)
+	if _, ok := menutest.Item(f.tester, "Delete"); !ok {
+		t.Fatal(f.tester.Texts())
 	}
 	f.choose("Delete")
 	if !f.confirm.Open() {
@@ -1834,12 +1826,11 @@ func TestHistoryExportUsesHistoryService(t *testing.T) {
 
 func TestHistoryMenuBlocksExportOfUnreadableFormat(t *testing.T) {
 	f := newHistoryFixture(t)
-	if err := f.tester.RightClick("old format"); err != nil {
+	if err := menutest.Open(f.tester, f.settle, "old format"); err != nil {
 		t.Fatal(err)
 	}
-	f.settle()
-	if err := f.tester.ChooseMenuItem(locales.TrafficExportTitle(), "HAR"); err == nil {
-		f.settle()
+	if err := menutest.Choose(f.tester, f.settle, locales.TrafficExportTitle(), "HAR"); err == nil {
+		t.Fatal("HAR export of an unreadable format is offered")
 	}
 	if len(f.exported) != 0 {
 		t.Fatal(f.exported)

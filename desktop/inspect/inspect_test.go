@@ -22,6 +22,7 @@ import (
 	"github.com/josexy/flowlens/backend/pkg/database"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/desktop/store"
@@ -322,8 +323,8 @@ func TestWebSocketMessageFileNames(t *testing.T) {
 	}
 	f.tester.RightClickAt(row.X+row.W/2, row.Y+row.H/2)
 	f.settle()
-	if err := f.tester.ChooseMenuItem(locales.DetailHexExport()); err != nil {
-		t.Fatalf("%v: %v", err, f.tester.Menu())
+	if err := menutest.Choose(f.tester, f.settle, locales.DetailHexExport()); err != nil {
+		t.Fatalf("%v: %v", err, f.tester.Texts())
 	}
 	f.settle()
 	if got, want := f.pickedNames(), []string{"websocket-message.txt", "websocket-message.bin", "websocket-selection.bin"}; !slices.Equal(got, want) {
@@ -379,7 +380,7 @@ func TestWebSocketHexExportWaitsForTheDialogsSave(t *testing.T) {
 	}
 	f.tester.RightClickAt(row.X+row.W/2, row.Y+row.H/2)
 	f.settle()
-	if err := f.tester.ChooseMenuItem(locales.DetailHexExport()); err == nil || !strings.Contains(err.Error(), "disabled") {
+	if err := menutest.Choose(f.tester, f.settle, locales.DetailHexExport()); err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("Export during a Save: %v", err)
 	}
 	if info, ok := f.tester.Access(locales.DetailSaveBody()); !ok || !info.Disabled {
@@ -635,8 +636,8 @@ func TestImageZoomBounds(t *testing.T) {
 	area, _ := f.tester.Find("image-area")
 	f.tester.RightClickAt(area.X+area.W/2, area.Y+area.H/2)
 	f.settle()
-	if err := f.tester.ChooseMenuItem(locales.DetailImageReset()); err != nil {
-		t.Fatal(err)
+	if err := menutest.Choose(f.tester, f.settle, locales.DetailImageReset()); err != nil {
+		t.Fatalf("%v: %v", err, f.tester.Texts())
 	}
 	f.settle()
 	if preview.scale != 1 {

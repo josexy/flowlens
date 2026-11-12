@@ -91,6 +91,18 @@ type Table struct {
 	// finishes outside one.
 	clipboard *string
 
+	// menu is the context menu of the rows and the header, and menuTarget
+	// what it acts on.
+	menu       nui.MenuState
+	menuTarget tableMenuTarget
+	menuShown  bool
+	// menuPress is where a right-click went down, relative to the table,
+	// until the build after it finds what it pressed.
+	menuPress *float32
+	// headerBottom is where the header ended in the last frame, in window
+	// coordinates.
+	headerBottom float32
+
 	// HistoryKey, when set, names the saved session the table shows.
 	HistoryKey func() string
 	// HistoryAlias, when set, returns the alias of the saved session the
@@ -115,7 +127,6 @@ func NewTable(source Source, deps TableDependencies) *Table {
 		}
 		return uint64(0)
 	}
-	t.list.HeaderMenu = t.headerMenu
 	t.observer = t.observePointer
 	return t
 }
@@ -364,7 +375,6 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 			Title: column.title(), ID: string(column.key), Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: true,
 		}
 	}
-	t.list.CellMenu = func(menu *ui.Menu, row, _ int) { t.rowMenu(c, menu, row) }
 	t.list.HeaderCell = t.headerCell(c, theme, visible)
 	order := t.displayOrder(visible)
 	t.beginSelection()
@@ -384,9 +394,11 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 		}
 	})
 	handled := t.resolveSelection(element)
+	t.resolveMenu(element)
 	t.syncChoice(!handled && element.Changed())
 	t.syncLayout(visible)
 	t.holdWhileReading(element)
+	widgets.ContextMenu(c.Key("traffic-menu"), theme, element, &t.menu, t.menuItems, nui.MenuOptions{Label: t.menuLabel()})
 	t.resend.build(c, theme, t)
 }
 
@@ -566,7 +578,9 @@ func (t *Table) processCell(c *ui.Context, theme nui.Theme, entry *logic.Traffic
 	}
 }
 
-func (t *Table) headerMenu(menu *ui.Menu, _ int) {
+// columnMenuItems lets the user show and hide columns, as 1.0.5's header
+// menu did: choosing a column keeps the menu open.
+func (t *Table) columnMenuItems() []nui.MenuItem {
 	settings := t.deps.Settings
 	visible := t.visibleColumns()
 	shown := make(map[logic.TrafficColumnKey]bool, len(visible))
@@ -579,15 +593,19 @@ func (t *Table) headerMenu(menu *ui.Menu, _ int) {
 			t.deps.Notifier.Error(locales.TrafficColumnSettingsSaveFailed(err.Error()))
 		}
 	}
+	items := make([]nui.MenuItem, 0, len(columnDefinitions)+3)
+	items = append(items, nui.MenuItem{ID: "columns", Label: locales.TrafficColumns(), Kind: nui.MenuLabel})
 	for _, column := range columnDefinitions {
 		checked := shown[column.key]
-		item := menu.Item(column.title()).Checked(checked).Disabled(saving || (checked && len(visible) == 1))
-		if item.Chosen() {
-			settings.SetTrafficColumnVisible(column.key, !checked, onFailure)
-		}
+		items = append(items, nui.MenuItem{
+			ID: "column-" + string(column.key), Label: column.title(), Checked: nui.Set(checked), Close: nui.Set(false),
+			Disabled:        saving || (checked && len(visible) == 1),
+			OnCheckedChange: func(on bool) { settings.SetTrafficColumnVisible(column.key, on, onFailure) },
+		})
 	}
-	menu.Separator()
-	if menu.Item(locales.TrafficShowAllColumns()).Icon(widgets.ShowAllMenuIcon()).Disabled(saving || len(visible) == len(columnDefinitions)).Chosen() {
-		settings.ShowAllTrafficColumns(onFailure)
-	}
+	return append(items, widgets.MenuSeparator("columns-separator"), nui.MenuItem{
+		ID: "show-all-columns", Label: locales.TrafficShowAllColumns(), Icon: lucide.ListChecks(), Close: nui.Set(false),
+		Disabled: saving || len(visible) == len(columnDefinitions),
+		OnSelect: func() { settings.ShowAllTrafficColumns(onFailure) },
+	})
 }

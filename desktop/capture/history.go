@@ -150,6 +150,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 			})
 		}
 	})
+	w.historyMenus.Sweep()
 }
 
 func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyservice.HistoryMetadata) {
@@ -165,7 +166,6 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 		row.Border(1, ui.Transparent)
 	}
 	row.OnClick(func() { w.openHistory(key) })
-	row.ContextMenu(func(menu *ui.Menu) { w.historyMenu(menu, metadata) })
 	row.Children(func() {
 		color := theme.Muted.Alpha(0.7)
 		if active {
@@ -178,24 +178,33 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 		})
 		CountPill(c, theme, strconv.Itoa(metadata.Total), active)
 	})
+	widgets.ContextMenu(c.Key("menu:"+key), theme, row, w.historyMenus.For(key), func() []nui.MenuItem { return w.historyMenuItems(metadata) }, nui.MenuOptions{Label: historyLabel(metadata)})
 }
 
-func (w *Workspace) historyMenu(menu *ui.Menu, metadata *proxyservice.HistoryMetadata) {
+// historyMenuItems are the actions on a saved session.
+func (w *Workspace) historyMenuItems(metadata *proxyservice.HistoryMetadata) []nui.MenuItem {
 	disabled := w.exporter == nil || w.exporter.Exporting || !logic.IsHARExportableHistoryFormat(int(metadata.FormatVersion))
-	menu.Submenu(locales.TrafficExportTitle(), func(sub *ui.Menu) {
-		for _, format := range []logic.TrafficExportFormat{logic.ExportCSV, logic.ExportHAR} {
-			if sub.Item(exportFormatLabel(format)).Disabled(disabled).Chosen() {
-				hint := metadata.Alias
-				if hint == "" {
-					hint = metadata.Key
-				}
-				w.exporter.Export(format, ExportOptions{HistoryKey: metadata.Key, FilenameHint: hint})
+	return []nui.MenuItem{
+		sessionExportItem(disabled, func(format logic.TrafficExportFormat) {
+			hint := metadata.Alias
+			if hint == "" {
+				hint = metadata.Key
 			}
-		}
-	}).Icon(widgets.ExportMenuIcon())
-	if menu.Item(locales.HistoryDelete()).Icon(widgets.DeleteMenuIcon()).Danger().Chosen() {
-		w.askDeleteHistory(metadata)
+			w.exporter.Export(format, ExportOptions{HistoryKey: metadata.Key, FilenameHint: hint})
+		}),
+		{ID: "delete", Label: locales.HistoryDelete(), Icon: lucide.Trash(), Color: nui.Error, OnSelect: func() { w.askDeleteHistory(metadata) }},
 	}
+}
+
+// sessionExportItem is the Export submenu of the live capture or a saved
+// session: CSV and HAR.
+func sessionExportItem(disabled bool, export func(logic.TrafficExportFormat)) nui.MenuItem {
+	formats := []logic.TrafficExportFormat{logic.ExportCSV, logic.ExportHAR}
+	children := make([]nui.MenuItem, len(formats))
+	for index, format := range formats {
+		children[index] = nui.MenuItem{ID: "export-" + string(format), Label: exportFormatLabel(format), Disabled: disabled, OnSelect: func() { export(format) }}
+	}
+	return nui.MenuItem{ID: "export", Label: locales.TrafficExportTitle(), Icon: lucide.FileDown(), Children: children}
 }
 
 func (w *Workspace) askDeleteHistory(metadata *proxyservice.HistoryMetadata) {

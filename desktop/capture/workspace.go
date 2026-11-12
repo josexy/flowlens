@@ -75,6 +75,11 @@ type Workspace struct {
 	historyListSeen    uint64
 	toolbar            toolbarState
 	alias              aliasDialog
+	// captureMenu, historyMenus and categoryMenus are the states of the
+	// sidebars' context menus.
+	captureMenu   nui.MenuState
+	historyMenus  widgets.MenuStates
+	categoryMenus widgets.MenuStates
 }
 
 // New returns the capture workspace.
@@ -133,21 +138,6 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		row.Background(theme.Elevated.Mix(theme.Background, 0.12)).Border(1, ui.Transparent)
 	}
 	row.OnClick(func() { w.selectItem(store.CaptureItemLive) })
-	row.ContextMenu(func(menu *ui.Menu) {
-		if w.exporter != nil {
-			alias := w.Data.Proxy.Status.CaptureAlias
-			menu.Submenu(locales.TrafficExportTitle(), func(sub *ui.Menu) {
-				for _, format := range []logic.TrafficExportFormat{logic.ExportCSV, logic.ExportHAR} {
-					if sub.Item(exportFormatLabel(format)).Disabled(w.exporter.Exporting).Chosen() {
-						w.exporter.Export(format, ExportOptions{FilenameHint: alias})
-					}
-				}
-			}).Icon(widgets.ExportMenuIcon())
-		}
-		if menu.Item(locales.CaptureSetAlias()).Icon(widgets.AliasMenuIcon()).Chosen() {
-			w.ShowAliasDialog()
-		}
-	})
 	row.Children(func() {
 		color := theme.Muted.Alpha(0.7)
 		if active {
@@ -160,6 +150,19 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		nui.Tooltip(c, theme, restart, locales.CaptureRestart(), nui.TooltipOptions{})
 		CountPill(c, theme, strconv.FormatInt(w.Data.Traffic.Statistics.Total, 10), false)
 	})
+	widgets.ContextMenu(c.Key("capture-menu"), theme, row, &w.captureMenu, w.captureMenuItems, nui.MenuOptions{Label: label})
+}
+
+// captureMenuItems are the actions on the live capture.
+func (w *Workspace) captureMenuItems() []nui.MenuItem {
+	var items []nui.MenuItem
+	if w.exporter != nil {
+		alias := w.Data.Proxy.Status.CaptureAlias
+		items = append(items, sessionExportItem(w.exporter.Exporting, func(format logic.TrafficExportFormat) {
+			w.exporter.Export(format, ExportOptions{FilenameHint: alias})
+		}))
+	}
+	return append(items, nui.MenuItem{ID: "set-alias", Label: locales.CaptureSetAlias(), Icon: lucide.Tag(), OnSelect: w.ShowAliasDialog})
 }
 
 // SidebarSelectedColor fills the chosen item of a sidebar list: a tint of the

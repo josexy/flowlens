@@ -264,34 +264,3 @@ func TestInnermostHandlerWins(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
-
-func TestMenuShortcut(t *testing.T) {
-	overridden := &settingservice.ShortcutConfig{Overrides: map[string]settingservice.ShortcutOverride{
-		WorkspaceCloseTab: {Binding: &Binding{Key: "q", Modifiers: []settingservice.ShortcutModifier{modifierPrimary, modifierShift}}},
-	}}
-	disabled := &settingservice.ShortcutConfig{Overrides: map[string]settingservice.ShortcutOverride{
-		WorkspaceCloseTab: {Binding: nil},
-	}}
-	for _, tc := range []struct {
-		name    string
-		command string
-		config  *settingservice.ShortcutConfig
-		macOS   bool
-		mods    ui.Modifiers
-		key     ui.Key
-		ok      bool
-	}{
-		{"default on Windows", AppSave, nil, false, ui.Ctrl, ui.KeyS, true},
-		{"default on macOS", AppSave, nil, true, ui.Super, ui.KeyS, true},
-		{"close on Windows", WorkspaceCloseTab, nil, false, ui.Ctrl, ui.KeyW, true},
-		{"override", WorkspaceCloseTab, overridden, false, ui.Ctrl | ui.Shift, ui.KeyQ, true},
-		{"binding null", WorkspaceCloseTab, disabled, false, 0, ui.KeyUnknown, false},
-		{"no default", CaptureToggleProxy, nil, false, 0, ui.KeyUnknown, false},
-		{"unknown command", "nope", nil, false, 0, ui.KeyUnknown, false},
-	} {
-		mods, key, ok := menuShortcut(tc.command, tc.config, tc.macOS)
-		if mods != tc.mods || key != tc.key || ok != tc.ok {
-			t.Errorf("%s: %v %v %v, want %v %v %v", tc.name, mods, key, ok, tc.mods, tc.key, tc.ok)
-		}
-	}
-}

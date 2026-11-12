@@ -50,6 +50,7 @@ type View struct {
 	save         saveDialog
 	openSequence int
 	copying      bool
+	menus        widgets.MenuStates
 }
 
 type treeDrag struct {
@@ -327,6 +328,7 @@ func (v *View) tree(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) 
 			}
 		})
 	})
+	v.menus.Sweep()
 	if v.drag.active {
 		v.continueDrag(c, rows)
 		if collection.CanMoveToRoot(v.drag.id) {
@@ -396,7 +398,6 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 			v.open(row.ID)
 		}
 	})
-	line.ContextMenu(func(menu *ui.Menu) { v.menu(menu, row) })
 	// The full name shows to the right of the row, for names the sidebar
 	// cuts short.
 	nui.Tooltip(c, theme, line, row.Name, nui.TooltipOptions{Placement: nui.Set(nui.RightCenter)})
@@ -432,6 +433,14 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 			}
 			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).MarginStart(4).TextColor(theme.Muted)
 		}
+	})
+	// As 1.0.5's, opening the menu selects its row.
+	widgets.ContextMenu(c.Key("menu:"+row.ID), theme, line, v.menus.For(row.ID), func() []nui.MenuItem { return v.menuItems(row) }, nui.MenuOptions{
+		Label: row.Name, OnOpenChange: func(open bool) {
+			if open {
+				v.Data.Collection.SelectNode(row.ID)
+			}
+		},
 	})
 }
 
@@ -492,32 +501,23 @@ func (v *View) requestMethod(c *ui.Context, theme nui.Theme, row store.Collectio
 	ui.Text(c, method).Shrink(0).SingleLine().FontSize(14).FontWeight(600).LineHeight(1).TextColor(color)
 }
 
-func (v *View) menu(menu *ui.Menu, row store.CollectionRow) {
-	collection := v.Data.Collection
-	collection.SelectNode(row.ID)
+// menuItems are the actions on a row.
+func (v *View) menuItems(row store.CollectionRow) []nui.MenuItem {
+	var items []nui.MenuItem
 	if row.Folder {
-		if menu.Item(locales.ApiCollectionNewChildFolder()).Chosen() {
-			v.beginCreate(row.ID)
-		}
-		menu.Separator()
+		items = append(items,
+			nui.MenuItem{ID: "new-child-folder", Label: locales.ApiCollectionNewChildFolder(), OnSelect: func() { v.beginCreate(row.ID) }},
+			widgets.MenuSeparator("folder-separator"))
 	}
-	if menu.Item(locales.ApiCollectionRename()).Chosen() {
-		v.renaming.show(row.ID, row.Name)
-	}
+	items = append(items, nui.MenuItem{ID: "rename", Label: locales.ApiCollectionRename(), OnSelect: func() { v.renaming.show(row.ID, row.Name) }})
 	if !row.Folder {
-		if menu.Item(locales.ApiCollectionCopy()).Disabled(v.copying).Chosen() {
-			v.duplicate(row.ID)
-		}
+		items = append(items, nui.MenuItem{ID: "copy", Label: locales.ApiCollectionCopy(), Disabled: v.copying, OnSelect: func() { v.duplicate(row.ID) }})
 	}
-	if row.Folder && collection.CanMoveToRoot(row.ID) {
-		if menu.Item(locales.ApiCollectionMoveToRoot()).Chosen() {
-			v.move(row.ID, "")
-		}
+	if row.Folder && v.Data.Collection.CanMoveToRoot(row.ID) {
+		items = append(items, nui.MenuItem{ID: "move-to-root", Label: locales.ApiCollectionMoveToRoot(), OnSelect: func() { v.move(row.ID, "") }})
 	}
-	menu.Separator()
-	if menu.Item(locales.ApiCollectionDelete()).Danger().Chosen() {
-		v.askDelete([]string{row.ID}, false)
-	}
+	return append(items, widgets.MenuSeparator("delete-separator"),
+		nui.MenuItem{ID: "delete", Label: locales.ApiCollectionDelete(), Color: nui.Error, OnSelect: func() { v.askDelete([]string{row.ID}, false) }})
 }
 
 func (v *View) move(id, parent string) {

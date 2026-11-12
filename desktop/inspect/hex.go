@@ -10,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -42,6 +43,7 @@ type HexView struct {
 	failed   bool
 
 	list      ui.ListState
+	menu      nui.MenuState
 	selecting bool
 	column    logic.HexColumn
 	anchor    int64
@@ -158,7 +160,7 @@ func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body, e
 	element := ui.List(c.Key("hex-list"), &h.list, int(rows), func(row int) {
 		h.buildRow(c, theme, layout, int64(row), char, length)
 	}).Fill().MinHeight(0)
-	element.ContextMenu(func(menu *ui.Menu) { h.menu(menu, length) })
+	widgets.ContextMenu(c.Key("hex-menu"), theme, element, &h.menu, h.menuItems, nui.MenuOptions{Label: locales.DetailHex()})
 	if bounds := element.Bounds(); bounds.W > 0 {
 		h.width = bounds.W
 	}
@@ -261,22 +263,16 @@ func (h *HexView) pointer(box ui.Element, layout logic.HexLayout, row int64, cha
 	h.anchor, h.focus, h.hasChoice = byteIndex, byteIndex, true
 }
 
-func (h *HexView) menu(menu *ui.Menu, length int64) {
+// menuItems are the actions on the bytes selected.
+func (h *HexView) menuItems() []nui.MenuItem {
 	_, _, selected := h.SelectionRange()
-	if menu.Item(locales.DetailHexCopyText()).Disabled(!selected).Chosen() {
-		h.copySelection(logic.HexCopyText)
+	return []nui.MenuItem{
+		{ID: "copy-text", Label: locales.DetailHexCopyText(), Disabled: !selected, OnSelect: func() { h.copySelection(logic.HexCopyText) }},
+		{ID: "copy-hex", Label: locales.DetailHexCopyHex(), Disabled: !selected, OnSelect: func() { h.copySelection(logic.HexCopyHex) }},
+		{ID: "copy-base64", Label: locales.DetailHexCopyBase64(), Disabled: !selected, OnSelect: func() { h.copySelection(logic.HexCopyBase64) }},
+		widgets.MenuSeparator("export-separator"),
+		{ID: "export", Label: locales.DetailHexExport(), Disabled: !selected || *h.exportBusy(), OnSelect: h.exportSelection},
 	}
-	if menu.Item(locales.DetailHexCopyHex()).Disabled(!selected).Chosen() {
-		h.copySelection(logic.HexCopyHex)
-	}
-	if menu.Item(locales.DetailHexCopyBase64()).Disabled(!selected).Chosen() {
-		h.copySelection(logic.HexCopyBase64)
-	}
-	menu.Separator()
-	if menu.Item(locales.DetailHexExport()).Disabled(!selected || *h.exportBusy()).Chosen() {
-		h.exportSelection()
-	}
-	_ = length
 }
 
 func (h *HexView) copySelection(format logic.HexCopyFormat) {

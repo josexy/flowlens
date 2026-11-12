@@ -17,6 +17,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/inspect"
+	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/desktop/shortcuts"
@@ -110,8 +111,6 @@ type fixture struct {
 	dispatch *shortcuts.Dispatcher
 	editor   *Editor
 	python   bool
-	// drawnMenus draws the window's popup menus in it.
-	drawnMenus bool
 	// picked are the names the save dialog suggested, in order.
 	pickedMu sync.Mutex
 	picked   []string
@@ -183,9 +182,6 @@ func newFixture(t testing.TB, backend store.RequestBackend, requests *fakeReques
 	}, f.dispatch, f.notifier, f.confirm)
 	view := func(c *ui.Context) {
 		theme := nui.App(c, data.Settings.Theme().Config)
-		if f.drawnMenus {
-			c.SetMenuPresentation(ui.PopoverMenus)
-		}
 		f.dispatch.Begin()
 		ui.Column(c).Fill().Children(func() {
 			f.editor.TabBar(c, theme)
@@ -329,14 +325,12 @@ func TestDirtyTabMarkerAndGuards(t *testing.T) {
 	dirty := f.newHTTP()
 	dirty.HTTP.URL = "https://x.test/"
 	f.settle()
-	if err := f.tester.RightClick(DisplayTitle(dirty)); err != nil {
+	if err := menutest.Open(f.tester, f.settle, DisplayTitle(dirty)); err != nil {
 		t.Fatal(err)
 	}
-	f.tester.Frame()
-	if err := f.tester.ChooseMenuItem(locales.WorkspaceTabContextForceCloseCurrent()); err != nil {
+	if err := menutest.Choose(f.tester, f.settle, locales.WorkspaceTabContextForceCloseCurrent()); err != nil {
 		t.Fatal(err)
 	}
-	f.settle()
 	if f.confirm.Open() || len(workspace.Tabs) != 1 {
 		t.Fatal("force close skips the prompt")
 	}
@@ -353,14 +347,12 @@ func TestCloseVariants(t *testing.T) {
 	f.settle()
 	menu := func(title, item string) {
 		t.Helper()
-		if err := f.tester.RightClick(title); err != nil {
+		if err := menutest.Open(f.tester, f.settle, title); err != nil {
 			t.Fatal(err)
 		}
-		f.tester.Frame()
-		if err := f.tester.ChooseMenuItem(item); err != nil {
+		if err := menutest.Choose(f.tester, f.settle, item); err != nil {
 			t.Fatal(err)
 		}
-		f.settle()
 	}
 	tabs[3].HTTP.URL = "https://dirty.test/"
 	f.settle()
