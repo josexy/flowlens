@@ -45,7 +45,7 @@ The review also compared these surfaces with 1.0.5 and found no functional diffe
 
 - Changes to mygo or nuxt-ui-go.
 - Restoring error toasts for clipboard writes, which cannot fail natively, or the environment-info retry, whose loader cannot fail.
-- Removing native additions that do not conflict with 1.0.5: list keyboard navigation and Select All, and the API Collection Move to Root menu item. Decision 6 records them.
+- Removing native additions that do not conflict with 1.0.5: list keyboard navigation and Select All, and the API Collection Move to Root menu item. Decision 9 records them.
 
 ## Decisions
 
@@ -55,12 +55,15 @@ The review also compared these surfaces with 1.0.5 and found no functional diffe
 
 - **Snapshot.** At the end of each `Build`, the table records the selected IDs and the focused entry ID.
 - **Observe.** `ObserveInput` on the table element records a primary-button `InputPointerDown` with its `Mods` and the row under the pointer. The row is the one whose cell reported `Hovered()` in the last frame; `cellBackground` already builds a fill per cell. A matching `InputPointerUp` that is not `Canceled` and was not part of a drag (`ListState.DragSelecting()` never became true) becomes a pending click.
-- **Hold.** While a press is down and no drag has started, the table restores the snapshot each frame. MyGo's pointer-down choice therefore never shows, for example a range during a Shift press.
+- **Restore.** In the build that first sees a press, the table puts the snapshot back after `ui.Table` returns. MyGo makes its pointer-down choice only in that build (`pressPending` lasts one build pass), so the choice never shows, for example a range during a Shift press, and nothing is held until the release. A release may never reach the table: observers see a release only over the table, and a press the window loses the focus during ends without one. Holding the snapshot until the release would then keep reverting the keys, Select All, and the right-click choice.
+- **Stale press.** A press elsewhere (`PressedOutside`) after a press whose release the table never saw ends that press, so a later release over the table clicks no row.
 - **Rewrite.** In the next `Build`, after `ui.Table` returns, the table restores the snapshot and applies the 1.0.5 rule for the pending click. It sets `Selection`, `Selected` (so the keys move from the clicked row), the focused entry, and `ShowDetail`:
   - **Plain click.** If the snapshot is exactly that row, clear the selection and the focus. Otherwise select that row alone and focus it.
   - **Shift-click.** Toggle the row. An added row is focused. Removing the focused row focuses the first remaining selected row in table order. Removing the last row clears the focus.
   - **Primary-click** (`ui.Cmd`: Command on macOS, Control elsewhere). If the row is not selected, select it alone. If it is the focused row, toggle `ShowDetail`. Otherwise focus it and open the panel.
-- **Drag.** When a drag that started with any modifier ends, the selection becomes the range from the pressed row to `Selected`, as `replaceSelectionWithRange` did. The endpoint is focused and `ShowDetail` is left alone.
+- **Drag.** When a drag that started with any modifier ends, the selection becomes the range from the pressed row to `Selected`, as `replaceSelectionWithRange` did. The endpoint is focused and `ShowDetail` is left alone. When the press and a move past the drag threshold reach the app before the next frame, the build that sees the press also starts the drag, and `Selected` is already the drag's end: the pressed row is then the hovered one, not `Selected`.
+- **Sessions.** When `HistoryKey` changes, the table clears the selection, the focus, and any gesture, as 1.0.5's `dataContextKey` watcher did. Sessions number their entries alike, so the IDs chosen in one would otherwise choose rows of the next.
+- **Removed rows.** When the focused row leaves the table, the first row still selected in table order is focused, as 1.0.5's `remainingEntries[0]`.
 
 `syncChoice` loses `detailOpenedAt`, `dragAfterPress`, and the auto-open. It still focuses `Selected` after keyboard moves and drags, and clears the focus when the selection empties. A keyboard focus change never changes `ShowDetail`.
 
@@ -88,7 +91,7 @@ Alternatives considered:
 
 Actions are described as `{Icon, Label, Pressed, Disabled, Run}` and drawn as ghost icon buttons with tooltips, the pressed one in the primary color.
 
-`widgets.DetailWrap` keeps one wrap flag per view and resets it when the dialog opens, matching `wrapText`/`wordWrap = ref(false)` in each 1.0.5 component.
+`widgets.DetailWrap` keeps one wrap flag per view and resets it when the dialog opens. 1.0.5's SSE detail reset `wordWrap` on open; its console and WebSocket dialogs kept the flag of their still-mounted component between openings. The spec resets all three, so a dialog never opens wrapped.
 
 The three callers fill the slots:
 
@@ -96,7 +99,7 @@ The three callers fill the slots:
 - **WebSocket.** Direction and type badges and the size. Text uses the `CodeView`; binary uses the hex view.
 - **Console.** The time, a stream and level pill, and the source. The message uses a read-only `CodeView`.
 
-Save names move into these callers. `HexView` gains a `SelectionFilename` field, defaulting to `hex-selection.bin`, which the WebSocket dialog sets to `websocket-selection.bin`.
+Save names move into these callers. `HexView` gains a `SelectionFilename` field, defaulting to `hex-selection.bin`, which the WebSocket dialog sets to `websocket-selection.bin`, and an `Exporting` flag the dialog shares with its Save, as 1.0.5's dialog passed its `exporting` to `HexDumpViewer`: neither saves while the other does.
 
 Alternative considered: patching each modal in place. That keeps three diverging copies of the sizing and action rules.
 
@@ -131,7 +134,13 @@ A constructor error leaves that item without an icon. The capture, history, row,
 - The body type options are reordered.
 - The empty state of `inspect.MessageStream`, shared by the detail panel and the WebSocket Client, uses `WorkspaceWebsocketClientNoMessages`.
 
-### 8. Deliberate differences, recorded
+### 8. Rows that open as buttons
+
+1.0.5's console and SSE rows were buttons: a click or Enter opened one, and none stayed selected. MyGo's table reports no click on a row, and choosing the row already chosen changes nothing. `widgets.RowActivator` gives the table a `Selection` it empties after each build and a `Selected` cursor for the keys. A click therefore always chooses anew, a release seen through `ObserveInput` tells it from the keys, and Enter comes as the table's `Submitted`. Rows never show as chosen, the keys' row shows the focus ring, and MyGo's overlays give the focus back to the table as a detail closes.
+
+The SSE list becomes a `ui.Table` with 1.0.5's ID, Event type, and Data preview columns, fixed, in 44 px rows. Its incomplete-event note moves under the list and shows once parsing ends, as 1.0.5's did; this also keeps the main thread from reading the parser while a background job appends to it. The WebSocket list and conversation take 1.0.5's direction colors from `theme.WebSocketPalette`, with the Send or Receive tag, and the list drops the native size column. The detail panel's WebSocket tab shows the stream, with its toolbar and "No messages", when no body view is loaded.
+
+### 9. Deliberate differences, recorded
 
 `docs/technical/ui-parity.md` gains rows for:
 
@@ -145,7 +154,8 @@ It also gains a "Behavior review" section listing the surfaces in Context that w
 ## Risks / Trade-offs
 
 - **Hover-based row lookup misses a press without a preceding move.** Example: a click right after the list scrolls under a still pointer. In that case the table falls back to `Selected` after MyGo's pointer-down choice, which is the pressed row for plain and Shift presses. A Tester case scrolls the table under a fixed pointer and clicks.
-- **Restoring the snapshot during a press could fight MyGo's drag start.** The hold stops the moment `DragSelecting()` turns true, and drag results are rewritten only at the end. A Tester case drags with Cmd held and checks that the earlier selection is replaced.
+- **Restoring the snapshot could fight MyGo's drag start.** The snapshot is restored only in the build that sees the press, and a drag's result replaces MyGo's in every build of the drag. A Tester case drags with Cmd held and checks that the earlier selection is replaced; another starts the drag in the build that sees the press.
+- **A press on a selected row that drifts under the drag threshold onto another row clicks nothing.** MyGo leaves such a press to the release, which lands on another row, and the table cannot tell it from a press on the scroll bar without coupling to MyGo's scroll bar geometry. 1.0.5 clicked the pressed row. `ui-parity.md` records it.
 - **Testers of the unreleased native build lose click-to-open details.** The maintainer chose 1.0.5. Show and Ctrl/Cmd-click still open the panel. 1.1.0 is not released, so users coming from 1.0.x see no change and `CHANGELOG.md` needs no line. The user guide gains one sentence on opening details, since neither version documented it.
 - **Platform menus differ.** Icons and accelerators are verified by render with drawn menus and by helper unit tests. Platform menus still need the desktop pass recorded in `restore-ui-parity` task 9.3.
 - **`mygo.NewMenuIconSVG` rasterizes at 64 px once per icon.** Ten icons are made once, lazily, so the cost is negligible.

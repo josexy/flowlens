@@ -31,7 +31,7 @@ The SSE message, WebSocket message, and Python console entry details SHALL open 
 - **THEN** the dialog is at most 828 px wide and its content area is 420 px tall
 
 ### Requirement: Detail dialog actions
-A message detail dialog SHALL offer Wrap when its content is text, Copy when its content is text, and Save, as icon buttons with tooltips. Wrap SHALL start off each time the view opens, and SHALL be shown as pressed while on. Save SHALL be unavailable while a save from that dialog is in progress.
+A message detail dialog SHALL offer Wrap when its content is text, Copy when its content is text, and Save, as icon buttons with tooltips. Wrap SHALL start off each time the view opens, and SHALL be shown as pressed while on. Save SHALL be unavailable while a save from that dialog is in progress, and so SHALL the export of a hex selection in it.
 
 #### Scenario: Binary WebSocket message
 - **WHEN** the user opens a binary WebSocket message
@@ -40,6 +40,10 @@ A message detail dialog SHALL offer Wrap when its content is text, Copy when its
 #### Scenario: Turning on wrap
 - **WHEN** the user turns on Wrap in an SSE message detail
 - **THEN** long lines wrap and the Wrap button shows as pressed
+
+#### Scenario: Saving a binary message
+- **WHEN** a save of a binary WebSocket message is in progress
+- **THEN** Save and the hex view's Export are unavailable until it ends
 
 ### Requirement: Menu item icons
 Menus SHALL show the icons and color swatches of FlowLens 1.0.5 where the platform's menus show item icons:

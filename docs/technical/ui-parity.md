@@ -17,6 +17,9 @@ FlowLens 1.0.5, the last Wails build, is the visual and interaction reference fo
 | No API Collection menu item to move a nested folder to the root | Move to Root in a nested folder's menu | It gives a path without dragging to the drop zone's action. |
 | Error toasts when writing to the clipboard fails | No such toasts | Native clipboard writes cannot fail. |
 | No keys in the traffic table | Up, Down, Home, and End move the selection, and Cmd+A (Ctrl+A on Windows and Linux) selects all rows, while the table has the keyboard focus; the detail panel stays as it was | MyGo's list provides them, and they do not conflict with the 1.0.5 click model. |
+| Each Python console and SSE message row a tab stop, opened with Enter or Space | Each table one tab stop: the arrow keys move between rows, and Enter opens one | MyGo's table is one focusable list. |
+| A WebSocket text message in the conversation opens nothing when clicked | It opens its details, as in the list | It gives the conversation a path to a text message's actions, and conflicts with nothing in 1.0.5. |
+| A press on a selected traffic row released on the next row, under the drag threshold, clicks the row pressed | It clicks no row | MyGo leaves such a press to the release, and the table cannot tell it from a press on the scroll bar. |
 
 ## Render review
 
@@ -33,9 +36,9 @@ The renders were compared with `assets/screenshots/flowlens-{light,dark}.png` of
 - The capture render shows the table without the detail panel; `capture-detail` shows it open beside the inspected row, as Ctrl-click leaves it. The test backend serves no bodies, so its body tab is empty. The detail panel has its own renders (`detail-headers`).
 - Native scroll bars, as listed above.
 
-The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatted`, `ws-detail-receive-text`, `ws-detail-send-binary`, `python-console`, `python-console-detail`, `menu-highlight`, `menu-history`, `tab-menu`, `settings-root-ca-add`) match the 1.0.5 templates and the `restore-ui-behavior-parity` design, except:
+The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatted`, `ws-detail-receive-text`, `ws-detail-send-binary`, `python-console`, `python-console-detail`, `menu-highlight`, `menu-history`, `tab-menu`, `settings-root-ca-add`, and, after its review, `sse-list`, `ws-list`, and `ws-conversation`) match the 1.0.5 templates and the `restore-ui-behavior-parity` design, except:
 
-- The Python console table's header has no elevated background, and its rows no line between them: MyGo's `ui.Table` draws its own header and rows.
+- The Python console and SSE message tables' headers have no elevated background, and their rows no line between them: MyGo's `ui.Table` draws its own header and rows.
 - The console's Output column fills the room the others leave, at least 240 px rather than 1.0.5's 260 px. Once the user resizes it, it keeps that width rather than filling the rest.
 - WebSocket text messages and console entries show in a read-only code view with line numbers, where 1.0.5 had a plain text area.
 - Menu renders draw the menus in the window (`SetMenuPresentation`); the app shows the system's menus, which still need the desktop pass.
@@ -60,6 +63,8 @@ The `restore-ui-behavior-parity` change compared what each surface does with 1.0
 - Settings, with its save, reset, and quit guard.
 - Update, Memory Statistics, and Reset Startup.
 - Shell, status bar, title bar, and Python help docking.
+
+A review of the change found that two of these still differed and restored them: the SSE message list of the body pane, and the WebSocket message rows and bubbles of the detail panel and the WebSocket Client.
 
 ## Tooltips
 

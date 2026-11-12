@@ -39,6 +39,35 @@ The detail panel SHALL show the focused entry with request tabs Overview, Raw, H
 
 ## ADDED Requirements
 
+### Requirement: SSE message list
+The SSE view SHALL list messages in a bordered table with a header of ID, Event type, and Data preview, as FlowLens 1.0.5 did, in 44 px rows that show the message's effective ID or `—`, its event type, and the first line of its data or `(empty)`. A click on a row, or Enter on the row the arrow keys moved to, SHALL open its detail; rows SHALL NOT show as selected. Once parsing ends, an incomplete last event SHALL be noted under the list.
+
+#### Scenario: Message before any ID
+- **WHEN** the first message of a stream has no ID and the second has ID `7`
+- **THEN** the first row's ID cell shows `—` and the second's shows `7`
+
+#### Scenario: Opening a message from the keyboard
+- **WHEN** the list has the keyboard focus and the user presses Down, then Enter
+- **THEN** the detail of the next message opens
+
+#### Scenario: Incomplete last event
+- **WHEN** the body ends with an incomplete event
+- **THEN** a note under the list says so
+
+### Requirement: WebSocket message rows
+The WebSocket message list, in the detail panel and the WebSocket Client, SHALL show each message as FlowLens 1.0.5 did: a 44 px row inside a bordered box, with a direction arrow, a Send or Receive tag, and the text, or the size of a binary message. Send SHALL be amber and Receive blue, and a tag SHALL draw its text on a 12% tint of its direction's color.
+
+#### Scenario: Received text message in the list
+- **WHEN** the stream holds a received text message
+- **THEN** its row shows a blue down arrow, a Receive tag, and the text, and no size
+
+### Requirement: WebSocket conversation bubbles
+The WebSocket conversation SHALL show each message as FlowLens 1.0.5 did: a bubble tinted in its direction's color, with its tag above its text, or above a button with the size of a binary message that opens it.
+
+#### Scenario: Binary message in the conversation
+- **WHEN** the user clicks the size button of a binary message in the conversation
+- **THEN** its detail opens
+
 ### Requirement: SSE message detail content
 The SSE message detail SHALL show the message's sequence number and event type as badges and its effective ID, then the Data, Formatted, and Raw Event views. The Formatted view SHALL highlight JSON.
 
@@ -81,3 +110,7 @@ A WebSocket message stream with no messages to show, in the detail panel or the 
 #### Scenario: Direction filter hides every message
 - **WHEN** the stream holds only received messages and the filter shows Send only
 - **THEN** the stream shows the "No messages" empty state
+
+#### Scenario: No body loaded
+- **WHEN** the detail panel shows a WebSocket entry whose body is not loading and was not loaded
+- **THEN** the WebSocket tab shows the stream's toolbar and "No messages"

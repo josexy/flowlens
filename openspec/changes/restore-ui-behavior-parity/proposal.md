@@ -36,6 +36,13 @@ The review went through every context menu, toolbar, pane, and dialog. It compar
   - Exporting selected rows from a saved history with an alias suggests `<alias>-selection` in 1.0.5. The native build always suggests `flowlens-selection-<n>`.
   - The request body type menu lists None, JSON, Text, XML, File, Form Data, URL-encoded in 1.0.5. The native order differs.
 
+- **Found in review of the implementation.**
+  - A press whose release never reaches the traffic table, or one in the build a drag starts in, left the table reverting keys or anchored the drag at the wrong row.
+  - Switching saved sessions kept the selection, and a removed focused row moved the focus by ID, not table order.
+  - Python console entries could not be opened from the keyboard.
+  - The SSE message list, the WebSocket message rows and bubbles, and the WebSocket tab without a loaded body still differed from 1.0.5.
+  - The hex Export of a WebSocket message could run during its Save.
+
 Two native additions are kept and recorded as deliberate differences: the arrow-key and Select All behavior of the traffic table, and the API Collection folder menu's Move to Root item. Error toasts for clipboard writes that cannot fail natively are not restored.
 
 ## Capabilities
@@ -55,7 +62,7 @@ These capabilities are defined by the in-flight `migrate-to-mygo-native-ui` and 
 
 ## Impact
 
-- **Code**: `desktop/capture` (table selection, filter bar, menus), `desktop/inspect` (panel, SSE, messages, hex export name), `desktop/editor` (console, body type options, tab menus), `desktop/settings` (Root CA Add menu icons), `desktop/widgets` (shared detail dialog frame and menu icons), `desktop/shortcuts` (an exported helper that gives a command's resolved binding as a menu shortcut), and `docs/technical/ui-parity.md`. Copy uses existing locale keys, including `workspace.http_request.console_column_*` and `workspace.websocket_client.no_messages`. No new keys are expected. The native-only `detailClosePanel` key is removed from both catalogs.
+- **Code**: `desktop/capture` (table selection, filter bar, menus), `desktop/inspect` (panel, SSE list and detail, messages, hex export name and busy flag), `desktop/theme` (WebSocket direction colors), `desktop/editor` (console, body type options, tab menus), `desktop/settings` (Root CA Add menu icons), `desktop/widgets` (shared detail dialog frame, menu icons, and rows that open as buttons), `desktop/shortcuts` (an exported helper that gives a command's resolved binding as a menu shortcut), and `docs/technical/ui-parity.md`. Copy uses existing locale keys, including `workspace.http_request.console_column_*` and `workspace.websocket_client.no_messages`. No new keys are expected. The native-only `detailClosePanel` key is removed from both catalogs.
 - **Dependencies**: None. MyGo stays at v0.8.3 and nuxt-ui-go at v0.0.2. Menu icons use `mygo.NewMenuIconSVG`, which `desktop/locale` already depends on through the `mygo` package.
 - **Persistence**: None. Console column widths and dialog wrap states stay in view state, as in 1.0.5.
 - **Ordering**: Archive `migrate-to-mygo-native-ui`, then `restore-ui-parity`, then this change. The deltas modify requirements that those changes add.

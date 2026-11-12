@@ -24,6 +24,10 @@ Each console row SHALL be 40 px high and show on one line its local time, a Type
 - **WHEN** the user clicks a row
 - **THEN** the entry detail opens for that entry
 
+#### Scenario: Opening an entry from the keyboard
+- **WHEN** the console table has the keyboard focus and the user presses Down, then Enter
+- **THEN** the entry detail opens for the next entry, and no row shows as selected
+
 ### Requirement: Python console status
 The console header SHALL show a dot and status text: a pulsing accent dot with "Script running" while a send is in progress, and a muted dot with the entry count otherwise.
 

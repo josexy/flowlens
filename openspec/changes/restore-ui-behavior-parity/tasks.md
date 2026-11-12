@@ -115,6 +115,25 @@ Each task is checked against the 1.0.5 source in `/home/josexy/work/flowlens/fro
 - [x] 7.2 Render the capture table with a detail panel, all three detail dialogs, the console, and the decorated menus in both themes with `FLOWLENS_RENDER_DIR`. Compare them with the 1.0.5 templates and the values in design.md, and record any remaining differences in `docs/technical/ui-parity.md`.
 - [ ] 7.3 On a Linux desktop session, compare FlowLens with 1.0.5 side by side for row clicks with each modifier, drag selection, platform menu icons and shortcut hints, and the three detail dialogs. Record the results. Windows and macOS checks join migration tasks 17.4 and 17.5.
 
+## 8. Review fixes
+
+A review of the implementation found the gaps below. Each fix has a Tester case that fails without it.
+
+- [x] 8.1 Restore the snapshot only in the build that sees a press, not until the release (decision 1), so a release outside the table or a lost window focus no longer leaves the keys, Select All, and the right-click choice reverted. End a press whose release never came when a press lands elsewhere. Verify `TestReleaseOutsideTheTableLeavesTheKeysWorking`, `TestLosingTheWindowFocusDuringAPressLeavesTheKeysWorking`, `TestAReleaseAfterAPressElsewhereClicksNoRow`, and that `TestShiftPressShowsTheEarlierSelectionUntilRelease` still passes.
+- [x] 8.2 Take the pressed row from the hovered row when the drag starts in the build that sees the press. Verify `TestDragStartingInThePressBuildAnchorsAtThePressedRow`.
+- [x] 8.3 Clear the selection, the focus, and any gesture when the table shows another saved session, and focus the first row still selected in table order when the focused row leaves. Verify `TestSwitchingHistoriesClearsTheSelection` and `TestEvictionFocusesTheFirstRowLeftInTableOrder`.
+- [x] 8.4 Add `widgets.RowActivator` (decision 8) and open console entries with it. Verify `TestPythonConsoleRowsOpenByKeyboard`: Enter opens the row the keys reached, a click reopens the row opened before, and a header click opens nothing.
+- [x] 8.5 Rebuild the SSE list as a `ui.Table` with 1.0.5's columns, rows, and incomplete note, opened with `RowActivator`. Verify `TestSSEMessageListColumns`, `TestSSEMessagesOpenByKeyboard`, and the existing SSE cases.
+- [x] 8.6 Restore 1.0.5's WebSocket list rows and conversation bubbles with `theme.WebSocketPalette`, show the stream when no body view is loaded, and share the dialog's busy flag with the hex Export. Verify `TestWebSocketMessageRows`, `TestWebSocketConversationOpensBinaryMessagesByTheirButton`, `TestWebSocketPaneWithoutABodyView`, `TestWebSocketHexExportWaitsForTheDialogsSave`, `TestWebSocketPalette`, and light and dark renders of `ws-list`, `ws-conversation`, and `sse-list`.
+- [x] 8.7 Record in `docs/technical/ui-parity.md` the differences these fixes leave: one tab stop for console and SSE rows, the click that opens a WebSocket text bubble, and a press on a selected traffic row that drifts onto another row.
+- [x] 8.8 Run `task verify` and `CGO_ENABLED=1 go test -race` over the changed packages, and record the results here.
+
+  Results, on Linux arm64, 2026-11-11:
+  - `task verify`: passed. `fmt:check`, `lint:go` (0 issues), `vet:ui`, `i18n:check` (1380 messages in en and zh-Hans, no new keys), and `go test ./...`.
+  - `CGO_ENABLED=1 go test -race ./desktop/capture ./desktop/inspect ./desktop/editor ./desktop/widgets ./desktop/theme`: passed, with no races reported.
+  - `openspec validate restore-ui-behavior-parity --strict`: valid, with the archive-order notes listed under Workflow follow-up.
+  - After those runs, the SSE row label gained a bounds check; `fmt:check`, `lint:go`, `vet:ui`, and the `desktop/inspect` tests were run again and passed.
+
 ## Workflow follow-up
 
 - Archive `migrate-to-mygo-native-ui`, then `restore-ui-parity`, before this change. This change modifies "Row selection", "Traffic detail panel", and "Wheel scrolls horizontal strips", which those changes add, and `openspec` refuses a MODIFIED delta without a base spec.
