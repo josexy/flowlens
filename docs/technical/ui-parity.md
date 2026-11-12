@@ -20,6 +20,7 @@ FlowLens 1.0.5, the last Wails build, is the visual and interaction reference fo
 | Each Python console and SSE message row a tab stop, opened with Enter or Space | Each table one tab stop: the arrow keys move between rows, and Enter opens one | MyGo's table is one focusable list. |
 | A WebSocket text message in the conversation opens nothing when clicked | It opens its details, as in the list | It gives the conversation a path to a text message's actions, and conflicts with nothing in 1.0.5. |
 | A press on a selected traffic row released on the next row, under the drag threshold, clicks the row pressed | It clicks no row | MyGo leaves such a press to the release, and the table cannot tell it from a press on the scroll bar. |
+| Python API help docked beside the content in a workspace 1100 px wide or more, a Slideover in a narrower one | A Slideover at the window's right edge, 420 px wide, at any width | One placement at every size; the Slideover keeps the content's width and closes with Escape or a click beside it. |
 
 ## Render review
 
@@ -62,7 +63,7 @@ The `restore-ui-behavior-parity` change compared what each surface does with 1.0
 - Rewrite Rules and Python Plugins, including reordering.
 - Settings, with its save, reset, and quit guard.
 - Update, Memory Statistics, and Reset Startup.
-- Shell, status bar, title bar, and Python help docking.
+- Shell, status bar, and title bar.
 
 A review of the change found that two of these still differed and restored them: the SSE message list of the body pane, and the WebSocket message rows and bubbles of the detail panel and the WebSocket Client.
 

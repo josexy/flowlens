@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
@@ -120,10 +121,8 @@ func newFixture(t *testing.T) *fixture {
 		ui.Row(c).Fill().Children(func() {
 			ui.Box(c).Width(320).FillHeight().Shrink(0).Children(func() { f.view.Sidebar(c, theme) })
 			ui.Box(c).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() { f.view.Content(c, theme) })
-			if f.help.Visible() {
-				f.help.BuildDocked(c, theme)
-			}
 		})
+		f.help.Build(c, theme)
 		f.notifier.Show(c, theme)
 		nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 5})
 		f.dispatch.Install(c)
@@ -475,6 +474,9 @@ func TestRulesAddEditReorderDelete(t *testing.T) {
 func TestHelpSearchesAndCopiesPrompt(t *testing.T) {
 	f := newFixture(t)
 	f.click(locales.PythonPluginHelpTitle())
+	// The help slides in over the window.
+	f.tester.Advance(time.Second)
+	f.settle()
 	messages := pythonapi.MessagesFor("en")
 	if !f.help.Visible() || !f.has(messages.Global) {
 		t.Fatalf("%v", f.tester.Texts())
@@ -508,6 +510,7 @@ func TestHelpClosesWhenItsContextChanges(t *testing.T) {
 	context := "a"
 	f.help.Context = func() string { return context }
 	f.data.Workbench.OpenPythonHelp(pythonapi.ScopeInline)
+	f.tester.Advance(time.Second)
 	f.settle()
 	if !f.help.Visible() || !f.has(pythonapi.MessagesFor("en").Inline) {
 		t.Fatalf("%v", f.tester.Texts())
@@ -533,5 +536,31 @@ func TestPythonEditorOffersTheAPI(t *testing.T) {
 	f.settle()
 	if !f.has("headers") {
 		t.Fatalf("%v", f.tester.Texts())
+	}
+}
+
+// The help is a Slideover: a dialog at the window's right edge, closed by
+// Escape as by its close button.
+func TestHelpSlidesOverTheWindow(t *testing.T) {
+	f := newFixture(t)
+	f.click(locales.PythonPluginHelpTitle())
+	f.tester.Advance(time.Second)
+	f.settle()
+	messages := pythonapi.MessagesFor("en")
+	dialog, ok := f.tester.AccessByRole(ui.RoleDialog, messages.Title)
+	if !ok {
+		t.Fatalf("no help dialog in %v", f.tester.Texts())
+	}
+	if right := dialog.Bounds.X + dialog.Bounds.W; right < 1499 || dialog.Bounds.W > 421 {
+		t.Fatalf("help at %v, want 420 wide at the right edge", dialog.Bounds)
+	}
+	f.tester.Key(0, ui.KeyEscape)
+	f.tester.Advance(time.Second)
+	f.settle()
+	if f.help.Visible() {
+		t.Fatal("Escape leaves the help open")
+	}
+	if _, ok := f.tester.AccessByRole(ui.RoleDialog, messages.Title); ok {
+		t.Fatal("the help stays on show after closing")
 	}
 }

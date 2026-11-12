@@ -12,12 +12,11 @@ import (
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 )
 
-const (
-	helpMinWidth float32 = 320
-	helpMaxWidth float32 = 720
-)
+// helpWidth is the help panel's width, as 1.0.5's.
+const helpWidth float32 = 420
 
-// Help is the Python API reference.
+// Help is the Python API reference, which slides over the window from its
+// right edge.
 type Help struct {
 	Workbench *store.WorkbenchStore
 	Notifier  *widgets.Notifier
@@ -32,7 +31,6 @@ type Help struct {
 	expanded  []string
 	seenQuery string
 	seenScope string
-	width     float32
 	details   []string
 	clipboard *string
 	open      bool
@@ -41,7 +39,7 @@ type Help struct {
 
 // NewHelp returns the panel of a window.
 func NewHelp(workbench *store.WorkbenchStore, notifier *widgets.Notifier, locale func() string) *Help {
-	return &Help{Workbench: workbench, Notifier: notifier, Locale: locale, tab: "quickstart", width: 420}
+	return &Help{Workbench: workbench, Notifier: notifier, Locale: locale, tab: "quickstart"}
 }
 
 // Visible reports whether the panel is open.
@@ -53,11 +51,15 @@ func (h *Help) prepare(c *ui.Context) {
 		h.clipboard = nil
 	}
 	scope := h.Workbench.PythonHelpScope
+	if scope == "" {
+		h.seenScope = ""
+		return
+	}
 	context := ""
 	if h.Context != nil {
 		context = h.Context()
 	}
-	if scope != "" && context != h.opened && h.seenScope != "" {
+	if context != h.opened && h.seenScope != "" {
 		h.seenScope = ""
 		h.Workbench.ClosePythonHelp()
 		return
@@ -70,70 +72,68 @@ func (h *Help) prepare(c *ui.Context) {
 	}
 }
 
-// Forget notes that the panel was closed.
-func (h *Help) Forget() { h.seenScope = "" }
-
 func (h *Help) copy(text, success string) {
 	h.clipboard = &text
 	h.Notifier.Success(success)
 }
 
-// BuildDocked shows the panel beside the content.
-func (h *Help) BuildDocked(c *ui.Context, theme nui.Theme) {
-	h.prepare(c)
-	ui.Row(c.Key("python-help")).Width(h.width).Shrink(0).FillHeight().Children(func() {
-		handle := ui.Box(c.Key("resize")).Width(5).FillHeight().Shrink(0).Cursor(ui.CursorResizeEW).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border)
-		if dx, _, moved := handle.Dragged(); moved {
-			h.width = min(helpMaxWidth, max(helpMinWidth, h.width-dx))
-		}
-		ui.Column(c.Key("panel")).Grow(1).Basis(0).MinWidth(0).FillHeight().Background(theme.Background).Children(func() { h.content(c, theme) })
-	})
-}
-
-// BuildOverlay shows the panel above narrow content.
-func (h *Help) BuildOverlay(c *ui.Context, theme nui.Theme) {
+// Build shows the panel in a Slideover from the window's right edge. Call it
+// every frame, shown or not, so the panel slides out when it closes.
+func (h *Help) Build(c *ui.Context, theme nui.Theme) {
 	h.prepare(c)
 	h.open = h.Visible()
-	nui.Slideover(c.Key("python-help-overlay"), theme, &h.open, nui.SlideoverOptions{Side: nui.SideRight, Extent: nui.Set[float32](h.width)}, func(palette nui.Theme) {
-		ui.Column(c).Fill().MinHeight(0).Children(func() { h.content(c, palette) })
+	messages := pythonapi.MessagesFor(h.Locale())
+	nui.Slideover(c.Key("python-help"), theme, &h.open, nui.SlideoverOptions{
+		Side: nui.SideRight, Extent: nui.Set(helpWidth),
+		ModalOptions: nui.ModalOptions{
+			Title: messages.Title, Description: messages.Version, CloseLabel: messages.Close,
+			// The close button, Escape and a click beside the panel close it
+			// after the build, which derives open from the store again.
+			OnClose: h.Workbench.ClosePythonHelp,
+			Header:  func(c *ui.Context, palette nui.Theme) { h.header(c, palette, messages) },
+			Decoration: nui.Decoration{
+				UI: nui.Styles{
+					nui.Header: {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](12)},
+					nui.Body:   {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](12), Gap: nui.Set[float32](12)},
+				},
+				Style: func(slot nui.Slot, element ui.Element) {
+					if slot == nui.Header {
+						// The close button stays by the title above the
+						// scope and the tabs.
+						element.AlignItems(ui.Start)
+					}
+				},
+			},
+		},
+	}, func(palette nui.Theme) {
+		if h.tab == "reference" {
+			h.reference(c, palette, h.Locale(), messages)
+			return
+		}
+		h.quickstart(c, palette, h.Workbench.PythonHelpScope, messages)
 	})
-	if !h.open {
-		h.Workbench.ClosePythonHelp()
-	}
 }
 
-func (h *Help) content(c *ui.Context, theme nui.Theme) {
-	locale := h.Locale()
-	messages := pythonapi.MessagesFor(locale)
+// header shows the title, the scope with the prompt to copy, and the tabs,
+// which stay in place as the body scrolls.
+func (h *Help) header(c *ui.Context, theme nui.Theme, messages *pythonapi.Messages) {
 	scope := h.Workbench.PythonHelpScope
 	scopeLabel := messages.Global
 	if scope == pythonapi.ScopeInline {
 		scopeLabel = messages.Inline
 	}
-	ui.Column(c.Key("help-head")).FillWidth().Shrink(0).Gap(8).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Row(c.Key("title")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			ui.Column(c).Gap(2).Children(func() {
-				ui.Text(c, messages.Title).FontSize(14).Bold().TextColor(theme.Highlighted)
-				ui.Text(c, messages.Version).FontSize(12).TextColor(theme.Muted)
-			})
-			nui.Button(c.Key("close"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.X(), AccessibleLabel: messages.Close}).OnClick(h.Workbench.ClosePythonHelp)
+	ui.Column(c.Key("help-head")).FillWidth().Gap(8).Children(func() {
+		ui.Column(c.Key("title")).Gap(2).Children(func() {
+			ui.Text(c, messages.Title).FontSize(14).Bold().TextColor(theme.Highlighted).Role(ui.RoleHeading).Level(2)
+			ui.Text(c, messages.Version).FontSize(12).TextColor(theme.Muted)
 		})
 		ui.Row(c.Key("scope")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 			nui.Badge(c.Key("badge"), theme, scopeLabel, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
 			nui.Button(c.Key("copy-prompt"), theme, messages.CopyContext, nui.ButtonOptions{Size: nui.SM, Leading: lucide.Copy()}).OnClick(func() {
-				h.copy(pythonapi.SystemPrompt(scope, locale), messages.CopiedContext)
+				h.copy(pythonapi.SystemPrompt(scope, h.Locale()), messages.CopiedContext)
 			})
 		})
 		nui.Tabs(c.Key("tabs"), theme, &h.tab, []nui.TabItem{{ID: "quickstart", Label: messages.Quickstart}, {ID: "reference", Label: messages.Reference}}, nui.TabsOptions{Label: messages.Title, Size: nui.SM, Content: nui.Set(false)})
-	})
-	ui.Scroll(c.Key(h.tab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Gap(12).Padding(12).Children(func() {
-			if h.tab == "reference" {
-				h.reference(c, theme, locale, messages)
-				return
-			}
-			h.quickstart(c, theme, scope, messages)
-		})
 	})
 }
 

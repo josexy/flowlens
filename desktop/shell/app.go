@@ -33,18 +33,14 @@ type Surface struct {
 	Content func(c *ui.Context, theme nui.Theme)
 }
 
-// SidePanel is a panel docked beside the content on wide windows and laid
-// over it on narrow ones.
+// SidePanel is a panel that slides over the window from its edge, as a
+// Slideover: the window behind it takes no input while it shows.
 type SidePanel interface {
 	Visible() bool
-	BuildDocked(c *ui.Context, theme nui.Theme)
-	BuildOverlay(c *ui.Context, theme nui.Theme)
-	// Forget notes that the panel is closed.
-	Forget()
+	// Build builds the panel. It is called every frame, shown or not, so
+	// the panel can slide out.
+	Build(c *ui.Context, theme nui.Theme)
 }
-
-// sidePanelDockWidth is the narrowest workspace that docks the side panel.
-const sidePanelDockWidth float32 = 1100
 
 // TrafficCounts supplies the status bar's numbers.
 type TrafficCounts func() (total, selected int)
@@ -59,10 +55,9 @@ type App struct {
 	Surfaces   map[store.WorkspaceSection]Surface
 	// Overlays are built every frame, whichever section is on show.
 	Overlays []func(c *ui.Context, theme nui.Theme)
-	// SidePanel, when set, shows beside the content.
-	SidePanel      SidePanel
-	workspaceWidth float32
-	Counts         TrafficCounts
+	// SidePanel, when set, slides over the window while it is visible.
+	SidePanel SidePanel
+	Counts    TrafficCounts
 	// MacOS selects the platform's title bar layout.
 	MacOS bool
 
@@ -107,8 +102,11 @@ func (a *App) View(c *ui.Context) {
 	}
 	a.Confirm.Build(c, theme)
 	a.environmentModal(c, theme)
-	if a.SidePanel != nil && a.SidePanel.Visible() && !a.sidePanelDocked() {
-		a.SidePanel.BuildOverlay(c, theme)
+	if a.SidePanel != nil {
+		if a.SidePanel.Visible() {
+			a.Dispatcher.NoteModal()
+		}
+		a.SidePanel.Build(c, theme)
 	}
 	for _, overlay := range a.Overlays {
 		overlay(c, theme)
@@ -118,23 +116,9 @@ func (a *App) View(c *ui.Context) {
 }
 
 func (a *App) workspace(c *ui.Context, theme nui.Theme) {
-	row := ui.Row(c.Key("workspace-row")).Grow(1).Basis(0).MinWidth(0).FillHeight()
-	if bounds := row.Bounds(); bounds.W > 0 {
-		a.workspaceWidth = bounds.W
-	}
-	row.Children(func() {
+	ui.Row(c.Key("workspace-row")).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() {
 		a.workspaceMain(c, theme)
-		if a.sidePanelDocked() {
-			a.SidePanel.BuildDocked(c, theme)
-		}
 	})
-	if a.SidePanel != nil && !a.SidePanel.Visible() {
-		a.SidePanel.Forget()
-	}
-}
-
-func (a *App) sidePanelDocked() bool {
-	return a.SidePanel != nil && a.SidePanel.Visible() && a.workspaceWidth >= sidePanelDockWidth
 }
 
 func (a *App) workspaceMain(c *ui.Context, theme nui.Theme) {
