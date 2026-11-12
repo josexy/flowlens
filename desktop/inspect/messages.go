@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
+	desktoptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -34,6 +35,9 @@ type MessageStream struct {
 	filtered []logic.WebSocketDisplayMessage
 
 	list ui.ListState
+	// listHeight is the list's height in the last frame: rows that leave
+	// room under them draw a line under the last one too.
+	listHeight float32
 
 	open      bool
 	active    *logic.WebSocketDisplayMessage
@@ -49,6 +53,7 @@ type MessageStream struct {
 func NewMessageStream(deps Dependencies) *MessageStream {
 	stream := &MessageStream{deps: deps, Filter: DirectionAll, view: widgets.NewCodeView("plaintext", true), hex: NewHexView(deps)}
 	stream.hex.SelectionFilename = "websocket-selection.bin"
+	stream.hex.Exporting = &stream.exporting
 	stream.list.FollowEnd = true
 	return stream
 }
@@ -121,15 +126,40 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 			emptyState(c, theme, lucide.MessagesSquare(), locales.WorkspaceWebsocketClientNoMessages())
 			return
 		}
-		ui.List(c.Key("messages"), &m.list, len(m.filtered), func(index int) {
-			if m.Conversation {
-				m.bubble(c, theme, index)
-				return
+		// As 1.0.5: the list in a bordered box 10 px in, the conversation
+		// 14 px in without one.
+		padding := float32(10)
+		if m.Conversation {
+			padding = 14
+		}
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(padding).Children(func() {
+			list := ui.List(c.Key("messages"), &m.list, len(m.filtered), func(index int) {
+				if m.Conversation {
+					m.bubble(c, theme, index)
+					return
+				}
+				m.row(c, theme, index)
+			}).Fill().MinHeight(0)
+			if !m.Conversation {
+				list.Border(1, theme.Border)
 			}
-			m.row(c, theme, index)
-		}).Grow(1).Basis(0).MinHeight(0).FillWidth()
+			m.listHeight = list.Bounds().H
+		})
 	})
 	m.detail(c, theme)
+}
+
+// directionTag is a message's Send or Receive tag, in 1.0.5's direction
+// colors.
+func directionTag(c *ui.Context, theme nui.Theme, direction string) {
+	colors := desktoptheme.WebSocketPalette(theme.Dark)
+	label, tint, text := locales.WorkspaceWebsocketClientFilterReceive(), colors.Receive, colors.ReceiveTag
+	if direction == DirectionSend {
+		label, tint, text = locales.WorkspaceWebsocketClientFilterSend(), colors.Send, colors.SendTag
+	}
+	ui.Row(c).Shrink(0).MinHeight(20).AlignItems(ui.Center).PaddingX(8).Radius(999).Background(tint.Alpha(0.12)).Children(func() {
+		ui.Text(c, label).SingleLine().FontSize(12).FontWeight(700).TextColor(text)
+	})
 }
 
 func directionIcon(direction string) *ui.SVG {
@@ -151,35 +181,66 @@ func (m *MessageStream) preview(message logic.WebSocketDisplayMessage) string {
 	return message.Data
 }
 
+// row is a message of the list as 1.0.5 drew it: its direction's arrow and
+// tag, then its text or its size, with a line under it but the last when the
+// rows fill the list.
 func (m *MessageStream) row(c *ui.Context, theme nui.Theme, index int) {
 	message := m.filtered[index]
-	color := theme.Success
+	colors := desktoptheme.WebSocketPalette(theme.Dark)
+	color := colors.Receive
 	if message.Direction == DirectionSend {
-		color = theme.Primary
+		color = colors.Send
 	}
-	row := ui.Row(c.Key(message.ID)).FillWidth().Height(44).Gap(8).PaddingX(10).AlignItems(ui.Center)
+	row := ui.Row(c.Key(message.ID)).FillWidth().Height(44).Gap(10).PaddingX(12).AlignItems(ui.Center)
+	if index < len(m.filtered)-1 || float32(len(m.filtered)*44) < m.listHeight {
+		row.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
+	}
+	if row.Hovered() {
+		row.Background(theme.Elevated)
+	}
 	row.OnClick(func() { m.open_(message) })
 	row.Children(func() {
-		ui.Icon(c, directionIcon(message.Direction)).Size(14, 14).Shrink(0).TextColor(color)
+		ui.Row(c).Width(28).Shrink(0).Justify(ui.Center).Children(func() {
+			ui.Icon(c, directionIcon(message.Direction)).Size(16, 16).TextColor(color)
+		})
+		ui.Row(c).Width(88).Shrink(0).Children(func() { directionTag(c, theme, message.Direction) })
 		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(14).TextColor(theme.Text)
-		ui.Text(c, logic.FormatFileSize(int64(message.DataSize))).Shrink(0).FontSize(12).TextColor(theme.Muted)
 	})
 }
 
+// bubble is a message of the conversation as 1.0.5 drew it: its tag above
+// its text, or above a button with its size that opens a binary message. A
+// click on a text message opens it too, which 1.0.5's did not.
 func (m *MessageStream) bubble(c *ui.Context, theme nui.Theme, index int) {
 	message := m.filtered[index]
 	send := message.Direction == DirectionSend
-	ui.Row(c.Key(message.ID)).FillWidth().PaddingX(10).PaddingY(4).Children(func() {
-		if send {
-			ui.Box(c).Grow(1)
-		}
-		background := theme.Accented
-		if send {
-			background = theme.Primary.Alpha(0.14)
-		}
-		bubble := ui.Box(c).MaxWidth(520).Padding(8).Radius(10).Background(background)
-		bubble.OnClick(func() { m.open_(message) })
-		bubble.Children(func() { ui.Text(c, m.preview(message)).FontSize(14).TextColor(theme.Text) })
+	colors := desktoptheme.WebSocketPalette(theme.Dark)
+	background := colors.ReceiveBubble
+	if send {
+		background = colors.SendBubble
+	}
+	justify := ui.Start
+	if send {
+		justify = ui.End
+	}
+	ui.Row(c.Key(message.ID)).FillWidth().Padding(0, 0, 10, 0).Justify(justify).Children(func() {
+		ui.Column(c).MaxWidthPercent(76).Children(func() {
+			bubble := ui.Column(c).MaxWidth(720).Gap(6).PaddingX(12).PaddingY(10).Radius(16).Border(1, theme.Border).Background(background)
+			bubble.Shadow(0, 6, 16, 0, ui.Hex("#0f172a").Alpha(0.04))
+			if message.MsgType != "binary" {
+				bubble.OnClick(func() { m.open_(message) })
+			}
+			bubble.Children(func() {
+				ui.Row(c).Children(func() { directionTag(c, theme, message.Direction) })
+				if message.MsgType == "binary" {
+					button := ui.Row(c).Radius(999).PaddingX(12).PaddingY(8).Background(ui.Hex("#0f172a").Alpha(0.08)).Role(ui.RoleButton)
+					button.OnClick(func() { m.open_(message) })
+					button.Children(func() { ui.Text(c, m.preview(message)).FontSize(14).TextColor(theme.Text) })
+					return
+				}
+				ui.Text(c, message.Data).FontSize(14).LineHeight(1.6).TextColor(theme.Text)
+			})
+		})
 	})
 }
 
@@ -201,7 +262,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 	}
 	active := m.active
 	binary := active != nil && active.MsgType == "binary"
-	saving := m.exporting || m.hex.exporting
+	saving := m.exporting
 	var actions []widgets.DetailAction
 	if !binary {
 		actions = append(actions, m.wrap.Action(locales.DetailWrapBody()), widgets.DetailAction{Key: "copy", Icon: lucide.Copy(), Label: locales.DetailCopyBody(), Run: func() {
@@ -260,22 +321,25 @@ func (m *MessageStream) save(message *logic.WebSocketDisplayMessage) {
 	saveToFile(m.deps, &m.exporting, name, proxyservice.SaveBodyToFileRequest{Body: message.Data, BodyEncoding: encoding, ContentType: contentType})
 }
 
+// webSocketPane lists the entry's messages. Without a body view, once it is
+// not loading, the stream shows its toolbar and "No messages", as in 1.0.5.
 func (p *Panel) webSocketPane(c *ui.Context, theme nui.Theme) {
 	body := p.data.BodyView()
-	if body == nil {
-		if p.data.BodyLoading() {
-			ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
-			return
-		}
-		emptyState(c, theme, lucide.MessagesSquare(), locales.CommonNoContent())
+	if body == nil && p.data.BodyLoading() {
+		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
 		return
 	}
-	messages := make([]logic.WebSocketDisplayMessage, 0, len(body.WebSocketMessages))
-	for index, item := range body.WebSocketMessages {
-		if item != nil {
-			messages = append(messages, logic.ToWebSocketDisplayMessage(item, fmt.Sprintf("detail-ws-msg:%d:%d", p.entryID, index), time.Time{}))
+	var messages []logic.WebSocketDisplayMessage
+	truncated := false
+	if body != nil {
+		messages = make([]logic.WebSocketDisplayMessage, 0, len(body.WebSocketMessages))
+		for index, item := range body.WebSocketMessages {
+			if item != nil {
+				messages = append(messages, logic.ToWebSocketDisplayMessage(item, fmt.Sprintf("detail-ws-msg:%d:%d", p.entryID, index), time.Time{}))
+			}
 		}
+		truncated = body.WsMsgsTruncated
 	}
 	p.messages.SetMessages(messages)
-	p.messages.Build(c, theme, body.WsMsgsTruncated)
+	p.messages.Build(c, theme, truncated)
 }

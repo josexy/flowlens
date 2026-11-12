@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	nui "github.com/josexy/nuxt-ui-go"
 )
@@ -124,5 +125,28 @@ func TestAppearanceFromSettings(t *testing.T) {
 	want := Appearance{Mode: "dark", PrimaryColor: "rose", NeutralColor: "zinc", AppFont: "A", AppFontSize: 14, CodeFont: "B", CodeFontSize: 15}
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestWebSocketPalette(t *testing.T) {
+	for _, tc := range []struct {
+		dark                               bool
+		send, sendTag, receive, receiveTag string
+	}{
+		{false, "#d97706", "#b45309", "#2563eb", "#1d4ed8"},
+		{true, "#fbbf24", "#f59e0b", "#60a5fa", "#3b82f6"},
+	} {
+		got := WebSocketPalette(tc.dark)
+		for _, pair := range []struct {
+			got  ui.Color
+			want string
+		}{{got.Send, tc.send}, {got.SendTag, tc.sendTag}, {got.Receive, tc.receive}, {got.ReceiveTag, tc.receiveTag}} {
+			if pair.got != ui.Hex(pair.want) {
+				t.Errorf("dark %v: %v, want %s", tc.dark, pair.got, pair.want)
+			}
+		}
+		if got.SendBubble != ui.Hex("#f59e0b").Alpha(0.08) || got.ReceiveBubble != ui.Hex("#2563eb").Alpha(0.08) {
+			t.Errorf("dark %v: bubbles %v %v", tc.dark, got.SendBubble, got.ReceiveBubble)
+		}
 	}
 }

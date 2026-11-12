@@ -334,6 +334,76 @@ func TestWebSocketMessageFileNames(t *testing.T) {
 	}
 }
 
+func TestWebSocketMessageRows(t *testing.T) {
+	f := wsFixture(t,
+		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "incoming", DataSize: 8},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "text", Data: "outgoing", DataSize: 8},
+	)
+	// Each row shows its direction's tag and, as in 1.0.5, no size.
+	f.has(locales.WorkspaceWebsocketClientFilterReceive())
+	f.has(locales.WorkspaceWebsocketClientFilterSend())
+	f.lacks(logic.FormatFileSize(8))
+	first, _ := f.tester.Find("incoming")
+	second, _ := f.tester.Find("outgoing")
+	if second.Y-first.Y != 44 {
+		t.Fatalf("rows are %v apart, want 44", second.Y-first.Y)
+	}
+}
+
+func TestWebSocketConversationOpensBinaryMessagesByTheirButton(t *testing.T) {
+	f := wsFixture(t,
+		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello there", DataSize: 11},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
+	)
+	f.panel.messages.Conversation = true
+	f.settle()
+	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
+	f.has(locales.WorkspaceWebsocketClientMessageDetailSend())
+	f.panel.messages.open = false
+	f.settle()
+	f.openMessage("hello there")
+	f.has(locales.WorkspaceWebsocketClientMessageDetailReceive())
+}
+
+func TestWebSocketHexExportWaitsForTheDialogsSave(t *testing.T) {
+	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3})
+	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
+	stream := f.panel.messages
+	stream.hex.anchor, stream.hex.focus, stream.hex.hasChoice = 0, 1, true
+	// A Save of the message is in progress.
+	stream.exporting = true
+	f.settle()
+	row, ok := f.tester.Find("01 02 03")
+	if !ok {
+		t.Fatalf("no hex row in %v", f.tester.Texts())
+	}
+	f.tester.RightClickAt(row.X+row.W/2, row.Y+row.H/2)
+	f.settle()
+	if err := f.tester.ChooseMenuItem(locales.DetailHexExport()); err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("Export during a Save: %v", err)
+	}
+	if info, ok := f.tester.Access(locales.DetailSaveBody()); !ok || !info.Disabled {
+		t.Fatalf("Save %+v", info)
+	}
+}
+
+func TestWebSocketPaneWithoutABodyView(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "ws"
+	f := newFixture(t, entry, nil)
+	f.panel.responseTab = tabWebSocket
+	f.settle()
+	// As 1.0.5: the stream, with its toolbar, says there are no messages.
+	f.has(locales.WorkspaceWebsocketClientNoMessages())
+	f.lacks(locales.CommonNoContent())
+	if _, ok := f.tester.Access(locales.WorkspaceWebsocketClientFilterAll()); !ok {
+		t.Fatalf("no direction filter in %v", f.tester.Texts())
+	}
+	f.data.loading = true
+	f.settle()
+	f.lacks(locales.WorkspaceWebsocketClientNoMessages())
+}
+
 func TestEmptyWebSocketMessageStream(t *testing.T) {
 	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "incoming", DataSize: 8})
 	f.click(locales.WorkspaceWebsocketClientFilterAll())
@@ -691,6 +761,51 @@ func TestSSEOpensByDefaultAndListsEvents(t *testing.T) {
 		f.has(text)
 	}
 	f.has(locales.DetailSseMessageCount("2"))
+}
+
+func TestSSEMessageListColumns(t *testing.T) {
+	f := sseFixture(t, "event: hello\ndata: first\n\nid: 7\nevent: next\ndata: second\n\n")
+	// As 1.0.5: a header of ID, Event type and Data preview, 44 px rows,
+	// and a dash for a message before any ID.
+	for _, title := range []string{locales.DetailSseId(), locales.DetailSseEventType(), locales.DetailSsePreview()} {
+		f.has(title)
+	}
+	for _, text := range []string{"—", "hello", "first", "7", "next", "second"} {
+		f.has(text)
+	}
+	first, _ := f.tester.Find("first")
+	second, _ := f.tester.Find("second")
+	if second.Y-first.Y != sseRowHeight {
+		t.Fatalf("rows are %v apart, want %v", second.Y-first.Y, sseRowHeight)
+	}
+}
+
+func TestSSEMessagesOpenByKeyboard(t *testing.T) {
+	f := sseFixture(t, "data: first\n\ndata: second\n\n")
+	view := f.panel.responseBody.sse
+	f.openMessage(locales.DetailSseOpenMessage("1"))
+	if !view.open || view.selected.Sequence != 1 {
+		t.Fatalf("open %v selected %+v", view.open, view.selected)
+	}
+	// Closing gives the focus back to the list, whose keys move from the
+	// message opened, and Enter opens the one they reach.
+	f.tester.Key(0, ui.KeyEscape)
+	f.tester.Advance(time.Second)
+	f.settle()
+	if view.open {
+		t.Fatal("Escape left the detail open")
+	}
+	f.tester.Key(0, ui.KeyDown)
+	f.settle()
+	if view.open {
+		t.Fatal("a key opened a message")
+	}
+	f.tester.Key(0, ui.KeyEnter)
+	f.tester.Advance(time.Second)
+	f.settle()
+	if !view.open || view.selected.Sequence != 2 {
+		t.Fatalf("open %v selected %+v", view.open, view.selected)
+	}
 }
 
 func TestSSEIncompleteNotice(t *testing.T) {

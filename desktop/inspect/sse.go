@@ -20,6 +20,25 @@ import (
 // asyncParseThreshold is how much new text is parsed off the main thread.
 const asyncParseThreshold = 256 * 1024
 
+// sseRowHeight is 1.0.5's message row: 44 px, with the cells' padding.
+const sseRowHeight = 44
+
+// sseColumnIDs are the message list's columns in the order sseColumns gives
+// them.
+var sseColumnIDs = []string{"id", "event", "preview"}
+
+// sseColumns are 1.0.5's message list columns, 3rem and 6rem wide, and the
+// preview taking the rest, which the user neither moves nor resizes. Widths
+// count the cells' 10 px padding on each side, and the table scrolls sideways
+// below 1.0.5's 480 px.
+func sseColumns() []ui.TableColumn {
+	return []ui.TableColumn{
+		{ID: sseColumnIDs[0], Title: locales.DetailSseId(), Width: 68, Fixed: true},
+		{ID: sseColumnIDs[1], Title: locales.DetailSseEventType(), Width: 116, Fixed: true},
+		{ID: sseColumnIDs[2], Title: locales.DetailSsePreview(), MinWidth: 296, Fixed: true},
+	}
+}
+
 // SSEView lists the events of a stream.
 type SSEView struct {
 	deps Dependencies
@@ -34,6 +53,8 @@ type SSEView struct {
 	sequence uint64
 
 	list ui.ListState
+	// rows opens a message on a click or Enter, as 1.0.5's row buttons did.
+	rows *widgets.RowActivator
 
 	open       bool
 	selected   *logic.SSEMessageDetail
@@ -48,7 +69,7 @@ type SSEView struct {
 // NewSSEView returns an empty view.
 func NewSSEView(deps Dependencies) *SSEView {
 	view := &SSEView{deps: deps, parser: &logic.SSEParser{}, detailTab: "data", detailView: widgets.NewCodeView("plaintext", true)}
-	view.list.FollowEnd = true
+	view.resetList()
 	return view
 }
 
@@ -56,7 +77,19 @@ func (s *SSEView) reset() {
 	s.parser, s.events, s.parsed, s.parsing = &logic.SSEParser{}, nil, 0, false
 	s.sequence++
 	s.closeDetail()
+	s.resetList()
+}
+
+// resetList starts the message list at the top, following new messages.
+func (s *SSEView) resetList() {
 	s.list = ui.ListState{FollowEnd: true}
+	s.list.Label = func(row int) string {
+		if row >= len(s.events) {
+			return ""
+		}
+		return locales.DetailSseOpenMessage(strconv.Itoa(s.events[row].Sequence))
+	}
+	s.rows = widgets.NewRowActivator(&s.list)
 }
 
 func (s *SSEView) closeDetail() { s.open, s.selected = false, nil }
@@ -113,30 +146,47 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 			ui.Box(c).Grow(1)
 			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.list.ScrollToEnd)
 		})
-		if s.parser.HasPendingEvent() {
-			warningAlert(c, theme, locales.DetailSseIncomplete())
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingX(10).Children(func() {
+			// As 1.0.5: the empty state only once parsing found nothing.
+			if len(s.events) == 0 && !s.parsing {
+				emptyState(c, theme, lucide.Radio(), locales.DetailSseEmpty())
+				return
+			}
+			table := ui.Table(c.Key("sse-table"), &s.list, sseColumns(), len(s.events), func(row, col int) {
+				if row < len(s.events) {
+					s.cell(c, theme, s.events[row], col)
+				}
+			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.DetailSseTab())
+			s.rows.Attach(table)
+			if row, ok := s.rows.Activated(table, len(s.events)); ok {
+				s.openDetail(s.events[row])
+			}
+		})
+		// 1.0.5 noted an incomplete last event under the list once parsed;
+		// the parser is the background job's while it parses.
+		if !s.parsing && s.parser.HasPendingEvent() {
+			ui.Text(c, locales.DetailSseIncomplete()).FillWidth().Shrink(0).Padding(6, 10, 0, 10).FontSize(12).TextColor(theme.Muted)
 		}
-		if len(s.events) == 0 {
-			emptyState(c, theme, lucide.Radio(), locales.DetailSseEmpty())
-			return
-		}
-		ui.List(c.Key("sse-list"), &s.list, len(s.events), func(row int) { s.row(c, theme, row) }).Grow(1).Basis(0).MinHeight(0).FillWidth()
+		ui.Box(c).Shrink(0).Height(10)
 	})
 }
 
-func (s *SSEView) row(c *ui.Context, theme nui.Theme, index int) {
-	event := s.events[index]
-	row := ui.Row(c.Key(event.Sequence)).FillWidth().Gap(8).PaddingX(10).PaddingY(6).AlignItems(ui.Center).Label(locales.DetailSseOpenMessage(strconv.Itoa(event.Sequence)))
-	row.OnClick(func() { s.openDetail(event) })
-	row.Children(func() {
-		ui.Text(c, strconv.Itoa(event.Sequence)).Width(48).Shrink(0).FontSize(12).TextColor(theme.Muted)
-		ui.Text(c, event.EventType).Width(120).Shrink(0).FontSize(13).SingleLine().TextColor(theme.Primary)
-		ui.Text(c, orDash(event.LastEventID)).Width(100).Shrink(0).FontSize(13).SingleLine().TextColor(theme.Toned)
-		preview := event.Preview
-		if preview == "" {
-			preview = locales.DetailSseEmptyData()
+// cell builds a message row's column on one line, as 1.0.5 did: the ID in
+// muted figures, the event type, and the data preview.
+func (s *SSEView) cell(c *ui.Context, theme nui.Theme, event *logic.SSEEvent, col int) {
+	ui.Row(c).FillWidth().MinWidth(0).Height(sseRowHeight - 12).AlignItems(ui.Center).Children(func() {
+		switch sseColumnIDs[col] {
+		case "id":
+			ui.Text(c, orDash(event.LastEventID)).SingleLine().MinWidth(0).FontSize(14).FontFeatures("tnum").TextColor(theme.Muted)
+		case "event":
+			ui.Text(c, event.EventType).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Text)
+		default:
+			preview := event.Preview
+			if preview == "" {
+				preview = locales.DetailSseEmptyData()
+			}
+			ui.Text(c, preview).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Text)
 		}
-		ui.Text(c, preview).Grow(1).Basis(0).MinWidth(0).FontSize(13).SingleLine().TextColor(theme.Text)
 	})
 }
 

@@ -89,3 +89,26 @@ func TestRenderSSEMessageDetail(t *testing.T) {
 	f.click(locales.DetailFormatted())
 	rendertest.ShootThemes(t, f.tester, "sse-detail-formatted", f.setDark)
 }
+
+func TestRenderWebSocketMessageList(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "ws"
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
+		{Direction: "send", MsgType: "text", Data: `{"type":"subscribe","channel":"prices"}`, DataSize: 39},
+		{Direction: "receive", MsgType: "text", Data: `{"type":"ack","channel":"prices"}`, DataSize: 33},
+		{Direction: "receive", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte("\x00\x01binary frame\xff")), DataSize: 16},
+	}})
+	f.tester.SetSize(rendertest.Width, 520)
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "ws-list", f.setDark)
+	f.panel.messages.Conversation = true
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "ws-conversation", f.setDark)
+}
+
+func TestRenderSSEMessageList(t *testing.T) {
+	f := sseFixture(t, "event: open\ndata: {\"session\":\"a1\"}\n\nid: 41\nevent: update\ndata: {\"status\":\"ok\",\"items\":[1,2,3]}\n\nid: 42\nevent: update\ndata:\n\ndata: tail")
+	f.tester.SetSize(rendertest.Width, 520)
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "sse-list", f.setDark)
+}

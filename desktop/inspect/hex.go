@@ -29,6 +29,10 @@ type HexView struct {
 	// SelectionFilename is the name Export suggests for the bytes selected,
 	// hex-selection.bin when empty.
 	SelectionFilename string
+	// Exporting, when set, is the busy flag of the owner's Save, which Export
+	// shares, as 1.0.5's WebSocket message dialog did: neither saves while
+	// the other does.
+	Exporting *bool
 
 	identity uint64
 	body     string
@@ -269,7 +273,7 @@ func (h *HexView) menu(menu *ui.Menu, length int64) {
 		h.copySelection(logic.HexCopyBase64)
 	}
 	menu.Separator()
-	if menu.Item(locales.DetailHexExport()).Disabled(!selected || h.exporting).Chosen() {
+	if menu.Item(locales.DetailHexExport()).Disabled(!selected || *h.exportBusy()).Chosen() {
 		h.exportSelection()
 	}
 	_ = length
@@ -299,7 +303,7 @@ func (h *HexView) copySelection(format logic.HexCopyFormat) {
 
 func (h *HexView) exportSelection() {
 	start, end, ok := h.SelectionRange()
-	if !ok || h.exporting {
+	if !ok || *h.exportBusy() {
 		return
 	}
 	var data strings.Builder
@@ -311,5 +315,13 @@ func (h *HexView) exportSelection() {
 	if name == "" {
 		name = "hex-selection.bin"
 	}
-	saveToFile(h.deps, &h.exporting, name, proxyservice.SaveBodyToFileRequest{Body: encoded, BodyEncoding: "base64", ContentType: "application/octet-stream"})
+	saveToFile(h.deps, h.exportBusy(), name, proxyservice.SaveBodyToFileRequest{Body: encoded, BodyEncoding: "base64", ContentType: "application/octet-stream"})
+}
+
+// exportBusy returns the flag set while Export saves.
+func (h *HexView) exportBusy() *bool {
+	if h.Exporting != nil {
+		return h.Exporting
+	}
+	return &h.exporting
 }
