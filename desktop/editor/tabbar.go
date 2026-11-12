@@ -93,8 +93,9 @@ func (e *Editor) scrollButton(c *ui.Context, theme nui.Theme, key string, icon *
 
 func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	workspace := e.Data.Workspace
+	// DropdownMenu opens and closes the menu on the button's click itself;
+	// toggling it here as well would undo each click.
 	anchor := tabStripButton(c, theme, "tabs-new", locales.WorkspaceTabBarNew(), lucide.Plus(), 30)
-	anchor.OnClick(func() { e.newMenu.Open = !e.newMenu.Open })
 	nui.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, []nui.MenuItem{
 		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewHTTPRequest), "+"), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
 		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: strings.Join(e.kbds(shortcuts.WorkspaceNewWebSocket), "+"), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},

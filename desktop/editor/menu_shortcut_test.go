@@ -60,6 +60,26 @@ func TestTabMenuShowsShortcuts(t *testing.T) {
 	}
 }
 
+// The new tab button opens its menu with one click, and its items create
+// tabs.
+func TestNewTabButtonOpensItsMenu(t *testing.T) {
+	f := newFake(t)
+	before := len(f.tabKeys())
+	f.click(locales.WorkspaceTabBarNew())
+	if !f.editor.newMenu.Open {
+		t.Fatal("one click on New leaves its menu closed")
+	}
+	f.click(locales.WorkspaceTabBarNewHttp())
+	if f.editor.newMenu.Open || len(f.tabKeys()) != before+1 {
+		t.Fatalf("menu open %v, tabs %v", f.editor.newMenu.Open, f.tabKeys())
+	}
+	f.click(locales.WorkspaceTabBarNew())
+	f.click(locales.WorkspaceTabBarNewWs())
+	if len(f.tabKeys()) != before+2 {
+		t.Fatalf("tabs %v", f.tabKeys())
+	}
+}
+
 func TestNewTabMenuShowsBindings(t *testing.T) {
 	f := newFake(t)
 	f.editor.newMenu.Open = true
