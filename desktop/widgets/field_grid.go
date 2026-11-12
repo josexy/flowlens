@@ -40,9 +40,13 @@ type fieldGridCell struct {
 // name column's width lasts while the grid is shown.
 type fieldGridState struct {
 	list ui.ListState
-	// nameWidth is the name column's width, 0 for half the grid.
-	nameWidth float32
-	width     float32
+	// nameShare is the name column's share of a row's width, 0 for half.
+	// A share rather than a width, so the columns keep their proportion as
+	// the grid is resized, laid out in the same frame.
+	nameShare float32
+	// width is a row's width inside its borders in the last frame, which
+	// turns a drag of the column's edge into a share.
+	width float32
 
 	open       *fieldGridCell
 	openAt     ui.Rect
@@ -75,21 +79,24 @@ func FieldGrid(c *ui.Context, theme nui.Theme, rows []KeyValue, o FieldGridOptio
 			fieldGridRow(c, theme, state, rows, index, o)
 		}).Fill().Label(o.Label)
 		if bounds := list.Bounds(); bounds.W > 0 {
-			state.width = bounds.W
+			state.width = bounds.W - 2
 		}
 	})
 	fieldGridEditor(c, theme, state)
 	return area
 }
 
-// fieldGridNameWidth returns the name column's width in a grid width wide.
-func fieldGridNameWidth(state *fieldGridState, width float32) float32 {
-	if state.nameWidth <= 0 {
-		return max(width/2, 0)
+// fieldGridNameShare returns the name column's share of a row.
+func fieldGridNameShare(state *fieldGridState) float32 {
+	if state.nameShare <= 0 {
+		return 0.5
 	}
-	return clampFieldGridName(state.nameWidth, width)
+	return state.nameShare
 }
 
+// clampFieldGridName keeps a name column width within 1.0.5's limits in a row
+// width wide: at least FieldGridNameMinWidth, and leaving the value at least
+// FieldGridValueMinWidth where the row has room for both.
 func clampFieldGridName(name, width float32) float32 {
 	return min(max(name, FieldGridNameMinWidth), max(FieldGridNameMinWidth, width-FieldGridValueMinWidth))
 }
@@ -105,16 +112,20 @@ func fieldGridRow(c *ui.Context, theme nui.Theme, state *fieldGridState, rows []
 	if row.Hovered() {
 		row.Background(theme.Elevated)
 	}
-	nameWidth := fieldGridNameWidth(state, state.width-2)
+	// The columns are sized by the layout of this frame: the name takes its
+	// share of the row, giving way down to its minimum where the value would
+	// be narrower than its own, and the value takes the rest. Only a row
+	// narrower than both minimums clips the value.
+	row.Clip()
 	row.Children(func() {
-		name := ui.Row(c.Key("name")).Width(nameWidth).Shrink(0).MinWidth(0).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
+		name := ui.Row(c.Key("name")).BasisPercent(fieldGridNameShare(state) * 100).Grow(0).Shrink(1).MinWidth(FieldGridNameMinWidth).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
 		name.BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Label(field.Key)
 		fieldGridCellClick(name, state, index, false, field)
 		name.Children(func() {
 			ui.Text(c, field.Key).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).FontWeight(500).TextColor(theme.Text)
-			fieldGridResizer(c, theme, state)
+			fieldGridResizer(c, theme, state, name)
 		})
-		value := ui.Row(c.Key("value")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
+		value := ui.Row(c.Key("value")).Grow(1).Basis(0).Shrink(0).MinWidth(FieldGridValueMinWidth).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
 		fieldGridCellClick(value, state, index, true, field)
 		value.Children(func() {
 			ui.Text(c, field.Value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).TextColor(theme.Text)
@@ -140,12 +151,13 @@ func fieldGridCellClick(cell ui.Element, state *fieldGridState, index int, value
 }
 
 // fieldGridResizer is the name column's edge: dragging it resizes the
-// column within its limits.
-func fieldGridResizer(c *ui.Context, theme nui.Theme, state *fieldGridState) {
+// column within its limits, as a share of the row.
+func fieldGridResizer(c *ui.Context, theme nui.Theme, state *fieldGridState, name ui.Element) {
 	handle := ui.Box(c.Key("resize")).Absolute().Top(0).Bottom(0).Right(-fieldGridResizeHandle / 2).Width(fieldGridResizeHandle).ZIndex(2).Cursor(ui.CursorResizeEW).Label("resize-name-column")
 	if dx, _, held := handle.Dragged(); held && dx != 0 {
-		width := state.width - 2
-		state.nameWidth = clampFieldGridName(fieldGridNameWidth(state, width)+dx, width)
+		if width, current := state.width, name.Bounds().W; width > 0 && current > 0 {
+			state.nameShare = clampFieldGridName(current+dx, width) / width
+		}
 	}
 	if handle.Hovered() || handle.Pressed() {
 		handle.Background(theme.Primary.Alpha(0.35))

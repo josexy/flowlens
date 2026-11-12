@@ -197,3 +197,43 @@ func TestFieldGridBuildsOnlyVisibleRows(t *testing.T) {
 		t.Fatalf("built %d rows of 2000", count)
 	}
 }
+
+// The columns are laid out in the frame that builds the grid, without
+// waiting for a frame to measure it, and keep their proportion as the grid
+// is resized.
+func TestFieldGridColumnsFollowTheWidthAtOnce(t *testing.T) {
+	config := nui.DefaultApp()
+	rows := []KeyValue{{"content-type", "text/html"}, {"accept", "*/*"}}
+	tester := ui.NewTester(func(c *ui.Context) {
+		theme := nui.App(c, config)
+		ui.Column(c).Fill().Padding(10).Children(func() {
+			FieldGrid(c, theme, rows, FieldGridOptions{Label: "fields"})
+		})
+	}, 700, 400)
+	tester.Frame()
+	nameColumn := func() (name, value ui.Rect) {
+		t.Helper()
+		n, ok := tester.Access("content-type")
+		v, found := tester.Find("text/html")
+		if !ok || !found {
+			t.Fatalf("no row in %v", tester.Texts())
+		}
+		return n.Bounds, v
+	}
+	// One frame: the name takes half of the 678 px inside the borders.
+	name, value := nameColumn()
+	if name.W < 330 || name.W > 348 || value.X < name.X+name.W {
+		t.Fatalf("first frame: name %v, value %v", name, value)
+	}
+	tester.SetSize(1100, 400)
+	tester.Frame()
+	if name, _ = nameColumn(); name.W < 530 || name.W > 548 {
+		t.Fatalf("after widening: name %v", name)
+	}
+	// Narrow: the name keeps its minimum and the value its own.
+	tester.SetSize(340, 400)
+	tester.Frame()
+	if name, value = nameColumn(); name.W < FieldGridNameMinWidth-1 || name.W > 340-20-2-FieldGridValueMinWidth+1 || value.X < name.X+name.W {
+		t.Fatalf("narrow: name %v, value %v", name, value)
+	}
+}
