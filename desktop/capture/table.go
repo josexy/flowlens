@@ -84,7 +84,9 @@ type Table struct {
 	// gesture applies the 1.0.5 click model over MyGo's selection.
 	gesture  rowGesture
 	observer func(ui.InputEvent)
-	resend   resendDialog
+	// historyShown is the HistoryKey the selection belongs to.
+	historyShown string
+	resend       resendDialog
 	// clipboard is text waiting for the next build to copy, for work that
 	// finishes outside one.
 	clipboard *string
@@ -211,30 +213,19 @@ func (t *Table) refreshRows() bool {
 	return true
 }
 
-// pruneSelection removes rows that left the table and moves the focused entry
-// to a row still selected.
+// pruneSelection removes rows that left the table and, as 1.0.5 did, moves
+// the focus to the first row still selected in table order.
 func (t *Table) pruneSelection() {
 	if t.selection.Len() == 0 {
 		return
 	}
-	present := make(map[uint64]*logic.TrafficEntry, len(t.rows))
+	present := make(map[uint64]bool, len(t.rows))
 	for _, entry := range t.rows {
-		present[entry.ID] = entry
+		present[entry.ID] = true
 	}
-	var first *logic.TrafficEntry
-	focusStillSelected := false
-	focused := t.source.SelectedEntry()
 	for id := range t.selection.All() {
-		entry, ok := present[id]
-		if !ok {
+		if !present[id] {
 			t.selection.Remove(id)
-			continue
-		}
-		if first == nil || entry.ID < first.ID {
-			first = entry
-		}
-		if focused != nil && focused.ID == id {
-			focusStillSelected = true
 		}
 	}
 	if t.selection.Len() == 0 {
@@ -242,9 +233,33 @@ func (t *Table) pruneSelection() {
 		t.source.SelectEntry(nil)
 		return
 	}
-	if !focusStillSelected {
-		t.source.SelectEntry(first)
+	if focused := t.source.SelectedEntry(); focused != nil && t.selection.Has(focused.ID) {
+		return
 	}
+	for _, entry := range t.rows {
+		if t.selection.Has(entry.ID) {
+			t.source.SelectEntry(entry)
+			return
+		}
+	}
+}
+
+// followHistory clears the selection, the focus and any gesture when the
+// table shows another saved session, as 1.0.5 did: sessions number their
+// entries alike, so the rows chosen in one are not the same rows in another.
+func (t *Table) followHistory() {
+	if t.HistoryKey == nil {
+		return
+	}
+	key := t.HistoryKey()
+	if key == t.historyShown {
+		return
+	}
+	t.historyShown = key
+	t.selection.Clear()
+	t.selectedRow = -1
+	t.gesture = rowGesture{}
+	t.focusEntry(nil)
 }
 
 func (t *Table) replaceSelection(index int) {
@@ -335,6 +350,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.loadLayout()
 	visible := t.visibleColumns()
 	t.applySortCycle(visible)
+	t.followHistory()
 	rowsChanged := t.refreshRows()
 	if rowsChanged {
 		t.pruneSelection()

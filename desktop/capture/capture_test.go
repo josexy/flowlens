@@ -878,6 +878,126 @@ func TestPressOnAHeaderSelectsNothing(t *testing.T) {
 	f.requireSelection([]uint64{2}, 2, false)
 }
 
+// rowCenter returns the center of the row showing host.
+func (f *fixture) rowCenter(host string) (x, y float32) {
+	f.t.Helper()
+	r, ok := f.tester.Find(host)
+	if !ok {
+		f.t.Fatalf("row %s", host)
+	}
+	return r.X + r.W/2, r.Y + r.H/2
+}
+
+func TestDragStartingInThePressBuildAnchorsAtThePressedRow(t *testing.T) {
+	f := newFixture(t, manyEntries(9)...)
+	table := f.workspace.Table
+	x, y := f.rowCenter("host3.test")
+	ex, ey := f.rowCenter("host6.test")
+	f.tester.Press(x, y)
+	// A platform may deliver the press and a move past the drag threshold
+	// before the next frame, so the build that first sees the press also
+	// starts the drag. The Tester draws a frame after each event: the
+	// press is made unseen again to stand for that.
+	g := &table.gesture
+	g.press.fresh, g.press.onRow, g.press.row = true, false, 0
+	f.tester.Move(ex, ey)
+	f.tester.Release(ex, ey)
+	f.settle()
+	f.requireSelection([]uint64{3, 4, 5, 6}, 6, false)
+}
+
+func TestReleaseOutsideTheTableLeavesTheKeysWorking(t *testing.T) {
+	f := newFixture(t, manyEntries(6)...)
+	f.clickRow(0, "host2.test")
+	_, y := f.rowCenter("host4.test")
+	// The table begins where the 240 DIP sidebar ends: the release lands
+	// on the sidebar, short of a drag.
+	f.tester.Press(241, y)
+	f.tester.Move(238, y)
+	f.tester.Release(238, y)
+	f.settle()
+	f.requireSelection([]uint64{2}, 2, false)
+	f.tester.Key(0, ui.KeyDown)
+	f.settle()
+	f.requireSelection([]uint64{3}, 3, false)
+}
+
+func TestLosingTheWindowFocusDuringAPressLeavesTheKeysWorking(t *testing.T) {
+	f := newFixture(t, manyEntries(6)...)
+	f.clickRow(0, "host2.test")
+	f.tester.Press(f.rowCenter("host4.test"))
+	f.tester.SetFocused(false)
+	f.tester.SetFocused(true)
+	f.settle()
+	f.requireSelection([]uint64{2}, 2, false)
+	f.tester.Key(0, ui.KeyDown)
+	f.settle()
+	f.requireSelection([]uint64{3}, 3, false)
+	f.tester.Key(ui.Cmd, ui.KeyA)
+	f.settle()
+	f.requireSelection([]uint64{1, 2, 3, 4, 5, 6}, 3, false)
+}
+
+func TestAReleaseAfterAPressElsewhereClicksNoRow(t *testing.T) {
+	f := newFixture(t, manyEntries(6)...)
+	f.clickRow(0, "host2.test")
+	// A press on row 4 whose release the table never sees.
+	_, y := f.rowCenter("host4.test")
+	f.tester.Press(241, y)
+	f.tester.Move(238, y)
+	f.tester.Release(238, y)
+	f.settle()
+	// A press on the sidebar, released over the table.
+	x, ry := f.rowCenter("host5.test")
+	f.tester.Press(100, ry)
+	f.tester.Move(x, ry)
+	f.tester.Release(x, ry)
+	f.settle()
+	f.requireSelection([]uint64{2}, 2, false)
+}
+
+func TestEvictionFocusesTheFirstRowLeftInTableOrder(t *testing.T) {
+	f := newFixture(t, entry(1, "d.test"), entry(2, "b.test"), entry(3, "a.test"), entry(4, "c.test"))
+	table := f.workspace.Table
+	table.sort = ui.SortOrder{Column: string(logic.ColumnHost)}
+	table.lastSort = table.sort
+	f.settle()
+	f.clickRow(0, "d.test")
+	f.clickRow(ui.Shift, "c.test")
+	f.clickRow(ui.Shift, "b.test")
+	f.requireSelection([]uint64{2, 4, 1}, 2, false)
+	// Row 4 comes before row 1 by host, though its ID is larger.
+	f.data.Traffic.Delete([]uint64{2})
+	f.settle()
+	f.requireSelection([]uint64{4, 1}, 4, false)
+}
+
+func TestSwitchingHistoriesClearsTheSelection(t *testing.T) {
+	backend := &fakeHistoryBackend{
+		list: []*proxyservice.HistoryMetadata{
+			{Key: "k1", Alias: "first-session", CreatedAt: 1700000000000, Total: 3, FormatVersion: 2},
+			{Key: "k2", Alias: "second-session", CreatedAt: 1700000001000, Total: 3, FormatVersion: 2},
+		},
+		// Each session numbers its entries from 1.
+		entries: map[string][]*logic.TrafficEntry{
+			"k1": {entry(1, "a1.test"), entry(2, "a2.test"), entry(3, "a3.test")},
+			"k2": {entry(1, "b1.test"), entry(2, "b2.test"), entry(3, "b3.test")},
+		},
+	}
+	h := newFixtureSized(t, nil, 1400, 800, backend)
+	table := h.workspace.HistoryTable
+	h.click("first-session")
+	h.clickRow(ui.Cmd, "a2.test")
+	if ids := selectedIDs(table); !slices.Equal(ids, []uint64{2}) || !h.data.History.Traffic.ShowDetailPanel {
+		t.Fatalf("first session: selected %v detail %v", ids, h.data.History.Traffic.ShowDetailPanel)
+	}
+	h.click("second-session")
+	h.settle()
+	if ids := selectedIDs(table); len(ids) != 0 || h.data.History.Traffic.Selected != nil || h.data.History.Traffic.SelectedCount != 0 || h.data.History.Traffic.ShowDetailPanel {
+		t.Fatalf("second session: selected %v focus %v count %d detail %v", ids, h.data.History.Traffic.Selected, h.data.History.Traffic.SelectedCount, h.data.History.Traffic.ShowDetailPanel)
+	}
+}
+
 func TestEvictedSelectionIsRemoved(t *testing.T) {
 	entries := make([]*logic.TrafficEntry, 5000)
 	for index := range entries {

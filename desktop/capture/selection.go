@@ -20,8 +20,11 @@ import (
 //     pointer, in place of the others.
 //
 // MyGo has no hook for a row's click, so the table watches presses with
-// ObserveInput, holds the selection as it was while a press is down, and
-// applies the click once MyGo has handled it.
+// ObserveInput, puts back the selection MyGo chose as the pointer went down
+// in the build that sees the press, and applies the click once MyGo has
+// handled it. MyGo chooses on a press only in that build, so nothing needs
+// holding until the release, which may never reach the table: one outside
+// it, or none as the window loses the focus.
 
 // rowPress is a press of the primary button on the table.
 type rowPress struct {
@@ -94,12 +97,6 @@ func (t *Table) observePointer(ev ui.InputEvent) {
 	}
 }
 
-// holding reports whether a press MyGo took as a row's is down without a
-// drag: the selection stays as it was until the release.
-func (g *rowGesture) holding() bool {
-	return g.press.down && g.press.onRow && !g.press.dragged
-}
-
 // beginSelection prepares a build that may see a press or a click: it keeps
 // the selection as it is, and starts Selected at -1 to learn which row MyGo
 // chooses.
@@ -107,7 +104,7 @@ func (t *Table) beginSelection() {
 	g := &t.gesture
 	g.spans = g.spans[:0]
 	g.probing = false
-	if !g.press.fresh && len(g.clicks) == 0 && !g.holding() {
+	if !g.press.fresh && len(g.clicks) == 0 {
 		return
 	}
 	g.snapshot = g.snapshot[:0]
@@ -173,11 +170,18 @@ func (t *Table) resolveSelection(table ui.Element) bool {
 		chosen = t.selectedRow
 	}
 	top := table.Bounds().Y
+	if g.press.down && !g.press.fresh && table.PressedOutside() {
+		// A press elsewhere began after one whose release the table never
+		// saw: that one is over, and clicks nothing.
+		g.press.down = false
+	}
 	if g.press.fresh {
 		g.press.fresh = false
 		g.press.row = t.rowAt(top, g.press.y)
-		// MyGo chooses a row not selected as the pointer goes down.
-		if chosen >= 0 && g.press.down {
+		// MyGo chooses a row not selected as the pointer goes down. A drag
+		// that began in the same build has moved Selected on to the row
+		// under the pointer, so the row pressed is the one under the press.
+		if chosen >= 0 && g.press.down && !dragging {
 			g.press.onRow = true
 			g.press.row = t.rows[chosen].ID
 		}
@@ -196,7 +200,7 @@ func (t *Table) resolveSelection(table ui.Element) bool {
 			t.focusEntry(t.rows[t.selectedRow])
 		}
 		return true
-	case g.probing || g.holding():
+	case g.probing:
 		t.restoreSelection()
 	default:
 		return false
