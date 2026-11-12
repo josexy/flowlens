@@ -55,22 +55,20 @@ type consoleView struct {
 	state  *logic.HTTPEditorState
 	// list keeps the column widths while the tab is open; they are not
 	// saved, as in 1.0.5.
-	list   ui.ListState
-	chosen int
-	// clicked is set by a click on the table, which opens the row it
-	// chooses; the keys choose nothing.
-	clicked bool
-	detail  *logic.PluginLogEntry
-	open    bool
-	wrap    widgets.DetailWrap
-	view    *widgets.CodeView
-	saving  bool
+	list ui.ListState
+	// rows opens an entry on a click or Enter, as 1.0.5's row buttons did.
+	rows   *widgets.RowActivator
+	detail *logic.PluginLogEntry
+	open   bool
+	wrap   widgets.DetailWrap
+	view   *widgets.CodeView
+	saving bool
 }
 
 func newConsoleView(e *Editor, key string, state *logic.HTTPEditorState) *consoleView {
-	view := &consoleView{editor: e, key: key, state: state, chosen: -1, view: widgets.NewCodeView("plaintext", true)}
+	view := &consoleView{editor: e, key: key, state: state, view: widgets.NewCodeView("plaintext", true)}
 	view.list.FollowEnd = true
-	view.list.Selected = &view.chosen
+	view.rows = widgets.NewRowActivator(&view.list)
 	return view
 }
 
@@ -210,16 +208,11 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 					v.cell(c, theme, &entries[row], col)
 				}
 			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.WorkspaceHttpRequestConsole())
-			table.ObserveInput(func(ev ui.InputEvent) {
-				if ev.Kind == ui.InputPointerUp && ev.Button == 0 && !ev.Canceled {
-					v.clicked = true
-				}
-			})
-			if table.Changed() && v.clicked && v.chosen >= 0 && v.chosen < len(entries) {
-				chosen := entries[v.chosen]
+			v.rows.Attach(table)
+			if row, ok := v.rows.Activated(table, len(entries)); ok {
+				chosen := entries[row]
 				v.detail, v.open = &chosen, true
 			}
-			v.clicked, v.chosen = false, -1
 		})
 	})
 	v.detailDialog(c, theme)

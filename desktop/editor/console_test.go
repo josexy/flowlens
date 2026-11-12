@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -165,6 +166,53 @@ func TestPythonConsoleEntryDetail(t *testing.T) {
 	f.click(locales.WorkspaceHttpRequestConsoleCopyEntry())
 	if got := f.tester.Clipboard(); got != long {
 		t.Fatalf("clipboard %q", got)
+	}
+}
+
+func TestPythonConsoleRowsOpenByKeyboard(t *testing.T) {
+	f, _, view := consoleFixture(t,
+		consoleEntry(1, "alpha", "stdout", "info", "one"),
+		consoleEntry(2, "beta", "stdout", "info", "two"),
+		consoleEntry(3, "gamma", "stdout", "info", "three"),
+	)
+	open := func(want uint64) {
+		t.Helper()
+		f.tester.Advance(time.Second)
+		f.settle()
+		if !view.open || view.detail == nil || view.detail.EventID != want {
+			t.Fatalf("open %v detail %+v, want entry %d", view.open, view.detail, want)
+		}
+	}
+	close := func() {
+		t.Helper()
+		f.tester.Key(0, ui.KeyEscape)
+		f.tester.Advance(time.Second)
+		f.settle()
+		if view.open {
+			t.Fatal("Escape left the detail open")
+		}
+	}
+	f.click("alpha")
+	open(1)
+	// Closing gives the focus back to the table, whose keys move from the
+	// row opened, and Enter opens the row they reach.
+	close()
+	f.tester.Key(0, ui.KeyDown)
+	f.settle()
+	if view.open {
+		t.Fatal("a key opened an entry")
+	}
+	f.tester.Key(0, ui.KeyEnter)
+	open(2)
+	close()
+	// A click on the row opened before opens it again.
+	f.click("alpha")
+	open(1)
+	close()
+	// A click on the header opens nothing.
+	f.click(locales.WorkspaceHttpRequestConsoleColumnTime())
+	if view.open {
+		t.Fatal("a click on the header opened an entry")
 	}
 }
 
