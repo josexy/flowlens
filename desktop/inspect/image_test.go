@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/png"
 	"math"
+	"os"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -15,6 +16,80 @@ import (
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 )
+
+func avifFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile("testdata/" + name + ".avif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestAVIFPreview(t *testing.T) {
+	for _, name := range []string{"opaque", "alpha"} {
+		for _, encoding := range []string{"", "base64"} {
+			t.Run(name+"/"+encoding, func(t *testing.T) {
+				data := avifFixture(t, name)
+				body := string(data)
+				if encoding == "base64" {
+					body = base64.StdEncoding.EncodeToString(data)
+				}
+				f := bodyFixture(t, "image/avif", body, encoding)
+				preview := &f.panel.responseBody.image
+				if preview.failed || preview.image.bitmap == nil {
+					t.Fatal("AVIF preview failed")
+				}
+				if preview.width != 64 || preview.height != 48 {
+					t.Fatalf("dimensions %d x %d, want 64 x 48", preview.width, preview.height)
+				}
+				for _, dark := range []bool{false, true} {
+					f.setDark(dark)
+					f.imageRects()
+					f.has("AVIF | 64 x 48")
+					f.lacks(locales.DetailImagePreviewFailed())
+				}
+				if encoding == "base64" {
+					rendertest.ShootThemes(t, f.tester, "image-avif-"+name, f.setDark)
+				}
+				f.click(locales.DetailSaveBody())
+				if len(f.saved) != 1 || f.saved[0].Body != body || f.saved[0].BodyEncoding != encoding {
+					t.Fatalf("saving changed the AVIF body: %+v", f.saved)
+				}
+				f.click(locales.DetailHex())
+				var hexBody bytes.Buffer
+				for chunk := range f.panel.responseBody.hex.source.Range(0, int64(len(data))) {
+					hexBody.Write(chunk)
+				}
+				if !bytes.Equal(hexBody.Bytes(), data) {
+					t.Fatal("hex does not contain the original AVIF bytes")
+				}
+				f.click(locales.DetailPreview())
+				f.imageRects()
+				// Rendering over black checks both color and alpha after MyGo's
+				// conversion to premultiplied bitmap pixels.
+				tester := ui.NewTester(func(c *ui.Context) {
+					ui.Box(c).Size(64, 48).Background(ui.RGB(0, 0, 0)).Children(func() {
+						ui.Image(c, preview.image.bitmap).Size(64, 48)
+					})
+				}, 64, 48)
+				pixels := tester.Image()
+				red := pixels.RGBAAt(16, 24)
+				if red.R < 250 || red.G > 5 || red.B > 5 {
+					t.Fatalf("opaque red pixel = %v", red)
+				}
+				blue := pixels.RGBAAt(48, 24)
+				wantBlue := 255
+				if name == "alpha" {
+					wantBlue = 128
+				}
+				if blue.R > 5 || blue.G > 5 || math.Abs(float64(blue.B)-float64(wantBlue)) > 5 {
+					t.Fatalf("blue pixel = %v, want blue %d over black", blue, wantBlue)
+				}
+			})
+		}
+	}
+}
 
 func TestImageCentersAsSoonAsLoadingFinishes(t *testing.T) {
 	var data bytes.Buffer

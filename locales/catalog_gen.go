@@ -2084,6 +2084,16 @@ func (msgs Messages) DetailHexSelectionCopied() string {
 	return Catalog.Format(msgs.locale, "detailHexSelectionCopied", nil)
 }
 
+// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Raw or Hex."
+// in the language the app shows.
+func DetailImageFormatUnsupported() string { return In(i18n.Locale()).DetailImageFormatUnsupported() }
+
+// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Raw or Hex."
+// in the language of msgs.
+func (msgs Messages) DetailImageFormatUnsupported() string {
+	return Catalog.Format(msgs.locale, "detailImageFormatUnsupported", nil)
+}
+
 // DetailImagePreviewFailed says "This image could not be decoded. View it in Raw or Hex."
 // in the language the app shows.
 func DetailImagePreviewFailed() string { return In(i18n.Locale()).DetailImagePreviewFailed() }

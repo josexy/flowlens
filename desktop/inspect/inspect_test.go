@@ -636,13 +636,39 @@ func TestSVGPreview(t *testing.T) {
 }
 
 func TestInvalidImageKeepsRawAndHex(t *testing.T) {
-	f := bodyFixture(t, "image/png", base64.StdEncoding.EncodeToString([]byte("not a png")), "base64")
-	f.has(locales.DetailImagePreviewFailed())
-	f.click(locales.DetailHex())
-	if f.panel.responseBody.Active() != logic.BodyTabHex {
-		t.Fatal(f.panel.responseBody.Active())
+	avif := avifFixture(t, "opaque")
+	for _, tc := range []struct {
+		name, contentType, body, hex string
+		unsupported                  bool
+	}{
+		{name: "truncated png", contentType: "image/png", body: "\x89PNG\r\n\x1a\n", hex: "89 50 4E 47"},
+		{name: "truncated avif", contentType: "image/avif", body: string(avif[:len(avif)-8]), hex: "66 74 79 70"},
+		{name: "unrecognized", contentType: "image/png", body: "not an image", hex: "6E 6F 74", unsupported: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := bodyFixture(t, tc.contentType, base64.StdEncoding.EncodeToString([]byte(tc.body)), "base64")
+			if tc.unsupported {
+				f.has(locales.DetailImageFormatUnsupported())
+				f.lacks(locales.DetailImagePreviewFailed())
+			} else {
+				f.has(locales.DetailImagePreviewFailed())
+				f.lacks(locales.DetailImageFormatUnsupported())
+			}
+			if !slices.Contains(f.panel.responseBody.tabs, logic.BodyTabRaw) {
+				t.Fatal("Raw tab is unavailable after decoding fails")
+			}
+			f.panel.responseBody.tabChoice = string(logic.BodyTabRaw)
+			f.settle()
+			if f.panel.responseBody.Active() != logic.BodyTabRaw || f.panel.responseBody.raw.Text() != locales.DetailBinaryDataHint() {
+				t.Fatal("Raw view did not open after decoding failed")
+			}
+			f.click(locales.DetailHex())
+			if f.panel.responseBody.Active() != logic.BodyTabHex {
+				t.Fatal(f.panel.responseBody.Active())
+			}
+			f.has(tc.hex)
+		})
 	}
-	f.has("6E 6F 74")
 }
 
 func TestImageZoomBounds(t *testing.T) {

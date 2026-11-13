@@ -3,11 +3,14 @@ package inspect
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"image"
 	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	_ "github.com/gen2brain/gav1d/avif" // Register AVIF for ui.DecodeBitmap without cgo or external codecs.
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
@@ -24,14 +27,15 @@ type decodedImage struct {
 
 // imagePreview decodes a picture off the main thread and shows it zoomable.
 type imagePreview struct {
-	identity uint64
-	body     string
-	started  bool
-	loading  bool
-	failed   bool
-	image    decodedImage
-	width    int
-	height   int
+	identity    uint64
+	body        string
+	started     bool
+	loading     bool
+	failed      bool
+	unsupported bool
+	image       decodedImage
+	width       int
+	height      int
 	// scale is the zoom over the fitted size: 1 shows the whole image in
 	// the pane without upscaling it, as 1.0.5's object-contain.
 	scale float64
@@ -90,6 +94,7 @@ func (i *imagePreview) ensure(b *BodyViewer) {
 		i.loading = false
 		if err != nil {
 			i.failed = true
+			i.unsupported = errors.Is(err, image.ErrFormat)
 			return
 		}
 		i.image = result
@@ -155,7 +160,11 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 		return
 	}
 	if i.failed {
-		emptyState(c, theme, lucide.ImageOff(), locales.DetailImagePreviewFailed())
+		message := locales.DetailImagePreviewFailed()
+		if i.unsupported {
+			message = locales.DetailImageFormatUnsupported()
+		}
+		emptyState(c, theme, lucide.ImageOff(), message)
 		return
 	}
 	ui.Column(c).Fill().MinHeight(0).Border(1, theme.Border).Background(theme.Background).Children(func() {

@@ -1161,6 +1161,7 @@
   "detailHexPage": "Segment {current} / {total}",
   "detailHexPreviousPage": "Previous segment",
   "detailHexSelectionCopied": "Selection copied",
+  "detailImageFormatUnsupported": "This image format is unsupported or unrecognized. View it in Raw or Hex.",
   "detailImagePreviewFailed": "This image could not be decoded. View it in Raw or Hex.",
   "detailImageReset": "Reset",
   "detailImageSave": "Save",

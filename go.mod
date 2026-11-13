@@ -9,6 +9,7 @@ require (
 	github.com/andybalholm/brotli v1.2.2
 	github.com/egoist/mygo v0.8.3
 	github.com/fyne-io/oksvg v0.2.0
+	github.com/gen2brain/gav1d v0.2.7
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
 	github.com/josexy/mitmproxy-go/v2 v2.0.2-0.20261024062624-9a3b2cf7565d
