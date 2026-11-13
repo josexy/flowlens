@@ -8,6 +8,7 @@ import (
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -84,7 +85,7 @@ func New(data *store.Store, host Host) *App {
 
 // View builds the main window.
 func (a *App) View(c *ui.Context) {
-	theme := nui.App(c, a.Store.Settings.Theme().Config)
+	theme := theme.Begin(c, a.Store.Settings.Theme().Config)
 	a.Dispatcher.Begin()
 	a.declareShortcuts()
 	ui.Column(c).Fill().Background(theme.Background).Children(func() {

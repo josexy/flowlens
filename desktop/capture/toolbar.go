@@ -10,6 +10,8 @@ import (
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -263,7 +265,7 @@ func (w *Workspace) statusText(c *ui.Context, theme nui.Theme, config *settingse
 		if proxy.Status.Running {
 			text = locales.ToolbarProxyRunning(address)
 		}
-		ui.Text(c, text).SingleLine().Shrink(1).FontSize(14).TextColor(theme.Toned)
+		ui.Text(c, text).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Toned)
 		if proxy.Status.Running && address != "" {
 			nui.Button(c.Key("copy-address"), theme, "", nui.ButtonOptions{
 				Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true,
@@ -408,8 +410,9 @@ func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settings
 			problem = locales.ToolbarInvalidPort()
 		}
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarPort(), Error: problem, Disabled: saving}, func(field nui.Theme) {
-			nui.InputNumber(c.Key("port-number"), field, &state.portValue, &state.portNumber, nui.InputNumberOptions{
+			widgets.InputNumber(c.Key("port-number"), field, &state.portValue, &state.portNumber, nui.InputNumberOptions{
 				InputOptions: nui.InputOptions{Label: locales.ToolbarPort(), Disabled: saving},
+				Orientation:  nui.Vertical,
 				Step:         1, AllowInvalid: true,
 			})
 		})
@@ -468,13 +471,14 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 		}
 		nui.Switch(c.Key("dns-enabled"), palette, &state.dnsEnabled, nui.SwitchOptions{Label: locales.ToolbarDnsCacheEnabled(), Disabled: busy})
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarDnsCacheTtl(), Error: problem, Disabled: busy}, func(field nui.Theme) {
-			nui.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
+			widgets.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
 				InputOptions: nui.InputOptions{Label: locales.ToolbarDnsCacheTtl(), Disabled: busy},
+				Orientation:  nui.Vertical,
 				Step:         1, AllowInvalid: true,
 			})
 		})
 		if state.dnsError != "" {
-			ui.Text(c, state.dnsError).FontSize(12).TextColor(palette.Error)
+			ui.Text(c, state.dnsError).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Error)
 		}
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 			clear := nui.Button(c.Key("dns-clear"), palette, locales.ToolbarDnsCacheClear(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: busy})

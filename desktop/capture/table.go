@@ -10,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -72,10 +73,11 @@ type Table struct {
 	rowsSort     logic.TrafficSort
 	rowsComputed bool
 
-	fullOrder   []string
-	layoutOrder []string
-	layoutWidth map[string]float32
-	loaded      bool
+	fullOrder     []string
+	layoutOrder   []string
+	layoutWidth   map[string]float32
+	loaded        bool
+	viewportWidth float32
 
 	hovered        bool
 	wasAtEdge      bool
@@ -372,9 +374,25 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.followNewest(rowsChanged)
 
 	columns := make([]ui.TableColumn, len(visible))
+	var fixedWidth float32
+	for _, column := range visible {
+		if column.key != logic.ColumnPath {
+			width := column.width
+			if saved := t.list.Columns.Widths[string(column.key)]; saved > 0 {
+				width = saved
+			}
+			fixedWidth += max(width, column.minWidth)
+		}
+	}
 	for index, column := range visible {
+		width := column.width
+		if column.key == logic.ColumnPath && t.list.Columns.Widths[string(column.key)] <= 0 {
+			// Default width and drag minimum are separate: the first drag
+			// must be able to shrink below the readable 300-DIP default.
+			width = max(300, t.viewportWidth-fixedWidth)
+		}
 		columns[index] = ui.TableColumn{
-			Title: column.title(), ID: string(column.key), Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: true,
+			Title: column.title(), ID: string(column.key), Width: width, MinWidth: column.minWidth, Align: column.align, Sortable: true,
 		}
 	}
 	t.list.HeaderCell = t.headerCell(c, theme, visible)
@@ -401,6 +419,12 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}
 	})
+	if width := element.Bounds().W; width <= 0 {
+		c.Invalidate()
+	} else if width != t.viewportWidth {
+		t.viewportWidth = width
+		c.Invalidate()
+	}
 	t.resolveMenu(element)
 	t.syncChoice(element.Changed() || rowsChanged)
 	if t.focusRequested && t.list.Focus(c) {
@@ -474,7 +498,7 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 }
 
 func cellText(c *ui.Context, theme nui.Theme, text string) ui.Element {
-	return ui.Text(c, text).SingleLine().Shrink(1).FontSize(14).TextColor(theme.Text)
+	return ui.Text(c, text).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 }
 
 // numericText is a cell of numbers that line up across rows.
@@ -483,7 +507,7 @@ func numericText(c *ui.Context, theme nui.Theme, text string) ui.Element {
 }
 
 func mutedText(c *ui.Context, theme nui.Theme, text string) ui.Element {
-	return ui.Text(c, text).SingleLine().FontSize(14).TextColor(theme.Muted)
+	return ui.Text(c, text).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 }
 
 func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, key logic.TrafficColumnKey) {

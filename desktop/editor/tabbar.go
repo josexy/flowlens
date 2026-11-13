@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -145,7 +146,7 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 		}
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(6).PaddingX(12).Children(func() {
 			ui.Icon(c, tabIcon(tab.Type)).Size(14, 14).Shrink(0).TextColor(iconColor)
-			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(14).FontWeight(500).TextColor(theme.Toned)
+			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Toned)
 		})
 		if tab.Closable && workspace.IsDirty(tab.Key) {
 			dot := ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Margin(0, 4, 0, 0).Background(theme.Primary).Label(locales.WorkspaceTabBarUnsavedChanges())

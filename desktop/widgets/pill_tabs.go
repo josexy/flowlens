@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
@@ -57,7 +58,7 @@ func PillTabs(c *ui.Context, theme nui.Theme, value *string, items []PillTab, la
 					foreground = theme.Text
 				}
 				tab.Children(func() {
-					ui.Text(c, item.Label).SingleLine().FontSize(12).LineHeight(16.0 / 12.0).FontWeight(500).TextColor(foreground)
+					ui.Text(c, item.Label).SingleLine().FontSize(apptheme.TextSize(c, 12)).LineHeight(16.0 / 12.0).FontWeight(500).TextColor(foreground)
 				})
 			}
 		})

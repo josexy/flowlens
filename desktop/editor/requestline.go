@@ -83,7 +83,7 @@ func (f urlField) build(c *ui.Context, theme nui.Theme) {
 					Label: f.label, Placeholder: f.placeholder, Variant: nui.None, Size: nui.MD, OnSubmit: f.submit,
 					UI: nui.Styles{nui.Root: {PaddingX: nui.Set[float32](12)}},
 					Style: func(_, editor, _, _ ui.Element) {
-						editor.FontSize(15).TextRanges(urlTextRanges(*f.url, theme)...)
+						editor.FontSize(desktoptheme.TextSize(c, 15)).TextRanges(urlTextRanges(*f.url, theme)...)
 					},
 				}).FillWidth()
 			})

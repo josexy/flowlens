@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	appservice "github.com/josexy/flowlens/backend/services/app_service"
 	"github.com/josexy/flowlens/desktop/locale"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -136,7 +137,7 @@ func (v *View) stages(c *ui.Context, theme nui.Theme) {
 			}
 			ui.Row(c.Key(stage)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, icon).Size(16, 16).Shrink(0).TextColor(color)
-				ui.Text(c, stageLabel(stage)).FontSize(14).TextColor(color)
+				ui.Text(c, stageLabel(stage)).FontSize(apptheme.TextSize(c, 14)).TextColor(color)
 			})
 		}
 	})
@@ -144,7 +145,7 @@ func (v *View) stages(c *ui.Context, theme nui.Theme) {
 
 // Build shows the window.
 func (v *View) Build(c *ui.Context) {
-	theme := nui.App(c, v.Config)
+	theme := apptheme.Begin(c, v.Config)
 	v.finishHandshake(c)
 	problem := v.failure
 	if v.state != nil && v.state.Error != "" {
@@ -156,14 +157,14 @@ func (v *View) Build(c *ui.Context) {
 			title = locales.SettingsResetRecoveryTitle()
 		}
 		ui.Column(c.Key("head")).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, title).FontSize(18).Bold().TextColor(theme.Highlighted).FillWidth()
+			ui.Text(c, title).FontSize(apptheme.TextSize(c, 18)).Bold().TextColor(theme.Highlighted).FillWidth()
 			if problem != "" {
-				ui.Text(c, locales.SettingsResetRecoveryDescription()).FontSize(14).TextColor(theme.Muted).FillWidth()
+				ui.Text(c, locales.SettingsResetRecoveryDescription()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted).FillWidth()
 			}
 		})
 		v.stages(c, theme)
 		if problem != "" {
-			ui.Text(c.Key("error"), problem).FontSize(14).TextColor(theme.Error).FillWidth().Role(ui.RoleAlert).Selectable()
+			ui.Text(c.Key("error"), problem).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Error).FillWidth().Role(ui.RoleAlert).Selectable()
 		}
 		ui.Box(c.Key("space")).Grow(1)
 		ui.Row(c.Key("actions")).FillWidth().Justify(ui.End).Gap(8).Children(func() {

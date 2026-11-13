@@ -12,6 +12,7 @@ import (
 	rewriteservice "github.com/josexy/flowlens/backend/services/rewrite_service"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -99,7 +100,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("rewrite-sidebar")).Fill().MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-				ui.Text(c, locales.RewriteRulesTitle()).FontSize(14).FontWeight(600).TextColor(theme.Highlighted)
+				ui.Text(c, locales.RewriteRulesTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Highlighted)
 				ui.Row(c).Gap(2).Children(func() {
 					refresh := nui.Button(c.Key("refresh"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.RefreshCw(), AccessibleLabel: locales.RewriteRulesRefresh(), Loading: rewrite.Loading, Disabled: rewrite.Busy()})
 					if !rewrite.Busy() {
@@ -140,7 +141,7 @@ func (v *View) emptyList(c *ui.Context, theme nui.Theme) {
 	switch {
 	case v.Data.Rewrite.Loading:
 		ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() {
-			ui.Text(c, locales.RewriteRulesLoading()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.RewriteRulesLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 	case strings.TrimSpace(v.search) != "":
 		widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.Repeat2(), Title: locales.RewriteRulesNoSearchResults()})
@@ -187,7 +188,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 	if name == "" {
 		name = locales.RewriteRulesNewName()
 	}
-	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleListItem).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(ruleRowHeight-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).FocusRing(true).AccessSelected(selected).Label(name)
+	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleListItem).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).FocusRing(true).AccessSelected(selected).Label(name)
 	dragged := v.drag.active && v.drag.key == row.Key
 	switch {
 	case selected:
@@ -208,14 +209,14 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
 			v.gripHandle(c, theme, index, row, rows)
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, name).SingleLine().Shrink(1).FontSize(14).FontWeight(500).TextColor(theme.Highlighted).MinWidth(0)
+				ui.Text(c, name).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Highlighted).MinWidth(0)
 				if rewrite.IsDirty(row.Key) {
 					ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary).Label(locales.RewriteRulesUnsaved())
 				}
 			})
 			v.ruleSwitch(c, theme, row)
 		})
-		ui.Text(c, row.Rule.URLPattern).SingleLine().FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
+		ui.Text(c, row.Rule.URLPattern).SingleLine().FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Muted)
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(4).Children(func() {
 			nui.Badge(c.Key("method"), theme, row.Rule.Method, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Subtle, Size: nui.SM})
 			color := nui.Neutral
@@ -224,7 +225,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 			}
 			nui.Badge(c.Key("action"), theme, actionLabel(row.Rule), nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
 			if row.Saved == nil {
-				ui.Text(c, locales.RewriteRulesDraft()).FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, locales.RewriteRulesDraft()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 			ui.Box(c).Grow(1).Basis(0)
 			if row.Saved != nil && strings.TrimSpace(v.search) == "" {
@@ -282,6 +283,7 @@ type ruleDrag struct {
 	from int
 	// travel is how far the pointer has moved since the press.
 	travel   float32
+	pitch    float32
 	revision int64
 	active   bool
 }
@@ -289,7 +291,7 @@ type ruleDrag struct {
 // offset is how far the dragged row, now at index, is drawn from its place,
 // so that it stays under the pointer.
 func (d ruleDrag) offset(index int) float32 {
-	return d.travel - float32(index-d.from)*ruleRowHeight
+	return d.travel - float32(index-d.from)*max(ruleRowHeight, d.pitch)
 }
 
 func (v *View) gripHandle(c *ui.Context, theme nui.Theme, index int, row store.RewriteRow, rows []store.RewriteRow) {
@@ -301,7 +303,7 @@ func (v *View) gripHandle(c *ui.Context, theme nui.Theme, index int, row store.R
 	}
 	grip.Cursor(ui.CursorGrab).OnClick(func() {})
 	if grip.PressedInside() {
-		v.drag = ruleDrag{key: row.Key, from: index, revision: rewrite.State.Revision}
+		v.drag = ruleDrag{key: row.Key, from: index, revision: rewrite.State.Revision, pitch: max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))}
 	}
 	if v.drag.key != row.Key {
 		return
@@ -344,7 +346,7 @@ func (v *View) placeDragged(key string) {
 			saved++
 		}
 	}
-	target := v.drag.from + int(math.Round(float64(v.drag.travel/ruleRowHeight)))
+	target := v.drag.from + int(math.Round(float64(v.drag.travel/max(ruleRowHeight, v.drag.pitch))))
 	target = min(max(target, 0), saved)
 	v.localOrder = slices.Insert(order, target, key)
 }
@@ -470,7 +472,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 		case rewrite.Loading:
 			ui.Row(c.Key("loading")).FillWidth().Grow(1).Basis(0).Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.RewriteRulesLoading()).FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, locales.RewriteRulesLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		default:
 			v.emptyPage(c, theme)
@@ -509,7 +511,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 	}
 	ui.Row(c.Key("rewrite-header")).FillWidth().Height(48).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Icon(c, lucide.Repeat2()).Size(16, 16).Shrink(0).TextColor(theme.Primary)
-		ui.Text(c, title).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).Bold().TextColor(theme.Highlighted)
+		ui.Text(c, title).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		if rewrite.SelectedID != "" && rewrite.IsDirty(rewrite.SelectedID) {
 			nui.Badge(c.Key("unsaved"), theme, locales.RewriteRulesUnsaved(), nui.BadgeOptions{Color: nui.Warning, Variant: nui.Soft})
 		}
@@ -540,7 +542,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 func (v *View) conflictBanner(c *ui.Context, theme nui.Theme) {
 	rewrite := v.Data.Rewrite
 	ui.Column(c.Key("conflict")).FillWidth().Shrink(0).Gap(8).Padding(12).Background(theme.Warning.Alpha(0.1)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Warning.Alpha(0.3)).Children(func() {
-		ui.Text(c, locales.RewriteRulesConflict()).FontSize(14).TextColor(theme.Warning).FillWidth()
+		ui.Text(c, locales.RewriteRulesConflict()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Warning).FillWidth()
 		ui.Row(c).Gap(8).Children(func() {
 			keep := nui.Button(c.Key("keep"), theme, locales.RewriteRulesKeepDraft(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.XS, Disabled: rewrite.Busy()})
 			load := nui.Button(c.Key("load"), theme, locales.RewriteRulesLoadSaved(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.XS, Disabled: rewrite.Busy()})
@@ -633,7 +635,7 @@ func (d *deleteDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 			if d.dirty {
 				message = locales.RewriteRulesDeleteDirty(d.name)
 			}
-			ui.Text(c, message).FontSize(14).TextColor(palette.Text).FillWidth()
+			ui.Text(c, message).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).FillWidth()
 			if field := fieldErrorMessage(rewrite.FieldErrors(d.id).First()); field != "" {
 				nui.Alert(c.Key("field"), palette, nui.AlertOptions{Description: field, Color: nui.Error, Variant: nui.Soft})
 			}
@@ -733,7 +735,7 @@ func (v *View) Overlay(c *ui.Context, theme nui.Theme) {
 			if prompt.Reason == ReasonUpdate {
 				message = locales.RewriteRulesUpdateDirty(count)
 			}
-			ui.Text(c, message).FontSize(14).TextColor(palette.Text).FillWidth()
+			ui.Text(c, message).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).FillWidth()
 			if field := fieldErrorMessage(rewrite.FieldErrors(rewrite.SelectedID).First()); field != "" {
 				nui.Alert(c.Key("field"), palette, nui.AlertOptions{Description: field, Color: nui.Error, Variant: nui.Soft})
 			}

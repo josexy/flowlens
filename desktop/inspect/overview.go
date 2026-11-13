@@ -35,12 +35,12 @@ func overviewRow(c *ui.Context, theme nui.Theme, key string) ui.Element {
 
 // overviewLabel is the label column of an overview row.
 func overviewLabel(c *ui.Context, theme nui.Theme, label string) ui.Element {
-	return ui.Text(c, strings.ToUpper(label)).Width(labelColumnWidth).Shrink(0).FontSize(14).FontWeight(600).LetterSpacing(0.5).TextColor(theme.Toned).Selectable()
+	return ui.Text(c, strings.ToUpper(label)).Width(labelColumnWidth).Shrink(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).LetterSpacing(0.5).TextColor(theme.Toned).Selectable()
 }
 
 // overviewValue is the value column of an overview row.
 func overviewValue(c *ui.Context, theme nui.Theme, value string) ui.Element {
-	return ui.Text(c, value).Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(theme.Text).Selectable()
+	return ui.Text(c, value).Grow(1).Basis(0).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text).Selectable()
 }
 
 func detailRow(c *ui.Context, theme nui.Theme, key, label, value string) {
@@ -55,7 +55,7 @@ func urlRow(c *ui.Context, theme nui.Theme, key, label, raw string) {
 	colors := desktoptheme.URLPalette(theme.Dark)
 	parsed := logic.ParseHighlightedURL(raw)
 	span := func(text string, color ui.Color, weight int) ui.Span {
-		return ui.Span{Text: text, Color: color, Weight: weight, Size: 14}
+		return ui.Span{Text: text, Color: color, Weight: weight, Size: desktoptheme.TextSize(c, 14)}
 	}
 	spans := []ui.Span{span(parsed.Scheme, theme.Muted, 0), span(parsed.Host, colors.Host, 600), span(parsed.Path, colors.Path, 0)}
 	if parsed.HasQuery {
@@ -123,7 +123,7 @@ func section(c *ui.Context, theme nui.Theme, key, title string, open *bool, body
 			if *open {
 				ui.Box(c.Key("bar")).Absolute().Left(0).Top(0).Bottom(0).Width(3).Background(theme.Primary).IgnoreInput(true)
 			}
-			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(14).FontWeight(600).TextColor(color)
+			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).TextColor(color)
 			icon := lucide.ChevronRight()
 			if *open {
 				icon = lucide.ChevronDown()
@@ -160,7 +160,7 @@ func (p *Panel) basicRows(c *ui.Context, theme nui.Theme, entry *logic.TrafficEn
 		overviewLabel(c, theme, locales.DetailMethod())
 		color := desktoptheme.MethodColor(entry.Method)
 		ui.Box(c).MinHeight(20).PaddingX(8).Radius(6).Center().Background(color.Alpha(0.13).Over(theme.Background)).Children(func() {
-			ui.Text(c, entry.Method).SingleLine().FontSize(14).Bold().TextColor(color)
+			ui.Text(c, entry.Method).SingleLine().FontSize(desktoptheme.TextSize(c, 14)).Bold().TextColor(color)
 		})
 	})
 	urlRow(c, theme, "url", locales.DetailUrl(), entry.URL)
@@ -252,7 +252,7 @@ func (p *Panel) processSection(c *ui.Context, theme nui.Theme, entry *logic.Traf
 			overviewValue(c, theme, processDisplayName(process))
 		})
 		if message := processStatusMessage(process); message != "" {
-			ui.Text(c.Key("status"), message).FontSize(14).TextColor(theme.Muted).Padding(4, 8, 4, 8)
+			ui.Text(c.Key("status"), message).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Muted).Padding(4, 8, 4, 8)
 		}
 		detailRow(c, theme, "name", locales.DetailProcessName(), orDash(process.ProcessName))
 		pid := logic.UnknownValue
@@ -368,7 +368,7 @@ func metricRow(c *ui.Context, theme nui.Theme, key, label, value string, badge f
 	overviewRow(c, theme, key).AlignItems(ui.Center).Children(func() {
 		overviewLabel(c, theme, label)
 		if value != logic.UnknownValue || badge == nil {
-			ui.Text(c, value).FontSize(14).TextColor(theme.Text).Selectable()
+			ui.Text(c, value).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text).Selectable()
 		}
 		if badge != nil {
 			badge()
@@ -381,7 +381,7 @@ func (p *Panel) metricsSections(c *ui.Context, theme nui.Theme, entry *logic.Tra
 		if entry.Type != "tcp" {
 			ui.Row(c.Key("no-metrics")).FillWidth().Gap(8).Padding(8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, lucide.Info()).Size(14, 14).TextColor(theme.Muted)
-				ui.Text(c, locales.DetailLegacyMetricsUnavailable()).FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, locales.DetailLegacyMetricsUnavailable()).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		}
 		return

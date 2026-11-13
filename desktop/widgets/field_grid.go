@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/egoist/mygo/ui"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
@@ -107,7 +108,7 @@ func fieldGridRow(c *ui.Context, theme nui.Theme, state *fieldGridState, rows []
 	if index == 0 {
 		top = 1
 	}
-	row := ui.Row(c.Key(index)).FillWidth().Height(FieldGridRowHeight).AlignItems(ui.Stretch).Background(theme.Background)
+	row := ui.Row(c.Key(index)).FillWidth().Height(max(FieldGridRowHeight, apptheme.TextSize(c, 14)*1.45+12)).AlignItems(ui.Stretch).Background(theme.Background)
 	row.BorderWidth(top, 1, 1, 1).BorderColor(theme.Border)
 	if row.Hovered() {
 		row.Background(theme.Elevated)
@@ -122,13 +123,13 @@ func fieldGridRow(c *ui.Context, theme nui.Theme, state *fieldGridState, rows []
 		name.BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Label(field.Key)
 		fieldGridCellClick(name, state, index, false, field)
 		name.Children(func() {
-			ui.Text(c, field.Key).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).FontWeight(500).TextColor(theme.Text)
+			ui.Text(c, field.Key).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).FontWeight(500).TextColor(theme.Text)
 			fieldGridResizer(c, theme, state, name)
 		})
 		value := ui.Row(c.Key("value")).Grow(1).Basis(0).Shrink(0).MinWidth(FieldGridValueMinWidth).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
 		fieldGridCellClick(value, state, index, true, field)
 		value.Children(func() {
-			ui.Text(c, field.Value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).TextColor(theme.Text)
+			ui.Text(c, field.Value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).TextColor(theme.Text)
 			if o.ValueTrailing != nil {
 				ui.Row(c.Key("trailing")).Shrink(0).MarginStart(4).AlignItems(ui.Center).Children(func() { o.ValueTrailing(index) })
 			}

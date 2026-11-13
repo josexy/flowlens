@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -105,7 +106,7 @@ func serializeRows(rows []logic.EditableRow) string {
 
 func paneHeader(c *ui.Context, theme nui.Theme, title string, actions func()) {
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Text(c, title).FontSize(14).TextColor(theme.Muted)
+		ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		ui.Row(c).Gap(4).Children(actions)
 	})
 }
@@ -254,7 +255,7 @@ func (e *Editor) fileControl(c *ui.Context, theme nui.Theme, job string, file **
 	area.Children(func() {
 		if *file == nil {
 			ui.Icon(c, lucide.FileText()).Size(28, 28).TextColor(theme.Muted)
-			ui.Text(c, locales.WorkspaceHttpRequestFileDropHint()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestFileDropHint()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			choose := nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() { e.pickFile(job, begin(), apply) })
 			nui.Tooltip(c, theme, choose, locales.WorkspaceHttpRequestFileChoose(), nui.TooltipOptions{})
@@ -262,9 +263,9 @@ func (e *Editor) fileControl(c *ui.Context, theme nui.Theme, job string, file **
 		}
 		chosen := *file
 		ui.Icon(c, lucide.FileText()).Size(28, 28).TextColor(theme.Primary)
-		ui.Text(c, chosen.Name).FontSize(14).Bold().TextColor(theme.Text).Selectable()
-		ui.Text(c, locales.WorkspaceHttpRequestFilePath()+": "+chosen.Path).FontSize(12).TextColor(theme.Muted).Selectable()
-		ui.Text(c, locales.WorkspaceHttpRequestFileSize()+": "+logic.FormatFileSize(chosen.Size)).FontSize(12).TextColor(theme.Muted)
+		ui.Text(c, chosen.Name).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Text).Selectable()
+		ui.Text(c, locales.WorkspaceHttpRequestFilePath()+": "+chosen.Path).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).Selectable()
+		ui.Text(c, locales.WorkspaceHttpRequestFileSize()+": "+logic.FormatFileSize(chosen.Size)).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		ui.Row(c).Gap(8).Children(func() {
 			choose := nui.Button(c.Key("choose"), theme, locales.WorkspaceHttpRequestFileChoose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM}).
 				OnClick(func() { e.pickFile(job, begin(), apply) })

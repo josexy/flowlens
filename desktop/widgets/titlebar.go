@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo/ui"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/resources"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -67,7 +68,7 @@ func (f WindowFrame) Build(c *ui.Context, theme nui.Theme) {
 			if f.MacOS {
 				weight = 500
 			}
-			ui.Text(c, f.Title).SingleLine().Shrink(1).FontSize(14).FontWeight(weight).TextColor(theme.Text)
+			ui.Text(c, f.Title).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(weight).TextColor(theme.Text)
 		})
 		if !f.MacOS {
 			f.controls(c, theme)

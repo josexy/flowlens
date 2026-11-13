@@ -10,6 +10,7 @@ import (
 	rewriteservice "github.com/josexy/flowlens/backend/services/rewrite_service"
 	"github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -94,7 +95,7 @@ func (f *ruleForm) build(c *ui.Context, theme nui.Theme, draft *store.RuleDraft)
 	ui.Column(c.Key("rule-form")).FillWidth().MaxWidth(896).Gap(20).Padding(16).AlignSelf(ui.Center).Children(func() {
 		ui.Row(c.Key("identity")).FillWidth().Gap(12).Children(func() {
 			ui.Box(c.Key("name")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				nui.FormField(c, theme, nui.FormFieldOptions{Label: locales.RewriteRulesName(), Error: fieldErrorMessage(errors.Name), Disabled: disabled}, func(field nui.Theme) {
+				nui.FormField(c, theme, nui.FormFieldOptions{Label: locales.RewriteRulesName(), Required: true, Error: fieldErrorMessage(errors.Name), Disabled: disabled}, func(field nui.Theme) {
 					nui.Input(c.Key("input"), field, &rule.Name, nui.InputOptions{Label: locales.RewriteRulesName(), Disabled: disabled, Invalid: errors.Name != ""}).FillWidth()
 				})
 			})
@@ -104,10 +105,10 @@ func (f *ruleForm) build(c *ui.Context, theme nui.Theme, draft *store.RuleDraft)
 				})
 			})
 		})
-		nui.FormField(c.Key("pattern"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesUrlPattern(), Error: fieldErrorMessage(errors.URLPattern), Disabled: disabled}, func(field nui.Theme) {
+		nui.FormField(c.Key("pattern"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesUrlPattern(), Required: true, Error: fieldErrorMessage(errors.URLPattern), Disabled: disabled}, func(field nui.Theme) {
 			nui.Input(c.Key("input"), field, &rule.URLPattern, nui.InputOptions{Label: locales.RewriteRulesUrlPattern(), Disabled: disabled, Invalid: errors.URLPattern != ""}).FillWidth()
 			if errors.URLPattern == "" {
-				ui.Text(c, locales.RewriteRulesPatternHint()).FontSize(12).TextColor(field.Muted).FillWidth().Margin(6, 0, 0, 0)
+				ui.Text(c, locales.RewriteRulesPatternHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(field.Muted).FillWidth().Margin(6, 0, 0, 0)
 			}
 		})
 		kinds := []string{rewriteservice.ActionRedirect, rewriteservice.ActionRequest, rewriteservice.ActionResponse}
@@ -148,10 +149,10 @@ func (f *ruleForm) build(c *ui.Context, theme nui.Theme, draft *store.RuleDraft)
 }
 
 func (f *ruleForm) redirect(c *ui.Context, theme nui.Theme, rule *store.RewriteRule, disabled bool) {
-	nui.FormField(c.Key("target"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesTargetUrl(), Disabled: disabled}, func(field nui.Theme) {
+	nui.FormField(c.Key("target"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesTargetUrl(), Required: true, Disabled: disabled}, func(field nui.Theme) {
 		nui.Input(c.Key("input"), field, &rule.Action.TargetURL, nui.InputOptions{Label: locales.RewriteRulesTargetUrl(), Disabled: disabled}).FillWidth()
 	})
-	ui.Text(c.Key("target-hint"), locales.RewriteRulesTargetHint("${1}", "${2}")).FontSize(12).TextColor(theme.Muted).FillWidth()
+	ui.Text(c.Key("target-hint"), locales.RewriteRulesTargetHint("${1}", "${2}")).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 	nui.FormField(c.Key("policy"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesHostPolicy(), Disabled: disabled}, func(field nui.Theme) {
 		ui.Box(c).Width(256).Children(func() {
 			nui.Select(c.Key("select"), field, &rule.Action.HostPolicy, option([]string{"target", "preserve"}, hostPolicyLabel), nui.SelectOptions{Label: locales.RewriteRulesHostPolicy(), Disabled: disabled})
@@ -174,7 +175,7 @@ func operationList(c *ui.Context, theme nui.Theme, title string, operations *[]r
 	ui.Column(c).FillWidth().Gap(8).Children(func() {
 		ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
-				ui.Text(c, title).FontSize(14).Bold().TextColor(theme.Highlighted)
+				ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 				help := nui.Button(c.Key("help"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.CircleQuestionMark(), AccessibleLabel: locales.RewriteRulesOperationsHelp()})
 				nui.Tooltip(c, theme, help, locales.RewriteRulesOperationsHint(), nui.TooltipOptions{})
 			})
@@ -256,18 +257,18 @@ func (f *ruleForm) body(c *ui.Context, theme nui.Theme, rule *store.RewriteRule,
 		if body.Mode == "none" {
 			return
 		}
-		ui.Text(c.Key("body-hint"), locales.RewriteRulesBodyHint()).FontSize(12).TextColor(theme.Muted).FillWidth()
+		ui.Text(c.Key("body-hint"), locales.RewriteRulesBodyHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 		label := locales.RewriteRulesReplacementText()
 		if body.Mode == "regex" {
 			nui.FormField(c.Key("pattern"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesRegexPattern(), Disabled: disabled}, func(field nui.Theme) {
 				nui.Input(c.Key("input"), field, &body.Pattern, nui.InputOptions{Label: locales.RewriteRulesRegexPattern(), Disabled: disabled}).FillWidth()
 			})
-			ui.Text(c.Key("regex-hint"), locales.RewriteRulesRegexHint()).FontSize(12).TextColor(theme.Muted).FillWidth()
+			ui.Text(c.Key("regex-hint"), locales.RewriteRulesRegexHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 			label = locales.RewriteRulesRegexReplacement()
 		}
-		ui.Text(c.Key("label"), label).FontSize(14).Bold().TextColor(theme.Highlighted)
+		ui.Text(c.Key("label"), label).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		ui.Box(c.Key("editor")).FillWidth().Height(224).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-			f.replacement.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+			f.replacement.Build(c, f.view.Data.Settings.CodeFont()).Fill()
 		})
 	})
 }
@@ -324,8 +325,8 @@ func (m *matchTest) build(c *ui.Context, theme nui.Theme, v *View, draft *store.
 	}
 	ui.Column(c).FillWidth().Gap(12).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Background(theme.MutedBackground).Children(func() {
 		ui.Column(c).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, locales.RewriteRulesPreview()).FontSize(14).Bold().TextColor(theme.Highlighted)
-			ui.Text(c, locales.RewriteRulesPreviewHint()).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, locales.RewriteRulesPreview()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
+			ui.Text(c, locales.RewriteRulesPreviewHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		})
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c.Key("method")).Width(96).Shrink(0).Children(func() {
@@ -354,11 +355,11 @@ func (m *matchTest) resultPane(c *ui.Context, theme nui.Theme) {
 		}
 		nui.Badge(c.Key("badge"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Soft})
 		for index, capture := range result.Captures {
-			ui.Text(c.Key(index), strconv.Itoa(index+1)+": "+capture).FontSize(12).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
+			ui.Text(c.Key(index), strconv.Itoa(index+1)+": "+capture).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
 		}
 		if result.TargetURL != "" {
-			ui.Text(c.Key("target-label"), locales.RewriteRulesExpandedTarget()).FontSize(12).TextColor(theme.Muted)
-			ui.Text(c.Key("target"), result.TargetURL).FontSize(12).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
+			ui.Text(c.Key("target-label"), locales.RewriteRulesExpandedTarget()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
+			ui.Text(c.Key("target"), result.TargetURL).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
 		}
 	})
 }
@@ -513,7 +514,7 @@ func (p *bodyPreview) preparePreviewPane(theme nui.Theme) {
 	}
 	p.diffResult = p.result
 	if p.showDiff() {
-		p.diff = &editor.DiffState{Old: editor.NewBuffer(p.sample), New: editor.NewBuffer(p.result.Output), Layout: editor.DiffUnified, ExpandUnchanged: true, Font: ui.Font{Family: theme.MonoFont, Size: 13}}
+		p.diff = &editor.DiffState{Old: editor.NewBuffer(p.sample), New: editor.NewBuffer(p.result.Output), Layout: editor.DiffUnified, ExpandUnchanged: true}
 		return
 	}
 	p.diff = nil
@@ -527,8 +528,8 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 	p.preparePreviewPane(theme)
 	ui.Column(c).FillWidth().Gap(12).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Background(theme.MutedBackground).Children(func() {
 		ui.Column(c).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, locales.RewriteRulesRegexTest()).FontSize(14).Bold().TextColor(theme.Highlighted)
-			ui.Text(c, locales.RewriteRulesRegexTestHint()).FontSize(12).TextColor(theme.Muted).FillWidth()
+			ui.Text(c, locales.RewriteRulesRegexTest()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
+			ui.Text(c, locales.RewriteRulesRegexTestHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 		})
 		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Children(func() {
 			p.toolbar(c, theme, body)
@@ -537,7 +538,7 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 		if p.busy {
 			ui.Row(c.Key("status")).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.RewriteRulesRegexTestUpdating()).FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, locales.RewriteRulesRegexTestUpdating()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			})
 		} else if p.hasPreview() {
 			label, color := locales.RewriteRulesNotMatched(), nui.Neutral
@@ -558,7 +559,7 @@ func (p *bodyPreview) toolbar(c *ui.Context, theme nui.Theme, body *rewriteservi
 		title, copyLabel = locales.RewriteRulesRegexTestOutput(), locales.RewriteRulesRegexTestCopyOutput()
 	}
 	ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Text(c, title).FontSize(14).Bold().TextColor(theme.Highlighted)
+		ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 			iconButton(c, theme, "copy", lucide.Copy(), copyLabel, nui.Neutral, !p.canCopy(), p.copy)
 			color := nui.Neutral
@@ -584,9 +585,10 @@ func iconButton(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, label 
 }
 
 func (p *bodyPreview) content(c *ui.Context, theme nui.Theme) {
-	font := ui.Font{Family: theme.MonoFont, Size: 13}
+	font := p.view.Data.Settings.CodeFont()
 	switch {
 	case p.showDiff() && p.diff != nil:
+		p.diff.Font = font
 		p.diff.Wrap = p.effectiveWrap()
 		editor.DiffView(c.Key("diff"), p.diff).Fill()
 	case p.hasPreview():

@@ -10,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -145,13 +146,17 @@ func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body, e
 	case h.loading || h.source == nil:
 		ui.Column(c).Fill().Center().Gap(8).Children(func() {
 			ui.Spinner(c).Size(24, 24).TextColor(theme.Muted)
-			ui.Text(c, locales.DetailHexLoading()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailHexLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 		return
 	}
 	width := h.width
 	if width == 0 {
 		width = defaultHexWidth
+		h.width = width
+		// Bounds become available after this first layout. Schedule the pass
+		// that measures them even when the window has no animations or input.
+		c.Invalidate()
 	}
 	char := charWidth(c, theme)
 	length := h.source.Len()
@@ -161,8 +166,11 @@ func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body, e
 		h.buildRow(c, theme, layout, int64(row), char, length)
 	}).Fill().MinHeight(0)
 	widgets.ContextMenu(c.Key("hex-menu"), theme, element, &h.menu, h.menuItems, nui.MenuOptions{Label: locales.DetailHex()})
-	if bounds := element.Bounds(); bounds.W > 0 {
+	if bounds := element.Bounds(); bounds.W > 0 && bounds.W != h.width {
 		h.width = bounds.W
+		// This pass used the old width. Reflow the byte columns before going
+		// idle, including after a splitter or window resize.
+		c.Invalidate()
 	}
 }
 

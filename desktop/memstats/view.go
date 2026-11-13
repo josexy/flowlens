@@ -10,6 +10,7 @@ import (
 	memstatsservice "github.com/josexy/flowlens/backend/services/mem_stats_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -102,10 +103,10 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	data := v.Data
 	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Row(c.Key("title")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
-			ui.Text(c, locales.MemstatsTitle()).SingleLine().FontSize(15.2).FontWeight(600).TextColor(theme.Text)
+			ui.Text(c, locales.MemstatsTitle()).SingleLine().FontSize(apptheme.TextSize(c, 15.2)).FontWeight(600).TextColor(theme.Text)
 			nui.Badge(c.Key("subtitle"), theme, locales.MemstatsSubtitle(), nui.BadgeOptions{
 				Color: nui.Info, Variant: nui.Subtle, Size: nui.MD,
-				UI: nui.Styles{nui.Root: {FontSize: nui.Set[float32](14), Weight: nui.Set(600), PaddingX: nui.Set[float32](8), PaddingY: nui.Set[float32](2)}},
+				UI: nui.Styles{nui.Root: {FontSize: nui.Set(apptheme.TextSize(c, 14)), Weight: nui.Set(600), PaddingX: nui.Set[float32](8), PaddingY: nui.Set[float32](2)}},
 			})
 		})
 		ui.Row(c.Key("actions")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
@@ -141,8 +142,8 @@ func (v *View) summary(c *ui.Context, theme nui.Theme, sample *memstatsservice.M
 	ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).Children(func() {
 		for index, card := range cards {
 			panelCard(c, theme, index).Grow(1).Basis(180).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, card.label).SingleLine().FontSize(14).TextColor(theme.Muted)
-				ui.Text(c, card.value).SingleLine().FontSize(17.6).FontWeight(600).TextColor(theme.Primary)
+				ui.Text(c, card.label).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(1.5).TextColor(theme.Muted)
+				ui.Text(c, card.value).SingleLine().FontSize(apptheme.TextSize(c, 17.6)).LineHeight(1.5).FontWeight(600).TextColor(theme.Primary)
 			})
 		}
 	})
@@ -208,21 +209,21 @@ func metrics(c *ui.Context, theme nui.Theme, key string, items []metric) {
 				line.BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
 			}
 			line.Children(func() {
-				ui.Text(c, item.label).WidthPercent(38).MinWidth(120).Shrink(0).FontSize(12).LineHeight(1.35).Padding(7, 9).TextColor(theme.Muted).Background(theme.Elevated)
-				ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(12).LineHeight(1.35).Padding(7, 9).TextColor(theme.Text).Selectable()
+				ui.Text(c, item.label).WidthPercent(38).MinWidth(120).Shrink(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Muted).Background(theme.Elevated)
+				ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Text).Selectable()
 			})
 		}
 	})
 }
 
 func heading(c *ui.Context, theme nui.Theme, title string) {
-	ui.Text(c.Key(title), title).FontSize(14).FontWeight(600).TextColor(theme.Text)
+	ui.Text(c.Key(title), title).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
 }
 
 // divider names a group inside a card, with a rule after the name.
 func divider(c *ui.Context, theme nui.Theme, title string) {
 	ui.Row(c.Key(title)).FillWidth().AlignItems(ui.Center).Gap(8).Margin(12, 0, 12, 0).Children(func() {
-		ui.Text(c, title).SingleLine().FontSize(14).FontWeight(600).TextColor(theme.Muted)
+		ui.Text(c, title).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
 		ui.Box(c).Grow(1).Height(1).Background(theme.Border)
 	})
 }
@@ -287,7 +288,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		}
 		entry.Children(func() {
 			ui.Icon(c, lucide.Activity()).Size(16, 16).Shrink(0).TextColor(theme.Primary)
-			ui.Text(c, locales.MenuMemstats()).SingleLine().FontSize(14).Bold().TextColor(theme.Text)
+			ui.Text(c, locales.MenuMemstats()).SingleLine().FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Text)
 		})
 	})
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -258,7 +259,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRo
 	}
 	header := ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).MinHeight(40).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(0, 10, 0, 12).Background(theme.Elevated)
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Text(c, locales.ApiCollectionTitle()).FontSize(14).FontWeight(600).TextColor(theme.Muted).SingleLine().Shrink(1)
+		ui.Text(c, locales.ApiCollectionTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted).SingleLine().Shrink(1)
 		ui.Row(c).Gap(6).Shrink(0).Children(func() {
 			action("refresh", lucide.RefreshCw(), locales.ApiCollectionRefresh(), collection.Loading, false, v.refresh)
 			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), false, false, func() { v.beginCreate("") })
@@ -289,7 +290,7 @@ func (v *View) area(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) 
 	collection := v.Data.Collection
 	status := func(text string) {
 		ui.Column(c).Fill().Center().Padding(16).Children(func() {
-			ui.Text(c, text).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 	}
 	switch {
@@ -347,7 +348,7 @@ func (v *View) rootZone(c *ui.Context, theme nui.Theme, area ui.Element) {
 		}
 		zone.Children(func() {
 			ui.Icon(c, lucide.FolderOpen()).Size(14, 14).TextColor(theme.Muted)
-			ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(14).TextColor(theme.Text)
+			ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 		})
 	})
 }
@@ -419,11 +420,11 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 			if !row.Folder {
 				v.requestMethod(c, theme, row)
 			}
-			ui.Text(c, row.Name).SingleLine().Shrink(1).MinWidth(0).FontSize(14).LineHeight(20.0 / 14).TextColor(theme.Text)
+			ui.Text(c, row.Name).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14).TextColor(theme.Text)
 			if row.Folder {
-				ui.Row(c.Key("count")).Shrink(0).Height(20).MinWidth(20).PaddingX(6).Radius(10).Center().Background(theme.Elevated.Alpha(0.92)).
+				ui.Row(c.Key("count")).Shrink(0).MinHeight(20).MinWidth(20).PaddingX(6).Radius(10).Center().Background(theme.Elevated.Alpha(0.92)).
 					Label("child-count").Children(func() {
-					ui.Text(c, strconv.Itoa(row.Children)).FontSize(14).TextColor(theme.Muted)
+					ui.Text(c, strconv.Itoa(row.Children)).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 				})
 			}
 		})
@@ -499,7 +500,7 @@ func (v *View) requestMethod(c *ui.Context, theme nui.Theme, row store.Collectio
 	if !ok {
 		color = ui.Hex("#64748b")
 	}
-	ui.Text(c, method).Shrink(0).SingleLine().FontSize(14).FontWeight(600).LineHeight(1).TextColor(color)
+	ui.Text(c, method).Shrink(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(600).LineHeight(1).TextColor(color)
 }
 
 // menuItems are the actions on a row.

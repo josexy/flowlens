@@ -3,6 +3,8 @@ package editor
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 )
@@ -36,14 +38,14 @@ func tlsProfileOptions() []nui.Option[string] {
 
 func settingRow(c *ui.Context, theme nui.Theme, key, label string, control func()) {
 	ui.Row(c.Key(key)).FillWidth().AlignItems(ui.Center).Gap(10).MinHeight(36).Children(func() {
-		ui.Text(c, label).Width(170).Shrink(0).FontSize(14).TextColor(theme.Toned)
+		ui.Text(c, label).Width(170).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Toned)
 		ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(control)
 	})
 }
 
 func selectRow(c *ui.Context, theme nui.Theme, key, label string, value *string, options []nui.Option[string], onChange func()) {
 	settingRow(c, theme, key, label, func() {
-		nui.Select(c.Key("select"), theme, value, options, nui.SelectOptions{Label: label, Size: nui.SM, OnChange: onChange})
+		nui.Select(c.Key("select"), theme, value, options, nui.SelectOptions{Label: label, OnChange: onChange})
 	})
 }
 
@@ -60,8 +62,8 @@ func (f *numberField) build(c *ui.Context, theme nui.Theme, key, label, placehol
 		f.value, f.seen, f.ready = nui.Set(float64(*target)), *target, true
 	}
 	settingRow(c, theme, key, label, func() {
-		nui.InputNumber(c.Key("number"), theme, &f.value, &f.state, nui.InputNumberOptions{
-			InputOptions: nui.InputOptions{Label: label, Placeholder: placeholder, Size: nui.SM}, Min: nui.Set(minimum), Step: step,
+		widgets.InputNumber(c.Key("number"), theme, &f.value, &f.state, nui.InputNumberOptions{
+			InputOptions: nui.InputOptions{Label: label, Placeholder: placeholder}, Orientation: nui.Vertical, Min: nui.Set(minimum), Step: step,
 		})
 	})
 	if f.value.Set {

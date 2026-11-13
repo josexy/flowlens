@@ -26,6 +26,7 @@ type lifecycleFixture struct {
 
 func newLifecycleFixture(t *testing.T, behavior settingservice.MainWindowCloseBehavior, guards ...quitGuard) *lifecycleFixture {
 	t.Helper()
+	t.Setenv("APPDATA", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))

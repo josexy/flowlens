@@ -158,7 +158,7 @@ func directionTag(c *ui.Context, theme nui.Theme, direction string) {
 		label, tint, text = locales.WorkspaceWebsocketClientFilterSend(), colors.Send, colors.SendTag
 	}
 	ui.Row(c).Shrink(0).MinHeight(20).AlignItems(ui.Center).PaddingX(8).Radius(999).Background(tint.Alpha(0.12)).Children(func() {
-		ui.Text(c, label).SingleLine().FontSize(12).FontWeight(700).TextColor(text)
+		ui.Text(c, label).SingleLine().FontSize(desktoptheme.TextSize(c, 12)).FontWeight(700).TextColor(text)
 	})
 }
 
@@ -204,7 +204,7 @@ func (m *MessageStream) row(c *ui.Context, theme nui.Theme, index int) {
 			ui.Icon(c, directionIcon(message.Direction)).Size(16, 16).TextColor(color)
 		})
 		ui.Row(c).Width(88).Shrink(0).Children(func() { directionTag(c, theme, message.Direction) })
-		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(14).TextColor(theme.Text)
+		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text)
 	})
 }
 
@@ -235,10 +235,10 @@ func (m *MessageStream) bubble(c *ui.Context, theme nui.Theme, index int) {
 				if message.MsgType == "binary" {
 					button := ui.Row(c).Radius(999).PaddingX(12).PaddingY(8).Background(ui.Hex("#0f172a").Alpha(0.08)).Role(ui.RoleButton)
 					button.OnClick(func() { m.open_(message) })
-					button.Children(func() { ui.Text(c, m.preview(message)).FontSize(14).TextColor(theme.Text) })
+					button.Children(func() { ui.Text(c, m.preview(message)).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text) })
 					return
 				}
-				ui.Text(c, message.Data).FontSize(14).LineHeight(1.6).TextColor(theme.Text)
+				ui.Text(c, message.Data).FontSize(desktoptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Text)
 			})
 		})
 	})
@@ -287,7 +287,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 				kind = locales.WorkspaceWebsocketClientDraftTypeBinaryFile()
 			}
 			nui.Badge(c, palette, kind, nui.BadgeOptions{Color: nui.Neutral, Size: nui.LG}).Shrink(0)
-			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(14).MinWidth(0).TextColor(palette.Muted)
+			ui.Text(c, locales.WorkspaceWebsocketClientBinarySize(strconv.Itoa(active.DataSize))).FontSize(desktoptheme.TextSize(c, 14)).MinWidth(0).TextColor(palette.Muted)
 		},
 		Content: func(c *ui.Context, palette nui.Theme) {
 			if binary {
@@ -298,7 +298,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 				m.view.SetText(active.Data)
 			}
 			m.view.SetWordWrap(m.wrap.On())
-			m.view.Build(c, ui.Font{Family: palette.Font, Size: 14}).Fill()
+			m.view.Build(c, ui.Font{Family: palette.Font, Size: desktoptheme.TextSize(c, 14)}).Fill()
 		},
 	}
 	if active != nil && active.Error != "" {

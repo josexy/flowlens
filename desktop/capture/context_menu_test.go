@@ -69,6 +69,24 @@ func TestMenusAreDrawnInTheWindowWith105Items(t *testing.T) {
 	f.requireMenu(f.workspace.Table.menuItems(), append(columns, "-", locales.TrafficShowAllColumns())...)
 }
 
+func TestTrafficMenuLastItemIsFullyVisibleWithoutScrolling(t *testing.T) {
+	f := newHistoryFixture(t, entry(1, "a.test"))
+	openRowMenu(t, f.fixture, "a.test")
+	f.tester.Advance(time.Second)
+	f.settle()
+	menu, ok := f.tester.AccessByRole(ui.RoleMenu, "")
+	if !ok {
+		t.Fatal("no menu")
+	}
+	last, ok := menutest.Item(f.tester, locales.ContextMenuTrafficTableDelete())
+	if !ok || last.Bounds.H == 0 || last.Bounds.Y+last.Bounds.H > menu.Bounds.Y+menu.Bounds.H {
+		t.Fatalf("last item %+v is clipped by menu %+v", last.Bounds, menu.Bounds)
+	}
+	if err := f.tester.Click(locales.ContextMenuTrafficTableDelete()); err != nil {
+		t.Fatalf("last item cannot be clicked without scrolling: %v", err)
+	}
+}
+
 // openHighlightSubmenu opens the Highlight submenu of the open row menu.
 func openHighlightSubmenu(t *testing.T, f *fixture) {
 	t.Helper()

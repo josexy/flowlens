@@ -167,7 +167,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 				emptyState(c, theme, lucide.File(), locales.DetailBodyEmpty())
 				return
 			}
-			font := ui.Font{Family: theme.MonoFont, Size: 13}
+			font := b.deps.Settings.CodeFont()
 			switch b.active {
 			case logic.BodyTabFormatted:
 				b.formatted.Build(c, font).Fill()
@@ -186,12 +186,16 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 
 func (b *BodyViewer) toolbar(c *ui.Context, theme nui.Theme) {
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).PaddingX(10).PaddingY(4).Children(func() {
-		items := make([]nui.TabItem, len(b.tabs))
+		items := make([]widgets.PillTab, len(b.tabs))
 		for index, tab := range b.tabs {
-			items[index] = nui.TabItem{ID: string(tab), Label: tabLabel(tab)}
+			items[index] = widgets.PillTab{ID: string(tab), Label: tabLabel(tab)}
 		}
-		nui.Tabs(c.Key("body-tabs"), theme, &b.tabChoice, items, nui.TabsOptions{Label: locales.DetailBodyRaw(), Size: nui.XS, Content: nui.Set(false)})
-		ui.Row(c).Gap(4).Children(func() { b.actions(c, theme) })
+		strip := ui.ScrollHorizontal(c.Key("body-tabs-scroll")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false)
+		widgets.WheelScroll(c, strip).Children(func() {
+			widgets.PillTabs(c.Key("body-tabs"), theme, &b.tabChoice, items, locales.DetailBodyRaw())
+		})
+		b.active = logic.BodyTab(b.tabChoice)
+		ui.Row(c).Shrink(0).Gap(4).Children(func() { b.actions(c, theme) })
 	})
 }
 

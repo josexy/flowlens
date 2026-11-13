@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
@@ -160,6 +161,15 @@ func (s *SettingsStore) Load() error {
 // Theme returns the appearance every window currently shows.
 func (s *SettingsStore) Theme() theme.Resolved { return s.resolved }
 
+// CodeFont is the current preview or saved code font, including its size.
+func (s *SettingsStore) CodeFont() ui.Font {
+	resolved := theme.Resolve(theme.Appearance{})
+	if s != nil {
+		resolved = s.resolved
+	}
+	return ui.Font{Family: resolved.CodeFont, Size: float32(theme.NormalizeCodeFontSize(resolved.CodeFontSize))}
+}
+
 func (s *SettingsStore) refreshTheme() {
 	appearance := theme.Appearance{}
 	if s.Current != nil {
@@ -238,6 +248,12 @@ func (s *SettingsStore) PreviewDraftAppearance() {
 		return
 	}
 	appearance := theme.AppearanceFromSettings(s.Draft.CommonConfig)
+	if s.preview != nil && *s.preview == appearance {
+		return
+	}
+	if s.preview == nil && s.Current != nil && appearance == theme.AppearanceFromSettings(s.Current.CommonConfig) {
+		return
+	}
 	s.preview = &appearance
 	s.refreshTheme()
 	s.rt.Dispatcher.InvalidateAll()

@@ -4,6 +4,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -101,7 +102,7 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 		}
 		warningAlert(c, theme, warning)
 		ui.Box(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 0, 10, 10).Children(func() {
-			pane.view.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+			pane.view.Build(c, p.deps.Settings.CodeFont()).Fill()
 		})
 	})
 }
@@ -136,7 +137,7 @@ func (p *Panel) rawTCP(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry
 		ui.Column(c).FillWidth().PaddingX(12).PaddingY(14).Gap(2).Children(func() {
 			ui.Row(c).FillWidth().Gap(8).Padding(0, 8, 4, 8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, lucide.Network()).Size(16, 16).TextColor(theme.Primary)
-				ui.Text(c, locales.DetailRawTcpTunnelInfo()).FontSize(14).Bold()
+				ui.Text(c, locales.DetailRawTcpTunnelInfo()).FontSize(apptheme.TextSize(c, 14)).Bold()
 				label, color := "TCP", nui.Neutral
 				if tls {
 					label, color = "TCP/TLS", nui.Info
@@ -173,10 +174,10 @@ func (p *Panel) connectHeaders(c *ui.Context, theme nui.Theme, entry *logic.Traf
 	ui.Column(c.Key("connect")).FillWidth().Gap(8).Padding(4, 0, 0, 0).Children(func() {
 		ui.Row(c).Gap(8).PaddingX(8).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, lucide.Rows3()).Size(16, 16).TextColor(theme.Primary)
-			ui.Text(c, locales.DetailRawTcpOuterConnectHeaders()).FontSize(14).Bold()
+			ui.Text(c, locales.DetailRawTcpOuterConnectHeaders()).FontSize(apptheme.TextSize(c, 14)).Bold()
 		})
 		if entry.Request == nil || len(entry.Request.HeaderFields) == 0 {
-			ui.Text(c, locales.DetailNoHeaders()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailNoHeaders()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			return
 		}
 		rows := make([]widgets.KeyValue, len(entry.Request.HeaderFields))

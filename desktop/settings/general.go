@@ -5,7 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
-	"github.com/josexy/flowlens/desktop/theme"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -33,8 +34,8 @@ func (f *integerField) build(c *ui.Context, theme nui.Theme, key, label string, 
 	if !f.ready || *target != f.seen {
 		f.value, f.seen, f.ready = nui.Set(float64(*target)), *target, true
 	}
-	ui.Box(c.Key(key)).Width(140).Children(func() {
-		nui.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{InputOptions: nui.InputOptions{Label: label, Size: nui.SM, Disabled: disabled}, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
+	ui.Box(c.Key(key)).Width(176).Children(func() {
+		widgets.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{InputOptions: nui.InputOptions{Label: label, Disabled: disabled}, Orientation: nui.Vertical, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
 	})
 	if f.value.Set {
 		*target = int(f.value.Value)
@@ -82,7 +83,14 @@ func (v *View) fontRow(c *ui.Context, palette nui.Theme, key, label string, fami
 		}
 		ui.Box(c.Key("menu")).Width(320).Children(func() {
 			nui.SelectMenu(c.Key("select"), palette, selected, state, items, nui.SelectMenuOptions{
-				ListboxOptions: nui.ListboxOptions{Label: label, Loading: v.general.fontsBusy}, Size: nui.SM, SearchPlaceholder: locales.SettingsFontSearchPlaceholder(),
+				ListboxOptions: nui.ListboxOptions{Label: label, Loading: v.general.fontsBusy, OnChange: func(values []string) {
+					if len(values) == 1 {
+						*family = values[0]
+						if *family == defaultFontID {
+							*family = ""
+						}
+					}
+				}}, SearchPlaceholder: locales.SettingsFontSearchPlaceholder(),
 				OnOpenChange: func(open bool) {
 					if open {
 						v.loadFonts()
@@ -90,13 +98,6 @@ func (v *View) fontRow(c *ui.Context, palette nui.Theme, key, label string, fami
 				},
 			})
 		})
-		if len(*selected) == 1 {
-			chosen := (*selected)[0]
-			if chosen == defaultFontID {
-				chosen = ""
-			}
-			*family = chosen
-		}
 		font := *family
 		if font == "" {
 			font = fallback
@@ -117,7 +118,7 @@ func (v *View) sizeRow(c *ui.Context, palette nui.Theme, key, label string, fiel
 	row(c, palette, key, label, "", func() {
 		ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 			field.build(c, palette, "number", label, value, float64(minimum), float64(maximum), 1, v.committing)
-			ui.Text(c, locales.SettingsUnitPixels()).FontSize(14).TextColor(palette.Muted)
+			ui.Text(c, locales.SettingsUnitPixels()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			blocked := v.committing || *value == fallback
 			reset := nui.Button(c.Key("reset"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.RotateCcw(), Disabled: blocked, AccessibleLabel: locales.SettingsFontSizeReset() + " " + label})
 			if !blocked {
@@ -137,8 +138,26 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 					options := make([]nui.Option[string], len(names))
 					for index, item := range paletteOptions(names) {
 						options[index] = option(item.ID, item.Label)
+						colors, _ := nui.PaletteByName(item.ID)
+						options[index].Build = func(c *ui.Context, _ nui.Theme) {
+							ui.Box(c).Size(12, 12).Radius(6).Background(colors.Shade(500)).Shrink(0).AccessHidden(true)
+							ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
+						}
 					}
-					nui.Select(c.Key("select"), palette, target, options, nui.SelectOptions{Label: label, Size: nui.SM, Disabled: v.committing})
+					select_ := nui.Select(c.Key("select"), palette, target, options, nui.SelectOptions{
+						Label: label, Disabled: v.committing,
+						Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+							if slot == nui.Label {
+								element.PaddingStart(20)
+							}
+						}},
+					})
+					select_.Children(func() {
+						colors, _ := nui.PaletteByName(*target)
+						ui.Box(c.Key("swatch")).Absolute().Left(10).Top(0).Bottom(0).Width(12).Center().IgnoreInput(true).AccessHidden(true).Children(func() {
+							ui.Box(c).Size(12, 12).Radius(6).Background(colors.Shade(500))
+						})
+					})
 				})
 			})
 		}
@@ -146,9 +165,9 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 		colorRow("neutral", locales.SettingsThemeColorsNeutral(), nui.NeutralPaletteNames(), &common.ThemeNeutralColor)
 		items := v.fontItems(common)
 		v.fontRow(c, palette, "app-font", locales.SettingsAppFontLabel(), &common.AppFontFamily, common.AppFontSize, locales.SettingsFontPreviewText(), &state.appFont, &state.appValue, items, palette.Font)
-		v.sizeRow(c, palette, "app-size", locales.SettingsAppFontSizeLabel(), &state.appSize, &common.AppFontSize, theme.MinAppFontSize, theme.MaxAppFontSize, theme.DefaultAppFontSize)
+		v.sizeRow(c, palette, "app-size", locales.SettingsAppFontSizeLabel(), &state.appSize, &common.AppFontSize, apptheme.MinAppFontSize, apptheme.MaxAppFontSize, apptheme.DefaultAppFontSize)
 		v.fontRow(c, palette, "code-font", locales.SettingsCodeFontLabel(), &common.CodeFontFamily, common.CodeFontSize, locales.SettingsCodeFontPreviewText(), &state.codeFont, &state.codeValue, items, palette.MonoFont)
-		v.sizeRow(c, palette, "code-size", locales.SettingsCodeFontSizeLabel(), &state.codeSize, &common.CodeFontSize, theme.MinCodeFontSize, theme.MaxCodeFontSize, theme.DefaultCodeFontSize)
+		v.sizeRow(c, palette, "code-size", locales.SettingsCodeFontSizeLabel(), &state.codeSize, &common.CodeFontSize, apptheme.MinCodeFontSize, apptheme.MaxCodeFontSize, apptheme.DefaultCodeFontSize)
 	})
 	v.section(c, palette, "behavior", locales.SettingsSectionBehavior(), false, nil, func() {
 		row(c, palette, "frame", locales.SettingsWindowFrameModeLabel(), "", func() {
@@ -157,7 +176,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 				nui.Select(c.Key("select"), palette, &value, []nui.Option[string]{
 					option(string(settingservice.WindowFrameModeCustom), locales.SettingsWindowFrameModeCustom()),
 					option(string(settingservice.WindowFrameModeSystem), locales.SettingsWindowFrameModeSystem()),
-				}, nui.SelectOptions{Label: locales.SettingsWindowFrameModeLabel(), Size: nui.SM})
+				}, nui.SelectOptions{Label: locales.SettingsWindowFrameModeLabel()})
 			})
 			window.FrameMode = settingservice.WindowFrameMode(value)
 		})
@@ -167,7 +186,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 				nui.Select(c.Key("select"), palette, &value, []nui.Option[string]{
 					option(string(settingservice.MainWindowCloseBehaviorHideToTray), locales.SettingsMainWindowCloseBehaviorHideToTray()),
 					option(string(settingservice.MainWindowCloseBehaviorQuit), locales.SettingsMainWindowCloseBehaviorQuit()),
-				}, nui.SelectOptions{Label: locales.SettingsMainWindowCloseBehaviorLabel(), Size: nui.SM})
+				}, nui.SelectOptions{Label: locales.SettingsMainWindowCloseBehaviorLabel()})
 			})
 			window.MainWindowCloseBehavior = settingservice.MainWindowCloseBehavior(value)
 		})

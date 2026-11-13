@@ -11,6 +11,7 @@ import (
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -67,12 +68,12 @@ func normalizeHostRows(rows []hostFilterRow) []string {
 }
 
 func (d *hostFilterDialog) section(c *ui.Context, theme nui.Theme, key, title string, rows *[]hostFilterRow, saving bool) {
-	ui.Column(c.Key(key)).FillWidth().Gap(8).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, title).Bold().FontSize(14).TextColor(theme.Highlighted)
-			nui.Badge(c, theme, strconv.Itoa(len(*rows)), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.XS})
+	ui.Column(c.Key(key)).FillWidth().Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Margin(0, 0, 8, 0).Children(func() {
+			ui.Text(c, title).Bold().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Highlighted)
+			ui.Text(c, strconv.Itoa(len(*rows))).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Muted).Background(theme.Elevated).PaddingX(6).MinWidth(18).MinHeight(18).Radius(9)
 			ui.Box(c).Grow(1)
-			add := nui.Button(c.Key(key+"-add"), theme, locales.SettingsAddDomainFilter(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Size: nui.SM, Leading: lucide.Plus(), Disabled: saving})
+			add := nui.Button(c.Key(key+"-add"), theme, locales.SettingsAddDomainFilter(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Leading: lucide.Plus(), Disabled: saving})
 			if !saving {
 				add.OnClick(func() { d.add(rows) })
 			}
@@ -80,27 +81,29 @@ func (d *hostFilterDialog) section(c *ui.Context, theme nui.Theme, key, title st
 		if len(*rows) == 0 {
 			return
 		}
-		ui.Column(c).FillWidth().Gap(8).Padding(10).MaxHeight(220).Children(func() {
-			for index := range *rows {
-				row := &(*rows)[index]
-				id := row.id
-				ui.Row(c.Key(id)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-						options := nui.InputOptions{
-							Label: title, Placeholder: locales.SettingsHostFilterPlaceholder(), Disabled: saving,
-							OnSubmit: func(string) { d.add(rows) },
+		ui.Scroll(c.Key("rows")).FillWidth().MinHeight(0).MaxHeight(220).Border(1, theme.Border).Radius(8).Background(theme.Elevated).Children(func() {
+			ui.Column(c).FillWidth().Gap(8).Padding(10).Children(func() {
+				for index := range *rows {
+					row := &(*rows)[index]
+					id := row.id
+					ui.Row(c.Key(id)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+						ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+							options := nui.InputOptions{
+								Label: title, Placeholder: locales.SettingsHostFilterPlaceholder(), Disabled: saving,
+								OnSubmit: func(string) { d.add(rows) },
+							}
+							if id == d.focusID {
+								options.Style = widgets.AutoFocus()
+							}
+							nui.Input(c, theme, &row.value, options)
+						})
+						remove := nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveDomainFilter(), Disabled: saving})
+						if !saving {
+							remove.OnClick(func() { removeHostRow(rows, id) })
 						}
-						if id == d.focusID {
-							options.Style = widgets.AutoFocus()
-						}
-						nui.Input(c, theme, &row.value, options)
 					})
-					remove := nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveDomainFilter(), Disabled: saving})
-					if !saving {
-						remove.OnClick(func() { removeHostRow(rows, id) })
-					}
-				})
-			}
+				}
+			})
 		})
 	})
 }
@@ -319,11 +322,12 @@ func (d *resendDialog) quick(t *Table, id uint64, config proxyservice.ResendConf
 
 func (d *resendDialog) numberRow(c *ui.Context, theme nui.Theme, key, label string, value *nui.Optional[float64], state *nui.NumberState, options nui.InputNumberOptions) {
 	ui.Row(c.Key(key)).FillWidth().AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, label).Width(120).Shrink(0).FontSize(14).TextColor(theme.Toned)
+		ui.Text(c, label).Width(120).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Toned)
 		ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
 			options.InputOptions = nui.InputOptions{Label: label, Disabled: d.sending}
+			options.Orientation = nui.Vertical
 			options.AllowInvalid = true
-			nui.InputNumber(c, theme, value, state, options)
+			widgets.InputNumber(c, theme, value, state, options)
 		})
 	})
 }
@@ -359,12 +363,12 @@ func (d *resendDialog) build(c *ui.Context, theme nui.Theme, t *Table) {
 			d.numberRow(c, palette, "delay", locales.ResendModalDelay(), &d.delay, &d.delayState, nui.InputNumberOptions{Min: nui.Set[float64](0), Step: 100})
 			d.numberRow(c, palette, "interval", locales.ResendModalInterval(), &d.interval, &d.intervalState, nui.InputNumberOptions{Min: nui.Set[float64](0), Step: 100})
 			ui.Row(c.Key("use-proxy")).FillWidth().AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, locales.ResendModalUseProxy()).Width(120).Shrink(0).FontSize(14).TextColor(palette.Toned)
+				ui.Text(c, locales.ResendModalUseProxy()).Width(120).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Toned)
 				nui.Switch(c, palette, &d.useProxy, nui.SwitchOptions{Label: locales.ResendModalUseProxy(), Disabled: sending})
 			})
 			if !d.useProxy {
 				ui.Row(c.Key("upstream")).FillWidth().AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Text(c, locales.ResendModalUpstreamProxy()).Width(120).Shrink(0).FontSize(14).TextColor(palette.Toned)
+					ui.Text(c, locales.ResendModalUpstreamProxy()).Width(120).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Toned)
 					ui.Box(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
 						nui.Input(c, palette, &d.upstream, nui.InputOptions{Label: locales.ResendModalUpstreamProxy(), Placeholder: locales.ResendModalUpstreamProxyPlaceholder(), Disabled: sending})
 					})

@@ -7,6 +7,7 @@ import (
 	"github.com/josexy/flowlens/desktop/inspect"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -249,28 +250,32 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 	binary := state.DraftType == draftTypeBinaryFile
 	ui.Row(c.Key("draft-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceWebsocketClientDraftType()).FontSize(14).TextColor(theme.Muted)
-			ui.Box(c).Width(150).Children(func() {
-				nui.Select(c, theme, &state.DraftType, options, nui.SelectOptions{Label: locales.WorkspaceWebsocketClientDraftType(), Size: nui.SM})
+			ui.Text(c, locales.WorkspaceWebsocketClientDraftType()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+			ui.Box(c).Width(130).Children(func() {
+				nui.Select(c, theme, &state.DraftType, options, nui.SelectOptions{Label: locales.WorkspaceWebsocketClientDraftType()})
 			})
 		})
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 			if !binary {
 				wordWrapButton(c, theme, p.draft)
 			}
-			button := nui.Button(c.Key("send-message"), theme, "", nui.ButtonOptions{Size: nui.SM, Square: true, Leading: lucide.Send(), AccessibleLabel: locales.WorkspaceWebsocketClientSendMessage(), Disabled: !p.canSend() || state.IsSendingMessage, Loading: state.IsSendingMessage})
-			if p.canSend() && !state.IsSendingMessage {
-				button.OnClick(p.send)
-			}
-			nui.Tooltip(c, theme, button, locales.WorkspaceWebsocketClientSendMessage(), nui.TooltipOptions{Kbds: p.editor.kbds(shortcuts.RequestEditorSend)})
 		})
 	})
-	ui.Box(c.Key("draft")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		if binary {
-			p.editor.fileControl(c, theme, p.key+":draft", &state.DraftFile, &p.fileGuard)
-			return
-		}
-		p.draft.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+	ui.Box(c.Key("draft")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+		ui.Box(c.Key("draft-content")).Fill().Children(func() {
+			if binary {
+				p.editor.fileControl(c, theme, p.key+":draft", &state.DraftFile, &p.fileGuard)
+			} else {
+				p.draft.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
+			}
+			ui.Box(c.Key("send-position")).Absolute().Right(20).Bottom(12).Children(func() {
+				button := nui.Button(c.Key("send-message"), theme, "", nui.ButtonOptions{Size: nui.XL, Square: true, Leading: lucide.Send(), AccessibleLabel: locales.WorkspaceWebsocketClientSendMessage(), Disabled: !p.canSend() || state.IsSendingMessage, Loading: state.IsSendingMessage}).Radius(100)
+				if p.canSend() && !state.IsSendingMessage {
+					button.OnClick(p.send)
+				}
+				nui.Tooltip(c, theme, button, locales.WorkspaceWebsocketClientSendMessage(), nui.TooltipOptions{Kbds: p.editor.kbds(shortcuts.RequestEditorSend)})
+			})
+		})
 	})
 }
 
@@ -334,7 +339,7 @@ func (p *socketPane) rightPanel(c *ui.Context, theme nui.Theme) {
 		case state.ConnectionStatus == socketStatusConnecting:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.WorkspaceWebsocketClientConnectionStatusConnecting()).FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, locales.WorkspaceWebsocketClientConnectionStatusConnecting()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 			return
 		case !hasResult:

@@ -14,6 +14,7 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -128,7 +129,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	if label == "" {
 		label = locales.MenuCapture()
 	}
-	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
+	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).FillWidth().MinHeight(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
 	switch {
 	case active:
 		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
@@ -146,7 +147,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		ui.ButtonBase(c.Key("open")).Grow(1).Basis(0).MinWidth(0).FillHeight().Justify(ui.Start).Gap(8).Radius(4).FocusRing(true).Label(label).
 			OnClick(func() { w.selectItem(store.CaptureItemLive) }).Children(func() {
 			ui.Icon(c, lucide.Radio()).Size(16, 16).Shrink(0).TextColor(color)
-			ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Text)
+			ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
 		})
 		restart := nui.Button(c.Key("restart"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.SkipForward(), AccessibleLabel: locales.CaptureRestart()})
 		restart.OnClick(w.Restart)
@@ -181,8 +182,8 @@ func CountPill(c *ui.Context, theme nui.Theme, count string, active bool) ui.Ele
 	if active {
 		background, foreground = theme.Primary.Alpha(0.14).Over(theme.Elevated), theme.Primary
 	}
-	return ui.Box(c).Height(20).MinWidth(22).PaddingX(7).Radius(10).Center().Shrink(0).Background(background).Children(func() {
-		ui.Text(c, count).SingleLine().FontSize(14).LineHeight(20.0 / 14.0).TextColor(foreground)
+	return ui.Box(c).MinHeight(20).MinWidth(22).PaddingX(7).Radius(10).Center().Shrink(0).Background(background).Children(func() {
+		ui.Text(c, count).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14.0).TextColor(foreground)
 	})
 }
 
@@ -238,9 +239,14 @@ func (w *Workspace) historyTitle(key string) string {
 		return key
 	}
 	metadata := w.Data.History.MetadataFor(key)
-	switch {
-	case metadata == nil:
+	if metadata == nil {
 		return key
+	}
+	return historyTabTitle(metadata)
+}
+
+func historyTabTitle(metadata *proxyservice.HistoryMetadata) string {
+	switch {
 	case metadata.Alias != "":
 		return metadata.Alias
 	case metadata.CreatedAt == 0:

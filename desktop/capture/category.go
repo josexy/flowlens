@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -165,7 +166,7 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 		header := ui.Row(c.Key("category-header")).FillWidth().Shrink(0).MinHeight(40).AlignItems(ui.Center).PaddingX(12).Background(theme.Elevated)
 		header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			if source != nil {
-				ui.Text(c, source.label).SingleLine().Shrink(1).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+				ui.Text(c, source.label).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
 			}
 		})
 		ui.Column(c.Key("category-body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
@@ -185,7 +186,7 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryView, source *categorySource) {
 	status := func(text string) {
 		ui.Column(c).Fill().Center().Padding(16).Children(func() {
-			ui.Text(c, text).FontSize(14).TextAlign(ui.Center).TextColor(theme.Muted)
+			ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextAlign(ui.Center).TextColor(theme.Muted)
 		})
 	}
 	if source == nil {
@@ -261,7 +262,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 		active = row.node.Key == view.activeLeaf
 		indent += float32(row.node.Depth) * structureIndent
 	}
-	element := ui.ButtonBase(c.Key(row.key)).FillWidth().Height(32).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, indent).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
+	element := ui.ButtonBase(c.Key(row.key)).FillWidth().MinHeight(32).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, indent).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
 	switch {
 	case active:
 		element.Background(theme.Accented)
@@ -284,7 +285,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 		default:
 			ui.Icon(c, structureIcon(row.node, view.expanded[row.node.Key])).Size(20, 20).Shrink(0).TextColor(theme.Muted)
 		}
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(20.0 / 14).TextColor(theme.Text)
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14).TextColor(theme.Text)
 		switch {
 		case checked:
 			ui.Icon(c.Key("check"), lucide.Check()).Size(20, 20).Shrink(0).TextColor(theme.Primary)
@@ -306,7 +307,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 func (w *Workspace) categorySectionRow(c *ui.Context, theme nui.Theme, row categoryRow) {
 	view := &w.category
 	band := theme.Elevated.Alpha(0.88).Over(theme.Background)
-	element := ui.ButtonBase(c.Key(row.key)).FillWidth().Height(32).Justify(ui.Start).Gap(6).PaddingX(12).Background(band).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
+	element := ui.ButtonBase(c.Key(row.key)).FillWidth().MinHeight(32).Justify(ui.Start).Gap(6).PaddingX(12).Background(band).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
 	top := float32(0)
 	if row.section != sectionHost {
 		top = 1
@@ -317,7 +318,7 @@ func (w *Workspace) categorySectionRow(c *ui.Context, theme nui.Theme, row categ
 	}
 	element.OnClick(func() { view.collapsed[row.section] = !view.collapsed[row.section] })
 	element.Children(func() {
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
 		chevron := lucide.ChevronDown()
 		if view.collapsed[row.section] {
 			chevron = lucide.ChevronRight()

@@ -95,6 +95,10 @@ func Resolve(appearance Appearance) Resolved {
 		theme.Font = resolved.AppFont
 		theme.MonoFont = resolved.CodeFont
 		theme.FontSize = float32(resolved.AppFontSize) * interfaceTextRatio
+		theme = theme.WithComponent(nui.ComponentModal, nui.ComponentTheme{UI: nui.Styles{
+			nui.Header: {BorderColor: nui.Set(theme.BorderMuted)},
+			nui.Footer: {BorderColor: nui.Set(theme.BorderMuted)},
+		}})
 		return theme
 	}
 	resolved.Config = nui.AppConfig{Mode: nuiMode(resolved.Mode), Light: apply(false), Dark: apply(true)}

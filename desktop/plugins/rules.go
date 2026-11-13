@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -65,7 +66,7 @@ func (r *rulesPane) build(c *ui.Context, theme nui.Theme, v *View, plugin *store
 	plugins := v.Data.Plugins
 	r.sync(plugin)
 	ui.Row(c.Key("rules-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 10).Gap(8).Children(func() {
-		ui.Text(c, locales.PythonPluginsRulesHint()).FontSize(12).TextColor(theme.Muted).Grow(1).Basis(0).MinWidth(0)
+		ui.Text(c, locales.PythonPluginsRulesHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).Grow(1).Basis(0).MinWidth(0)
 		nui.Button(c.Key("add"), theme, locales.PythonPluginsAddRule(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Plus(), Loading: plugins.IsMutating("rule:create:" + plugin.ID)}).OnClick(func() {
 			r.err = ""
 			plugins.CreateRule(plugin.ID, func(_ *store.PluginRule, err error) {

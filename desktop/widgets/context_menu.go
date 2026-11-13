@@ -17,6 +17,12 @@ import (
 // list). The menu takes over the anchor's HandleInput: an anchor that handles
 // its input itself cannot have one. Key c in a list.
 func ContextMenu(c *ui.Context, theme nui.Theme, anchor ui.Element, state *nui.MenuState, items func() []nui.MenuItem, o nui.MenuOptions) ui.Element {
+	if !o.MaxHeight.Set {
+		// Let ordinary menus show every item when the window has room. nui
+		// constrains and positions the scrollable popup within the viewport.
+		_, height := c.Size()
+		o.MaxHeight = nui.Set(max(float32(0), height-24))
+	}
 	var built []nui.MenuItem
 	if state.Open {
 		if built = items(); len(built) == 0 {

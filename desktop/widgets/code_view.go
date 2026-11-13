@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+	"github.com/josexy/flowlens/desktop/theme"
 )
 
 // Above these sizes, read-only text is shown plain: wrapped capture payloads
@@ -135,10 +136,16 @@ func (v *CodeView) PlainText() bool { return v.state.ReadOnly && v.large }
 // State returns the editor state, for options such as completions.
 func (v *CodeView) State() *editor.State { return &v.state }
 
-// Build shows the view in font and reports edits to OnChange.
+// Build fills its parent with the framed view and reports edits to OnChange.
+// It returns the editor itself so focus and accessibility stay on the input.
 func (v *CodeView) Build(c *ui.Context, font ui.Font) ui.Element {
 	v.state.Font = font
-	element := editor.View(c, &v.state)
+	v.state.LineHeight = 18.0 / 13.0
+	v.state.Theme = theme.Editor(c.Theme())
+	var element ui.Element
+	ui.Box(c).Fill().MinWidth(0).MinHeight(0).Padding(0, 0, 0, 8).Children(func() {
+		element = editor.View(c, &v.state).Fill().Border(1, c.Theme().Border)
+	})
 	if version := v.state.Buffer.Version(); version != v.version {
 		v.version = version
 		if v.OnChange != nil && !v.state.ReadOnly {

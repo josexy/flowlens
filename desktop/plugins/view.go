@@ -10,6 +10,7 @@ import (
 	"github.com/josexy/flowlens/desktop/pythonapi"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -153,7 +154,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).MinWidth(0).Children(func() {
-					ui.Text(c, locales.PythonPluginsTitle()).SingleLine().Shrink(1).FontSize(14).FontWeight(600).TextColor(theme.Highlighted)
+					ui.Text(c, locales.PythonPluginsTitle()).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Highlighted)
 					label, color := v.runtimeBadge()
 					nui.Badge(c.Key("runtime"), theme, label, nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
 				})
@@ -184,7 +185,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 					v.pluginRow(c, theme, index, plugin, visible)
 				}
 				if plugins.Error != "" {
-					ui.Text(c.Key("error"), plugins.Error).FontSize(12).TextColor(theme.Error).FillWidth().Padding(8)
+					ui.Text(c.Key("error"), plugins.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Error).FillWidth().Padding(8)
 				}
 			})
 		})
@@ -222,7 +223,7 @@ func (v *View) selectPlugin(id string) {
 func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *store.Plugin, visible []*store.Plugin) {
 	plugins := v.Data.Plugins
 	selected := plugins.SelectedPluginID == plugin.ID
-	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleListItem).FillWidth().Height(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
+	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleListItem).FillWidth().MinHeight(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
 	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent)
 	hovered := row.Hovered()
 	switch {
@@ -241,9 +242,9 @@ func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *stor
 			nui.Tooltip(c, theme, dot, validationLabel(plugin.ValidationStatus), nui.TooltipOptions{})
 		})
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, plugin.Name).SingleLine().FontSize(14).FontWeight(500).TextColor(theme.Highlighted)
+			ui.Text(c, plugin.Name).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Highlighted)
 			if plugin.Description != "" {
-				ui.Text(c, plugin.Description).SingleLine().FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, plugin.Description).SingleLine().FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 		})
 		enabled := plugin.Enabled
@@ -453,13 +454,13 @@ func (v *View) header(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 	ui.Row(c.Key("header")).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(8, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, plugin.Name).SingleLine().FontSize(14).Bold().TextColor(theme.Highlighted)
+				ui.Text(c, plugin.Name).SingleLine().FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 				if plugins.EditorDirty() {
 					ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary)
 				}
 			})
 			if plugin.Description != "" {
-				ui.Text(c, plugin.Description).SingleLine().FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, plugin.Description).SingleLine().FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 		})
 		saving := plugins.IsMutating("file:save:" + plugins.SelectedPluginID + ":" + plugins.SelectedFilePath)
@@ -555,7 +556,7 @@ func (v *View) filesPane(c *ui.Context, theme nui.Theme) {
 	plugins := v.Data.Plugins
 	ui.Column(c.Key("files")).Width(220).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
 		ui.Row(c.Key("files-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 8).Children(func() {
-			ui.Text(c, locales.PythonPluginsFiles()).FontSize(12).Bold().TextColor(theme.Muted)
+			ui.Text(c, locales.PythonPluginsFiles()).FontSize(apptheme.TextSize(c, 12)).Bold().TextColor(theme.Muted)
 			ui.Row(c).Gap(2).Children(func() {
 				none := plugins.SelectedFilePath == ""
 				action(c, theme, "new-file", lucide.FilePlus(), locales.PythonPluginsNewFile(), nui.Neutral, nui.Ghost, false, func() { v.fileModal.show(false, "") })
@@ -582,7 +583,7 @@ func (v *View) fileRow(c *ui.Context, theme nui.Theme, row fileRow) {
 	} else {
 		line = ui.ButtonBase(c.Key(row.key)).Justify(ui.Start).FocusRing(true)
 	}
-	line.FillWidth().Height(26).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(row.depth)*12+6).Radius(theme.Radius).Label(row.path)
+	line.FillWidth().MinHeight(26).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(row.depth)*12+6).Radius(theme.Radius).Label(row.path)
 	if selected {
 		line.Background(theme.Primary.Alpha(0.1))
 	} else if !row.directory && line.Hovered() {
@@ -607,7 +608,7 @@ func (v *View) fileRow(c *ui.Context, theme nui.Theme, row fileRow) {
 			color = theme.Primary
 		}
 		ui.Icon(c, icon).Size(14, 14).Shrink(0).TextColor(color)
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
+		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(color)
 		if selected && plugins.EditorDirty() {
 			ui.Box(c.Key("dirty")).Size(6, 6).Shrink(0).Radius(3).Background(theme.Primary)
 		}
@@ -622,14 +623,14 @@ func (v *View) editorPane(c *ui.Context, theme nui.Theme) {
 				widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: locales.PythonPluginsNoFileSelected()})
 			})
 		} else {
-			ui.Box(c.Key(fileLanguage(plugins.SelectedFilePath) == "python")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-				v.activeEditor().Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+			ui.Box(c.Key(fileLanguage(plugins.SelectedFilePath) == "python")).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingY(8).Children(func() {
+				v.activeEditor().Build(c, v.Data.Settings.CodeFont()).Fill()
 			})
 		}
 		if plugins.EditorError != "" {
 			ui.Row(c.Key("editor-error")).FillWidth().Shrink(0).Gap(6).AlignItems(ui.Center).Padding(6, 10).Background(theme.Error.Alpha(0.1)).Children(func() {
 				ui.Icon(c, lucide.CircleAlert()).Size(14, 14).Shrink(0).TextColor(theme.Error)
-				ui.Text(c, plugins.EditorError).FontSize(12).TextColor(theme.Error).Grow(1).Basis(0).MinWidth(0)
+				ui.Text(c, plugins.EditorError).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Error).Grow(1).Basis(0).MinWidth(0)
 			})
 		}
 	})
@@ -654,7 +655,7 @@ func (v *View) detailPane(c *ui.Context, theme nui.Theme, plugin *store.Plugin) 
 func (v *View) paramsPane(c *ui.Context, theme nui.Theme) {
 	plugins := v.Data.Plugins
 	ui.Row(c.Key("params-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 10).Gap(8).Children(func() {
-		ui.Text(c, locales.PythonPluginsParamsHint()).FontSize(12).TextColor(theme.Muted).Grow(1).Basis(0).MinWidth(0)
+		ui.Text(c, locales.PythonPluginsParamsHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).Grow(1).Basis(0).MinWidth(0)
 		ui.Row(c).Gap(4).Children(func() {
 			nui.Button(c.Key("format"), theme, locales.PythonPluginsFormat(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Leading: lucide.TextAlignStart()}).OnClick(v.formatParams)
 			saving := plugins.IsMutating("params:save:" + plugins.SelectedPluginID)
@@ -669,8 +670,8 @@ func (v *View) paramsPane(c *ui.Context, theme nui.Theme) {
 			nui.Alert(c, theme, nui.AlertOptions{Description: plugins.ParamsError, Color: nui.Error, Variant: nui.Soft})
 		})
 	}
-	ui.Box(c.Key("params-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		v.params.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+	ui.Box(c.Key("params-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingY(8).Children(func() {
+		v.params.Build(c, v.Data.Settings.CodeFont()).Fill()
 	})
 }
 
@@ -701,16 +702,16 @@ func (v *View) statusBar(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 		if plugin.ActiveRevision != "" {
 			revision = plugin.ActiveRevision[:min(12, len(plugin.ActiveRevision))]
 		}
-		label := ui.Text(c.Key("revision"), locales.PythonPluginsRevision(revision)).FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted).Shrink(0)
+		label := ui.Text(c.Key("revision"), locales.PythonPluginsRevision(revision)).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Muted).Shrink(0)
 		if plugin.ActiveRevision != "" {
 			nui.Tooltip(c, theme, label, plugin.ActiveRevision, nui.TooltipOptions{})
 		}
-		ui.Text(c.Key("validation-error"), plugin.ValidationError).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(12).TextColor(theme.Error)
+		ui.Text(c.Key("validation-error"), plugin.ValidationError).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Error)
 		state := locales.PythonPluginsDisabled()
 		if plugin.Enabled {
 			state = locales.PythonPluginsEnabled()
 		}
-		ui.Text(c.Key("state"), state).FontSize(12).TextColor(theme.Muted)
+		ui.Text(c.Key("state"), state).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 	})
 }
 
@@ -732,18 +733,18 @@ func (d *pluginDialog) build(c *ui.Context, theme nui.Theme, v *View, title, con
 	}
 	v.Dispatcher.NoteModal()
 	busy := v.Data.Plugins.IsMutating(key)
-	nui.ModalWithOptions(c.Key(title), theme, &d.open, nui.ModalOptions{Title: title, Width: nui.Set[float32](460), Dismissible: nui.Set(!busy), Footer: func(c *ui.Context, palette nui.Theme) {
+	nui.ModalWithOptions(c.Key(title), theme, &d.open, nui.ModalOptions{Title: title, Dismissible: nui.Set(!busy), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { d.open = false })
 			nui.Button(c.Key("submit"), palette, confirm, nui.ButtonOptions{Loading: busy, AccessibleLabel: confirm + " " + title}).OnClick(func() { submit(d) })
 		})
 	}}, func(palette nui.Theme) {
-		ui.Column(c).FillWidth().Gap(12).Children(func() {
-			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsName()}, func(field nui.Theme) {
+		ui.Column(c).FillWidth().Gap(16).Children(func() {
+			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsName(), Required: true}, func(field nui.Theme) {
 				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			nui.FormField(c.Key("description"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsDescription()}, func(field nui.Theme) {
-				nui.Textarea(c, field, &d.description, nui.TextareaOptions{InputOptions: nui.InputOptions{Label: locales.PythonPluginsDescription(), Disabled: busy}, Rows: 3}).FillWidth()
+				nui.Textarea(c, field, &d.description, nui.TextareaOptions{InputOptions: nui.InputOptions{Label: locales.PythonPluginsDescription(), Disabled: busy}, Rows: 3, MaxRows: 8, AutoResize: true}).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})
@@ -793,7 +794,7 @@ func (d *fileDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	if d.rename {
 		title = locales.PythonPluginsRenameFile()
 	}
-	nui.ModalWithOptions(c.Key("file-dialog"), theme, &d.open, nui.ModalOptions{Title: title, Width: nui.Set[float32](460), Footer: func(c *ui.Context, palette nui.Theme) {
+	nui.ModalWithOptions(c.Key("file-dialog"), theme, &d.open, nui.ModalOptions{Title: title, Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(func() { d.open = false })
 			nui.Button(c.Key("submit"), palette, locales.PythonPluginsConfirm(), nui.ButtonOptions{}).OnClick(func() { d.submit(v) })
@@ -865,6 +866,6 @@ func (v *View) confirmModal(c *ui.Context, theme nui.Theme, key, title, message 
 			nui.Button(c.Key("confirm"), palette, locales.PythonPluginsDelete(), nui.ButtonOptions{Color: nui.Error, Loading: busy}).OnClick(run)
 		})
 	}}, func(palette nui.Theme) {
-		ui.Text(c, message).FontSize(14).TextColor(palette.Text).FillWidth()
+		ui.Text(c, message).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).FillWidth()
 	})
 }

@@ -10,6 +10,7 @@ import (
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -274,7 +275,7 @@ func (p *Panel) responseItems(entry *logic.TrafficEntry) []nui.TabItem {
 // summaryChip is a small label beside the response tabs.
 func summaryChip(c *ui.Context, text string, foreground, background ui.Color) ui.Element {
 	return ui.Box(c).MinHeight(20).PaddingX(8).Radius(6).Center().Shrink(0).Background(background).Children(func() {
-		ui.Text(c, text).SingleLine().FontSize(14).Bold().TextColor(foreground)
+		ui.Text(c, text).SingleLine().FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(foreground)
 	})
 }
 
@@ -372,8 +373,8 @@ func (p *Panel) closeButton(c *ui.Context, theme nui.Theme) {
 
 func (p *Panel) errorPane(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry) {
 	ui.Column(c).FillWidth().Padding(16).Gap(8).Children(func() {
-		ui.Text(c, logic.FormatTimeRFC3339(entry.Error.Timestamp)).FontSize(14).TextColor(theme.Muted)
-		ui.Text(c, entry.Error.Error).Selectable().FontSize(14).TextColor(theme.Error)
+		ui.Text(c, logic.FormatTimeRFC3339(entry.Error.Timestamp)).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+		ui.Text(c, entry.Error.Error).Selectable().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Error)
 	})
 }
 

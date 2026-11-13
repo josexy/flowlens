@@ -11,6 +11,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -139,9 +140,9 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Children(func() {
-			ui.Text(c, locales.DetailSseMessageCount(strconv.Itoa(len(s.events)))).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailSseMessageCount(strconv.Itoa(len(s.events)))).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			if s.parsing {
-				ui.Text(c, locales.DetailSseParsing()).FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, locales.DetailSseParsing()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 			ui.Box(c).Grow(1)
 			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.list.ScrollToEnd)
@@ -165,7 +166,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		// 1.0.5 noted an incomplete last event under the list once parsed;
 		// the parser is the background job's while it parses.
 		if !s.parsing && s.parser.HasPendingEvent() {
-			ui.Text(c, locales.DetailSseIncomplete()).FillWidth().Shrink(0).Padding(6, 10, 0, 10).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailSseIncomplete()).FillWidth().Shrink(0).Padding(6, 10, 0, 10).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		}
 		ui.Box(c).Shrink(0).Height(10)
 	})
@@ -177,15 +178,15 @@ func (s *SSEView) cell(c *ui.Context, theme nui.Theme, event *logic.SSEEvent, co
 	ui.Row(c).FillWidth().MinWidth(0).Height(sseRowHeight - 12).AlignItems(ui.Center).Children(func() {
 		switch sseColumnIDs[col] {
 		case "id":
-			ui.Text(c, orDash(event.LastEventID)).SingleLine().MinWidth(0).FontSize(14).FontFeatures("tnum").TextColor(theme.Muted)
+			ui.Text(c, orDash(event.LastEventID)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontFeatures("tnum").TextColor(theme.Muted)
 		case "event":
-			ui.Text(c, event.EventType).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Text)
+			ui.Text(c, event.EventType).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 		default:
 			preview := event.Preview
 			if preview == "" {
 				preview = locales.DetailSseEmptyData()
 			}
-			ui.Text(c, preview).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Text)
+			ui.Text(c, preview).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 		}
 	})
 }
@@ -232,7 +233,7 @@ func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
 		Lead: func(c *ui.Context, palette nui.Theme) {
 			nui.Badge(c, palette, "#"+strconv.Itoa(s.selected.Sequence), nui.BadgeOptions{Color: nui.Neutral}).Shrink(0)
 			nui.Badge(c, palette, s.selected.EventType, nui.BadgeOptions{Color: nui.Info}).MinWidth(0)
-			ui.Text(c, locales.DetailSseId()+": "+orDash(s.selected.LastEventID)).FontSize(14).MinWidth(0).TextColor(palette.Muted)
+			ui.Text(c, locales.DetailSseId()+": "+orDash(s.selected.LastEventID)).FontSize(apptheme.TextSize(c, 14)).MinWidth(0).TextColor(palette.Muted)
 		},
 		Header: func(c *ui.Context, palette nui.Theme) {
 			items := []widgets.PillTab{{ID: "data", Label: locales.DetailSseData()}}
@@ -263,7 +264,7 @@ func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
 				s.detailView.SetText(text)
 			}
 			s.detailView.SetWordWrap(s.wrap.On())
-			s.detailView.Build(c, ui.Font{Family: palette.MonoFont, Size: 13}).Fill()
+			s.detailView.Build(c, s.deps.Settings.CodeFont()).Fill()
 		},
 	})
 	if !s.open {

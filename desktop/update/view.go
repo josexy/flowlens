@@ -13,6 +13,7 @@ import (
 	appservice "github.com/josexy/flowlens/backend/services/app_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/flowlens/resources"
@@ -204,7 +205,7 @@ func (v *View) steps(c *ui.Context, theme nui.Theme) {
 				ui.Box(c.Key("circle")).Size(28, 28).Radius(14).Background(background).Center().Children(func() {
 					ui.Icon(c, icon).Size(14, 14).TextColor(foreground)
 				})
-				ui.Text(c, item.title).SingleLine().FontSize(12).TextColor(titleColor)
+				ui.Text(c, item.title).SingleLine().FontSize(apptheme.TextSize(c, 12)).TextColor(titleColor)
 			})
 		}
 	})
@@ -277,9 +278,9 @@ func (v *View) downloadProgress(c *ui.Context, theme nui.Theme) {
 		nui.Progress(c.Key("bar"), theme, percent, nui.ProgressOptions{Label: locales.UpdaterDownloadingTitle(), Size: nui.SM, Indeterminate: !known})
 		if progress != nil {
 			ui.Row(c.Key("summary")).FillWidth().Justify(ui.SpaceBetween).Gap(16).Children(func() {
-				ui.Text(c, progressSummary(progress)).FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
+				ui.Text(c, progressSummary(progress)).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Muted)
 				if known {
-					ui.Text(c, strconv.Itoa(int(math.Round(percent)))+"%").FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
+					ui.Text(c, strconv.Itoa(int(math.Round(percent)))+"%").FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Muted)
 				}
 			})
 		}
@@ -293,8 +294,8 @@ func cardSection(c *ui.Context, theme nui.Theme, key string) ui.Element {
 
 func detail(c *ui.Context, theme nui.Theme, key, label, value string, strong bool) {
 	ui.Row(c.Key(key)).FillWidth().Gap(20).Children(func() {
-		ui.Text(c, label).Width(110).Shrink(0).FontSize(14).TextColor(theme.Muted)
-		text := ui.Text(c, value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).Font(theme.MonoFont).TextColor(theme.Toned)
+		ui.Text(c, label).Width(110).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+		text := ui.Text(c, value).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).Font(theme.MonoFont).TextColor(theme.Toned)
 		if strong {
 			text.FontWeight(600).TextColor(theme.Text)
 		}
@@ -311,8 +312,8 @@ func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 				ui.Icon(c, status.icon).Size(24, 24).TextColor(status.color)
 			})
 			ui.Column(c.Key("text")).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, status.title).FontSize(18).LineHeight(24.0 / 18.0).Bold().TextColor(theme.Text).FillWidth()
-				ui.Text(c, status.description).FontSize(14).LineHeight(20.0 / 14.0).TextColor(theme.Muted).FillWidth()
+				ui.Text(c, status.title).FontSize(apptheme.TextSize(c, 18)).LineHeight(24.0 / 18.0).Bold().TextColor(theme.Text).FillWidth()
+				ui.Text(c, status.description).FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14.0).TextColor(theme.Muted).FillWidth()
 			})
 		})
 		if updater.Phase() == appservice.UpdatePhaseDownloading {
@@ -354,7 +355,7 @@ func (v *View) notes(c *ui.Context, theme nui.Theme) {
 	}
 	ui.Column(c.Key("notes")).FillWidth().Margin(6, 0, 0, 0).Gap(8).Children(func() {
 		ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(12).Children(func() {
-			ui.Text(c, locales.UpdaterReleaseNotes()).FontSize(14).Bold().TextColor(theme.Text)
+			ui.Text(c, locales.UpdaterReleaseNotes()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Text)
 			label, color := locales.UpdaterModeManual(), nui.Info
 			if updater.SelfUpdate() {
 				label, color = locales.UpdaterModeSelf(), nui.Success
@@ -364,7 +365,7 @@ func (v *View) notes(c *ui.Context, theme nui.Theme) {
 		ui.Scroll(c.Key("body")).FillWidth().MinHeight(96).MaxHeight(224).Radius(8).Border(1, theme.Border).Background(theme.Background).Children(func() {
 			ui.Column(c.Key("text")).FillWidth().Padding(12, 16).Children(func() {
 				if release.Notes == "" {
-					ui.Text(c.Key("empty"), locales.UpdaterReleaseNotesEmpty()).FontSize(14).TextColor(theme.Muted)
+					ui.Text(c.Key("empty"), locales.UpdaterReleaseNotesEmpty()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 					return
 				}
 				markdown.View(c.Key("markdown"), release.Notes, &markdown.Options{OnLink: v.openLink})
@@ -451,7 +452,7 @@ var appIcon = sync.OnceValue(func() ui.ImageSource {
 // Build shows the window.
 func (v *View) Build(c *ui.Context) {
 	updater := v.Data.Updater
-	theme := nui.App(c, v.Data.Settings.Theme().Config)
+	theme := apptheme.Begin(c, v.Data.Settings.Theme().Config)
 	ui.Column(c.Key("update")).Fill().Background(theme.MutedBackground).Children(func() {
 		v.Host.Frame.Build(c, theme)
 		ui.Scroll(c.Key("scroll")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
@@ -466,9 +467,9 @@ func (v *View) Build(c *ui.Context) {
 						}
 					})
 					ui.Column(c.Key("heading")).Grow(1).Basis(0).MinWidth(0).Gap(4).Padding(2, 0, 0, 0).Children(func() {
-						ui.Text(c, strings.ToUpper(locales.UpdaterEyebrow())).FontSize(12).FontWeight(600).LetterSpacing(1.7).TextColor(theme.Muted)
+						ui.Text(c, strings.ToUpper(locales.UpdaterEyebrow())).FontSize(apptheme.TextSize(c, 12)).FontWeight(600).LetterSpacing(1.7).TextColor(theme.Muted)
 						ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
-							ui.Text(c, locales.UpdaterWindowTitle()).FontSize(20).Bold().LetterSpacing(-0.4).TextColor(theme.Text)
+							ui.Text(c, locales.UpdaterWindowTitle()).FontSize(apptheme.TextSize(c, 20)).Bold().LetterSpacing(-0.4).TextColor(theme.Text)
 							nui.Badge(c.Key("version"), theme, "v"+updater.Snapshot.CurrentVersion, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Subtle, Size: nui.SM})
 						})
 					})

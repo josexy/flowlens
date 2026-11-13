@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/egoist/mygo/ui"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
@@ -140,7 +141,7 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 	if index == 0 {
 		top = 1
 	}
-	row := ui.Row(c.Key(editableGridRowKey(o, index))).FillWidth().Height(EditableGridRowHeight).AlignItems(ui.Stretch).Background(theme.Background)
+	row := ui.Row(c.Key(editableGridRowKey(o, index))).FillWidth().Height(max(EditableGridRowHeight, apptheme.TextSize(c, 14)*1.45+12)).AlignItems(ui.Stretch).Background(theme.Background)
 	row.BorderWidth(top, 1, 1, 1).BorderColor(theme.Border)
 	if row.Hovered() {
 		row.Background(theme.Elevated)
@@ -205,7 +206,7 @@ func editableGridText(c *ui.Context, theme nui.Theme, text, placeholder string) 
 	if text == "" {
 		text, color = placeholder, theme.Muted
 	}
-	ui.Text(c, text).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).TextColor(color)
+	ui.Text(c, text).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).TextColor(color)
 }
 
 func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions, cell ui.Element, index int, field EditableGridField) {

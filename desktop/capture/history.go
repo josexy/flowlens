@@ -12,6 +12,7 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	desktopruntime "github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -121,9 +122,9 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	header.Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-			ui.Text(c, locales.HistoryTitle()).FontSize(14).FontWeight(600).TextColor(theme.Muted)
+			ui.Text(c, locales.HistoryTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
 			ui.Box(c).PaddingX(6).PaddingY(1).Radius(8).Background(theme.Elevated.Mix(theme.Background, 0.18)).Children(func() {
-				ui.Text(c, strconv.Itoa(len(history.Metadata))).SingleLine().FontSize(14).LineHeight(1.6).TextColor(theme.Muted)
+				ui.Text(c, strconv.Itoa(len(history.Metadata))).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Muted)
 			})
 		})
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
@@ -138,7 +139,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 			ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(20, 20).TextColor(theme.Muted) })
 		case len(history.Metadata) == 0:
 			ui.Column(c).Fill().Center().Padding(16).Children(func() {
-				ui.Text(c, locales.HistoryEmpty()).FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, locales.HistoryEmpty()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		default:
 			ui.Scroll(c).Fill().Children(func() {
@@ -156,7 +157,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyservice.HistoryMetadata) {
 	key := metadata.Key
 	active := w.Data.Workbench.CaptureSelection == historyItemPrefix+key
-	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(44).Justify(ui.Start).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
+	row := ui.ButtonBase(c.Key(key)).FillWidth().MinHeight(44).Justify(ui.Start).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
 	switch {
 	case active:
 		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
@@ -173,8 +174,8 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 		}
 		ui.Icon(c, lucide.Archive()).Size(15, 15).Shrink(0).TextColor(color)
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, historyLabel(metadata)).SingleLine().FontSize(14).FontWeight(600).TextColor(theme.Text)
-			ui.Text(c, historyTime(metadata)).FontSize(12).LineHeight(16.0 / 12.0).TextColor(theme.Muted)
+			ui.Text(c, historyLabel(metadata)).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
+			ui.Text(c, historyTime(metadata)).FontSize(apptheme.TextSize(c, 12)).LineHeight(16.0 / 12.0).TextColor(theme.Muted)
 		})
 		CountPill(c, theme, strconv.Itoa(metadata.Total), active)
 	})
@@ -285,6 +286,11 @@ func (w *Workspace) finishImport(summary store.HARImportSummary) {
 	if summary.First != nil {
 		history.LoadList()
 		w.openHistory(summary.First.Key)
+		// The list refresh is asynchronous. Use the import result's metadata
+		// now, rather than leaving the new tab named after its internal key.
+		if workspace := w.Data.Workspace; workspace != nil {
+			workspace.OpenHistoryTab(summary.First.Key, historyTabTitle(summary.First))
+		}
 	}
 	result := locales.HarImportResult(strconv.Itoa(summary.Failed), strconv.Itoa(summary.Files), strconv.Itoa(summary.Imported), strconv.Itoa(summary.Missing), strconv.Itoa(summary.Skipped))
 	first := ""
@@ -324,7 +330,7 @@ func (w *Workspace) dropTarget(c *ui.Context, theme nui.Theme, element ui.Elemen
 		bounds := element.Bounds()
 		ui.Box(c).Absolute().Left(bounds.X).Top(bounds.Y).Width(bounds.W).Height(bounds.H).Center().IgnoreInput(true).
 			Background(theme.Elevated.Alpha(0.9)).Border(2, theme.Primary).Children(func() {
-			ui.Text(c, locales.HarImportDropHint()).FontSize(14).Bold().TextColor(theme.Primary)
+			ui.Text(c, locales.HarImportDropHint()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Primary)
 		})
 	})
 }
@@ -338,7 +344,7 @@ func (w *Workspace) historyPane(c *ui.Context, theme nui.Theme) {
 		return
 	case history.Traffic.Key == "":
 		ui.Column(c).Fill().Center().Children(func() {
-			ui.Text(c, locales.HistorySelectHint()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.HistorySelectHint()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 		return
 	}

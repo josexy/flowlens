@@ -80,7 +80,7 @@ func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefin
 			AlignItems(ui.Center).PaddingX(cellPaddingX).Background(headerBackground(theme, cell.Hovered() && !onEdge))
 		overlay.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 		overlay.Children(func() {
-			ui.Text(c, column.title()).SingleLine().Shrink(1).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Text)
+			ui.Text(c, column.title()).SingleLine().Shrink(1).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
 			if t.sort.Column == string(column.key) {
 				icon := lucide.ArrowUp()
 				if t.sort.Descending {
@@ -186,10 +186,10 @@ func badge(c *ui.Context, theme nui.Theme, text string, tone badgeTone) ui.Eleme
 	if color == ui.Transparent {
 		color = theme.Muted
 	}
-	pill := ui.Box(c).Shrink(0).PaddingX(8).MinWidth(36).Height(20).Radius(10).Center().
+	pill := ui.Box(c).Shrink(0).PaddingX(8).MinWidth(36).MinHeight(20).Radius(10).Center().
 		Background(background).Border(1, color.Alpha(0.1).Over(background))
 	pill.Children(func() {
-		ui.Text(c, text).SingleLine().FontSize(12).Bold().TextColor(color)
+		ui.Text(c, text).SingleLine().FontSize(desktoptheme.TextSize(c, 12)).Bold().TextColor(color)
 	})
 	return pill
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -348,8 +349,8 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 		}{{locales.SettingsCaCertExists(), info.CertExists}, {locales.SettingsCaKeyExists(), info.KeyExists}, {locales.SettingsCaValidPair(), info.ValidPair}, {locales.SettingsCaIsCa(), info.IsCA}} {
 			text, color := yesNo(item.value)
 			ui.Column(c.Key(index)).Gap(2).Children(func() {
-				ui.Text(c, item.label).FontSize(12).TextColor(palette.Muted)
-				ui.Text(c, text).FontSize(14).Bold().TextColor(color)
+				ui.Text(c, item.label).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
+				ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(color)
 			})
 		}
 	})
@@ -358,8 +359,8 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 			return
 		}
 		ui.Column(c.Key(key)).FillWidth().Gap(2).Children(func() {
-			ui.Text(c, label).FontSize(12).TextColor(palette.Muted)
-			ui.Text(c, value).FontSize(14).TextColor(palette.Text).Selectable().FillWidth()
+			ui.Text(c, label).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
+			ui.Text(c, value).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).Selectable().FillWidth()
 		})
 	}
 	micros := func(value int64) string {
@@ -388,9 +389,9 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 		ui.Row(c.Key("summary")).FillWidth().Gap(8).Children(func() {
 			ui.Icon(c, icon).Size(16, 16).Shrink(0).TextColor(color)
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, state.statusSummary(proxy.UseBuiltinCA)).FontSize(14).TextColor(color).FillWidth()
+				ui.Text(c, state.statusSummary(proxy.UseBuiltinCA)).FontSize(apptheme.TextSize(c, 14)).TextColor(color).FillWidth()
 				if !proxy.UseBuiltinCA && state.info != nil && state.info.CertExists && state.info.KeyExists && state.info.Error != "" {
-					ui.Text(c, state.info.Error).FontSize(12).TextColor(palette.Muted).FillWidth()
+					ui.Text(c, state.info.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).FillWidth()
 				}
 				if (state.trust != nil && state.trust.Supported) || state.trustFailed {
 					text, trustIcon, tone := state.trustSummary()
@@ -403,7 +404,7 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 					}
 					ui.Row(c.Key("trust")).Gap(6).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, trustIcon).Size(14, 14).TextColor(toneColor)
-						ui.Text(c, text).FontSize(14).TextColor(toneColor)
+						ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextColor(toneColor)
 					})
 				}
 			})
@@ -436,8 +437,8 @@ func collapsibleHead(c *ui.Context, palette nui.Theme, key, title, summary strin
 				icon = lucide.ChevronDown()
 			}
 			ui.Icon(c, icon).Size(14, 14).TextColor(palette.Muted)
-			ui.Text(c, title).FontSize(14).TextColor(palette.Text)
-			ui.Text(c, summary).FontSize(14).TextColor(summaryColor)
+			ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text)
+			ui.Text(c, summary).FontSize(apptheme.TextSize(c, 14)).TextColor(summaryColor)
 		})
 		actions()
 	})
@@ -469,13 +470,13 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 		return
 	}
 	if len(proxy.RootCAPaths) == 0 {
-		ui.Text(c.Key("roots-empty"), locales.SettingsNoRootCasDesc()).FontSize(14).TextColor(palette.Muted).FillWidth()
+		ui.Text(c.Key("roots-empty"), locales.SettingsNoRootCasDesc()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
 		return
 	}
 	for index := range proxy.RootCAPaths {
 		number := strconv.Itoa(index + 1)
 		ui.Row(c.Key("root-" + number)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, number).Width(20).Shrink(0).FontSize(14).TextColor(palette.Muted)
+			ui.Text(c, number).Width(20).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				v.fileInput(c, palette, "file", locales.SettingsRootCaPathPlaceholder()+" "+number, locales.SettingsRootCaPathPlaceholder(), "", certificatePicker(locales.SettingsSelectRootCaFile(), locales.SettingsSelectRootCaFileMessage()), &proxy.RootCAPaths[index])
 			})
@@ -559,7 +560,7 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 		return
 	}
 	if len(proxy.ClientCerts) == 0 {
-		ui.Text(c.Key("certs-empty"), locales.SettingsNoClientCertsDesc()).FontSize(14).TextColor(palette.Muted).FillWidth()
+		ui.Text(c.Key("certs-empty"), locales.SettingsNoClientCertsDesc()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
 		return
 	}
 	for index := range proxy.ClientCerts {
@@ -574,12 +575,12 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
 				nui.Switch(c.Key("switch"), palette, &cert.Enabled, nui.SwitchOptions{}).Label(title)
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-					ui.Text(c, title).SingleLine().FontSize(14).TextColor(palette.Text)
+					ui.Text(c, title).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text)
 					state := locales.SettingsClientCertDisabled()
 					if cert.Enabled {
 						state = locales.SettingsClientCertEnabled()
 					}
-					ui.Text(c, state).FontSize(12).TextColor(palette.Muted)
+					ui.Text(c, state).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
 				})
 				nui.Button(c.Key("remove"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveClientCert() + " " + number}).OnClick(func() {
 					next := append([]settingservice.ClientCertConfig(nil), proxy.ClientCerts[:position]...)
@@ -598,7 +599,7 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 			if warning := certificateWarning(cert); warning != "" {
 				ui.Row(c.Key("warning")).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Icon(c, lucide.Info()).Size(14, 14).Shrink(0).TextColor(palette.Warning)
-					ui.Text(c, warning).FontSize(12).TextColor(palette.Warning).FillWidth()
+					ui.Text(c, warning).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Warning).FillWidth()
 				})
 			}
 		})

@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/pythonapi"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -124,8 +125,8 @@ func (h *Help) header(c *ui.Context, theme nui.Theme, messages *pythonapi.Messag
 	}
 	ui.Column(c.Key("help-head")).FillWidth().Gap(8).Children(func() {
 		ui.Column(c.Key("title")).Gap(2).Children(func() {
-			ui.Text(c, messages.Title).FontSize(14).Bold().TextColor(theme.Highlighted).Role(ui.RoleHeading).Level(2)
-			ui.Text(c, messages.Version).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, messages.Title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted).Role(ui.RoleHeading).Level(2)
+			ui.Text(c, messages.Version).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		})
 		ui.Row(c.Key("scope")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 			nui.Badge(c.Key("badge"), theme, scopeLabel, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
@@ -138,37 +139,37 @@ func (h *Help) header(c *ui.Context, theme nui.Theme, messages *pythonapi.Messag
 }
 
 func (h *Help) quickstart(c *ui.Context, theme nui.Theme, scope string, messages *pythonapi.Messages) {
-	ui.Text(c.Key("hint"), messages.Start.AIHint).FontSize(14).TextColor(theme.Muted).FillWidth()
+	ui.Text(c.Key("hint"), messages.Start.AIHint).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted).FillWidth()
 	edit, enable := messages.Start.Global.Edit, messages.Start.Global.Enable
 	if scope == pythonapi.ScopeInline {
 		edit, enable = messages.Start.Inline.Edit, messages.Start.Inline.Enable
 	}
 	for index, step := range []pythonapi.Step{messages.Start.Runtime, edit, enable} {
 		ui.Row(c.Key(index)).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, strconv.Itoa(index+1)).Shrink(0).FontSize(14).Bold().TextColor(theme.Primary)
+			ui.Text(c, strconv.Itoa(index+1)).Shrink(0).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Primary)
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, step.Title).FontSize(14).Bold().TextColor(theme.Highlighted)
-				ui.Text(c, step.Text).FontSize(12).TextColor(theme.Muted).FillWidth()
+				ui.Text(c, step.Title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
+				ui.Text(c, step.Text).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 			})
 		})
 	}
 	ui.Column(c.Key("essentials")).FillWidth().Gap(4).Children(func() {
-		ui.Text(c, messages.Start.EssentialsTitle).FontSize(14).Bold().TextColor(theme.Highlighted)
+		ui.Text(c, messages.Start.EssentialsTitle).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		for index, text := range messages.Start.Essentials {
-			ui.Text(c.Key(index), "• "+text).FontSize(12).TextColor(theme.Toned).FillWidth()
+			ui.Text(c.Key(index), "• "+text).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Toned).FillWidth()
 		}
 	})
 	nui.Accordion(c.Key("details"), theme, &h.details, []nui.AccordionItem{
 		{ID: "template", Label: messages.MinimalTemplate, Content: func(c *ui.Context, palette nui.Theme) {
 			ui.Column(c).FillWidth().Gap(6).Children(func() {
 				nui.Button(c.Key("copy"), palette, messages.CopyTemplate, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Copy()}).OnClick(func() { h.copy(pythonapi.MinimalScript(), messages.CopiedTemplate) })
-				ui.Text(c.Key("script"), pythonapi.MinimalScript()).FontSize(12).Font(palette.MonoFont).TextColor(palette.Text).Selectable().FillWidth()
+				ui.Text(c.Key("script"), pythonapi.MinimalScript()).FontSize(apptheme.TextSize(c, 12)).Font(palette.MonoFont).TextColor(palette.Text).Selectable().FillWidth()
 			})
 		}},
 		{ID: "runtime", Label: messages.RuntimeDetails, Content: func(c *ui.Context, palette nui.Theme) {
 			ui.Column(c).FillWidth().Gap(4).Children(func() {
 				for index, text := range messages.RuntimeSummary {
-					ui.Text(c.Key(index), "• "+text).FontSize(12).TextColor(palette.Toned).FillWidth()
+					ui.Text(c.Key(index), "• "+text).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Toned).FillWidth()
 				}
 			})
 		}},
@@ -177,12 +178,12 @@ func (h *Help) quickstart(c *ui.Context, theme nui.Theme, scope string, messages
 
 func (h *Help) reference(c *ui.Context, theme nui.Theme, locale string, messages *pythonapi.Messages) {
 	nui.Input(c.Key("search"), theme, &h.query, nui.InputOptions{Label: messages.Search, Placeholder: messages.Search, Leading: lucide.Search(), Size: nui.SM}).FillWidth()
-	ui.Text(c.Key("provided"), messages.ProvidedHint).FontSize(12).TextColor(theme.Muted).FillWidth()
+	ui.Text(c.Key("provided"), messages.ProvidedHint).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 	groups := pythonapi.Groups(locale, h.query)
 	if len(groups) == 0 {
 		ui.Column(c.Key("none")).FillWidth().Padding(16).Center().Gap(4).Children(func() {
-			ui.Text(c, messages.NoResults).FontSize(14).Bold().TextColor(theme.Text)
-			ui.Text(c, messages.NoResultsHint).FontSize(12).TextColor(theme.Muted)
+			ui.Text(c, messages.NoResults).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Text)
+			ui.Text(c, messages.NoResultsHint).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		})
 		return
 	}
@@ -214,15 +215,15 @@ func groupBody(c *ui.Context, theme nui.Theme, group pythonapi.Group, messages *
 		}
 		nui.Badge(c.Key("tag"), theme, tag, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Outline, Size: nui.SM})
 		if summary := messages.GroupSummaries[group.Name]; summary != "" {
-			ui.Text(c.Key("summary"), summary).FontSize(12).TextColor(theme.Muted).FillWidth()
+			ui.Text(c.Key("summary"), summary).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 		}
 		if group.Note != "" {
-			ui.Text(c.Key("note"), messages.UsageNotes+": "+group.Note).FontSize(12).TextColor(theme.Toned).FillWidth()
+			ui.Text(c.Key("note"), messages.UsageNotes+": "+group.Note).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Toned).FillWidth()
 		}
 		for index, entry := range group.Entries {
 			ui.Column(c.Key(index)).FillWidth().Gap(2).Children(func() {
 				ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
-					ui.Text(c, strings.TrimSuffix(entry.Signature, "  # read-only")).Grow(1).Basis(0).MinWidth(0).FontSize(12).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
+					ui.Text(c, strings.TrimSuffix(entry.Signature, "  # read-only")).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
 					label := messages.Method
 					switch entry.Kind {
 					case "property":
@@ -237,12 +238,12 @@ func groupBody(c *ui.Context, theme nui.Theme, group pythonapi.Group, messages *
 					}
 					nui.Badge(c.Key("kind"), theme, label, nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
 				})
-				ui.Text(c, entry.Description).FontSize(12).TextColor(theme.Muted).FillWidth().Selectable()
+				ui.Text(c, entry.Description).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth().Selectable()
 				if len(entry.Parameters) > 0 {
-					ui.Text(c, messages.Parameters+": "+strings.Join(entry.Parameters, ", ")).FontSize(12).TextColor(theme.Toned).FillWidth()
+					ui.Text(c, messages.Parameters+": "+strings.Join(entry.Parameters, ", ")).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Toned).FillWidth()
 				}
 				if entry.ReturnType != "" {
-					ui.Text(c, messages.Returns+": "+entry.ReturnType).FontSize(12).TextColor(theme.Toned).FillWidth()
+					ui.Text(c, messages.Returns+": "+entry.ReturnType).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Toned).FillWidth()
 				}
 			})
 		}

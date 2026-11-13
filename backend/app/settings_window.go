@@ -59,9 +59,19 @@ func openDialogOptions(picker settings.FilePicker, multiple bool) mygo.OpenDialo
 func (s *settingsWindowController) host() settings.Host {
 	all := s.all
 	return settings.Host{
-		ListFonts: all.setting.ListSystemFonts,
-		CAInfo:    all.setting.GetCACertificateInfo,
-		CATrust:   all.setting.GetCurrentCACertificateTrustStatus,
+		ListFonts: func() []settingservice.FontOption {
+			// Use the same family names as the renderer. Registry font-file
+			// labels such as "SimSun & NSimSun" are not usable family names.
+			// MyGo allows this enumeration from the settings background job.
+			families := ui.FontFamilies()
+			options := make([]settingservice.FontOption, len(families))
+			for index, family := range families {
+				options[index] = settingservice.FontOption{Label: family.Name, Value: family.Name}
+			}
+			return options
+		},
+		CAInfo:  all.setting.GetCACertificateInfo,
+		CATrust: all.setting.GetCurrentCACertificateTrustStatus,
 		GenerateCA: func(overwrite bool) error {
 			_, err := all.setting.GenerateCurrentCACertificate(settingservice.GenerateCACertificateRequest{Overwrite: overwrite})
 			return err

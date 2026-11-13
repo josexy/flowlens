@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/inspect"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -77,7 +78,7 @@ func (r *responseView) build(c *ui.Context, theme nui.Theme) {
 		case state.IsSending && visible != logic.ResponseTabConsole:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, locales.WorkspaceHttpRequestResponseSendingTitle()).FontSize(14).TextColor(theme.Muted)
+				ui.Text(c, locales.WorkspaceHttpRequestResponseSendingTitle()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		case !hasResponse && !hasConsole && !cancelled:
 			emptyPane(c, theme, lucide.Send(), locales.WorkspaceHttpRequestRequestNotStarted(), "")
@@ -262,18 +263,18 @@ func errorCard(c *ui.Context, theme nui.Theme, e *Editor, title, description, he
 			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, lucide.CircleAlert()).Size(18, 18).Shrink(0).TextColor(theme.Error)
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-					ui.Text(c, title).FontSize(14).Bold().TextColor(theme.Highlighted)
+					ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 					if description != "" {
-						ui.Text(c, description).FontSize(12).TextColor(theme.Muted)
+						ui.Text(c, description).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 					}
 				})
 			})
 			ui.Column(c).FillWidth().Gap(6).Border(1, theme.Border).Radius(theme.Radius).Padding(10).Children(func() {
 				ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-					ui.Text(c, heading).FontSize(12).TextColor(theme.Muted)
+					ui.Text(c, heading).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 					iconAction(c, theme, "copy-error", lucide.Copy(), copyLabel, false, func() { e.copy(details, copied) })
 				})
-				ui.Text(c, details).FontSize(14).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
+				ui.Text(c, details).FontSize(apptheme.TextSize(c, 14)).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
 			})
 		})
 	})

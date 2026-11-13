@@ -7,6 +7,7 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/pythonapi"
 	"github.com/josexy/flowlens/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -252,7 +253,7 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 	text := state.RequestBodyType == logic.BodyTypeJSON || state.RequestBodyType == logic.BodyTypeText || state.RequestBodyType == logic.BodyTypeXML
 	ui.Row(c.Key("body-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestBodyType()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestBodyType()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			ui.Box(c).Width(150).Children(func() {
 				nui.Select(c, theme, &state.RequestBodyType, options, nui.SelectOptions{Label: locales.WorkspaceHttpRequestBodyType(), Size: nui.SM})
 			})
@@ -264,7 +265,7 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 	ui.Box(c.Key("body-content")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 		switch {
 		case text:
-			p.body.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+			p.body.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
 		case state.RequestBodyType == logic.BodyTypeFile:
 			p.editor.fileControl(c, theme, p.key+":body", &state.RequestBodyFile, &p.bodyGuard)
 		case state.RequestBodyType == logic.BodyTypeFormData:
@@ -294,7 +295,7 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
 	ui.Row(c.Key("script-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestInlineScriptEnable()).FontSize(14).TextColor(theme.Muted)
+			ui.Text(c, locales.WorkspaceHttpRequestInlineScriptEnable()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			nui.Switch(c.Key("script-enabled"), theme, &state.InlineScriptEnabled, nui.SwitchOptions{Disabled: p.busy(), Size: nui.SM}).Label(locales.WorkspaceHttpRequestInlineScriptEnable())
 		})
 		ui.Row(c).Gap(4).Children(func() {
@@ -310,7 +311,7 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 		})
 	}
 	ui.Box(c.Key("script-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		p.script.Build(c, ui.Font{Family: theme.MonoFont, Size: 13}).Fill()
+		p.script.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
 	})
 }
 
@@ -443,7 +444,7 @@ func (v *formDataView) fileCell(c *ui.Context, theme nui.Theme, e *Editor, key s
 	chip.OnClick(func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) })
 	chip.Children(func() {
 		ui.Icon(c, lucide.File()).Size(16, 16).Shrink(0).TextColor(color)
-		ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).TextColor(color)
+		ui.Text(c, name).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(color)
 	})
 	if item.File != nil {
 		nui.Tooltip(c, theme, chip, item.File.Path, nui.TooltipOptions{})

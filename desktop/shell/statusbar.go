@@ -10,6 +10,7 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/store"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -28,7 +29,7 @@ type environmentDialog struct {
 }
 
 func (a *App) statusBar(c *ui.Context, theme nui.Theme) {
-	row := ui.Row(c).FillWidth().Height(statusBarHeight).Shrink(0).AlignItems(ui.Center).Justify(ui.End).PaddingX(16).Background(theme.Background)
+	row := ui.Row(c).FillWidth().MinHeight(statusBarHeight).Shrink(0).AlignItems(ui.Center).Justify(ui.End).PaddingX(16).Background(theme.Background)
 	row.BorderWidth(1, 0, 0, 0).BorderColor(theme.BorderAccented)
 	row.Children(func() {
 		total, selected := 0, 0
@@ -40,7 +41,7 @@ func (a *App) statusBar(c *ui.Context, theme nui.Theme) {
 			text += " " + locales.StatusSelected(strconv.Itoa(selected))
 		}
 		ui.Row(c).Absolute().Left(192).Right(192).Top(0).Bottom(0).Center().IgnoreInput(true).Children(func() {
-			ui.Text(c, text).SingleLine().Shrink(1).FontSize(14).FontWeight(500).TextColor(theme.Muted)
+			ui.Text(c, text).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Muted)
 		})
 		ui.Row(c).AlignItems(ui.Center).Gap(2).Shrink(0).Children(func() {
 			a.statusButton(c, theme, "environment", locales.StatusActionEnvironment(), lucide.Info(), false, a.showEnvironment)
@@ -190,7 +191,7 @@ func (a *App) environmentModal(c *ui.Context, theme nui.Theme) {
 			if a.environment.loading {
 				ui.Row(c).FillWidth().MinHeight(112).Center().Gap(8).Children(func() {
 					ui.Spinner(c).Size(16, 16).TextColor(theme.Muted)
-					ui.Text(c, locales.AppLoading()).FontSize(14).TextColor(theme.Muted)
+					ui.Text(c, locales.AppLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 				})
 			}
 			return

@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/egoist/mygo/ui"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
@@ -32,10 +33,10 @@ func KeyValueTable(c *ui.Context, theme nui.Theme, rows []KeyValue) ui.Element {
 				keyCell.BorderColor(theme.Border)
 				valueCell.BorderColor(theme.Border)
 				keyCell.Children(func() {
-					ui.Text(c, row.Key).Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).FontWeight(500).TextColor(theme.Text).Selectable()
+					ui.Text(c, row.Key).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).FontWeight(500).TextColor(theme.Text).Selectable()
 				})
 				valueCell.Children(func() {
-					ui.Text(c, row.Value).Grow(1).Basis(0).MinWidth(0).FontSize(14).LineHeight(1.45).TextColor(theme.Text).Selectable()
+					ui.Text(c, row.Value).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).TextColor(theme.Text).Selectable()
 				})
 			})
 		}

@@ -13,6 +13,7 @@ import (
 	shortcutservice "github.com/josexy/flowlens/backend/services/shortcut_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -200,14 +201,14 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 		row(c, palette, "timeout", locales.SettingsPythonHookTimeoutLabel(), "", func() {
 			ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 				state.timeout.build(c, palette, "number", locales.SettingsPythonHookTimeoutAccessibleLabel(), &config.HookTimeoutMs, 100, 60000, 100, false)
-				ui.Text(c, locales.SettingsUnitMilliseconds()).FontSize(14).TextColor(palette.Muted)
+				ui.Text(c, locales.SettingsUnitMilliseconds()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			})
 		})
 		runtime := v.Data.Settings.PythonStatus
 		if runtime != nil && runtime.Error != "" {
 			nui.Alert(c.Key("runtime-error"), palette, nui.AlertOptions{Title: locales.SettingsPythonRuntimeError(), Description: runtime.Error, Color: nui.Error, Variant: nui.Soft})
 		} else if version := runtimeVersion(runtime); version != "" && (state.status == nil || !state.status.Ready) {
-			ui.Text(c.Key("runtime-version"), locales.SettingsPythonRuntimeVersion(version)).FontSize(12).TextColor(palette.Muted)
+			ui.Text(c.Key("runtime-version"), locales.SettingsPythonRuntimeVersion(version)).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
 		}
 	})
 	v.discoveryDialog(c, palette, config)
@@ -226,7 +227,7 @@ func (v *View) discoveryDialog(c *ui.Context, palette nui.Theme, config *setting
 		})
 	}}, func(theme nui.Theme) {
 		ui.Column(c).FillWidth().Gap(6).Children(func() {
-			ui.Text(c, locales.SettingsPythonInterpreterDetectDescription()).FontSize(14).TextColor(theme.Muted).FillWidth()
+			ui.Text(c, locales.SettingsPythonInterpreterDetectDescription()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted).FillWidth()
 			highest := state.candidates[0]
 			for index, candidate := range state.candidates {
 				selected := state.selected == candidate.InterpreterPath
@@ -239,7 +240,7 @@ func (v *View) discoveryDialog(c *ui.Context, palette nui.Theme, config *setting
 				card.OnClick(func() { state.selected = path })
 				card.Children(func() {
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, version).FontSize(14).TextColor(theme.Text)
+						ui.Text(c, version).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 						if candidate.PythonMajor == highest.PythonMajor && candidate.PythonMinor == highest.PythonMinor && candidate.PythonPatch == highest.PythonPatch {
 							nui.Badge(c.Key("latest"), theme, locales.SettingsPythonInterpreterDetectLatest(), nui.BadgeOptions{Color: nui.Success, Variant: nui.Soft, Size: nui.SM})
 						}
@@ -247,7 +248,7 @@ func (v *View) discoveryDialog(c *ui.Context, palette nui.Theme, config *setting
 							nui.Badge(c.Key("current"), theme, locales.SettingsPythonInterpreterDetectCurrent(), nui.BadgeOptions{Color: nui.Neutral, Variant: nui.Soft, Size: nui.SM})
 						}
 					})
-					ui.Text(c, candidate.InterpreterPath).FontSize(12).Font(theme.MonoFont).TextColor(theme.Muted)
+					ui.Text(c, candidate.InterpreterPath).FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Muted)
 				})
 			}
 		})
@@ -287,7 +288,7 @@ func logLevelOptions() []nui.Option[string] {
 
 func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 	state := &v.logs
-	ui.Text(c.Key("immediate"), locales.SettingsLogImmediateNotice()).FontSize(14).TextColor(palette.Muted).FillWidth()
+	ui.Text(c.Key("immediate"), locales.SettingsLogImmediateNotice()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
 	if state.status == nil {
 		v.loadLogs()
 		return
@@ -423,8 +424,8 @@ func (v *View) dangerRow(c *ui.Context, palette nui.Theme, key, title, descripti
 	}
 	ui.Row(c.Key(key)).FillWidth().Gap(16).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(12).Border(1, border).Radius(6).Background(palette.Elevated.Alpha(0.44)).Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
-			ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(palette.Text)
-			ui.Text(c, description).FontSize(14).LineHeight(1.5).TextColor(palette.Muted).FillWidth()
+			ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(palette.Text)
+			ui.Text(c, description).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.5).TextColor(palette.Muted).FillWidth()
 		})
 		button := nui.Button(c.Key("action"), palette, label, nui.ButtonOptions{Color: color, Variant: variant, Leading: lucide.Trash(), Disabled: disabled, Loading: loading, AccessibleLabel: title}).Shrink(0)
 		if !disabled {
@@ -442,7 +443,7 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 			threshold := int(cache.BodyCacheThresholdBytes)
 			ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
 				state.threshold.build(c, palette, "number", locales.SettingsCacheThresholdAccessibleLabel(), &threshold, 1, 1<<40, 1, false)
-				ui.Text(c, locales.SettingsUnitBytes()).FontSize(14).TextColor(palette.Muted)
+				ui.Text(c, locales.SettingsUnitBytes()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			})
 			cache.BodyCacheThresholdBytes = int64(threshold)
 		})
@@ -478,8 +479,8 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 			}{{locales.SettingsDiskUsageCache(), state.size.CacheBytes}, {locales.SettingsDiskUsageHistory(), state.size.HistoryBytes}, {locales.SettingsDiskUsageTotal(), state.size.CacheBytes + state.size.HistoryBytes}} {
 				tile := ui.Column(c.Key(index)).MinWidth(118).Gap(4).Padding(9, 10).Radius(6).Border(1, palette.Border).Background(palette.Elevated.Alpha(0.72))
 				tile.Children(func() {
-					ui.Text(c, item.label).SingleLine().FontSize(14).LineHeight(1.4).FontWeight(600).TextColor(palette.Muted)
-					ui.Text(c, formatSize(item.value)).FontSize(14).LineHeight(1.35).FontWeight(600).TextColor(palette.Toned)
+					ui.Text(c, item.label).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(1.4).FontWeight(600).TextColor(palette.Muted)
+					ui.Text(c, formatSize(item.value)).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.35).FontWeight(600).TextColor(palette.Toned)
 				})
 			}
 		})
@@ -634,7 +635,7 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 			}}})
 		})
 	})
-	ui.Text(c.Key("note"), locales.ShortcutsGlobalNote()).FontSize(12).TextColor(palette.Muted).FillWidth()
+	ui.Text(c.Key("note"), locales.ShortcutsGlobalNote()).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).FillWidth()
 	for index, warning := range warnings {
 		nui.Alert(c.Key(fmt.Sprintf("warning-%d", index)), palette, nui.AlertOptions{Title: message("shortcutsWarnings" + camel(warning)), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
 	}
@@ -662,15 +663,20 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 		target.commands = append(target.commands, command)
 	}
 	if len(groups) == 0 {
-		ui.Text(c.Key("empty"), locales.ShortcutsEmptySearch()).FontSize(14).TextColor(palette.Muted)
+		ui.Text(c.Key("empty"), locales.ShortcutsEmptySearch()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 		return
 	}
 	for index, current := range groups {
-		ui.Column(c.Key(fmt.Sprintf("group-%d", index))).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, current.label).FontSize(14).Bold().TextColor(palette.Highlighted)
-			for _, command := range current.commands {
-				v.commandRow(c, palette, config, command, runtimeState)
-			}
+		ui.Column(c.Key(fmt.Sprintf("group-%d", index))).FillWidth().Gap(10).Margin(20, 0, 0, 0).Children(func() {
+			ui.Text(c, current.label).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(palette.Highlighted)
+			ui.Column(c.Key("commands")).FillWidth().Radius(8).Border(1, palette.Border).Background(palette.Background).Clip().Children(func() {
+				for index, command := range current.commands {
+					if index > 0 {
+						ui.Box(c.Key("separator-" + command.ID)).FillWidth().Height(1).Background(palette.Border)
+					}
+					v.commandRow(c, palette, config, command, runtimeState)
+				}
+			})
 		})
 	}
 }
@@ -683,19 +689,19 @@ func (v *View) commandRow(c *ui.Context, palette nui.Theme, config *settingservi
 		v.watchRecording(c, config, command)
 	}
 	label := command.Label()
-	line := ui.Row(c.Key(command.ID)).FillWidth().MinHeight(36).AlignItems(ui.Center).Gap(8).PaddingX(8).Radius(palette.Radius)
+	line := ui.Row(c.Key(command.ID)).FillWidth().MinHeight(52).AlignItems(ui.Center).Gap(8).Padding(10, 12)
 	if recording {
 		line.Background(palette.Primary.Alpha(0.1))
 	}
 	line.Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, label).SingleLine().FontSize(14).TextColor(palette.Text)
+			ui.Text(c, label).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text)
 			scope := scopeOf(config, command)
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				switch command.ID {
 				case shortcuts.CaptureToggleProxy:
 					global := scope == settingservice.ShortcutScopeGlobal
-					ui.Text(c, locales.ShortcutsScopeGlobal()).FontSize(12).TextColor(palette.Muted)
+					ui.Text(c, locales.ShortcutsScopeGlobal()).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
 					before := global
 					nui.Switch(c.Key("scope"), palette, &global, nui.SwitchOptions{Size: nui.SM}).Label(locales.ShortcutsScopeLabel())
 					if global != before {
@@ -721,7 +727,18 @@ func (v *View) commandRow(c *ui.Context, palette nui.Theme, config *settingservi
 		} else if resolved.Binding != nil {
 			text = v.keyLabels(resolved.Binding)
 		}
-		record := nui.Button(c.Key("record"), palette, text, nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, AccessibleLabel: locales.ShortcutsRecordFor(label)})
+		record := nui.Button(c.Key("record"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, AccessibleLabel: locales.ShortcutsRecordFor(label)}).Width(160).MinHeight(32).Shrink(0).Center()
+		record.Children(func() {
+			if recording || resolved.Binding == nil {
+				ui.Text(c, text).SingleLine().MinWidth(0)
+			} else {
+				platform := "windows"
+				if v.MacOS {
+					platform = "darwin"
+				}
+				nui.Kbd(c, palette, shortcuts.KbdKeys(resolved.Binding, v.MacOS), nui.KbdOptions{Size: nui.XS, Platform: platform}).IgnoreInput(true)
+			}
+		})
 		if !recording {
 			record.OnClick(func() { *state = shortcutState{search: state.search, recording: command.ID} })
 		}

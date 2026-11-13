@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -244,9 +245,9 @@ func (i *imagePreview) info(b *BodyViewer) string {
 func (i *imagePreview) infoBar(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 	bar := ui.Row(c.Key("image-info")).FillWidth().Shrink(0).MinHeight(28).AlignItems(ui.Center).Gap(10).PaddingX(10).Background(theme.Elevated)
 	bar.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Text(c, strconv.Itoa(int(i.scale*100+0.5))+"%").Shrink(0).FontSize(14).FontWeight(600).FontFeatures("tnum").TextColor(theme.Toned)
-		ui.Text(c, i.info(b)).Shrink(1).MinWidth(0).SingleLine().FontSize(14).FontFeatures("tnum").TextColor(theme.Toned)
+		ui.Text(c, strconv.Itoa(int(i.scale*100+0.5))+"%").Shrink(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).FontFeatures("tnum").TextColor(theme.Toned)
+		ui.Text(c, i.info(b)).Shrink(1).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontFeatures("tnum").TextColor(theme.Toned)
 		ui.Box(c).Grow(1)
-		ui.Text(c, locales.DetailImageZoomHint()).Shrink(0).FontSize(14).TextColor(theme.Muted)
+		ui.Text(c, locales.DetailImageZoomHint()).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 	})
 }

@@ -613,6 +613,10 @@ func TestSortCycleAndIncompleteValues(t *testing.T) {
 	complete.Response = &proxyservice.HTTPMessage{Metrics: &proxyservice.HTTPMessageMetrics{StartedAtMicros: 3, EndedAtMicros: 9}}
 	f := newFixture(t, entry(1, "a.test"), complete, entry(3, "c.test"))
 	table := f.workspace.Table
+	// The default path column preserves its readable width, so later columns
+	// are reached through the table's native horizontal scrolling.
+	f.tester.Scroll(700, 150, 400, 0)
+	f.settle()
 	f.click("Duration")
 	if table.sort.Column != "duration" || table.sort.Descending {
 		t.Fatalf("first click %+v", table.sort)
@@ -1687,9 +1691,10 @@ func TestHistoryClearAll(t *testing.T) {
 func TestHARImportFromDropOpensResult(t *testing.T) {
 	f := newHistoryFixture(t, entry(1, "live.test"))
 	f.history.import_ = func(path string) (proxyservice.HARImportResult, error) {
-		f.history.list = append(f.history.list, &proxyservice.HistoryMetadata{Key: "imported", Alias: "imported one", CreatedAt: 1800000000000})
+		metadata := &proxyservice.HistoryMetadata{Key: "imported", Alias: "imported one", CreatedAt: 1800000000000}
+		f.history.list = append(f.history.list, metadata)
 		f.history.entries["imported"] = []*logic.TrafficEntry{entry(21, "imported.test")}
-		return proxyservice.HARImportResult{Imported: 1, Metadata: &proxyservice.HistoryMetadata{Key: "imported"}}, nil
+		return proxyservice.HARImportResult{Imported: 1, Metadata: metadata}, nil
 	}
 	rect, ok := f.tester.Find("live.test")
 	if !ok {
@@ -1702,6 +1707,9 @@ func TestHARImportFromDropOpensResult(t *testing.T) {
 	f.requireText("imported.test")
 	if f.data.Workbench.CaptureSelection != "history:imported" {
 		t.Fatal(f.data.Workbench.CaptureSelection)
+	}
+	if got := f.data.Workspace.ActiveTab().Title; got != "imported one" {
+		t.Fatalf("imported tab title %q", got)
 	}
 	f.requireText("Imported 1 files")
 }

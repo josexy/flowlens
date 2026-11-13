@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -73,7 +74,7 @@ func emptyState(c *ui.Context, theme nui.Theme, icon *ui.SVG, title string) {
 
 func paneTitle(c *ui.Context, theme nui.Theme, title string, actions func()) {
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(10, 10, 8, 10).Children(func() {
-		ui.Text(c, title).FontSize(14).TextColor(theme.Muted)
+		ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		ui.Row(c).Gap(4).Children(actions)
 	})
 }
@@ -201,20 +202,20 @@ func (p *Panel) cookieAttributes(c *ui.Context, theme nui.Theme, index int, cook
 	nui.Popover(c.Key("popover"), theme, anchor, open, nui.PopoverOptions{Label: label, Placement: nui.BottomEnd, Width: nui.Set[float32](384), MaxHeight: nui.Set[float32](420)}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Children(func() {
 			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 12).BorderWidth(0, 0, 1, 0).BorderColor(palette.Border).Children(func() {
-				ui.Text(c, name).FontSize(14).FontWeight(500).TextColor(palette.Text).Grow(1).Basis(0).MinWidth(0).Selectable()
-				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(12).TextColor(palette.Muted).Shrink(0)
+				ui.Text(c, name).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(palette.Text).Grow(1).Basis(0).MinWidth(0).Selectable()
+				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).Shrink(0)
 			})
 			ui.Scroll(c.Key("body")).FillWidth().MaxHeight(320).Children(func() {
 				ui.Column(c).FillWidth().Padding(12).Children(func() {
 					cookieAttributeGrid(c, palette, cookie.Attributes)
 					ui.Column(c.Key("raw")).FillWidth().MarginY(0).Padding(8, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(palette.Border).Gap(4).Children(func() {
 						ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-							ui.Text(c, locales.DetailCookieRawHeader()).FontSize(12).TextColor(palette.Muted)
+							ui.Text(c, locales.DetailCookieRawHeader()).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted)
 							iconButton(c, palette, "copy-header", lucide.Copy(), locales.DetailCopySetCookieHeader(), false, func() {
 								p.copyText(logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header}), locales.DetailSetCookieHeaderCopied())
 							})
 						})
-						ui.Text(c, logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header})).FillWidth().FontSize(12).Font(palette.MonoFont).TextColor(palette.Text).Selectable()
+						ui.Text(c, logic.FormatHeaderFieldsAsText([]logic.HeaderField{cookie.Header})).FillWidth().FontSize(apptheme.TextSize(c, 12)).Font(palette.MonoFont).TextColor(palette.Text).Selectable()
 					})
 				})
 			})
@@ -246,22 +247,22 @@ func cookieAttributeShown(attribute logic.CookieAttribute) attributeShown {
 // "=" but no value shows "Empty value"; a flag without "=" shows a check.
 func cookieAttributeGrid(c *ui.Context, theme nui.Theme, attributes []logic.CookieAttribute) {
 	if len(attributes) == 0 {
-		ui.Text(c.Key("no-attributes"), locales.DetailCookieNoAttributes()).FontSize(12).TextColor(theme.Muted).MarginY(0)
+		ui.Text(c.Key("no-attributes"), locales.DetailCookieNoAttributes()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).MarginY(0)
 		ui.Box(c).Height(12)
 		return
 	}
 	ui.Column(c.Key("attributes")).FillWidth().Gap(8).Children(func() {
 		for position, attribute := range attributes {
 			ui.Row(c.Key(position)).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, cookieName(attribute.Name)).Grow(1).Basis(0).MinWidth(0).FontSize(12).TextColor(theme.Muted).Selectable()
+				ui.Text(c, cookieName(attribute.Name)).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).Selectable()
 				ui.Row(c.Key("value")).Grow(2).Basis(0).MinWidth(0).Children(func() {
 					switch cookieAttributeShown(attribute) {
 					case attributeFlag:
 						ui.Icon(c, lucide.Check()).Size(14, 14).TextColor(theme.Text)
 					case attributeEmpty:
-						ui.Text(c, locales.DetailCookieEmptyValue()).FontSize(12).TextColor(theme.Muted)
+						ui.Text(c, locales.DetailCookieEmptyValue()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 					default:
-						ui.Text(c, attribute.Value).FillWidth().FontSize(12).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
+						ui.Text(c, attribute.Value).FillWidth().FontSize(apptheme.TextSize(c, 12)).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
 					}
 				})
 			})

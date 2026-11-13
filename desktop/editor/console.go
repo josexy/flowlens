@@ -10,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go"
@@ -233,7 +234,7 @@ func (v *consoleView) status(c *ui.Context, theme nui.Theme, running bool, count
 		} else {
 			dot.Background(theme.Muted)
 		}
-		ui.Text(c, text).SingleLine().FontSize(14).TextColor(theme.Muted)
+		ui.Text(c, text).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 	})
 }
 
@@ -243,16 +244,16 @@ func (v *consoleView) cell(c *ui.Context, theme nui.Theme, entry *logic.PluginLo
 	ui.Row(c).FillWidth().MinWidth(0).Height(consoleRowHeight - 12).AlignItems(ui.Center).Gap(6).Children(func() {
 		switch consoleColumnIDs[col] {
 		case consoleColumnTime:
-			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).SingleLine().MinWidth(0).FontSize(14).FontFeatures("tnum").TextColor(theme.Toned)
+			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontFeatures("tnum").TextColor(theme.Toned)
 		case consoleColumnType:
 			ui.Icon(c, consoleStreamIcon(entry.Stream)).Size(14, 14).Shrink(0).TextColor(theme.Text).Label(consoleStreamLabel(entry.Stream))
 			consolePill(c, theme, entry, consoleLevelLabel(entry.Level), nil)
 		case consoleColumnSource:
-			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(14).TextColor(theme.Toned)
+			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Toned)
 		default:
-			ui.Text(c, logic.PythonLogPreview(entry.Message, consolePreviewLength)).SingleLine().Shrink(1).MinWidth(0).FontSize(14).TextColor(theme.Text)
+			ui.Text(c, logic.PythonLogPreview(entry.Message, consolePreviewLength)).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 			if count := logic.PythonLogLineCount(entry.Message); count > 1 {
-				ui.Text(c, locales.WorkspaceHttpRequestConsoleLines(strconv.Itoa(count))).SingleLine().Shrink(0).FontSize(12).TextColor(theme.Muted)
+				ui.Text(c, locales.WorkspaceHttpRequestConsoleLines(strconv.Itoa(count))).SingleLine().Shrink(0).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 		}
 	})
@@ -268,9 +269,9 @@ func (v *consoleView) detailDialog(c *ui.Context, theme nui.Theme) {
 	widgets.DetailDialog(c.Key("console-detail"), theme, &v.open, widgets.DetailDialogOptions{
 		Title: locales.WorkspaceHttpRequestConsoleEntryDetail(),
 		Header: func(c *ui.Context, palette nui.Theme) {
-			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).Shrink(0).FontSize(14).FontWeight(500).TextColor(palette.Toned)
+			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).Shrink(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(palette.Toned)
 			consolePill(c, palette, entry, consoleStreamLabel(entry.Stream)+" · "+consoleLevelLabel(entry.Level), consoleStreamIcon(entry.Stream)).Shrink(0)
-			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(14).TextColor(palette.Muted)
+			ui.Text(c, consoleSource(entry)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 		},
 		Actions: []widgets.DetailAction{
 			v.wrap.Action(locales.WorkspaceHttpRequestConsoleWrap()),
@@ -285,7 +286,7 @@ func (v *consoleView) detailDialog(c *ui.Context, theme nui.Theme) {
 				v.view.SetText(entry.Message)
 			}
 			v.view.SetWordWrap(v.wrap.On())
-			v.view.Build(c, ui.Font{Family: palette.Font, Size: 14}).Fill()
+			v.view.Build(c, ui.Font{Family: palette.Font, Size: apptheme.TextSize(c, 14)}).Fill()
 		},
 	})
 	if !v.open {

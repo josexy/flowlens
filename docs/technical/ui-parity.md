@@ -18,6 +18,40 @@ The review compared the original repository at `972cf419b60551bea63813b8c4dfe42b
 
 Source review and headless tests do not establish real-window IME, DPI, platform-menu, drag/drop, or window-lifecycle compatibility. Keep unperformed platform checks in the migration verification matrix; do not infer completion from visual similarity or a successful build.
 
+## Rendering fixes and scale baseline, 2026-11-13
+
+A real-window comparison against original commit `972cf41` and native baseline `38a23db` found four rendering defects: Hex columns kept a stale measured width, the first imported HAR tab used its internal key, the Formatted body label was squeezed, and the traffic context menu clipped its last item at the toolkit's default maximum height. Hex now requests the frames needed to finish width-dependent layout, import completion uses its returned metadata, body tabs keep their label widths and update the displayed body in the same build, and context menus use the available window height while retaining native scrolling and positioning.
+
+The comparison machine uses 150% monitor DPI and a separate 119% Windows accessibility text scale. MyGo already applies monitor DPI. `desktop/theme.Begin` applies the accessibility factor once to the whole window and consumes it before resolving the component theme, keeping fixed geometry, custom text, code editors, and base controls at the same scale. Main, settings, update, and startup-progress windows share this entry point. Shared form details now include vertical number steppers, consistent settings selectors, palette swatches, required-field markers, and grouped shortcut rows with resolved keycaps.
+
+Regression tests cover idle-frame Hex reflow at widths 320/525/900, complete body labels and immediate tab activation, imported tab naming, and the last traffic-menu action's visibility and hit target. Scale tests combine 100%/150%/200% rendering scales with 100%/119%/150% accessibility scales. `CGO_ENABLED=0 go test ./...` (with actual CPython 3 integration tests), `task vet:ui`, and a Windows GUI build passed. Windows lifecycle fixtures now isolate `APPDATA` as well as HOME/XDG paths.
+
+The repaired Windows build was inspected with an isolated profile and a synthetic HAR: immediate import naming, body tabs, Hex at normal and narrower splitter widths, the complete traffic menu, and general/shortcut settings in light and dark themes. Local screenshots and the comparison report are under the ignored `bin/ui-audit/` directory. Other monitor configurations, cross-monitor transitions, macOS, and Linux still need real-window verification; the headless scale matrix is not a substitute for those checks.
+
+## Remaining visual checklist, 2026-11-13
+
+The follow-up comparison reran both Windows applications with the same synthetic HAR and 150% display / 119% text scaling. The remaining visual items were addressed as follows:
+
+| Checklist item | Result |
+| --- | --- |
+| Traffic column widths | The path column keeps a 300-DIP default and grows into spare space. Saved/custom widths retain the 120-DIP minimum. Later columns remain available by native horizontal scrolling. The 100-DIP method column remains intentional. |
+| Numeric fields | Shared nui number inputs show thousands separators when unfocused. Focus reveals the native editable number; invalid drafts remain visible and retain native validation. Grouping never changes the numeric value, caret, or parser. |
+| WebSocket send action | The circular XL button sits at the message editor's lower right, with the existing shortcut, loading state, and send guards. The draft selector and surrounding spacing match the original proportions. |
+| Code appearance | Native editors use VS-like light/dark token colors, an 18/13 line-height ratio, and consistent framing/left inset. The settings store now supplies the actual code font size to request, response, plugin, SSE, and rewrite editors, including preview/discard. Native token categories, folding and gutter mechanics remain in use. The initial audit's description of Python string colors was corrected: ordinary strings are red in the original light theme. |
+| Dialogs | Plugin forms use the shared 512-DIP modal width, 16-DIP field spacing, and subdued header/footer borders. Descriptions grow from three to eight lines using native Textarea sizing rather than a WebView resize handle. Domain-filter controls use standard button sizing, readable count pills, and bounded scrollable groups. |
+| Memory Statistics | Summary-card line heights now match the calibrated density. No sample still means unknown; an actual zero-valued sample displays zero and its absent GC time displays “No GC yet”. This intentionally avoids claiming that an unobserved runtime has no GC activity. |
+| Already-correct behavior | Empty plugin names still fail validation, duplicate headers remain separate, and missing raw header order still produces its degradation warning. |
+
+Regression coverage includes default/custom path widths, horizontally reached sort controls, grouped-number focus and invalid input, code-font preview/discard, and the floating send button after repeated rebuilds and resizes. The full Go suite (using real CPython 3), MyGo UI vet, and the Windows GUI build pass. The new local screenshot report is `bin/ui-audit/round2/report.html`; it also records the retained native differences. The cross-platform and cross-monitor limits described above still apply.
+
+## Font settings follow-up, 2026-11-13
+
+Font selectors now write selections back in their change callbacks, so rebuilding the settings window no longer resets the chosen family. The native settings host enumerates MyGo's usable font families instead of Windows registry font-file labels such as `SimSun & NSimSun`. Returning a draft to the saved font size also refreshes the appearance preview, and unchanged previews no longer invalidate every window repeatedly.
+
+Custom interface text uses the same size ratio as nui controls while retaining the existing heading/body/caption hierarchy. Code editors and explicit font samples retain independent sizes. Text rows, count pills, shared field grids, and rewrite-rule drag spacing accommodate larger interface fonts.
+
+The full Go suite, MyGo UI vet, and Windows GUI build passed. Headless coverage includes font selection/save/reopen/discard, size reset, independent code sizing, 12/16/24 interface sizes across DPI/accessibility scales, large field rows, and rewrite dragging. Real-window checks confirmed Arial selection and the 24-size settings layout. The final manual pass was stopped before validating the corrected Chinese font list and saved-font restoration after a process restart; those checks remain outstanding, along with the platform limits above.
+
 ## Deliberate differences
 
 | 1.0.5 behavior | Native behavior | Reason |
