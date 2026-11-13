@@ -129,7 +129,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	if label == "" {
 		label = locales.MenuCapture()
 	}
-	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).FillWidth().MinHeight(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
+	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).MinHeight(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
 	switch {
 	case active:
 		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)

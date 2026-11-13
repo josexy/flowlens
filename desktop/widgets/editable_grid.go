@@ -86,7 +86,7 @@ type editableGridState struct {
 // use native button activation and an anchored Textarea with native Tab order.
 // Enter or blur commits; Escape restores the value from when editing began.
 func EditableGrid(c *ui.Context, theme nui.Theme, o EditableGridOptions) ui.Element {
-	area := ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0)
+	area := ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Clip()
 	state := ui.Local(area, "flowlens-editable-grid", func() editableGridState { return editableGridState{} })
 	if state == nil {
 		return area
@@ -95,10 +95,17 @@ func EditableGrid(c *ui.Context, theme nui.Theme, o EditableGridOptions) ui.Elem
 		state.open = nil
 		area.Focusable().TabStop(false).Focus()
 	}
+	// Fields are updated in place; scrolling their row out of view commits
+	// the edit without restoring focus and scrolling back to the old cell.
+	if open := state.open; open != nil {
+		if first, last := state.list.Visible(); open.index < first || open.index > last {
+			state.open = nil
+		}
+	}
 	area.Children(func() {
 		list := ui.List(c.Key("rows"), &state.list, o.Rows, func(index int) {
 			if index < o.Rows {
-				editableGridRow(c, theme, state, o, index)
+				editableGridRow(c, theme, state, o, index, area)
 			}
 		}).Fill().Label(o.Label)
 		if bounds := list.Bounds(); bounds.W > 0 {
@@ -136,7 +143,7 @@ func clampEditableGridKey(key, width float32) float32 {
 	return min(max(key, EditableGridKeyMinWidth), limit)
 }
 
-func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions, index int) {
+func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions, index int, area ui.Element) {
 	top := float32(0)
 	if index == 0 {
 		top = 1
@@ -164,14 +171,16 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 			key.Grow(1).Basis(0)
 		}
 		key.Children(func() {
-			editableGridText(c, theme, *o.Key(index), o.KeyPlaceholder)
+			editableGridTextCell(c, theme, state, o, key, index, EditableGridKey, area)
+			if !state.editing(index, EditableGridKey) {
+				editableGridText(c, theme, *o.Key(index), o.KeyPlaceholder)
+			}
 			if o.KeyTrailing != nil && !state.editing(index, EditableGridKey) {
 				o.KeyTrailing(index)
 			}
 			if o.Resizable {
 				editableGridResizer(c, theme, state, key)
 			}
-			editableGridTextCell(c, theme, state, o, key, index, EditableGridKey)
 		})
 		var value ui.Element
 		if o.Value(index) != nil {
@@ -183,8 +192,10 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 		if text := o.Value(index); text != nil {
 			value.Cursor(ui.CursorText)
 			value.Children(func() {
-				editableGridText(c, theme, *text, o.ValuePlaceholder)
-				editableGridTextCell(c, theme, state, o, value, index, EditableGridValue)
+				editableGridTextCell(c, theme, state, o, value, index, EditableGridValue, area)
+				if !state.editing(index, EditableGridValue) {
+					editableGridText(c, theme, *text, o.ValuePlaceholder)
+				}
 			})
 		} else if o.ValueCell != nil {
 			value.Children(func() { o.ValueCell(index) })
@@ -209,7 +220,7 @@ func editableGridText(c *ui.Context, theme nui.Theme, text, placeholder string) 
 	ui.Text(c, text).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).TextColor(color)
 }
 
-func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions, cell ui.Element, index int, field EditableGridField) {
+func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions, cell ui.Element, index int, field EditableGridField, area ui.Element) {
 	label := o.KeyLabel
 	if field == EditableGridValue {
 		label = o.ValueLabel
@@ -229,7 +240,7 @@ func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridSta
 		// Keep the anchor in the native focus order, but skip its Tab stop
 		// while its editor occupies that position.
 		cell.TabStop(false)
-		editableGridEditor(c, theme, state, cell)
+		area.Children(func() { editableGridEditor(c, theme, state, cell, area) })
 	}
 }
 
@@ -249,67 +260,63 @@ func editableGridResizer(c *ui.Context, theme nui.Theme, state *editableGridStat
 	}
 }
 
-// editableGridEditor is the open cell's editor, above the grid so it can
-// grow past the row. It edits the row's field in place.
-func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState, cell ui.Element) {
+// editableGridEditor grows past the row within the grid's clip. It edits
+// the row's field in place and follows the cell through the current layout.
+func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState, cell, area ui.Element) {
 	open := state.open
 	text := open.text
-	ui.Overlay(c, func() {
-		// AttachTo keeps native Tab order next to the source cell and also
-		// keeps a long editor inside the window when the grid is near an edge.
-		box := ui.Box(c.Key(open)).AttachTo(cell, ui.AnchorTopStart, ui.AnchorTopStart).Left(8).Top(4).Width(max(cell.Bounds().W-16, 80))
-		box.Shadow(0, 8, 20, 0, ui.RGBA(15, 23, 42, 0.12)).Children(func() {
-			nui.Textarea(c, theme, text, nui.TextareaOptions{
-				InputOptions: nui.InputOptions{Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
-					editor.AutoFocus()
-					// Composition confirmation must not become a grid command
-					// even on platforms forwarding its final key to the input.
-					editor.OnTextKey(func(k ui.TextKey) bool {
-						if state.composing && (k.Key == ui.KeyEnter || k.Key == ui.KeyEscape) {
-							return true
-						}
-						if k.Mods&^ui.Shift != 0 {
-							return false
-						}
-						switch k.Key {
-						case ui.KeyEnter:
-							state.committed, state.returnFocus = true, true
-							return true
-						case ui.KeyEscape:
-							state.committed, state.canceled, state.returnFocus = true, true, true
-							return true
-						}
-						return false // Tab follows the native focus order.
-					})
-					focused := editor.Focused()
-					if focused && state.select_ {
-						editor.SetTextSelection(0, len([]rune(*text)))
-						state.select_ = false
+	// AttachTo keeps native Tab order next to the source cell and also
+	// keeps a long editor inside the window when the grid is near an edge.
+	box := ui.Box(c.Key(open)).AttachTo(cell, ui.AnchorTopStart, ui.AnchorTopStart).Left(8).Top(4).Width(max(cell.Bounds().W-16, 80)).ZIndex(1)
+	box.Shadow(0, 8, 20, 0, ui.RGBA(15, 23, 42, 0.12)).Children(func() {
+		nui.Textarea(c, theme, text, nui.TextareaOptions{
+			InputOptions: nui.InputOptions{Size: nui.MD, Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
+				editor.AutoFocus()
+				// Composition confirmation must not become a grid command
+				// even on platforms forwarding its final key to the input.
+				editor.OnTextKey(func(k ui.TextKey) bool {
+					if state.composing && (k.Key == ui.KeyEnter || k.Key == ui.KeyEscape) {
+						return true
 					}
-					if state.focused && !focused {
-						state.committed = true
+					if k.Mods&^ui.Shift != 0 {
+						return false
 					}
-					state.focused = focused
-				}},
-				Rows: 1, AutoResize: true,
-			}).FillWidth()
-		})
-		box.ObserveInput(func(ev ui.InputEvent) {
-			switch ev.Kind {
-			case ui.InputCompose:
-				state.composing = ev.Text != ""
-			case ui.InputText:
-				state.composing = false
-			}
-		})
-		// Blur is observed while building the Textarea. Hide this pass's
-		// overlay immediately: an idle native window may not build another
-		// frame just because state.open is cleared below.
-		if state.committed {
-			box.Hidden(true)
+					switch k.Key {
+					case ui.KeyEnter:
+						state.committed, state.returnFocus = true, true
+						return true
+					case ui.KeyEscape:
+						state.committed, state.canceled, state.returnFocus = true, true, true
+						return true
+					}
+					return false // Tab follows the native focus order.
+				})
+				focused := editor.Focused()
+				if focused && state.select_ {
+					editor.SetTextSelection(0, len([]rune(*text)))
+					state.select_ = false
+				}
+				if state.focused && !focused {
+					state.committed = true
+				}
+				state.focused = focused
+			}},
+			Rows: 1, AutoResize: true, MaxRows: gridEditorMaxRows(theme, area.Bounds(), cell.Bounds()),
+		}).FillWidth()
+	})
+	box.ObserveInput(func(ev ui.InputEvent) {
+		switch ev.Kind {
+		case ui.InputCompose:
+			state.composing = ev.Text != ""
+		case ui.InputText:
+			state.composing = false
 		}
 	})
+	// Blur is observed while building the Textarea. Hide this pass's
+	// editor immediately: an idle native window may not build another
+	// frame just because state.open is cleared below.
 	if state.committed {
+		box.Hidden(true)
 		if state.canceled {
 			*text = open.original
 		}

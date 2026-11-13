@@ -312,20 +312,20 @@ func (w *Workspace) quickSettings(c *ui.Context, theme nui.Theme, config *settin
 	if proxy.SystemProxy.Supported {
 		w.systemProxyButton(c, theme, config)
 	}
-	w.booleanButton(c, theme, "disable-proxy", pick(config.DisableProxy, iconUpstreamProxyOff, iconUpstreamProxy), locales.ToolbarDisableProxy(), locales.ToolbarDisableProxyOn(), locales.ToolbarDisableProxyOff(), config.DisableProxy,
+	w.booleanButton(c, theme, "disable-proxy", pick(config.DisableProxy, lucide.Unplug, lucide.Plug), locales.ToolbarDisableProxy(), locales.ToolbarDisableProxyOn(), locales.ToolbarDisableProxyOff(), config.DisableProxy,
 		func(target *settingservice.ProxyConfig, value bool) { target.DisableProxy = value })
-	w.booleanButton(c, theme, "disable-http2", pick(config.DisableHTTP2, iconHTTP2Off, iconHTTP2), locales.ToolbarDisableHttp2(), locales.ToolbarDisableHttp2On(), locales.ToolbarDisableHttp2Off(), config.DisableHTTP2,
+	w.booleanButton(c, theme, "disable-http2", lucide.Heading2(), locales.ToolbarDisableHttp2(), locales.ToolbarDisableHttp2On(), locales.ToolbarDisableHttp2Off(), config.DisableHTTP2,
 		func(target *settingservice.ProxyConfig, value bool) { target.DisableHTTP2 = value })
-	w.booleanButton(c, theme, "anti-cache", pick(config.AntiCache, iconAntiCacheOn, iconAntiCache), locales.ToolbarAntiCache(), locales.ToolbarAntiCacheOn(), locales.ToolbarAntiCacheOff(), config.AntiCache,
+	w.booleanButton(c, theme, "anti-cache", pick(config.AntiCache, lucide.DatabaseZap, lucide.Database), locales.ToolbarAntiCache(), locales.ToolbarAntiCacheOn(), locales.ToolbarAntiCacheOff(), config.AntiCache,
 		func(target *settingservice.ProxyConfig, value bool) { target.AntiCache = value })
 	w.dnsPopover(c, theme)
-	w.booleanButton(c, theme, "anti-comp", pick(config.AntiComp, iconAntiCompOn, iconAntiComp), locales.ToolbarAntiComp(), locales.ToolbarAntiCompOn(), locales.ToolbarAntiCompOff(), config.AntiComp,
+	w.booleanButton(c, theme, "anti-comp", pick(config.AntiComp, lucide.File, lucide.FileArchive), locales.ToolbarAntiComp(), locales.ToolbarAntiCompOn(), locales.ToolbarAntiCompOff(), config.AntiComp,
 		func(target *settingservice.ProxyConfig, value bool) { target.AntiComp = value })
-	w.booleanButton(c, theme, "skip-tls", pick(config.SkipVerifyTLS, iconTLSSkip, iconTLSVerify), locales.ToolbarSkipVerifyTls(), locales.ToolbarSkipVerifyTlsOn(), locales.ToolbarSkipVerifyTlsOff(), config.SkipVerifyTLS,
+	w.booleanButton(c, theme, "skip-tls", pick(config.SkipVerifyTLS, lucide.ShieldOff, lucide.ShieldCheck), locales.ToolbarSkipVerifyTls(), locales.ToolbarSkipVerifyTlsOn(), locales.ToolbarSkipVerifyTlsOff(), config.SkipVerifyTLS,
 		func(target *settingservice.ProxyConfig, value bool) { target.SkipVerifyTLS = value })
 	count := len(config.IncludeHosts) + len(config.ExcludeHosts)
 	toolbarButton(c, theme, toolButton{
-		key: "host-filter", icon: iconHostFilter(), tooltip: locales.ToolbarHostFilterTooltip(strconv.Itoa(count)), active: count > 0, quick: true,
+		key: "host-filter", icon: lucide.ListFilter(), tooltip: locales.ToolbarHostFilterTooltip(strconv.Itoa(count)), active: count > 0, quick: true,
 		run: func() { w.toolbar.hosts.show(config) },
 	})
 }
@@ -347,7 +347,7 @@ func (w *Workspace) systemProxyButton(c *ui.Context, theme nui.Theme, config *se
 
 func (w *Workspace) modeMenu(c *ui.Context, theme nui.Theme, config *settingservice.ProxyConfig) {
 	tooltip := locales.ToolbarQuickMode(strings.ToUpper(string(config.Mode)))
-	anchor := toolbarButton(c, theme, toolButton{key: "mode", icon: iconMode(), tooltip: tooltip, quick: true})
+	anchor := toolbarButton(c, theme, toolButton{key: "mode", icon: lucide.Network(), tooltip: tooltip, quick: true})
 	item := func(label string, mode settingservice.ProxyMode) nui.MenuItem {
 		return nui.MenuItem{ID: string(mode), Label: label, Radio: true, Checked: nui.Set(config.Mode == mode), OnSelect: func() {
 			if mode != config.Mode {
@@ -371,7 +371,7 @@ func (w *Workspace) localIPs() []settingservice.LocalIPAddress {
 
 func (w *Workspace) hostMenu(c *ui.Context, theme nui.Theme, config *settingservice.ProxyConfig) {
 	tooltip := locales.ToolbarQuickHost(config.Host)
-	anchor := toolbarButton(c, theme, toolButton{key: "host", icon: iconListenHost(), tooltip: tooltip, quick: true})
+	anchor := toolbarButton(c, theme, toolButton{key: "host", icon: lucide.Router(), tooltip: tooltip, quick: true})
 	var items []nui.MenuItem
 	if w.toolbar.hostMenu.Open {
 		for _, option := range w.localIPs() {
@@ -391,7 +391,7 @@ func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settings
 	saving := state.applying || w.Data.Settings.Saving
 	tooltip := locales.ToolbarQuickPort(strconv.Itoa(config.Port))
 	anchor := toolbarButton(c, theme, toolButton{
-		key: "port", icon: iconPort(), tooltip: tooltip, quick: true,
+		key: "port", icon: lucide.Hash(), tooltip: tooltip, quick: true,
 		run: func() {
 			if !saving {
 				state.portOpen = !state.portOpen
@@ -522,4 +522,12 @@ func (w *Workspace) applyDNS() {
 	}) {
 		state.dnsApplying = false
 	}
+}
+
+// pick returns on's icon when active and off's otherwise.
+func pick(active bool, on, off func() *ui.SVG) *ui.SVG {
+	if active {
+		return on()
+	}
+	return off()
 }
