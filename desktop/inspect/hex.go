@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -71,7 +72,10 @@ type hexPress struct {
 // NewHexView returns an empty view.
 func NewHexView(deps Dependencies) *HexView { return &HexView{deps: deps, anchor: -1, focus: -1} }
 
-func (h *HexView) clearChoice() { h.hasChoice, h.anchor, h.focus, h.selecting = false, -1, -1, false }
+func (h *HexView) clearChoice() {
+	h.hasChoice, h.anchor, h.focus, h.selecting = false, -1, -1, false
+	h.press = hexPress{}
+}
 
 // SelectionRange returns the chosen bytes, end exclusive.
 func (h *HexView) SelectionRange() (int64, int64, bool) {
@@ -225,7 +229,7 @@ func (h *HexView) buildRow(c *ui.Context, theme nui.Theme, layout logic.HexLayou
 		mono(layout.HexStart, hexText, theme.Text)
 		mono(layout.TextStart, text, theme.Toned)
 	})
-	h.pointer(box, layout, row, char, length)
+	h.pointer(c, box, layout, row, char, length)
 }
 
 func (h *HexView) columnAt(x float32, layout logic.HexLayout) logic.HexColumn {
@@ -235,24 +239,24 @@ func (h *HexView) columnAt(x float32, layout logic.HexLayout) logic.HexColumn {
 	return logic.HexColumnHex
 }
 
-func (h *HexView) pointer(box ui.Element, layout logic.HexLayout, row int64, char float32, length int64) {
+func (h *HexView) pointer(c *ui.Context, box ui.Element, layout logic.HexLayout, row int64, char float32, length int64) {
+	// Register dragging on every build and follow the captured press. Pressed
+	// becomes false as soon as the pointer leaves this row's bounds.
+	dx, dy, held := box.Dragged()
 	if h.press.active && h.press.row == row {
-		if dx, dy, moved := box.Dragged(); moved {
+		if held {
 			h.dragX += dx
 			h.dragY += dy
 			y := h.press.y + h.dragY
-			targetRow := h.press.row + int64(y/hexRowHeight)
-			if y < 0 {
-				targetRow--
-			}
-			h.focus = logic.HexByteAt(h.press.x+h.dragX, targetRow, h.column, layout, char, length)
+			targetRow := h.press.row + int64(math.Floor(float64(y/hexRowHeight)))
+			h.focus = max(0, logic.HexByteAt(h.press.x+h.dragX, targetRow, h.column, layout, char, length))
 		}
-		if !box.Pressed() {
+		if !held {
 			h.press.active = false
 		}
 		return
 	}
-	if !box.Pressed() || h.press.active {
+	if !held || h.press.active {
 		return
 	}
 	x, y, ok := box.PointerPosition()
@@ -264,7 +268,7 @@ func (h *HexView) pointer(box ui.Element, layout logic.HexLayout, row int64, cha
 	h.dragX, h.dragY = 0, 0
 	h.column = h.columnAt(x, layout)
 	byteIndex := logic.HexByteAt(x, row, h.column, layout, char, length)
-	if box.ClickModifiers()&ui.Shift != 0 && h.hasChoice {
+	if c.Modifiers()&ui.Shift != 0 && h.hasChoice {
 		h.focus = byteIndex
 		return
 	}

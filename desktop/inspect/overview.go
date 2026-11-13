@@ -88,11 +88,13 @@ func listRow(c *ui.Context, theme nui.Theme, key, label string, values []string)
 	if len(values) == 0 {
 		return
 	}
-	overviewRow(c, theme, key).Children(func() {
+	overviewRow(c, theme, key).AlignItems(ui.Start).Children(func() {
 		overviewLabel(c, theme, label)
 		ui.Column(c.Key("values")).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
 			for index, value := range values {
-				overviewValue(c.Key(index), theme, value).LineHeight(1.45)
+				// These flex along the vertical axis: keep the text's natural
+				// height, including wrapped lines, instead of a zero basis.
+				ui.Text(c.Key(index), value).FillWidth().Shrink(0).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text).Selectable().LineHeight(1.45)
 			}
 		})
 	})

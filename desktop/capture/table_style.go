@@ -88,11 +88,14 @@ func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefin
 				}
 				ui.Icon(c.Key("sort-arrow"), icon).Size(12, 12).Shrink(0).MarginStart(4).TextColor(theme.Primary).Label("sort-arrow")
 			}
+			// Keep conditional decoration inside this stable overlay. MyGo
+			// appends an unkeyed resize grip after HeaderCell; adding/removing
+			// its siblings changes its identity and cancels the captured drag.
+			if onEdge {
+				ui.Box(c.Key("resize-strip")).Absolute().Top(0).Bottom(1).Right(0).Width(headerResizeStrip).ZIndex(1).IgnoreInput(true).
+					Background(headerEdgeColor(theme)).Label("resize-strip")
+			}
 		})
-		if onEdge {
-			ui.Box(c.Key("resize-strip")).Absolute().Top(0).Bottom(1).Right(0).Width(headerResizeStrip).ZIndex(1).IgnoreInput(true).
-				Background(headerEdgeColor(theme)).Label("resize-strip")
-		}
 	}
 }
 

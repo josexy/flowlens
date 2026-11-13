@@ -1,12 +1,17 @@
 package inspect
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/i18n"
+	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
+	"github.com/josexy/flowlens/desktop/internal/rendertest"
+	desktoptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
+	nui "github.com/josexy/nuxt-ui-go"
 )
 
 func tlsEntryFixture(t *testing.T) *fixture {
@@ -17,6 +22,69 @@ func tlsEntryFixture(t *testing.T) *fixture {
 	f.panel.overview.tls, f.panel.overview.cert = true, true
 	f.settle()
 	return f
+}
+
+func TestTLSListsKeepNaturalHeight(t *testing.T) {
+	i18n.SetLocaleFunc(func() string { return "zh-Hans" })
+	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
+	if err := desktoptheme.RegisterFonts(); err != nil {
+		t.Fatal(err)
+	}
+	for _, dark := range []bool{false, true} {
+		for _, size := range []int{16, 24} {
+			t.Run(fmt.Sprintf("dark=%v/size=%v", dark, size), func(t *testing.T) {
+				mode := desktoptheme.ModeLight
+				if dark {
+					mode = desktoptheme.ModeDark
+				}
+				entry := renderEntry()
+				// Find must identify the supported values, not a duplicate in
+				// the negotiated-version/ALPN rows above them.
+				entry.Metadata.TLS.SelectedVersion, entry.Metadata.TLS.SelectedALPN = "", ""
+				entry.Metadata.TLS.SelectedCipherSuite = "TLS_AES_256_GCM_SHA384"
+				entry.Metadata.TLS.SupportedVersion = []string{"GREASE (0x2A2A)", "TLS1.3", "TLS1.2"}
+				entry.Metadata.TLS.SupportedCipherSuites = []string{
+					"GREASE (0x6A6A)", "TLS_AES_128_GCM_SHA256", "TLS_CHACHA20_POLY1305_SHA256",
+					"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+					"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS_RSA_WITH_AES_256_CBC_SHA",
+				}
+				entry.Metadata.Certificate = &proxyservice.ServerCertificate{Version: 3}
+				panel := &Panel{overview: overviewState{tls: true, cert: true}}
+				var lineHeight float32
+				tester := ui.NewTester(func(c *ui.Context) {
+					palette := nui.App(c, desktoptheme.Resolve(desktoptheme.Appearance{Mode: mode, AppFontSize: size}).Config)
+					lineHeight = desktoptheme.TextSize(c, 14) * 1.45
+					ui.Scroll(c).Fill().Children(func() {
+						ui.Column(c).FillWidth().Padding(10).Children(func() {
+							panel.tlsSection(c, palette, entry)
+							panel.certificateSection(c, palette, entry)
+						})
+					})
+				}, 525, 1100)
+				tester.SetDark(dark)
+				tester.SetLocale("zh-Hans")
+				for range 4 {
+					tester.Frame()
+				}
+				values := append([]string{}, entry.Metadata.TLS.SupportedVersion...)
+				values = append(values, entry.Metadata.TLS.SupportedALPN...)
+				values = append(values, entry.Metadata.TLS.SupportedCipherSuites...)
+				var bottom float32
+				for _, value := range values {
+					r, ok := tester.Find(value)
+					if !ok || r.H < lineHeight-1 || r.Y < bottom {
+						t.Fatalf("%q at %+v overlaps or has no line height; previous bottom %v", value, r, bottom)
+					}
+					bottom = r.Y + r.H
+				}
+				cert, ok := tester.Find(locales.DetailCertInfo())
+				if !ok || cert.Y < bottom {
+					t.Fatalf("certificate at %+v overlaps TLS ending at %v", cert, bottom)
+				}
+				rendertest.Shoot(t, tester, fmt.Sprintf("tls-lists-dark-%v-size-%v", dark, size))
+			})
+		}
+	}
 }
 
 func TestTLSLabelsAreLocalized(t *testing.T) {
