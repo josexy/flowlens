@@ -22,7 +22,7 @@ Passed:
 
 Environment setup: `python3` on the normal PATH resolves to the WindowsApps alias and fails to start a Worker. Verification used a temporary `python3.exe` launcher copied from the installed `D:/Python/Python312/python.exe`, with PATH overridden only for test processes. APPDATA was also redirected to temporary directories for tests. No global PATH or Python installation was changed.
 
-Additional full-repository run: `go test -json ./...` passed all tested packages except the unchanged `backend/pkg/logger`. `TestOpenDirUsesInjectedOpener` reproducibly fails Windows temporary-directory cleanup because `flowlens.log` is still open. The test registers `manager.Close` before calling `t.TempDir`, so cleanup attempts directory removal first. This is outside this UI change; the same isolated test also fails. Optional Unix permission/symlink and Windows Store/Python Manager discovery checks skipped where unsupported; Python Worker integration tests ran using real CPython.
+Initial additional full-repository run: `go test -json ./...` passed all tested packages except the then-unchanged `backend/pkg/logger`. `TestOpenDirUsesInjectedOpener` failed Windows temporary-directory cleanup because `flowlens.log` was still open. The test registered `manager.Close` before calling `t.TempDir`, so cleanup attempted directory removal first. The user subsequently requested this separate test fix; its resolution is recorded below. Optional Unix permission/symlink and Windows Store/Python Manager discovery checks skipped where unsupported; Python Worker integration tests ran using real CPython.
 
 An initial `backend/app` test run without isolated APPDATA exposed existing Windows fixture isolation gaps. Its identified reset manifest and marker were moved to a temporary quarantine; subsequent app/full-suite runs used isolated profiles. No product changes were made to those fixtures.
 
@@ -47,8 +47,14 @@ Ran the built application against a copy of the existing FlowLens data directory
 
 Limits: this was one Windows display at 150%, not a cross-monitor DPI migration test. macOS Cmd/native menus, Linux platform behavior, cross-display DPI, and the broader pre-existing window/drag/drop/release matrix remain unperformed. Their predecessor tasks remain unchanged and incomplete. Windows UI Automation sometimes reported an old focused text field; visible caret/focus and actual keyboard outcomes were used to confirm operation, without claiming toolkit accessibility-provider parity.
 
+## Logger test follow-up, 2026-11-13
+
+At the user's request, `TestOpenDirUsesInjectedOpener` now creates its temporary directory before registering the logger's close callback. Cleanup therefore closes the log before removing the directory. This changes only the test fixture; production logging behavior is unchanged.
+
+`go test ./backend/pkg/logger -count=1` passed. The subsequent full-repository `CGO_ENABLED=0 go test -count=1 -json ./...` also passed with no failures, using Go 1.27.3, isolated APPDATA, and actual CPython 3.12.10. Test caching was disabled. Platform-dependent permission/symlink and unavailable Windows Store/Python Manager checks retained their existing skips; Worker integration tests executed.
+
 ## Scope and archival
 
-Product edits are confined to the owning desktop surfaces/widgets, two detail callbacks in `backend/app`, locales, and documentation. New tests reuse existing fixtures and a shared test-only Tab traversal helper. No database schema, persistence representation, network model/transport, ordered-header normalization, Python Worker/SDK, process attribution/cache, CA/system proxy, update protocol or shortcut catalog changed. The logger test failure is recorded rather than folded into this change.
+Product edits are confined to the owning desktop surfaces/widgets, two detail callbacks in `backend/app`, locales, and documentation. New tests reuse existing fixtures and a shared test-only Tab traversal helper. No database schema, persistence representation, network model/transport, ordered-header normalization, Python Worker/SDK, process attribution/cache, CA/system proxy, update protocol or shortcut catalog changed. The separately requested logger test-fixture fix is recorded above.
 
 Do not archive before `migrate-to-mygo-native-ui` → `restore-ui-parity` → `restore-ui-behavior-parity`. Main specs are currently absent; strict validation succeeds, but the CLI correctly notes that the MODIFIED deltas cannot yet be archived. Revalidate their targets after the predecessor deltas are merged. No predecessor checkbox or archive was changed.

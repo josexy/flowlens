@@ -435,6 +435,9 @@ func TestOpenDirUsesInjectedOpener(t *testing.T) {
 	previous := directoryOpener.Swap(nil)
 	t.Cleanup(func() { directoryOpener.Store(previous) })
 
+	// Cleanup runs in reverse registration order: close the log before
+	// TempDir removes its directory, especially on Windows.
+	dir := t.TempDir()
 	manager := newRuntimeManager(false)
 	t.Cleanup(func() {
 		_ = manager.Close()
@@ -442,7 +445,7 @@ func TestOpenDirUsesInjectedOpener(t *testing.T) {
 	if _, err := manager.Configure(Config{
 		Enabled:      true,
 		Level:        LogLevelInfo,
-		LogDir:       t.TempDir(),
+		LogDir:       dir,
 		MaxSizeBytes: 1024,
 		MaxBackups:   1,
 	}); err != nil {
