@@ -5,12 +5,92 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
+	"math"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/logic"
+	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
+	nui "github.com/josexy/nuxt-ui-go"
 )
+
+func TestImageCentersAsSoonAsLoadingFinishes(t *testing.T) {
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewGray(image.Rect(0, 0, 88, 88))); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []struct {
+		name, body string
+		svg        bool
+	}{
+		{name: "png", body: data.String()},
+		{name: "svg", body: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><rect width="320" height="320" fill="#ff6600"/></svg>`, svg: true},
+	} {
+		t.Run(format.name, func(t *testing.T) {
+			decoded, err := decodeImage(format.body, "", format.svg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			viewer := NewBodyViewer(Dependencies{}, false)
+			viewer.content = BodyContent{Identity: 1, Body: format.body}
+			preview := &viewer.image
+			*preview = imagePreview{identity: 1, body: format.body, started: true, loading: true, scale: 1}
+			shown, mode := true, apptheme.ModeLight
+			tester := ui.NewTester(func(c *ui.Context) {
+				palette := nui.App(c, apptheme.Resolve(apptheme.Appearance{Mode: mode}).Config)
+				if shown {
+					preview.build(c, palette, viewer)
+				}
+			}, 525, 300)
+			if _, ok := tester.Find("image-picture"); ok {
+				t.Fatal("picture shown before decoding finishes")
+			}
+			// Publish the decoded result, as the background job does. Allow
+			// only the frames requested by the view, with no settle loop or input.
+			preview.image, preview.loading = decoded, false
+			if decoded.bitmap != nil {
+				preview.width, preview.height = decoded.bitmap.Size()
+			}
+			tester.Frame()
+			check := func() {
+				t.Helper()
+				area, ok := tester.Find("image-area")
+				if !ok {
+					t.Fatal("no image area")
+				}
+				picture, ok := tester.Find("image-picture")
+				if !ok {
+					t.Fatal("image did not appear without extra input")
+				}
+				if math.Abs(float64(picture.X+picture.W/2-area.X-area.W/2)) > 0.5 ||
+					math.Abs(float64(picture.Y+picture.H/2-area.Y-area.H/2)) > 0.5 {
+					t.Fatalf("picture %+v is not centered in %+v", picture, area)
+				}
+				if picture.W > area.W-2*imagePanePadding+0.5 || picture.H > area.H-2*imagePanePadding+0.5 {
+					t.Fatalf("picture %+v does not fit %+v", picture, area)
+				}
+			}
+			check()
+			rendertest.Shoot(t, tester, "image-first-visible-"+format.name+"-light")
+			// Reopening the tab after its container changes must measure again.
+			shown = false
+			tester.Frame()
+			tester.SetSize(400, 220)
+			shown, mode = true, apptheme.ModeDark
+			tester.Frame()
+			check()
+			rendertest.Shoot(t, tester, "image-reopened-"+format.name+"-dark")
+			// A collapsed pane must not keep requesting frames forever.
+			tester.SetSize(400, 1)
+			tester.Frame()
+			if tester.FramePending() {
+				t.Fatal("collapsed image pane keeps redrawing")
+			}
+		})
+	}
+}
 
 func largeImageFixture(t *testing.T) *fixture {
 	t.Helper()

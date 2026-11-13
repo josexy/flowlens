@@ -37,8 +37,10 @@ type imagePreview struct {
 	scale float64
 	// offsetX and offsetY pan the image while it is zoomed past 1.
 	offsetX, offsetY float32
-	// pane is the image area's size in the last frame.
+	// pane is the image area's last observed bounds. hasPane distinguishes
+	// the first read from an area laid out with no space available.
 	pane     ui.Rect
+	hasPane  bool
 	sequence uint64
 }
 
@@ -159,9 +161,13 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 	ui.Column(c).Fill().MinHeight(0).Border(1, theme.Border).Background(theme.Background).Children(func() {
 		i.infoBar(c, theme, b)
 		area := ui.Box(c.Key("image-area")).FillWidth().Grow(1).Basis(0).MinHeight(0).Clip().Label("image-area")
-		if bounds := area.Bounds(); bounds.W > 0 {
-			i.pane = bounds
+		bounds := area.Bounds()
+		if !i.hasPane || bounds.W != i.pane.W || bounds.H != i.pane.H {
+			// Bounds describe the previous layout. After loading (or reopening
+			// the pane), request the pass that can use its measured size.
+			c.Invalidate()
 		}
+		i.pane, i.hasPane = bounds, true
 		held := widgets.HeldModifiers(c)
 		area.HandleInput(func(ev ui.InputEvent) bool {
 			switch {
@@ -213,6 +219,11 @@ func (i *imagePreview) menuItems(b *BodyViewer) []nui.MenuItem {
 }
 
 func (i *imagePreview) picture(c *ui.Context, theme nui.Theme) {
+	// Until the area has been laid out, centering against zero dimensions
+	// would put half the image outside its top-left corner.
+	if i.pane.W <= 0 || i.pane.H <= 0 {
+		return
+	}
 	w, h := i.displaySize()
 	if w <= 0 || h <= 0 {
 		return
