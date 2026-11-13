@@ -134,7 +134,7 @@ func (p *Panel) rawTCP(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry
 	}
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).FillWidth().PaddingX(12).PaddingY(14).Gap(2).Children(func() {
-			ui.Row(c).Gap(8).Padding(0, 8, 4, 8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).FillWidth().Gap(8).Padding(0, 8, 4, 8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, lucide.Network()).Size(16, 16).TextColor(theme.Primary)
 				ui.Text(c, locales.DetailRawTcpTunnelInfo()).FontSize(14).Bold()
 				label, color := "TCP", nui.Neutral
@@ -142,6 +142,8 @@ func (p *Panel) rawTCP(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry
 					label, color = "TCP/TLS", nui.Info
 				}
 				nui.Badge(c, theme, label, nui.BadgeOptions{Color: color, Variant: nui.Subtle, Size: nui.SM})
+				ui.Box(c).Grow(1)
+				p.closeButton(c, theme)
 			})
 			detailRow(c, theme, "target", locales.DetailRawTcpTarget(), orDash(logic.TrafficTarget(entry)))
 			detailRow(c, theme, "source", locales.DetailRawTcpSource(), tcpSourceLabel(source))

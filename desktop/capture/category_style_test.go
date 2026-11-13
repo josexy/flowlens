@@ -37,7 +37,7 @@ func TestSelectingTwoHostsChecksBoth(t *testing.T) {
 // mark at its end.
 func (f *fixture) checkMark(label string) bool {
 	f.t.Helper()
-	row, ok := f.tester.Find(label)
+	row, ok := f.tester.Find(locales.CategoryTitle() + ": " + label)
 	if !ok {
 		f.t.Fatalf("no row %q", label)
 	}
@@ -60,7 +60,7 @@ func TestCategoryRowsShowNoCounts(t *testing.T) {
 	if one, ok := f.tester.Find(strconv.Itoa(1)); ok && one.X < 240 {
 		t.Fatalf("a count is shown at %v", one)
 	}
-	row, _ := f.tester.Find("api.test")
+	row, _ := f.tester.Find(locales.CategoryTitle() + ": api.test")
 	if row.H != 32 {
 		t.Fatalf("row %v", row)
 	}
@@ -68,7 +68,7 @@ func TestCategoryRowsShowNoCounts(t *testing.T) {
 
 func TestSectionHeaderCollapsesWithEndChevron(t *testing.T) {
 	f := categoryFixture(t)
-	header, _ := f.tester.Find(locales.CategoryHost())
+	header, _ := f.tester.Find(locales.CategoryTitle() + ": " + locales.CategoryHost())
 	chevron, ok := f.tester.Find("section-chevron")
 	if !ok || chevron.X < header.X+header.W-40 {
 		t.Fatalf("chevron %v not at the end of %v", chevron, header)
@@ -85,11 +85,10 @@ func TestSectionHeaderCollapsesWithEndChevron(t *testing.T) {
 		}
 		return n
 	}
-	// The host is listed under Hosts and Structure, as label and text, and
-	// in the table.
+	// The host is listed under Hosts and Structure and in the table.
 	before := count()
 	f.click(locales.CategoryHost())
-	if count() != before-2 {
+	if count() != before-1 {
 		t.Fatalf("%d api.test texts after collapsing, %d before", count(), before)
 	}
 	f.click(locales.CategoryHost())

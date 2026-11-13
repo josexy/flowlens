@@ -100,15 +100,15 @@ func countOf[T int | uint32 | uint64](sample *memstatsservice.MemSnapshot, read 
 
 func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	data := v.Data
-	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Row(c.Key("title")).Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
+	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Row(c.Key("title")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
 			ui.Text(c, locales.MemstatsTitle()).SingleLine().FontSize(15.2).FontWeight(600).TextColor(theme.Text)
 			nui.Badge(c.Key("subtitle"), theme, locales.MemstatsSubtitle(), nui.BadgeOptions{
 				Color: nui.Info, Variant: nui.Subtle, Size: nui.MD,
 				UI: nui.Styles{nui.Root: {FontSize: nui.Set[float32](14), Weight: nui.Set(600), PaddingX: nui.Set[float32](8), PaddingY: nui.Set[float32](2)}},
 			})
 		})
-		ui.Row(c.Key("actions")).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c.Key("actions")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
 			label, icon, color := locales.MemstatsStart(), lucide.Play(), nui.Primary
 			if data.Monitoring {
 				label, icon, color = locales.MemstatsStop(), lucide.Pause(), nui.Warning
@@ -138,9 +138,9 @@ func (v *View) summary(c *ui.Context, theme nui.Theme, sample *memstatsservice.M
 		{locales.MemstatsNumGc(), countOf(sample, func(s *memstatsservice.MemSnapshot) uint32 { return s.NumGC })},
 		{locales.MemstatsNumGoroutine(), countOf(sample, func(s *memstatsservice.MemSnapshot) int { return s.NumGoroutine })},
 	}
-	ui.Row(c.Key("summary")).FillWidth().Gap(12).Children(func() {
+	ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).Children(func() {
 		for index, card := range cards {
-			panelCard(c, theme, index).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+			panelCard(c, theme, index).Grow(1).Basis(180).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, card.label).SingleLine().FontSize(14).TextColor(theme.Muted)
 				ui.Text(c, card.value).SingleLine().FontSize(17.6).FontWeight(600).TextColor(theme.Primary)
 			})
@@ -229,8 +229,8 @@ func divider(c *ui.Context, theme nui.Theme, title string) {
 
 func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSnapshot) {
 	type snapshot = memstatsservice.MemSnapshot
-	ui.Row(c.Key("details")).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
-		panelCard(c, theme, "left").Grow(1).Basis(0).MinWidth(0).Children(func() {
+	ui.Row(c.Key("details")).FillWidth().Wrap().Gap(12).AlignItems(ui.Start).Children(func() {
+		panelCard(c, theme, "left").Grow(1).Basis(360).MinWidth(0).Children(func() {
 			heading(c, theme, locales.MemstatsSectionHeap())
 			ui.Box(c).Height(12)
 			metrics(c, theme, "heap", []metric{
@@ -247,7 +247,7 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 				{locales.MemstatsStackSys(), bytesOf(s, func(s *snapshot) uint64 { return s.StackSys })},
 			})
 		})
-		panelCard(c, theme, "right").Grow(1).Basis(0).MinWidth(0).Children(func() {
+		panelCard(c, theme, "right").Grow(1).Basis(360).MinWidth(0).Children(func() {
 			heading(c, theme, locales.MemstatsSectionGc())
 			ui.Box(c).Height(12)
 			metrics(c, theme, "gc", []metric{
@@ -280,7 +280,7 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 // Sidebar shows the section's single entry.
 func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("memstats-sidebar")).Fill().Children(func() {
-		entry := ui.Row(c.Key("entry")).FillWidth().MinHeight(40).AlignItems(ui.Center).Gap(8).Padding(8, 10, 8, 7).Background(theme.Primary.Alpha(0.08)).Role(ui.RoleButton).Label(locales.MenuMemstats())
+		entry := ui.ButtonBase(c.Key("entry")).FillWidth().MinHeight(40).Justify(ui.Start).Gap(8).Padding(8, 10, 8, 7).Background(theme.Primary.Alpha(0.08)).FocusRing(true).Label(locales.MenuMemstats())
 		entry.BorderWidth(0, 0, 0, 3).BorderColor(theme.Primary)
 		if v.Select != nil {
 			entry.OnClick(v.Select)

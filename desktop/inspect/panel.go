@@ -76,8 +76,10 @@ const (
 
 // Panel shows one traffic entry.
 type Panel struct {
-	data Data
-	deps Dependencies
+	// OnClose hides this panel in its owning workspace.
+	OnClose func()
+	data    Data
+	deps    Dependencies
 
 	entryID        uint64
 	requestTab     string
@@ -323,6 +325,7 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.tabBar(c, theme, "response-tabs", &p.responseTab, p.responseItems(entry), func() {
 			p.responseChips(c, theme, entry)
+			p.closeButton(c, theme)
 		})
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			switch p.responseTab {
@@ -353,6 +356,18 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 			}
 		})
 	})
+}
+
+func (p *Panel) closeButton(c *ui.Context, theme nui.Theme) {
+	if p.OnClose == nil {
+		return
+	}
+	label := locales.DetailClosePanel()
+	button := nui.Button(c.Key("close-details"), theme, "", nui.ButtonOptions{
+		Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true,
+		Leading: lucide.X(), AccessibleLabel: label,
+	}).OnClick(p.OnClose)
+	nui.Tooltip(c, theme, button, label, nui.TooltipOptions{})
 }
 
 func (p *Panel) errorPane(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry) {

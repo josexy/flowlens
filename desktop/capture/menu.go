@@ -135,10 +135,7 @@ func (t *Table) entryMenuItems(entries []*logic.TrafficEntry) []nui.MenuItem {
 	multiple := len(entries) > 1
 	items := []nui.MenuItem{{
 		ID: "show-details", Label: locales.ContextMenuTrafficTableShowDetails(), Disabled: multiple,
-		OnSelect: func() {
-			t.source.SelectEntry(first)
-			t.source.SetShowDetail(true)
-		},
+		OnSelect: func() { t.showDetails(first) },
 	}}
 	if t.deps.Exporter != nil {
 		items = append(items, t.exportMenuItem(entries))

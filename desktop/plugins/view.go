@@ -222,7 +222,7 @@ func (v *View) selectPlugin(id string) {
 func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *store.Plugin, visible []*store.Plugin) {
 	plugins := v.Data.Plugins
 	selected := plugins.SelectedPluginID == plugin.ID
-	row := ui.Row(c.Key(plugin.ID)).FillWidth().Height(pluginRowHeight).AlignItems(ui.Center).Gap(6).Padding(8, 8, 8, 5).Label(plugin.Name)
+	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleListItem).FillWidth().Height(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
 	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent)
 	hovered := row.Hovered()
 	switch {
@@ -576,7 +576,13 @@ func (v *View) filesPane(c *ui.Context, theme nui.Theme) {
 func (v *View) fileRow(c *ui.Context, theme nui.Theme, row fileRow) {
 	plugins := v.Data.Plugins
 	selected := !row.directory && plugins.SelectedFilePath == row.path
-	line := ui.Row(c.Key(row.key)).FillWidth().Height(26).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(row.depth)*12+6).Radius(theme.Radius).Label(row.path)
+	var line ui.Element
+	if row.directory {
+		line = ui.Row(c.Key(row.key))
+	} else {
+		line = ui.ButtonBase(c.Key(row.key)).Justify(ui.Start).FocusRing(true)
+	}
+	line.FillWidth().Height(26).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(row.depth)*12+6).Radius(theme.Radius).Label(row.path)
 	if selected {
 		line.Background(theme.Primary.Alpha(0.1))
 	} else if !row.directory && line.Hovered() {

@@ -35,6 +35,7 @@ type fixture struct {
 	window  *runtimetest.Window
 	tester  *ui.Tester
 	view    *View
+	config  nui.AppConfig
 }
 
 func newFixture(t *testing.T, status memstatsservice.MonitoringStatus) *fixture {
@@ -52,8 +53,8 @@ func newFixture(t *testing.T, status memstatsservice.MonitoringStatus) *fixture 
 	t.Cleanup(data.Cleanup)
 	config := theme.Resolve(theme.Appearance{}).Config
 	view := New(data)
-	f := &fixture{t: t, service: service, data: data, bus: bus, rt: rt, window: window, view: view}
-	f.tester = ui.NewTester(func(c *ui.Context) { view.Content(c, nui.App(c, config)) }, 1200, 1200)
+	f := &fixture{t: t, service: service, data: data, bus: bus, rt: rt, window: window, view: view, config: config}
+	f.tester = ui.NewTester(func(c *ui.Context) { view.Content(c, nui.App(c, f.config)) }, 1200, 1200)
 	f.tester.SetLocale("en")
 	f.settle()
 	return f
@@ -232,6 +233,17 @@ func TestSidebarSelectsTheSection(t *testing.T) {
 	tester.Frame()
 	if selected != 1 {
 		t.Fatal(selected)
+	}
+	tester.Key(ui.Shift, ui.KeyTab)
+	tester.Key(0, ui.KeyTab)
+	if !tester.Focused(locales.MenuMemstats()) {
+		t.Fatal("sidebar entry cannot receive keyboard focus")
+	}
+	tester.Key(0, ui.KeyEnter)
+	tester.Key(0, ui.KeySpace)
+	tester.Frame()
+	if selected != 3 {
+		t.Fatalf("keyboard activation count %d", selected)
 	}
 }
 

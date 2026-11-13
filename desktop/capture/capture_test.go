@@ -33,6 +33,7 @@ type fakeBackend struct {
 	entries  []*logic.TrafficEntry
 	stats    proxyservice.TrafficStatistics
 	bodies   map[uint64]*proxyservice.TrafficBodyView
+	readBody func(uint64) (*proxyservice.TrafficBodyView, error)
 	deleted  []int64
 	cleared  int
 	status   proxyservice.ProxyStatus
@@ -70,6 +71,10 @@ func (f *fakeBackend) DeleteTraffic(ids []int64) {
 func (f *fakeBackend) SetLiveTrafficDetail(uint64) {}
 func (f *fakeBackend) GetTrafficBodyView(id uint64) (*proxyservice.TrafficBodyView, error) {
 	f.mu.Lock()
+	if read := f.readBody; read != nil {
+		f.mu.Unlock()
+		return read(id)
+	}
 	defer f.mu.Unlock()
 	if view, ok := f.bodies[id]; ok {
 		return view, nil
@@ -740,67 +745,54 @@ func TestClickSelectsWithoutOpeningDetails(t *testing.T) {
 	f.requireSelection([]uint64{2}, 2, false)
 }
 
+func (f *fixture) openDetails(host string) {
+	f.t.Helper()
+	f.clickRow(0, host)
+	f.tester.Key(0, ui.KeyEnter)
+	f.settle()
+}
+
 func TestClickWhileDetailsAreOpenMovesThem(t *testing.T) {
 	f := newFixture(t, manyEntries(3)...)
-	f.clickRow(ui.Cmd, "host1.test")
+	f.openDetails("host1.test")
 	f.requireSelection([]uint64{1}, 1, true)
 	f.clickRow(0, "host3.test")
 	f.requireSelection([]uint64{3}, 3, true)
 }
 
-func TestClickingTheOnlySelectedRowClearsIt(t *testing.T) {
+func TestClickingTheOnlySelectedRowKeepsIt(t *testing.T) {
 	f := newFixture(t, manyEntries(3)...)
-	f.clickRow(ui.Cmd, "host2.test")
-	f.requireSelection([]uint64{2}, 2, true)
+	f.openDetails("host2.test")
 	f.clickRow(0, "host2.test")
-	f.requireSelection(nil, 0, false)
+	f.requireSelection([]uint64{2}, 2, true)
 }
 
-func TestShiftClickAddsAndRemovesRows(t *testing.T) {
+func TestPrimaryClickAddsAndRemovesRows(t *testing.T) {
 	f := newFixture(t, manyEntries(9)...)
 	f.clickRow(0, "host2.test")
-	f.clickRow(ui.Shift, "host5.test")
-	f.clickRow(ui.Shift, "host8.test")
+	f.clickRow(ui.Cmd, "host5.test")
+	f.clickRow(ui.Cmd, "host8.test")
 	f.requireSelection([]uint64{2, 5, 8}, 8, false)
-
-	// Removing the focused row focuses the first left in table order.
-	f.clickRow(ui.Shift, "host8.test")
+	f.clickRow(ui.Cmd, "host8.test")
 	f.requireSelection([]uint64{2, 5}, 2, false)
-
-	// Removing a row that is not focused keeps the focus.
-	f.clickRow(ui.Shift, "host5.test")
+	f.clickRow(ui.Cmd, "host5.test")
 	f.requireSelection([]uint64{2}, 2, false)
 }
 
-func TestShiftClickRemovingTheLastRowClosesDetails(t *testing.T) {
+func TestPrimaryClickRemovingTheLastRowClosesDetails(t *testing.T) {
 	f := newFixture(t, manyEntries(3)...)
+	f.openDetails("host3.test")
 	f.clickRow(ui.Cmd, "host3.test")
-	f.requireSelection([]uint64{3}, 3, true)
-	f.clickRow(ui.Shift, "host3.test")
 	f.requireSelection(nil, 0, false)
 }
 
-func TestCtrlClickKeepsAMultipleSelection(t *testing.T) {
+func TestShiftClickSelectsRange(t *testing.T) {
 	f := newFixture(t, manyEntries(9)...)
 	f.clickRow(0, "host2.test")
 	f.clickRow(ui.Shift, "host5.test")
-	f.clickRow(ui.Shift, "host8.test")
-	f.clickRow(ui.Cmd, "host5.test")
-	f.requireSelection([]uint64{2, 5, 8}, 5, true)
-}
-
-func TestCtrlClickOpensClosesAndMovesDetails(t *testing.T) {
-	f := newFixture(t, manyEntries(9)...)
-	// Opening with Ctrl-click.
-	f.clickRow(ui.Cmd, "host5.test")
-	f.requireSelection([]uint64{5}, 5, true)
-	// Closing with Ctrl-click.
-	f.clickRow(ui.Cmd, "host5.test")
-	f.requireSelection([]uint64{5}, 5, false)
-	// Ctrl-click on another row while the panel shows row 5.
-	f.clickRow(ui.Cmd, "host5.test")
-	f.clickRow(ui.Cmd, "host7.test")
-	f.requireSelection([]uint64{7}, 7, true)
+	f.requireSelection([]uint64{2, 3, 4, 5}, 5, false)
+	f.clickRow(ui.Shift, "host3.test")
+	f.requireSelection([]uint64{2, 3}, 3, false)
 }
 
 func TestKeyboardSelectionLeavesDetailsAsTheyWere(t *testing.T) {
@@ -809,36 +801,15 @@ func TestKeyboardSelectionLeavesDetailsAsTheyWere(t *testing.T) {
 	f.tester.Key(0, ui.KeyDown)
 	f.settle()
 	f.requireSelection([]uint64{3}, 3, false)
-
-	f.clickRow(ui.Cmd, "host3.test")
-	f.requireSelection([]uint64{3}, 3, true)
+	f.tester.Key(ui.Shift, ui.KeyDown)
+	f.settle()
+	f.requireSelection([]uint64{3, 4}, 4, false)
+	f.tester.Key(0, ui.KeyEnter)
+	f.settle()
+	f.requireSelection([]uint64{3, 4}, 4, true)
 	f.tester.Key(0, ui.KeyDown)
 	f.settle()
-	f.requireSelection([]uint64{4}, 4, true)
-}
-
-func TestShiftPressShowsTheEarlierSelectionUntilRelease(t *testing.T) {
-	f := newFixture(t, manyEntries(9)...)
-	table := f.workspace.Table
-	f.clickRow(0, "host2.test")
-	f.clickRow(ui.Shift, "host5.test")
-	var held [][]uint64
-	f.afterBuild = func() {
-		if table.gesture.press.down {
-			held = append(held, selectedIDs(table))
-		}
-	}
-	f.clickRow(ui.Shift, "host8.test")
-	f.afterBuild = nil
-	if len(held) == 0 {
-		t.Fatal("no frame while the press was down")
-	}
-	for _, ids := range held {
-		if !slices.Equal(ids, []uint64{2, 5}) {
-			t.Fatalf("a frame during the press showed %v", ids)
-		}
-	}
-	f.requireSelection([]uint64{2, 5, 8}, 8, false)
+	f.requireSelection([]uint64{5}, 5, true)
 }
 
 func TestClickAfterTheTableScrollsUnderAStillPointer(t *testing.T) {
@@ -887,20 +858,12 @@ func (f *fixture) rowCenter(host string) (x, y float32) {
 	return r.X + r.W/2, r.Y + r.H/2
 }
 
-func TestDragStartingInThePressBuildAnchorsAtThePressedRow(t *testing.T) {
+func TestQuickDragUsesNativeAnchor(t *testing.T) {
 	f := newFixture(t, manyEntries(9)...)
-	table := f.workspace.Table
-	x, y := f.rowCenter("host3.test")
-	ex, ey := f.rowCenter("host6.test")
-	f.tester.Press(x, y)
-	// A platform may deliver the press and a move past the drag threshold
-	// before the next frame, so the build that first sees the press also
-	// starts the drag. The Tester draws a frame after each event: the
-	// press is made unseen again to stand for that.
-	g := &table.gesture
-	g.press.fresh, g.press.onRow, g.press.row = true, false, 0
-	f.tester.Move(ex, ey)
-	f.tester.Release(ex, ey)
+	f.tester.Press(f.rowCenter("host3.test"))
+	x, y := f.rowCenter("host6.test")
+	f.tester.Move(x, y)
+	f.tester.Release(x, y)
 	f.settle()
 	f.requireSelection([]uint64{3, 4, 5, 6}, 6, false)
 }
@@ -915,10 +878,10 @@ func TestReleaseOutsideTheTableLeavesTheKeysWorking(t *testing.T) {
 	f.tester.Move(238, y)
 	f.tester.Release(238, y)
 	f.settle()
-	f.requireSelection([]uint64{2}, 2, false)
+	f.requireSelection([]uint64{4}, 4, false)
 	f.tester.Key(0, ui.KeyDown)
 	f.settle()
-	f.requireSelection([]uint64{3}, 3, false)
+	f.requireSelection([]uint64{5}, 5, false)
 }
 
 func TestLosingTheWindowFocusDuringAPressLeavesTheKeysWorking(t *testing.T) {
@@ -928,13 +891,13 @@ func TestLosingTheWindowFocusDuringAPressLeavesTheKeysWorking(t *testing.T) {
 	f.tester.SetFocused(false)
 	f.tester.SetFocused(true)
 	f.settle()
-	f.requireSelection([]uint64{2}, 2, false)
+	f.requireSelection([]uint64{4}, 4, false)
 	f.tester.Key(0, ui.KeyDown)
 	f.settle()
-	f.requireSelection([]uint64{3}, 3, false)
+	f.requireSelection([]uint64{5}, 5, false)
 	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.settle()
-	f.requireSelection([]uint64{1, 2, 3, 4, 5, 6}, 3, false)
+	f.requireSelection([]uint64{1, 2, 3, 4, 5, 6}, 5, false)
 }
 
 func TestAReleaseAfterAPressElsewhereClicksNoRow(t *testing.T) {
@@ -952,7 +915,7 @@ func TestAReleaseAfterAPressElsewhereClicksNoRow(t *testing.T) {
 	f.tester.Move(x, ry)
 	f.tester.Release(x, ry)
 	f.settle()
-	f.requireSelection([]uint64{2}, 2, false)
+	f.requireSelection([]uint64{4}, 4, false)
 }
 
 func TestEvictionFocusesTheFirstRowLeftInTableOrder(t *testing.T) {
@@ -962,8 +925,8 @@ func TestEvictionFocusesTheFirstRowLeftInTableOrder(t *testing.T) {
 	table.lastSort = table.sort
 	f.settle()
 	f.clickRow(0, "d.test")
-	f.clickRow(ui.Shift, "c.test")
-	f.clickRow(ui.Shift, "b.test")
+	f.clickRow(ui.Cmd, "c.test")
+	f.clickRow(ui.Cmd, "b.test")
 	f.requireSelection([]uint64{2, 4, 1}, 2, false)
 	// Row 4 comes before row 1 by host, though its ID is larger.
 	f.data.Traffic.Delete([]uint64{2})
@@ -986,7 +949,7 @@ func TestSwitchingHistoriesClearsTheSelection(t *testing.T) {
 	h := newFixtureSized(t, nil, 1400, 800, backend)
 	table := h.workspace.HistoryTable
 	h.click("first-session")
-	h.clickRow(ui.Cmd, "a2.test")
+	h.openDetails("a2.test")
 	if ids := selectedIDs(table); !slices.Equal(ids, []uint64{2}) || !h.data.History.Traffic.ShowDetailPanel {
 		t.Fatalf("first session: selected %v detail %v", ids, h.data.History.Traffic.ShowDetailPanel)
 	}
@@ -1095,7 +1058,7 @@ func TestRowMenuShowDetails(t *testing.T) {
 	f.requireSelection([]uint64{1}, 1, true)
 
 	// Show is unavailable while several rows are selected.
-	f.clickRow(ui.Shift, "b.test")
+	f.clickRow(ui.Cmd, "b.test")
 	openRowMenu(t, f, "b.test")
 	if err := menutest.Choose(f.tester, f.settle, "Show"); err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("Show with two rows selected: %v", err)
@@ -1319,8 +1282,8 @@ func TestExportSelection(t *testing.T) {
 	// Live capture: the file is named for the count.
 	f = newFixture(t, entry(1, "a.test"), entry(2, "b.test"), entry(3, "c.test"))
 	f.clickRow(0, "a.test")
-	f.clickRow(ui.Shift, "b.test")
-	f.clickRow(ui.Shift, "c.test")
+	f.clickRow(ui.Cmd, "b.test")
+	f.clickRow(ui.Cmd, "c.test")
 	openRowMenu(t, f, "b.test")
 	f.choose("Export", exportFormatLabel(logic.ExportCSV))
 	if f.pickedName != "flowlens-selection-3-csv.csv" {
@@ -1487,27 +1450,9 @@ func (f *fixture) drag(from, to string, during func()) {
 func TestDragSelectsRangeOfRows(t *testing.T) {
 	f := newFixture(t, manyEntries(9)...)
 	f.clickRow(0, "host2.test")
-	f.clickRow(ui.Shift, "host9.test")
+	f.clickRow(ui.Cmd, "host9.test")
 	f.drag("host4.test", "host6.test", nil)
 	f.requireSelection([]uint64{4, 5, 6}, 6, false)
-}
-
-func TestDragReplacesTheSelectionWhateverMyGoAdds(t *testing.T) {
-	f := newFixture(t, manyEntries(9)...)
-	table := f.workspace.Table
-	f.clickRow(ui.Cmd, "host2.test")
-	f.clickRow(ui.Shift, "host9.test")
-	f.requireSelection([]uint64{2, 9}, 9, true)
-	// A drag that began with Cmd held keeps the rows selected before it in
-	// MyGo's model; 1.0.5 replaced them.
-	f.drag("host4.test", "host6.test", func() {
-		if !table.list.DragSelecting() {
-			t.Fatal("the drag did not start")
-		}
-		table.selection.Add(2)
-		table.selection.Add(9)
-	})
-	f.requireSelection([]uint64{4, 5, 6}, 6, true)
 }
 
 func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
@@ -1591,7 +1536,8 @@ func TestDetailPanelOpensBesideTheTable(t *testing.T) {
 	f.requireNoText("detail-content")
 	f.click("a.test")
 	f.requireNoText("detail-content")
-	f.clickRow(ui.Cmd, "a.test")
+	f.tester.Key(0, ui.KeyEnter)
+	f.settle()
 	f.requireText("detail-content")
 	f.data.Traffic.SetShowDetailPanel(false)
 	f.settle()

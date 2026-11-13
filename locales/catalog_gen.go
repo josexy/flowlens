@@ -1610,6 +1610,16 @@ func (msgs Messages) DetailCipherSuite() string {
 	return Catalog.Format(msgs.locale, "detailCipherSuite", nil)
 }
 
+// DetailClosePanel says "Close details"
+// in the language the app shows.
+func DetailClosePanel() string { return In(i18n.Locale()).DetailClosePanel() }
+
+// DetailClosePanel says "Close details"
+// in the language of msgs.
+func (msgs Messages) DetailClosePanel() string {
+	return Catalog.Format(msgs.locale, "detailClosePanel", nil)
+}
+
 // DetailCookieAttributeCount says "{count} attributes"
 // in the language the app shows.
 func DetailCookieAttributeCount(count string) string {

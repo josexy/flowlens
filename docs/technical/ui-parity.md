@@ -1,6 +1,22 @@
-# UI Parity with FlowLens 1.0.5
+# Native UI behavior and comparison
 
-FlowLens 1.0.5, the last Wails build, is the visual and interaction reference for the native MyGo interface. This page records what was compared, the deliberate differences, and checks that keep the two aligned. The `restore-ui-parity` change in `openspec/changes/` explains the decisions.
+The MyGo interface preserves FlowLens's information hierarchy, business actions, data fidelity, and meaningful states. Native input, focus, selection, and accessibility behavior take priority. Layout, spacing, typography, animation, and control placement do not need to reproduce the Wails frontend pixel for pixel. A surface passes review when its information is readable and its actions remain discoverable and operable in both themes.
+
+FlowLens 1.0.5 remains a source of product behavior and historical comparisons. The `align-native-ui-interactions` change supersedes the earlier blanket visual-parity rule; specific contracts such as ordered headers, export contents, error states, and destructive-action confirmation still apply. The earlier render and behavior reviews below are historical evidence, not a requirement to restore every visual difference.
+
+## Source review, 2026-11-13
+
+The review compared the original repository at `972cf419b60551bea63813b8c4dfe42b3a78c8c2` with the native repository at `78e6c2e2e04266b24b8f4e622a6a8911b5f49c6c`. The complete module inventory and code references are in [the change design](../../openspec/changes/align-native-ui-interactions/design.md).
+
+| Area | Source-review conclusion |
+| --- | --- |
+| Shell, capture/history, editor, collection, rewrite, plugins, settings, update/reset | The principal surfaces and business entry points have native implementations. This is not proof that every branch or platform behaves identically. |
+| Traffic selection and details | The reviewed baseline overrode native selection to reproduce the original modifier-click model. The native-first change removes that override and gives details explicit open/close actions. |
+| Navigation and editable grids | Several custom rows only handled clicks. Settings lost the original keyboard entry; some other mouse-only entry points were inherited from the old frontend. |
+| Memory Statistics | The reviewed baseline kept fixed card/metric columns instead of adapting to available content width. Layout acceptance includes the minimum window with the widest sidebar. |
+| Native replacements | Editors, Hex virtualization, menus, help placement, and chart interaction have deliberate differences, recorded below. |
+
+Source review and headless tests do not establish real-window IME, DPI, platform-menu, drag/drop, or window-lifecycle compatibility. Keep unperformed platform checks in the migration verification matrix; do not infer completion from visual similarity or a successful build.
 
 ## Deliberate differences
 
@@ -16,13 +32,32 @@ FlowLens 1.0.5, the last Wails build, is the visual and interaction reference fo
 | Menu item icons and highlight swatches in every menu | Shown in context menus, which are `nui.ContextMenu` drawn in the window as 1.0.5's `UContextMenu` was, and in macOS menu-bar menus; Windows and Linux menu-bar menus show none | Those menu bars draw no item icons. |
 | No API Collection menu item to move a nested folder to the root | Move to Root in a nested folder's menu | It gives a path without dragging to the drop zone's action. |
 | Error toasts when writing to the clipboard fails | No such toasts | Native clipboard writes cannot fail. |
-| No keys in the traffic table | Up, Down, Home, and End move the selection, and Cmd+A (Ctrl+A on Windows and Linux) selects all rows, while the table has the keyboard focus; the detail panel stays as it was | MyGo's list provides them, and they do not conflict with the 1.0.5 click model. |
+| Shift-click toggles a row; Ctrl/Cmd-click toggles details; no table keys | Native single/additive/range/drag selection and keyboard movement; Enter or unmodified double-click opens details; Close details preserves selection | The toolkit owns selection and activation. Modifier clicks only select. |
 | Each Python console and SSE message row a tab stop, opened with Enter or Space | Each table one tab stop: the arrow keys move between rows, and Enter opens one | MyGo's table is one focusable list. |
 | A WebSocket text message in the conversation opens nothing when clicked | It opens its details, as in the list | It gives the conversation a path to a text message's actions, and conflicts with nothing in 1.0.5. |
 | A press on a selected traffic row released on the next row, under the drag threshold, clicks the row pressed | It clicks no row | MyGo leaves such a press to the release, and the table cannot tell it from a press on the scroll bar. |
 | Python API help docked beside the content in a workspace 1100 px wide or more, a Slideover in a narrower one | A Slideover at the window's right edge, 420 px wide, at any width | One placement at every size; the Slideover keeps the content's width and closes with Escape or a click beside it. |
+| Dragging the secondary splitter to zero collapses it | Clicking the active primary section toggles the sidebar; dragging changes its width within bounds | Keep the explicit native collapse action. |
+| Memory chart supports horizontal drag-to-zoom and double-click reset | Native chart offers sample inspection, keyboard movement, and series visibility; no drag zoom | Keep the toolkit's chart interaction without a second gesture implementation. |
 
-## Render review
+The following replacements are accepted on code and headless-test evidence. Platform rendering and IME remain subject to the real-window checks above. Original paths below are relative to `frontend/src/components/`; native paths are relative to the repository root.
+
+| Replacement | Original evidence | Native evidence |
+| --- | --- | --- |
+| Code editor | `common/MonacoBodyEditor.vue` | `desktop/widgets/code_view.go` (`ui/editor`) |
+| Virtual Hex | `common/HexDumpViewer.vue` | `desktop/inspect/hex.go`, `desktop/logic/hexdump.go` |
+| Menus | `menu/TrafficContextMenu.vue`, `traffic-workspace/WorkspaceTabBar.vue` | `desktop/widgets/context_menu.go`, `desktop/capture/menu.go`, `desktop/editor/tabbar.go` |
+| Help Slideover | `workbench/ContentHost.vue` | `desktop/plugins/help.go`, `desktop/shell/app.go` |
+| Sidebar collapse | `../views/MainView.vue`, `../stores/workbench.ts` | `desktop/shell/app.go`, `desktop/store/workbench.go` |
+| Memory chart | `memstats/MemStatsChart.vue` | `desktop/memstats/view.go`, pinned nuxt-ui-go `chart.go` |
+
+## Native interaction implementation, 2026-11-13
+
+Traffic tables now use MyGo selection directly. Enter, an unmodified native double-click, and **Show** share the detail-opening action; **Close details** returns focus without clearing selection. Settings and the custom navigation rows use native button activation with independent child checkboxes/switches. Request grids use focusable text cells and an anchored Textarea: native Tab order, Enter/blur commit, Escape restores the original value, and composition confirmation stays inside the editor. Row identity checks end editing when its data disappears.
+
+Memory Statistics now wraps its toolbar and summary cards and stacks metric cards according to the content area's available width. This preserves the native chart's inspection and series toggles, without drag zoom. Tester checks cover content widths 558/770/820/1360 DIPs (including a 1024-wide window with a 42% sidebar), paused/running resize cycles, retained samples and hidden series, both languages/themes, the maximum configured interface font, and 150% rendering scale. Narrow light/dark renders were inspected. These checks do not replace the real-window platform matrix.
+
+## Historical render review
 
 Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`desktop/internal/rendertest`):
 
@@ -34,7 +69,7 @@ The renders were compared with `assets/screenshots/flowlens-{light,dark}.png` of
 
 - Font rendering. The headless tester draws with its bundled font, which is wider than Segoe UI, SF Pro, or Noto Sans, and has no CJK glyphs; Chinese layouts were checked by tests rather than by eye.
 - Process icons are blank in renders, because the tests have no icon cache. Rows otherwise match.
-- The capture render shows the table without the detail panel; `capture-detail` shows it open beside the inspected row, as Ctrl-click leaves it. The test backend serves no bodies, so its body tab is empty. The detail panel has its own renders (`detail-headers`).
+- The capture render shows the table without the detail panel; `capture-detail` shows it open beside the inspected row, after an explicit open action. The test backend serves no bodies, so its body tab is empty. The detail panel has its own renders (`detail-headers`).
 - Native scroll bars, as listed above.
 
 The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatted`, `ws-detail-receive-text`, `ws-detail-send-binary`, `python-console`, `python-console-detail`, `menu-highlight`, `menu-history`, `tab-menu`, `settings-root-ca-add`, and, after its review, `sse-list`, `ws-list`, and `ws-conversation`) match the 1.0.5 templates and the `restore-ui-behavior-parity` design, except:
@@ -46,7 +81,7 @@ The `restore-ui-behavior-parity` renders (`capture-detail`, `sse-detail-formatte
 
 Interaction that renders cannot show (focus, wheel scrolling of strips, grid editing with an input method, drag feedback, and notifications) is covered by Tester cases, and still needs a desktop pass on each platform.
 
-## Behavior review
+## Historical behavior review
 
 The `restore-ui-behavior-parity` change compared what each surface does with 1.0.5: its actions, modifier keys, enabled states, copied text, and default file names. These surfaces were found to match and were left as they are:
 

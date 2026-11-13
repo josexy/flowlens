@@ -59,7 +59,7 @@ func TestRenderCaptureWorkspace(t *testing.T) {
 }
 
 // TestRenderCaptureWithDetail renders the table with the inspected row
-// selected and its detail panel open beside it, as Ctrl-click leaves them.
+// selected and its detail panel open beside it, after an explicit open action.
 func TestRenderCaptureWithDetail(t *testing.T) {
 	f := newRenderFixture(t)
 	panel := inspect.NewPanel(inspect.LiveData{Traffic: f.data.Traffic}, inspect.Dependencies{Runtime: f.data.Runtime, Settings: f.data.Settings, Notifier: f.notifier})

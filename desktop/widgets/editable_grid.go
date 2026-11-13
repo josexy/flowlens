@@ -1,8 +1,6 @@
 package widgets
 
 import (
-	"strconv"
-
 	"github.com/egoist/mygo/ui"
 	nui "github.com/josexy/nuxt-ui-go"
 )
@@ -35,7 +33,8 @@ type EditableGridOptions struct {
 	Label string
 	// Rows is how many rows there are.
 	Rows int
-	// RowKey identifies row i across frames; nil uses its index.
+	// RowKey identifies row i across frames; nil uses its key field pointer.
+	// Callers replacing or removing rows must change that pointer or RowKey.
 	RowKey func(i int) any
 	// Enabled, Key, and Value return row i's fields. Value returning nil
 	// leaves the value cell to ValueCell.
@@ -61,40 +60,39 @@ type EditableGridOptions struct {
 }
 
 type editableGridCell struct {
-	row   any
-	index int
-	field EditableGridField
+	row      any
+	index    int
+	field    EditableGridField
+	text     *string
+	original string
+	focus    *ui.Handle
 }
 
 type editableGridState struct {
-	list      ui.ListState
-	keyWidth  float32
-	width     float32
-	open      *editableGridCell
-	openAt    ui.Rect
-	select_   bool
-	focused   bool
-	committed bool
-	composing bool
-	// enterText is the text as it was when Enter committed it.
-	enterText *string
+	list        ui.ListState
+	keyWidth    float32
+	width       float32
+	open        *editableGridCell
+	select_     bool
+	focused     bool
+	committed   bool
+	canceled    bool
+	composing   bool
+	returnFocus bool
 }
 
-// EditableGrid edits rows of an enable box, a key, and a value, as FlowLens
-// 1.0.5 did: a bordered grid of one-line rows 40 px tall, with muted
-// placeholders in empty cells and row hover. Clicking a key or value opens
-// an editor over the cell that wraps and grows with its text, with the focus
-// and the text selected; Enter, Shift+Enter, or a click elsewhere closes it
-// without a line break. The key column can be resized. Only the rows in view
-// are built.
+// EditableGrid builds a compact, virtualized key/value grid. Its text cells
+// use native button activation and an anchored Textarea with native Tab order.
+// Enter or blur commits; Escape restores the value from when editing began.
 func EditableGrid(c *ui.Context, theme nui.Theme, o EditableGridOptions) ui.Element {
 	area := ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0)
 	state := ui.Local(area, "flowlens-editable-grid", func() editableGridState { return editableGridState{} })
 	if state == nil {
 		return area
 	}
-	if open := state.open; open != nil && (open.index >= o.Rows || editableGridRowKey(o, open.index) != open.row) {
+	if open := state.open; open != nil && (open.index >= o.Rows || editableGridRowKey(o, open.index) != open.row || editableGridField(o, open.index, open.field) != open.text) {
 		state.open = nil
+		area.Focusable().TabStop(false).Focus()
 	}
 	area.Children(func() {
 		list := ui.List(c.Key("rows"), &state.list, o.Rows, func(index int) {
@@ -106,13 +104,19 @@ func EditableGrid(c *ui.Context, theme nui.Theme, o EditableGridOptions) ui.Elem
 			state.width = bounds.W
 		}
 	})
-	editableGridEditor(c, theme, state, o)
 	return area
+}
+
+func editableGridField(o EditableGridOptions, index int, field EditableGridField) *string {
+	if field == EditableGridValue {
+		return o.Value(index)
+	}
+	return o.Key(index)
 }
 
 func editableGridRowKey(o EditableGridOptions, index int) any {
 	if o.RowKey == nil {
-		return index
+		return o.Key(index)
 	}
 	return o.RowKey(index)
 }
@@ -152,13 +156,12 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 				box.Label(o.EnabledLabel(index))
 			}
 		})
-		key := ui.Row(c.Key("key-cell")).MinWidth(0).AlignItems(ui.Center).Gap(6).Padding(editableGridCellPadding).Cursor(ui.CursorText).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border)
+		key := ui.ButtonBase(c.Key("key-cell")).Justify(ui.Start).FocusRing(true).MinWidth(0).Gap(6).Padding(editableGridCellPadding).Cursor(ui.CursorText).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border)
 		if width := state.keyColumnWidth(); width > 0 {
 			key.Width(width).Shrink(0)
 		} else {
 			key.Grow(1).Basis(0)
 		}
-		editableGridTextCell(c, theme, state, o, key, index, EditableGridKey)
 		key.Children(func() {
 			editableGridText(c, theme, *o.Key(index), o.KeyPlaceholder)
 			if o.KeyTrailing != nil && !state.editing(index, EditableGridKey) {
@@ -167,12 +170,21 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 			if o.Resizable {
 				editableGridResizer(c, theme, state, key)
 			}
+			editableGridTextCell(c, theme, state, o, key, index, EditableGridKey)
 		})
-		value := ui.Row(c.Key("value-cell")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Padding(editableGridCellPadding).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border)
+		var value ui.Element
+		if o.Value(index) != nil {
+			value = ui.ButtonBase(c.Key("value-cell")).Justify(ui.Start).FocusRing(true)
+		} else {
+			value = ui.Row(c.Key("value-cell"))
+		}
+		value.Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Padding(editableGridCellPadding).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border)
 		if text := o.Value(index); text != nil {
 			value.Cursor(ui.CursorText)
-			editableGridTextCell(c, theme, state, o, value, index, EditableGridValue)
-			value.Children(func() { editableGridText(c, theme, *text, o.ValuePlaceholder) })
+			value.Children(func() {
+				editableGridText(c, theme, *text, o.ValuePlaceholder)
+				editableGridTextCell(c, theme, state, o, value, index, EditableGridValue)
+			})
 		} else if o.ValueCell != nil {
 			value.Children(func() { o.ValueCell(index) })
 		}
@@ -204,13 +216,20 @@ func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridSta
 	if label != nil {
 		cell.Label(label(index))
 	}
-	if state.editing(index, field) {
-		state.openAt = cell.Bounds()
-	}
+	focus := ui.Local(cell, "cell-focus", func() ui.Handle { return ui.Handle{} })
+	cell.Bind(focus)
 	cell.OnClick(func() {
-		state.open = &editableGridCell{row: editableGridRowKey(o, index), index: index, field: field}
-		state.openAt, state.select_, state.focused, state.committed, state.enterText = cell.Bounds(), true, false, false, nil
+		text := editableGridField(o, index, field)
+		state.open = &editableGridCell{row: editableGridRowKey(o, index), index: index, field: field, text: text, original: *text, focus: focus}
+		state.select_, state.focused, state.committed, state.canceled, state.returnFocus = true, false, false, false, false
+		state.composing = false
 	})
+	if state.editing(index, field) {
+		// Keep the anchor in the native focus order, but skip its Tab stop
+		// while its editor occupies that position.
+		cell.TabStop(false)
+		editableGridEditor(c, theme, state, cell)
+	}
 }
 
 // editableGridResizer is the key column's edge; it highlights in the accent
@@ -231,33 +250,36 @@ func editableGridResizer(c *ui.Context, theme nui.Theme, state *editableGridStat
 
 // editableGridEditor is the open cell's editor, above the grid so it can
 // grow past the row. It edits the row's field in place.
-func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState, o EditableGridOptions) {
+func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState, cell ui.Element) {
 	open := state.open
-	if open == nil {
-		return
-	}
-	text := o.Key(open.index)
-	if open.field == EditableGridValue {
-		text = o.Value(open.index)
-	}
-	if text == nil {
-		state.open = nil
-		return
-	}
-	at := state.openAt
-	commit := func() {
-		if state.enterText != nil {
-			*text = *state.enterText
-		}
-		state.open, state.enterText = nil, nil
-	}
+	text := open.text
 	ui.Overlay(c, func() {
-		key := "flowlens-editable-grid-editor:" + strconv.Itoa(open.index) + ":" + strconv.Itoa(int(open.field))
-		box := ui.Box(c.Key(key)).Absolute().Left(at.X + 8).Top(at.Y + 4).Width(max(at.W-16, 80))
+		// AttachTo keeps native Tab order next to the source cell and also
+		// keeps a long editor inside the window when the grid is near an edge.
+		box := ui.Box(c.Key(open)).AttachTo(cell, ui.AnchorTopStart, ui.AnchorTopStart).Left(8).Top(4).Width(max(cell.Bounds().W-16, 80))
 		box.Shadow(0, 8, 20, 0, ui.RGBA(15, 23, 42, 0.12)).Children(func() {
 			nui.Textarea(c, theme, text, nui.TextareaOptions{
 				InputOptions: nui.InputOptions{Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
 					editor.AutoFocus()
+					// Composition confirmation must not become a grid command
+					// even on platforms forwarding its final key to the input.
+					editor.OnTextKey(func(k ui.TextKey) bool {
+						if state.composing && (k.Key == ui.KeyEnter || k.Key == ui.KeyEscape) {
+							return true
+						}
+						if k.Mods&^ui.Shift != 0 {
+							return false
+						}
+						switch k.Key {
+						case ui.KeyEnter:
+							state.committed, state.returnFocus = true, true
+							return true
+						case ui.KeyEscape:
+							state.committed, state.canceled, state.returnFocus = true, true, true
+							return true
+						}
+						return false // Tab follows the native focus order.
+					})
 					focused := editor.Focused()
 					if focused && state.select_ {
 						editor.SetTextSelection(0, len([]rune(*text)))
@@ -271,26 +293,28 @@ func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState
 				Rows: 1, AutoResize: true,
 			}).FillWidth()
 		})
-		// The text area takes Enter itself, so the box watches the keys
-		// before it does: Enter, with or without Shift, commits the text as
-		// it was before the key, without the line break, as 1.0.5 prevented
-		// Enter's default. Enter that ends an input method's composition
-		// goes to the input method.
 		box.ObserveInput(func(ev ui.InputEvent) {
 			switch ev.Kind {
 			case ui.InputCompose:
 				state.composing = ev.Text != ""
 			case ui.InputText:
 				state.composing = false
-			case ui.InputKeyDown:
-				if ev.Key == ui.KeyEnter && ev.Mods&^ui.Shift == 0 && !state.composing {
-					entered := *text
-					state.committed, state.enterText = true, &entered
-				}
 			}
 		})
+		// Blur is observed while building the Textarea. Hide this pass's
+		// overlay immediately: an idle native window may not build another
+		// frame just because state.open is cleared below.
+		if state.committed {
+			box.Hidden(true)
+		}
 	})
 	if state.committed {
-		commit()
+		if state.canceled {
+			*text = open.original
+		}
+		if state.returnFocus {
+			open.focus.Focus(c)
+		}
+		state.open = nil
 	}
 }

@@ -77,13 +77,13 @@ type Table struct {
 	layoutWidth map[string]float32
 	loaded      bool
 
-	hovered   bool
-	wasAtEdge bool
-	lastFirst int
-	revealing int
-	// gesture applies the 1.0.5 click model over MyGo's selection.
-	gesture  rowGesture
-	observer func(ui.InputEvent)
+	hovered        bool
+	wasAtEdge      bool
+	lastFirst      int
+	revealing      int
+	observer       func(ui.InputEvent)
+	menuSpans      []rowSpan
+	focusRequested bool
 	// historyShown is the HistoryKey the selection belongs to.
 	historyShown string
 	resend       resendDialog
@@ -224,7 +224,7 @@ func (t *Table) refreshRows() bool {
 	return true
 }
 
-// pruneSelection removes rows that left the table and, as 1.0.5 did, moves
+// pruneSelection removes rows that left the table and moves
 // the focus to the first row still selected in table order.
 func (t *Table) pruneSelection() {
 	if t.selection.Len() == 0 {
@@ -249,13 +249,14 @@ func (t *Table) pruneSelection() {
 	}
 	for _, entry := range t.rows {
 		if t.selection.Has(entry.ID) {
+			t.selectedRow = t.rowIndex(entry.ID)
 			t.source.SelectEntry(entry)
 			return
 		}
 	}
 }
 
-// followHistory clears the selection, the focus and any gesture when the
+// followHistory clears the selection, focus and context-menu target when the
 // table shows another saved session, as 1.0.5 did: sessions number their
 // entries alike, so the rows chosen in one are not the same rows in another.
 func (t *Table) followHistory() {
@@ -269,7 +270,8 @@ func (t *Table) followHistory() {
 	t.historyShown = key
 	t.selection.Clear()
 	t.selectedRow = -1
-	t.gesture = rowGesture{}
+	t.menuPress, t.menuTarget = nil, tableMenuTarget{}
+	t.menu.Open = false
 	t.focusEntry(nil)
 }
 
@@ -377,7 +379,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	}
 	t.list.HeaderCell = t.headerCell(c, theme, visible)
 	order := t.displayOrder(visible)
-	t.beginSelection()
+	t.menuSpans = t.menuSpans[:0]
 	var element ui.Element
 	ui.Themed(c, tableTheme(theme)).Fill().MinHeight(0).Children(func() {
 		element = ui.Table(c.Key("traffic-table"), &t.list, columns, len(t.rows), func(row, col int) {
@@ -388,14 +390,22 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 			}
 			t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
 			t.cell(c, theme, t.rows[row], visible[col].key)
-		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns()).ObserveInput(t.observer)
+		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns()).ObserveInput(t.observer).OnSubmit(func() {
+			// Native submission includes double-click. Modifier clicks only
+			// change selection, even when they arrive within a double-click.
+			if c.Modifiers() == 0 {
+				t.openFocusedDetails()
+			}
+		})
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}
 	})
-	handled := t.resolveSelection(element)
 	t.resolveMenu(element)
-	t.syncChoice(!handled && element.Changed())
+	t.syncChoice(element.Changed() || rowsChanged)
+	if t.focusRequested && t.list.Focus(c) {
+		t.focusRequested = false
+	}
 	t.syncLayout(visible)
 	t.holdWhileReading(element)
 	widgets.ContextMenu(c.Key("traffic-menu"), theme, element, &t.menu, t.menuItems, nui.MenuOptions{Label: t.menuLabel()})

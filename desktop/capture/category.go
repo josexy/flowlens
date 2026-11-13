@@ -261,7 +261,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 		active = row.node.Key == view.activeLeaf
 		indent += float32(row.node.Depth) * structureIndent
 	}
-	element := ui.Row(c.Key(row.key)).FillWidth().Height(32).AlignItems(ui.Center).Gap(6).Radius(6).Padding(0, 10, 0, indent).Label(row.label)
+	element := ui.ButtonBase(c.Key(row.key)).FillWidth().Height(32).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, indent).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
 	switch {
 	case active:
 		element.Background(theme.Accented)
@@ -306,7 +306,7 @@ func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow,
 func (w *Workspace) categorySectionRow(c *ui.Context, theme nui.Theme, row categoryRow) {
 	view := &w.category
 	band := theme.Elevated.Alpha(0.88).Over(theme.Background)
-	element := ui.Row(c.Key(row.key)).FillWidth().Height(32).AlignItems(ui.Center).Gap(6).PaddingX(12).Background(band).Label(row.label)
+	element := ui.ButtonBase(c.Key(row.key)).FillWidth().Height(32).Justify(ui.Start).Gap(6).PaddingX(12).Background(band).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
 	top := float32(0)
 	if row.section != sectionHost {
 		top = 1

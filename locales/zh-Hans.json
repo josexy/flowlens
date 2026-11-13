@@ -148,6 +148,7 @@
   "detailCertSubjectStreet": "主体街道",
   "detailCertVersion": "证书版本",
   "detailCipherSuite": "加密套件",
+  "detailClosePanel": "关闭详情",
   "detailCookieAttributeCount": "{count} 个属性",
   "detailCookieAttributes": "属性",
   "detailCookieEmptyValue": "空值",

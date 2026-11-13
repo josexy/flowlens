@@ -42,10 +42,12 @@ func editableRows(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, opt
 	gridPane(c, func() {
 		widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
 			Label: options.KeyPlaceholder, Rows: len(*rows), Resizable: true,
-			Enabled:          func(i int) *bool { return &(*rows)[i].Enabled },
-			Key:              func(i int) *string { return &(*rows)[i].Key },
-			Value:            func(i int) *string { return &(*rows)[i].Value },
-			EnabledLabel:     func(i int) string { return options.KeyPlaceholder + " " + number(i) + " enabled" },
+			Enabled: func(i int) *bool { return &(*rows)[i].Enabled },
+			Key:     func(i int) *string { return &(*rows)[i].Key },
+			Value:   func(i int) *string { return &(*rows)[i].Value },
+			EnabledLabel: func(i int) string {
+				return options.KeyPlaceholder + " " + number(i) + " " + locales.WorkspaceHttpRequestFormDataColEnabled()
+			},
 			KeyLabel:         func(i int) string { return options.KeyPlaceholder + " " + number(i) },
 			ValueLabel:       func(i int) string { return options.ValuePlaceholder + " " + number(i) },
 			KeyPlaceholder:   options.KeyPlaceholder,

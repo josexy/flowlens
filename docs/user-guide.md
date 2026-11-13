@@ -5,7 +5,7 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 ## Workspaces and Request Editing
 
 - Capture, history, categories, API collections, rewrite rules, Python plugins, and memory statistics share the same workbench shell.
-- In the capture and history traffic table, a click selects a row, Shift-click adds or removes a row, and Ctrl-click (Cmd-click on macOS) opens or closes that row's details, which the row menu's **Show** also opens.
+- In capture and history traffic tables, a click selects one row; Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. Repeated single clicks keep the row selected. With the table focused, arrows move the selection, Shift+arrows extend it, and Primary+A selects all. Enter, an unmodified double-click, or the row menu's **Show** opens details. **Close details** hides the panel without clearing the selection and returns focus to the table. Selection changes update an open panel but do not reopen a closed one.
 - HTTP Request Editor and WebSocket Client tabs can be saved into API Collection folders from the tab context menu.
 - Saving an editor tab already linked to an API Collection entry updates that request directly.
 - HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.
@@ -18,7 +18,7 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 
 Request header rows are sent in their displayed order. The URL remains the routing source of truth; the backend controls pseudo-headers, `Host`, body framing, generated content types, and the fallback `User-Agent`. Invalid layouts are rejected instead of being silently reordered.
 
-Text body and Raw HTTP viewers display the complete available content without pagination. Editor search and selection cover the full text; toolbar copy and save also use the complete content. Automatic wrapping can be toggled at any text size. Documents of at least 512K characters or lines of at least 128K characters use plain text without syntax highlighting or bracket matching to reduce rendering work. Hex viewing retains its existing paging and rendering limits.
+Text body and Raw HTTP viewers display the complete available content without pagination. Editor search and selection cover the full text; toolbar copy and save also use the complete content. Automatic wrapping can be toggled at any text size. Documents of at least 512K characters or lines of at least 128K characters use plain text without syntax highlighting or bracket matching to reduce rendering work. Hex viewing uses a virtualized byte list without frontend segment paging.
 
 HTTP Request Editor can run global and current-request Python hooks. Configure Python under `Settings > Python` and see the [Python plugin guide](technical/python-plugins.md) for setup, API details, limits, and examples.
 
@@ -54,6 +54,10 @@ Capture, history, and exports use the final rewritten content. See the [technica
 Open `Settings > Shortcuts` to search commands, record or clear a binding, and restore one or all known commands.
 
 `Primary` means Command on macOS and Ctrl on Windows/Linux. Menus and tooltips resolve labels from the active saved configuration.
+
+Tab and Shift+Tab move between sidebar entries, settings sections, and their controls. Enter or Space activates the focused entry: open a history or request, expand a collection folder, select a category, rule, plugin, or file. Row checkboxes and enable switches have their own focus and operate independently. Hidden sidebars and inactive pages do not handle these keys. Code editors retain Tab for indentation.
+
+In request key/value grids, Tab reaches editable cells; Enter or Space opens a cell with its text selected. Enter (including Shift+Enter) commits without inserting a line break. Tab or Shift+Tab commits and moves to the next or previous control. Escape restores the value from when editing began. Enter and Escape return focus to the cell; confirming Chinese or other input-method composition keeps the editor open. Clicking elsewhere also commits. Enable checkboxes, file pickers, and row actions remain separate controls.
 
 | Command | Default binding |
 | --- | --- |

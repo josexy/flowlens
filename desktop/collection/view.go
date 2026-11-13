@@ -370,7 +370,7 @@ func (v *View) createRow(c *ui.Context, theme nui.Theme, depth int) {
 func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.CollectionRow, rows []store.CollectionRow) {
 	collection := v.Data.Collection
 	selected := collection.SelectedNodeID == row.ID
-	line := ui.Row(c.Key(row.ID)).FillWidth().Height(rowHeight).AlignItems(ui.Center).Gap(6).Radius(6).Padding(0, 10, 0, float32(row.Depth)*14+10).Label(row.Name)
+	line := ui.ButtonBase(c.Key(row.ID)).Role(ui.RoleListItem).FillWidth().Height(rowHeight).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, float32(row.Depth)*14+10).FocusRing(true).AccessSelected(selected).Label(row.Name)
 	hovered := line.Hovered()
 	switch {
 	case v.drag.active && v.drag.target == row.ID:
@@ -383,7 +383,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 	if v.drag.active && v.drag.id == row.ID {
 		line.Opacity(0.5)
 	}
-	line.OnClick(func() {
+	activate := func() {
 		if v.suppress == row.ID {
 			v.suppress = ""
 			return
@@ -397,7 +397,8 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 		default:
 			v.open(row.ID)
 		}
-	})
+	}
+	line.OnClick(activate)
 	// The full name shows to the right of the row, for names the sidebar
 	// cuts short.
 	nui.Tooltip(c, theme, line, row.Name, nui.TooltipOptions{Placement: nui.Set(nui.RightCenter)})

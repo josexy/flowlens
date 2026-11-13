@@ -128,7 +128,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	if label == "" {
 		label = locales.MenuCapture()
 	}
-	row := ui.Row(c.Key("capture-item")).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
+	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).FillWidth().Height(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
 	switch {
 	case active:
 		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
@@ -143,8 +143,11 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		if active {
 			color = theme.Primary
 		}
-		ui.Icon(c, lucide.Radio()).Size(16, 16).Shrink(0).TextColor(color)
-		ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Text)
+		ui.ButtonBase(c.Key("open")).Grow(1).Basis(0).MinWidth(0).FillHeight().Justify(ui.Start).Gap(8).Radius(4).FocusRing(true).Label(label).
+			OnClick(func() { w.selectItem(store.CaptureItemLive) }).Children(func() {
+			ui.Icon(c, lucide.Radio()).Size(16, 16).Shrink(0).TextColor(color)
+			ui.Text(c, label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(14).FontWeight(600).TextColor(theme.Text)
+		})
 		restart := nui.Button(c.Key("restart"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.SkipForward(), AccessibleLabel: locales.CaptureRestart()})
 		restart.OnClick(w.Restart)
 		nui.Tooltip(c, theme, restart, locales.CaptureRestart(), nui.TooltipOptions{})

@@ -22,6 +22,7 @@ import (
 	"github.com/josexy/flowlens/backend/pkg/database"
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
+	"github.com/josexy/flowlens/desktop/internal/keytest"
 	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
@@ -165,7 +166,7 @@ func TestApplicableTabs(t *testing.T) {
 	f.lacks("Trailers")
 }
 
-func TestNoCloseButton(t *testing.T) {
+func TestPanelWithoutCloseHandler(t *testing.T) {
 	f := newFixture(t, httpEntry(), &proxyservice.TrafficBodyView{})
 	// The response tab strip ends with the summary chips.
 	f.has("200")
@@ -175,6 +176,26 @@ func TestNoCloseButton(t *testing.T) {
 	}
 	if _, ok := f.tester.Access("Close details"); ok {
 		t.Fatal("the panel offers a close button")
+	}
+}
+
+func TestCloseActionOnHTTPErrorAndRawTCP(t *testing.T) {
+	failed := httpEntry()
+	failed.Error = &proxyservice.TrafficError{Error: "failed"}
+	raw := &logic.TrafficEntry{ID: 2, Type: "tcp", RawTCP: &proxyservice.RawTCPTunnelInfo{HostPort: "a.test:443"}}
+	for name, entry := range map[string]*logic.TrafficEntry{"http": httpEntry(), "error": failed, "tcp": raw} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, entry, nil)
+			closed := 0
+			f.panel.OnClose = func() { closed++ }
+			f.settle()
+			keytest.TabTo(t, f.tester, locales.DetailClosePanel())
+			f.tester.Key(0, ui.KeyEnter)
+			f.settle()
+			if closed != 1 {
+				t.Fatalf("close called %d times", closed)
+			}
+		})
 	}
 }
 

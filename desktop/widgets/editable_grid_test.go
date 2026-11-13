@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/desktop/internal/keytest"
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
@@ -18,6 +19,7 @@ type editProbe struct {
 	rows   []gridRow
 	tester *ui.Tester
 	built  int
+	hidden bool
 }
 
 func newEditProbe(t *testing.T, rows []gridRow) *editProbe {
@@ -27,27 +29,117 @@ func newEditProbe(t *testing.T, rows []gridRow) *editProbe {
 	p.tester = ui.NewTester(func(c *ui.Context) {
 		theme := nui.App(c, config)
 		ui.Column(c).Fill().Padding(10).Children(func() {
-			EditableGrid(c, theme, EditableGridOptions{
-				Label: "rows", Rows: len(p.rows), Resizable: true,
-				Enabled:          func(i int) *bool { return &p.rows[i].enabled },
-				Key:              func(i int) *string { return &p.rows[i].key },
-				Value:            func(i int) *string { return &p.rows[i].value },
-				KeyLabel:         func(i int) string { p.built++; return "Key " + strconv.Itoa(i+1) },
-				ValueLabel:       func(i int) string { return "Value " + strconv.Itoa(i+1) },
-				KeyPlaceholder:   "Header name",
-				ValuePlaceholder: "Header value",
-				KeyTrailing: func(i int) {
-					if strings.Contains(p.rows[i].key, " ") {
-						ui.Text(c, "invalid-mark")
-					}
-				},
-			})
-			ui.Text(c, "outside")
+			if !p.hidden {
+				EditableGrid(c, theme, EditableGridOptions{
+					Label: "rows", Rows: len(p.rows), Resizable: true,
+					Enabled:          func(i int) *bool { return &p.rows[i].enabled },
+					Key:              func(i int) *string { return &p.rows[i].key },
+					Value:            func(i int) *string { return &p.rows[i].value },
+					KeyLabel:         func(i int) string { p.built++; return "Key " + strconv.Itoa(i+1) },
+					ValueLabel:       func(i int) string { return "Value " + strconv.Itoa(i+1) },
+					EnabledLabel:     func(i int) string { return "Enabled " + strconv.Itoa(i+1) },
+					KeyPlaceholder:   "Header name",
+					ValuePlaceholder: "Header value",
+					KeyTrailing: func(i int) {
+						if strings.Contains(p.rows[i].key, " ") {
+							ui.Text(c, "invalid-mark")
+						}
+					},
+				})
+			}
+			ui.ButtonBase(c.Key("outside")).Label("outside").Height(24).Children(func() { ui.Text(c, "outside") })
 		})
 	}, 800, 500)
 	p.tester.Frame()
 	p.tester.Frame()
 	return p
+}
+
+func TestEditableGridKeyboardCommitCancelAndTabOrder(t *testing.T) {
+	p := newEditProbe(t, []gridRow{{enabled: true, key: "Accept", value: "a"}, {key: "accept", value: ""}})
+	keytest.TabTo(t, p.tester, "Key 1")
+	p.tester.Key(0, ui.KeyEnter)
+	p.tester.Frame()
+	p.tester.Type("changed")
+	p.tester.Key(0, ui.KeyEscape)
+	p.tester.Frame()
+	p.tester.Frame()
+	if p.editorOpen() || p.rows[0].key != "Accept" || !p.tester.Focused("Key 1") {
+		t.Fatal("Escape did not restore the original cell and focus")
+	}
+	p.tester.Key(0, ui.KeyTab)
+	if !p.tester.Focused("Value 1") {
+		t.Fatal("Tab did not reach the value")
+	}
+	p.tester.Key(0, ui.KeySpace)
+	p.tester.Type("new")
+	p.tester.Key(ui.Shift, ui.KeyTab)
+	p.tester.Frame()
+	p.tester.Frame()
+	if p.editorOpen() || p.rows[0].value != "new" || !p.tester.Focused("Key 1") {
+		t.Fatal("Shift+Tab did not commit and focus the preceding control")
+	}
+	p.tester.Key(0, ui.KeySpace)
+	p.tester.Type("Case-Preserved")
+	p.tester.Key(0, ui.KeyTab)
+	p.tester.Frame()
+	p.tester.Frame()
+	if p.editorOpen() || !p.tester.Focused("Value 1") || p.rows[0].key != "Case-Preserved" || p.rows[1].enabled || p.rows[1].key != "accept" {
+		t.Fatal("Tab did not commit or changed other ordered fields")
+	}
+	p.tester.Key(0, ui.KeyEnter)
+	p.tester.Type("final")
+	p.tester.Key(0, ui.KeyEnter)
+	p.tester.Frame()
+	p.tester.Frame()
+	if p.editorOpen() || !p.tester.Focused("Value 1") || p.rows[0].value != "final" {
+		t.Fatal("Enter did not commit and restore focus")
+	}
+}
+
+func TestEditableGridRemovedRowAndHiddenGridDoNotEditNeighbor(t *testing.T) {
+	p := newEditProbe(t, []gridRow{{key: "first", value: "one"}, {key: "next", value: "two"}})
+	p.open(t, "Value 1")
+	p.tester.Type("draft")
+	// The remaining row occupies index zero, but has a different identity.
+	p.rows = p.rows[1:]
+	p.tester.Frame()
+	p.tester.Frame()
+	p.tester.Type("unexpected")
+	p.tester.Key(0, ui.KeyEscape)
+	p.tester.Frame()
+	if p.editorOpen() || p.rows[0].value != "two" {
+		t.Fatal("removed row's editor wrote into its neighbor")
+	}
+	p.open(t, "Value 1")
+	p.hidden = true
+	p.tester.Frame()
+	p.tester.Frame()
+	p.tester.Type("hidden")
+	p.hidden = false
+	p.tester.Frame()
+	p.tester.Frame()
+	if p.editorOpen() || p.rows[0].value != "two" {
+		t.Fatal("hidden grid retained an active editor")
+	}
+	keytest.TabTo(t, p.tester, "outside")
+}
+
+func TestEditableGridBlurClosesBeforeIdle(t *testing.T) {
+	for _, backward := range []bool{false, true} {
+		p := newEditProbe(t, []gridRow{{key: "key", value: "value"}})
+		p.open(t, "Value 1")
+		mods := ui.Modifiers(0)
+		if backward {
+			mods = ui.Shift
+		}
+		p.tester.Key(mods, ui.KeyTab)
+		// No extra Frame: a real idle window will not render one merely
+		// because the view cleared its editing state during this build.
+		if p.editorOpen() {
+			t.Fatal("blur left the old editor visible until another event")
+		}
+	}
 }
 
 func (p *editProbe) open(t *testing.T, label string) {
@@ -181,6 +273,8 @@ func TestEditableGridCompositionStaysInEditor(t *testing.T) {
 	p := newEditProbe(t, []gridRow{{enabled: true}})
 	p.open(t, "Value 1")
 	p.tester.Compose("ni", 2)
+	p.tester.Frame()
+	p.tester.Key(0, ui.KeyEnter)
 	p.tester.Frame()
 	if !p.editorOpen() {
 		t.Fatal("composition closed the editor")

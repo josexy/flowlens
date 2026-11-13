@@ -187,7 +187,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 	if name == "" {
 		name = locales.RewriteRulesNewName()
 	}
-	box := ui.Column(c.Key(row.Key)).FillWidth().Height(ruleRowHeight-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).Label(name)
+	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleListItem).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(ruleRowHeight-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).FocusRing(true).AccessSelected(selected).Label(name)
 	dragged := v.drag.active && v.drag.key == row.Key
 	switch {
 	case selected:

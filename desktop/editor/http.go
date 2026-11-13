@@ -439,7 +439,7 @@ func (v *formDataView) fileCell(c *ui.Context, theme nui.Theme, e *Editor, key s
 	if item.File != nil {
 		name, color = item.File.Name, theme.Text
 	}
-	chip := ui.Row(c.Key("file")).FillWidth().Height(28).AlignItems(ui.Center).Gap(6).PaddingX(10).Border(1, theme.Border).Radius(999).Role(ui.RoleButton).Label(locales.WorkspaceHttpRequestFormDataRowMenuUpload() + " " + strconv.Itoa(index+1))
+	chip := ui.ButtonBase(c.Key("file")).FillWidth().Height(28).Justify(ui.Start).FocusRing(true).Gap(6).PaddingX(10).Border(1, theme.Border).Radius(999).Label(locales.WorkspaceHttpRequestFormDataRowMenuUpload() + " " + strconv.Itoa(index+1))
 	chip.OnClick(func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) })
 	chip.Children(func() {
 		ui.Icon(c, lucide.File()).Size(16, 16).Shrink(0).TextColor(color)

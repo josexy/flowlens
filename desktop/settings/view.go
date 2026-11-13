@@ -450,7 +450,7 @@ func (v *View) nav(c *ui.Context, theme nui.Theme) {
 		ui.Text(c, strings.ToUpper(locales.MenuSettings())).FontSize(14).FontWeight(600).LetterSpacing(0.84).TextColor(theme.Muted).Padding(0, 8, 10, 8)
 		for _, item := range navItems() {
 			active := v.tab == item.key
-			row := ui.Row(c.Key(item.key)).FillWidth().AlignItems(ui.Center).Gap(8).Padding(7, 10).Radius(6).Role(ui.RoleButton).Label(item.label)
+			row := ui.ButtonBase(c.Key(item.key)).FillWidth().Justify(ui.Start).Gap(8).Padding(7, 10).Radius(6).FocusRing(true).AccessSelected(active).Label(item.label)
 			color, weight := theme.Toned, 400
 			switch {
 			case active:
