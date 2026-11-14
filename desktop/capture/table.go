@@ -432,6 +432,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 				t.openFocusedDetails()
 			}
 		})
+		widgets.TableHeaderDivider(c, theme, element)
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}

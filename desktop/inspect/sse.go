@@ -156,6 +156,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 					s.cell(c, theme, s.events[row], col)
 				}
 			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.DetailSseTab())
+			widgets.TableHeaderDivider(c, theme, table)
 			s.rows.Attach(table)
 			if row, ok := s.rows.Activated(table, len(s.events)); ok {
 				s.openDetail(s.events[row])

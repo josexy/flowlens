@@ -2,6 +2,7 @@ package capture
 
 import (
 	"image/color"
+	"math"
 	"strings"
 	"testing"
 
@@ -75,6 +76,36 @@ func TestHeaderShowsNativeDividersAtRest(t *testing.T) {
 				t.Fatalf("dark=%v: header pixel at x=%v is %v, want %v", dark, x, got, want)
 			}
 		}
+	}
+}
+
+func TestTrafficTableHeaderDividerIsOnePixel(t *testing.T) {
+	for _, name := range []string{"capture", "history"} {
+		t.Run(name, func(t *testing.T) {
+			f := newHistoryFixture(t, entry(1, "live.test")).fixture
+			if name == "history" {
+				f.click("session one")
+				f.requireText("saved.test")
+			}
+			f.tester.Move(1, 1)
+			for _, dark := range []bool{false, true} {
+				f.setDark(dark)
+				line := rgba(f.theme().BorderAccented)
+				for _, scale := range []float32{1, 1.25, 1.5, 2} {
+					f.tester.SetScale(scale)
+					for _, zoom := range []float32{1, 1.19} {
+						f.tester.SetZoom(zoom)
+						host := headerRect(t, f, locales.TrafficHost())
+						x := int((host.X + host.W/2) * scale)
+						y := int(math.Round(float64((host.Y + host.H) * scale)))
+						frame := f.tester.Image()
+						if above, divider, below := frame.RGBAAt(x, y-1), frame.RGBAAt(x, y), frame.RGBAAt(x, y+1); !near(divider, line) || near(above, line) || near(below, line) {
+							t.Fatalf("dark=%v scale=%v zoom=%v: divider and neighbors are %v, %v, %v, want %v on the middle pixel only", dark, scale, zoom, above, divider, below, line)
+						}
+					}
+				}
+			}
+		})
 	}
 }
 

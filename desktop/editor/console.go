@@ -209,6 +209,7 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 					v.cell(c, theme, &entries[row], col)
 				}
 			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.WorkspaceHttpRequestConsole())
+			widgets.TableHeaderDivider(c, theme, table)
 			v.rows.Attach(table)
 			if row, ok := v.rows.Activated(table, len(entries)); ok {
 				chosen := entries[row]

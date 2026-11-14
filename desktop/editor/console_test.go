@@ -2,6 +2,7 @@ package editor
 
 import (
 	"image/color"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -58,6 +59,34 @@ func TestPythonConsoleColumns(t *testing.T) {
 	f.settle()
 	if got := view.list.Columns.Widths[consoleColumnSource]; got != 420 {
 		t.Fatalf("Source is %v wide, want 420 (widths %v)", got, view.list.Columns.Widths)
+	}
+}
+
+func TestPythonConsoleHeaderDividerIsOnePixel(t *testing.T) {
+	f, _, _ := consoleFixture(t, consoleEntry(1, "alpha", "stdout", "info", "hello"))
+	f.tester.SetSize(1200, 500)
+	const scale = 1.5
+	f.tester.SetScale(scale)
+	for _, dark := range []bool{false, true} {
+		f.setDark(dark)
+		palette := f.data.Settings.Theme().Config.Resolve(dark, ui.Preferences{})
+		border, background := palette.BorderAccented, palette.Background
+		line := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
+		blank := color.RGBA{R: background.R, G: background.G, B: background.B, A: background.A}
+		for _, zoom := range []float32{1, 1.19} {
+			f.tester.SetZoom(zoom)
+			header, ok := f.tester.AccessByRole(ui.RoleColumnHeader, locales.WorkspaceHttpRequestConsoleColumnTime())
+			if !ok {
+				t.Fatal("console time header is missing")
+			}
+			x := int((header.Bounds.X + header.Bounds.W/2) * scale)
+			y := int(math.Round(float64((header.Bounds.Y + header.Bounds.H) * scale)))
+			frame := f.tester.Image()
+			got := [3]color.RGBA{frame.RGBAAt(x, y-1), frame.RGBAAt(x, y), frame.RGBAAt(x, y+1)}
+			if want := [3]color.RGBA{blank, line, blank}; got != want {
+				t.Fatalf("dark=%v zoom=%v: divider and adjacent pixels are %v, want %v", dark, zoom, got, want)
+			}
+		}
 	}
 }
 
