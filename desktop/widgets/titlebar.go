@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	titleBarHeight     = 38
+	titleBarHeight     = 32
 	titleBarIconSize   = 18
 	windowControlWidth = 42
 	windowControlIcon  = 16
@@ -52,7 +52,11 @@ func (f WindowFrame) Build(c *ui.Context, theme nui.Theme) {
 	}
 	bar := c.TitleBar()
 	row := ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Stretch).Height(max(bar.Height, titleBarHeight)).Padding(0, bar.Right, 0, bar.Left).DragWindow()
-	row.Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderAccented)
+	row.Background(theme.Background).Draw(func(p *ui.Painter, bounds ui.Rect) {
+		// Paint a single device pixel under the controls so their hover fills reach the edge.
+		pixel := 1 / p.Scale()
+		p.Fill(ui.Rect{X: bounds.X, Y: bounds.Y + bounds.H - pixel, W: bounds.W, H: pixel}, theme.BorderAccented, 0)
+	})
 	row.Children(func() {
 		title := ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(10)
 		if f.MacOS {
