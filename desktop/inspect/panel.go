@@ -190,7 +190,7 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 	}
 	p.loadSplit()
 	layout := p.splitLayout
-	widgets.Splitter(c.Key("detail-split"), theme, &p.split, nui.SplitterOptions{
+	nui.Splitter(c.Key("detail-split"), theme, &p.split, nui.SplitterOptions{
 		Percent: true, Vertical: layout == settingservice.TrafficDetailLayoutVertical,
 		Min: nui.Set[float32](minSplit), Max: nui.Set[float32](maxSplit),
 		OnChange: func(percent float32) { p.deps.Settings.SetTrafficDetailSplit(splitName(layout), percent) },

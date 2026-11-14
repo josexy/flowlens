@@ -138,7 +138,7 @@ func (a *App) workspaceMain(c *ui.Context, theme nui.Theme) {
 		ui.Box(c).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(content)
 		return
 	}
-	widgets.Splitter(c.Key("secondary-sidebar"), theme, &workbench.SecondarySidebarPercent, nui.SplitterOptions{
+	nui.Splitter(c.Key("secondary-sidebar"), theme, &workbench.SecondarySidebarPercent, nui.SplitterOptions{
 		Percent: true,
 		Min:     nui.Set[float32](15),
 		Max:     nui.Set[float32](42),

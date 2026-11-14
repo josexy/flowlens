@@ -177,7 +177,7 @@ func (p *socketPane) build(c *ui.Context, theme nui.Theme) {
 	p.syncState()
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.connectionLine(c, theme)
-		widgets.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
+		nui.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
 			func() { p.leftPanel(c, theme) },
 			func() { p.rightPanel(c, theme) },
 		).Fill()

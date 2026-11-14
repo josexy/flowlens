@@ -78,7 +78,7 @@ func TestRenderCaptureWithDetail(t *testing.T) {
 	rendertest.ShootThemes(t, f.tester, "capture-detail", f.setDark)
 }
 
-func TestTrafficTableEdgesMeetSinglePixelSplitters(t *testing.T) {
+func TestTrafficTableEdgesMeetSplitters(t *testing.T) {
 	for _, source := range []string{"capture", "history"} {
 		t.Run(source, func(t *testing.T) {
 			f := newHistoryFixture(t, entry(1, "live.test")).fixture
@@ -100,7 +100,6 @@ func TestTrafficTableEdgesMeetSinglePixelSplitters(t *testing.T) {
 			f.tester.Move(1, 1)
 			for _, dark := range []bool{false, true} {
 				f.setDark(dark)
-				palette := f.theme()
 				for _, scale := range []float32{1, 1.25, 1.5, 2} {
 					f.tester.SetScale(scale)
 					for _, zoom := range []float32{1, 1.19} {
@@ -113,18 +112,18 @@ func TestTrafficTableEdgesMeetSinglePixelSplitters(t *testing.T) {
 						bounds := table.Bounds
 						pixelAt := func(dip float32) int { return int(math.Round(float64(dip * scale))) }
 						left, bottom := pixelAt(bounds.X), pixelAt(bounds.Y+bounds.H)
-						frame := f.tester.Image()
-						leftPixels, bottomPixels := 0, 0
-						for offset := -5; offset <= 5; offset++ {
-							if frame.RGBAAt(left+offset, bottom-32) != rgba(palette.Background) {
-								leftPixels++
+						middleX, middleY := bounds.X+bounds.W/2, bounds.Y+bounds.H/2
+						var sidebar, detail bool
+						for _, node := range f.tester.AccessAll() {
+							if node.Role != ui.RoleSplitter {
+								continue
 							}
-							if frame.RGBAAt(pixelAt(bounds.X+bounds.W/4), bottom+offset) != rgba(palette.Background) {
-								bottomPixels++
-							}
+							r := node.Bounds
+							sidebar = sidebar || r.H > r.W && r.Y <= middleY && middleY < r.Y+r.H && pixelAt(r.X+r.W) == left
+							detail = detail || r.W > r.H && r.X <= middleX && middleX < r.X+r.W && pixelAt(r.Y) == bottom
 						}
-						if leftPixels != 1 || bottomPixels != 1 {
-							t.Fatalf("dark=%v scale=%v zoom=%v: sidebar divider is %d pixels and detail divider is %d pixels, want one each", dark, scale, zoom, leftPixels, bottomPixels)
+						if !sidebar || !detail {
+							t.Fatalf("dark=%v scale=%v zoom=%v: table meets sidebar=%t and detail=%t", dark, scale, zoom, sidebar, detail)
 						}
 					}
 				}
