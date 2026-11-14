@@ -204,3 +204,35 @@ func TestRowMenuOpensFromTheKeyboard(t *testing.T) {
 		t.Fatalf("clipboard %q", got)
 	}
 }
+
+func TestHeaderMenuAfterScrollingKeepsSelection(t *testing.T) {
+	for _, source := range []string{"capture", "history"} {
+		t.Run(source, func(t *testing.T) {
+			f := newHistoryFixture(t, manyEntries(200)...)
+			table := f.workspace.Table
+			if source == "history" {
+				f.history.entries["k1"] = manyEntries(200)
+				f.click("session one")
+				table = f.workspace.HistoryTable
+			}
+			table.list.ScrollTo(40, ui.Start)
+			f.settle()
+			f.click("host41.test")
+			for _, title := range []string{locales.TrafficHost(), locales.TrafficPath()} {
+				header := headerRect(t, f.fixture, title)
+				f.tester.RightClickAt(header.X+20, header.Y+header.H/2)
+				f.settle()
+				if !table.menuTarget.header || !menutest.Shown(f.tester) {
+					t.Fatalf("header %q opened target %+v", title, table.menuTarget)
+				}
+				if _, ok := menutest.Item(f.tester, locales.TrafficShowAllColumns()); !ok {
+					t.Fatal("header menu has no column visibility controls")
+				}
+				if !slices.Equal(table.selectedIDs(), []uint64{41}) || table.source.SelectedEntry().ID != 41 {
+					t.Fatalf("header menu changed selection: %v", table.selectedIDs())
+				}
+				menutest.Close(f.tester, f.settle)
+			}
+		})
+	}
+}

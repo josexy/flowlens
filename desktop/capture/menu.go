@@ -75,14 +75,16 @@ func (t *Table) resolveMenu(table ui.Element) {
 		t.menuPress = nil
 		top := table.Bounds().Y
 		switch id := t.rowAt(top, *press); {
+		case t.headerBottom > 0 && top+*press < t.headerBottom:
+			// Virtualized rows can extend behind the clipped, fixed header.
+			// The header takes precedence over those offscreen row bounds.
+			t.menuTarget = tableMenuTarget{header: true}
 		case id != 0:
 			if index := t.rowIndex(id); index >= 0 && !t.selection.Has(id) {
 				t.replaceSelection(index)
 				t.focusEntry(t.rows[index])
 			}
 			t.menuTarget = tableMenuTarget{ids: t.selectedIDs()}
-		case t.headerBottom > 0 && top+*press < t.headerBottom:
-			t.menuTarget = tableMenuTarget{header: true}
 		default:
 			t.menuTarget = tableMenuTarget{}
 		}

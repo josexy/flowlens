@@ -75,19 +75,32 @@ func TestHeaderHasNoRestingDividers(t *testing.T) {
 	}
 }
 
-func TestHoveredResizeEdgeIsAccent(t *testing.T) {
-	f := newRenderFixture(t)
-	theme := f.theme()
-	host := headerRect(t, f, locales.TrafficHost())
-	edge := host.X + host.W - 2
-	y := host.Y + host.H/2
-	f.tester.Move(edge, y)
-	f.settle()
-	if got, want := pixel(f.tester, edge-1, y+6), rgba(headerEdgeColor(theme)); !near(got, want) {
-		t.Fatalf("hovered edge pixel %v, want accent %v", got, want)
-	}
-	if f.tester.Cursor() != ui.CursorResizeEW {
-		t.Fatalf("cursor %v over the resize edge", f.tester.Cursor())
+func TestHoveredResizeEdgeUsesOnlyNativeGrip(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		f := newRenderFixture(t)
+		f.setDark(dark)
+		theme := f.theme()
+		host := headerRect(t, f, locales.TrafficHost())
+		edge := host.X + host.W
+		y := host.Y + host.H/2
+		f.tester.Move(edge-2, y)
+		f.settle()
+		for x := edge - 4; x < edge-1; x++ {
+			if got, want := pixel(f.tester, x, y), rgba(headerBackground(theme, true)); !near(got, want) {
+				t.Fatalf("dark=%v: extra resize strip at %v: %v, want header %v", dark, x, got, want)
+			}
+		}
+		if got, want := pixel(f.tester, edge-1, y), rgba(tableTheme(theme).Accent); !near(got, want) {
+			t.Fatalf("dark=%v: native grip pixel %v, want %v", dark, got, want)
+		}
+		if f.tester.Cursor() != ui.CursorResizeEW {
+			t.Fatalf("cursor %v over the resize edge", f.tester.Cursor())
+		}
+		suffix := "light"
+		if dark {
+			suffix = "dark"
+		}
+		rendertest.Shoot(t, f.tester, "table-native-resize-"+suffix)
 	}
 }
 

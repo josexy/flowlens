@@ -384,6 +384,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 			fixedWidth += max(width, column.minWidth)
 		}
 	}
+	var totalWidth float32
 	for index, column := range visible {
 		width := column.width
 		if column.key == logic.ColumnPath && t.list.Columns.Widths[string(column.key)] <= 0 {
@@ -394,9 +395,25 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 		columns[index] = ui.TableColumn{
 			Title: column.title(), ID: string(column.key), Width: width, MinWidth: column.minWidth, Align: column.align, Sortable: true,
 		}
+		if saved := t.list.Columns.Widths[string(column.key)]; saved > 0 {
+			width = saved
+		}
+		totalWidth += max(width, column.minWidth)
 	}
 	t.list.HeaderCell = t.headerCell(c, theme, visible)
 	order := t.displayOrder(visible)
+	if spare := t.viewportWidth - totalWidth; spare > 0 && len(order) > 0 {
+		// Saved widths (including Path), or a hidden Path, can leave unused
+		// room. Extend the last displayed column without saving that extra
+		// width; shrinking the viewport restores the user's preferred size.
+		last := slices.IndexFunc(columns, func(column ui.TableColumn) bool { return column.ID == order[len(order)-1] })
+		column := &columns[last]
+		width := column.Width
+		if saved := t.list.Columns.Widths[column.ID]; saved > 0 {
+			width = saved
+		}
+		column.MinWidth = max(width, column.MinWidth) + spare
+	}
 	t.menuSpans = t.menuSpans[:0]
 	var element ui.Element
 	ui.Themed(c, tableTheme(theme)).Fill().MinHeight(0).Children(func() {
