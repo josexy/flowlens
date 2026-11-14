@@ -57,25 +57,9 @@ func iconButton(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, label 
 	return button
 }
 
-func warningAlert(c *ui.Context, theme nui.Theme, message string) {
-	if message == "" {
-		return
-	}
-	ui.Box(c).FillWidth().Padding(0, 10, 8, 10).Children(func() {
-		nui.Alert(c, theme, nui.AlertOptions{Description: message, Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
-	})
-}
-
 func emptyState(c *ui.Context, theme nui.Theme, icon *ui.SVG, title string) {
 	ui.Column(c).Fill().Center().Children(func() {
 		widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: icon, Title: title})
-	})
-}
-
-func paneTitle(c *ui.Context, theme nui.Theme, title string, actions func()) {
-	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(10, 10, 8, 10).Children(func() {
-		ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-		ui.Row(c).Gap(4).Children(actions)
 	})
 }
 
@@ -86,7 +70,7 @@ func fieldsTable(c *ui.Context, theme nui.Theme, label string, fields []logic.He
 	for index, field := range fields {
 		rows[index] = widgets.KeyValue{Key: field.Name, Value: field.Value}
 	}
-	ui.Column(c.Key("fields")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+	widgets.PaneContent(c.Key("fields"), func() {
 		widgets.FieldGrid(c, theme, rows, widgets.FieldGridOptions{Label: label, ValueTrailing: trailing})
 	})
 }
@@ -94,7 +78,7 @@ func fieldsTable(c *ui.Context, theme nui.Theme, label string, fields []logic.He
 func (p *Panel) headersPane(c *ui.Context, theme nui.Theme, options headersPaneOptions) {
 	display := logic.SortHeaderFields(options.fields, *options.sort)
 	ui.Column(c.Key(options.title)).Fill().MinHeight(0).Children(func() {
-		paneTitle(c, theme, options.title, func() {
+		widgets.PaneTitle(c, theme, options.title, func() {
 			iconButton(c, theme, "copy-json", lucide.Code(), options.jsonLabel, false, func() { p.copyText(logic.FormatHeaderFieldsAsJSON(display), options.jsonCopied) })
 			iconButton(c, theme, "sort", lucide.ArrowUpDown(), options.sortLabel, false, func() {
 				*options.sort = nextHeaderSort(*options.sort)
@@ -102,15 +86,15 @@ func (p *Panel) headersPane(c *ui.Context, theme nui.Theme, options headersPaneO
 			})
 			iconButton(c, theme, "copy-text", lucide.Copy(), options.textLabel, false, func() { p.copyText(logic.FormatHeaderFieldsAsText(display), options.textCopied) })
 		})
-		warningAlert(c, theme, options.warning)
-		if options.orderUnavailable {
-			warningAlert(c, theme, locales.DetailHeaderOrderUnavailable())
-		}
 		if len(display) == 0 {
-			emptyState(c, theme, lucide.Rows3(), locales.DetailNoHeaders())
-			return
+			widgets.PaneContent(c, func() { emptyState(c, theme, lucide.Rows3(), locales.DetailNoHeaders()) })
+		} else {
+			fieldsTable(c, theme, options.title, display, nil)
 		}
-		fieldsTable(c, theme, options.title, display, nil)
+		widgets.PaneWarning(c, theme, options.warning)
+		if options.orderUnavailable {
+			widgets.PaneWarning(c, theme, locales.DetailHeaderOrderUnavailable())
+		}
 	})
 }
 
@@ -120,7 +104,7 @@ func (p *Panel) queryPane(c *ui.Context, theme nui.Theme, query logic.ParsedURLQ
 		fields[index] = logic.HeaderField{Name: field.Name, Value: field.Value}
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneTitle(c, theme, locales.DetailQueryList(), func() {
+		widgets.PaneTitle(c, theme, locales.DetailQueryList(), func() {
 			iconButton(c, theme, "copy-query", lucide.Copy(), locales.DetailCopyQuery(), false, func() { p.copyText(query.RawQuery, locales.DetailQueryCopied()) })
 		})
 		if len(fields) == 0 {
@@ -135,7 +119,7 @@ func (p *Panel) requestCookiesPane(c *ui.Context, theme nui.Theme, headers []log
 	cookies := logic.HeadersRecordToFields(logic.RequestCookiesRecord(headers))
 	raw := logic.FormatHeaderFieldsAsText(logic.CookieHeaderFields(headers, "cookie"))
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneTitle(c, theme, locales.DetailCookieList(), func() {
+		widgets.PaneTitle(c, theme, locales.DetailCookieList(), func() {
 			iconButton(c, theme, "copy-cookies", lucide.Copy(), locales.DetailCopyCookieHeader(), false, func() { p.copyText(raw, locales.DetailCookieHeaderCopied()) })
 		})
 		if len(cookies) == 0 {
@@ -150,21 +134,21 @@ func (p *Panel) responseCookiesPane(c *ui.Context, theme nui.Theme, headers []lo
 	cookies := logic.ParseResponseCookies(headers)
 	raw := logic.FormatHeaderFieldsAsText(logic.CookieHeaderFields(headers, "set-cookie"))
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneTitle(c, theme, locales.DetailCookieList(), func() {
+		widgets.PaneTitle(c, theme, locales.DetailCookieList(), func() {
 			iconButton(c, theme, "copy-cookies", lucide.Copy(), locales.DetailCopySetCookieHeader(), false, func() { p.copyText(raw, locales.DetailSetCookieHeaderCopied()) })
 		})
-		warningAlert(c, theme, warning)
 		if len(cookies) == 0 {
-			emptyState(c, theme, lucide.Cookie(), locales.DetailNoCookies())
-			return
+			widgets.PaneContent(c, func() { emptyState(c, theme, lucide.Cookie(), locales.DetailNoCookies()) })
+		} else {
+			fields := make([]logic.HeaderField, len(cookies))
+			for index, cookie := range cookies {
+				fields[index] = logic.HeaderField{Name: cookie.Name, Value: cookie.Value}
+			}
+			fieldsTable(c, theme, locales.DetailCookieList(), fields, func(index int) {
+				p.cookieAttributes(c, theme, index, cookies[index])
+			})
 		}
-		fields := make([]logic.HeaderField, len(cookies))
-		for index, cookie := range cookies {
-			fields[index] = logic.HeaderField{Name: cookie.Name, Value: cookie.Value}
-		}
-		fieldsTable(c, theme, locales.DetailCookieList(), fields, func(index int) {
-			p.cookieAttributes(c, theme, index, cookies[index])
-		})
+		widgets.PaneWarning(c, theme, warning)
 	})
 }
 

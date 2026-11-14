@@ -4,9 +4,19 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
+
+func settingsContent(c *ui.Context, theme nui.Theme, title string, controls func()) {
+	widgets.PaneTitle(c, theme, title, nil)
+	widgets.PaneContent(c, func() {
+		ui.Scroll(c.Key("settings")).Fill().Children(func() {
+			ui.Column(c).FillWidth().Gap(6).Children(controls)
+		})
+	})
+}
 
 func proxySettings(c *ui.Context, theme nui.Theme, mode, customProxy *string) {
 	options := []nui.Option[string]{

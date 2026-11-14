@@ -136,13 +136,18 @@ func section(c *ui.Context, theme nui.Theme, key, title string, open *bool, body
 }
 
 func (p *Panel) overviewPane(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry) {
-	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).FillWidth().Padding(10, 10, 14, 10).Gap(2).Children(func() {
-			p.basicRows(c, theme, entry)
-			p.processSection(c, theme, entry)
-			p.tlsSection(c, theme, entry)
-			p.certificateSection(c, theme, entry)
-			p.metricsSections(c, theme, entry)
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		widgets.PaneTitle(c, theme, locales.DetailOverview(), nil)
+		widgets.PaneContent(c, func() {
+			ui.Scroll(c).Fill().Children(func() {
+				ui.Column(c).FillWidth().Gap(2).Children(func() {
+					p.basicRows(c, theme, entry)
+					p.processSection(c, theme, entry)
+					p.tlsSection(c, theme, entry)
+					p.certificateSection(c, theme, entry)
+					p.metricsSections(c, theme, entry)
+				})
+			})
 		})
 	})
 }

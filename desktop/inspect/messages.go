@@ -105,26 +105,25 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 		m.clipboard = nil
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Children(func() {
-			ui.Box(c).Grow(1)
+		widgets.PaneToolbar(c, nil, func() {
 			m.filterButton(c, theme)
 			if m.OnClear != nil {
 				iconButton(c, theme, "clear", lucide.Trash(), locales.WorkspaceWebsocketClientClearMessages(), len(m.source) == 0, m.OnClear)
 			}
 		})
-		if truncated {
-			warningAlert(c, theme, locales.TrafficWsMsgsTruncated())
-		}
-		if len(m.filtered) == 0 {
-			emptyState(c, theme, lucide.MessagesSquare(), locales.WorkspaceWebsocketClientNoMessages())
-			return
-		}
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(10).Children(func() {
+		widgets.PaneContent(c, func() {
+			if len(m.filtered) == 0 {
+				emptyState(c, theme, lucide.MessagesSquare(), locales.WorkspaceWebsocketClientNoMessages())
+				return
+			}
 			list := ui.List(c.Key("messages"), &m.list, len(m.filtered), func(index int) {
 				m.row(c, theme, index)
 			}).Fill().MinHeight(0).Border(1, theme.Border)
 			m.listHeight = list.Bounds().H
 		})
+		if truncated {
+			widgets.PaneWarning(c, theme, locales.TrafficWsMsgsTruncated())
+		}
 	})
 	m.detail(c, theme)
 }

@@ -141,15 +141,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		return
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Children(func() {
-			ui.Text(c, locales.DetailSseMessageCount(strconv.Itoa(len(s.events)))).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
-			if s.parsing {
-				ui.Text(c, locales.DetailSseParsing()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
-			}
-			ui.Box(c).Grow(1)
-			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.table.List.ScrollToEnd)
-		})
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingX(10).Children(func() {
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			// As 1.0.5: the empty state only once parsing found nothing.
 			if len(s.events) == 0 && !s.parsing {
 				emptyState(c, theme, lucide.Radio(), locales.DetailSseEmpty())
@@ -164,12 +156,19 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 				s.openDetail(s.events[row])
 			}
 		})
+		label := locales.DetailSseMessageCount(strconv.Itoa(len(s.events)))
+		if s.parsing {
+			label += " · " + locales.DetailSseParsing()
+		}
+		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(2, 0, 0, 0).Children(func() {
+			ui.Text(c, label).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
+			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.table.List.ScrollToEnd)
+		})
 		// 1.0.5 noted an incomplete last event under the list once parsed;
 		// the parser is the background job's while it parses.
 		if !s.parsing && s.parser.HasPendingEvent() {
-			ui.Text(c, locales.DetailSseIncomplete()).FillWidth().Shrink(0).Padding(6, 10, 0, 10).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
+			ui.Text(c, locales.DetailSseIncomplete()).FillWidth().Shrink(0).Padding(6, 0, 0, 0).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 		}
-		ui.Box(c).Shrink(0).Height(10)
 	})
 }
 

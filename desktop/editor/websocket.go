@@ -242,21 +242,15 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 		{Value: draftTypeBinaryFile, Label: locales.WorkspaceWebsocketClientDraftTypeBinaryFile()},
 	}
 	binary := state.DraftType == draftTypeBinaryFile
-	ui.Row(c.Key("draft-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceWebsocketClientDraftType()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-			ui.Box(c).Width(130).Children(func() {
-				nui.Select(c, theme, &state.DraftType, options, nui.SelectOptions{Label: locales.WorkspaceWebsocketClientDraftType()})
-			})
-		})
-		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-			if !binary {
-				wordWrapButton(c, theme, p.draft)
-			}
-		})
+	widgets.PaneToolbar(c.Key("draft-type"), func() {
+		paneSelect(c, theme, locales.WorkspaceWebsocketClientDraftType(), &state.DraftType, options)
+	}, func() {
+		if !binary {
+			wordWrapButton(c, theme, p.draft)
+		}
 	})
-	ui.Box(c.Key("draft")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
-		ui.Box(c.Key("draft-content")).Fill().Children(func() {
+	widgets.PaneContent(c.Key("draft"), func() {
+		ui.Box(c.Key("draft-content")).Fill().MinHeight(0).Children(func() {
 			if binary {
 				p.editor.fileControl(c, theme, p.key+":draft", &state.DraftFile, &p.fileGuard)
 			} else {
@@ -275,15 +269,13 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 
 func (p *socketPane) settingsPane(c *ui.Context, theme nui.Theme) {
 	settings := &p.state.Settings
-	ui.Scroll(c.Key("settings")).Fill().MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Gap(6).Padding(10).Children(func() {
-			proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
-			settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
-				nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
-			})
-			selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
-			p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
+	settingsContent(c, theme, locales.WorkspaceWebsocketClientSettings(), func() {
+		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
+		settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
+			nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
 		})
+		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
+		p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
 	})
 }
 

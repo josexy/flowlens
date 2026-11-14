@@ -162,7 +162,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 	b.tabChoice = string(b.active)
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		b.toolbar(c, theme)
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		widgets.PaneContent(c, func() {
 			if content.Body == "" && b.active != logic.BodyTabSSE {
 				emptyState(c, theme, lucide.File(), locales.DetailBodyEmpty())
 				return
@@ -173,22 +173,22 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 			case logic.BodyTabSSE:
 				b.sse.Build(c, theme, content)
 			case logic.BodyTabHex:
-				b.hex.Build(c, theme, content.Identity, content.Body, content.Encoding)
+				ui.Box(c).Fill().MinHeight(0).Border(1, theme.Border).Clip().Children(func() {
+					b.hex.Build(c, theme, content.Identity, content.Body, content.Encoding)
+				})
 			default:
 				view := b.raw
 				if b.active == logic.BodyTabFormatted {
 					view = b.formatted
 				}
-				ui.Box(c).Fill().MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
-					view.Build(c, b.deps.Settings.CodeFont())
-				})
+				view.Build(c, b.deps.Settings.CodeFont())
 			}
 		})
 	})
 }
 
 func (b *BodyViewer) toolbar(c *ui.Context, theme nui.Theme) {
-	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).PaddingX(10).PaddingY(4).Children(func() {
+	widgets.PaneToolbar(c, func() {
 		items := make([]widgets.PillTab, len(b.tabs))
 		for index, tab := range b.tabs {
 			items[index] = widgets.PillTab{ID: string(tab), Label: tabLabel(tab)}
@@ -198,8 +198,7 @@ func (b *BodyViewer) toolbar(c *ui.Context, theme nui.Theme) {
 			widgets.PillTabs(c.Key("body-tabs"), theme, &b.tabChoice, items, locales.DetailBodyRaw())
 		})
 		b.active = logic.BodyTab(b.tabChoice)
-		ui.Row(c).Shrink(0).Gap(4).Children(func() { b.actions(c, theme) })
-	})
+	}, func() { b.actions(c, theme) })
 }
 
 func (b *BodyViewer) wrapTarget() *widgets.CodeView {

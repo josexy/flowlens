@@ -40,7 +40,7 @@ func editableRows(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, opt
 		}
 		return ""
 	}
-	gridPane(c, func() {
+	widgets.PaneContent(c.Key("grid"), func() {
 		widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
 			Label: options.KeyPlaceholder, Rows: len(*rows), Resizable: true,
 			Enabled: func(i int) *bool { return &(*rows)[i].Enabled },
@@ -65,11 +65,6 @@ func editableRows(c *ui.Context, theme nui.Theme, rows *[]logic.EditableRow, opt
 			},
 		})
 	})
-}
-
-// gridPane holds a grid with 1.0.5's px-2.5 pb-2.5 around it.
-func gridPane(c *ui.Context, grid func()) {
-	ui.Column(c.Key("grid")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(grid)
 }
 
 func removeEditableRow(rows []logic.EditableRow, index int) []logic.EditableRow {
@@ -104,11 +99,9 @@ func serializeRows(rows []logic.EditableRow) string {
 	return text.String()
 }
 
-func paneHeader(c *ui.Context, theme nui.Theme, title string, actions func()) {
-	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-		ui.Row(c).Gap(4).Children(actions)
-	})
+func paneSelect(c *ui.Context, theme nui.Theme, label string, value *string, options []nui.Option[string]) {
+	ui.Text(c, label).Shrink(1).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+	nui.Select(c, theme, value, options, nui.SelectOptions{Label: label, Size: nui.XS}).Width(150).Shrink(1).MinWidth(0)
 }
 
 func iconAction(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, label string, disabled bool, run func()) ui.Element {
@@ -181,7 +174,7 @@ func (r *requestRows) syncCookies(headers *[]logic.EditableRow) {
 
 func (e *Editor) headersPane(c *ui.Context, theme nui.Theme, headers *[]logic.EditableRow, protocol logic.RequestProtocol) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, locales.WorkspaceHttpRequestRequestHeaderList(), func() {
+		widgets.PaneTitle(c, theme, locales.WorkspaceHttpRequestRequestHeaderList(), func() {
 			iconAction(c, theme, "copy-json", lucide.Code(), locales.WorkspaceHttpRequestCopyRequestHeadersJson(), false, func() {
 				e.copy(logic.FormatHeaderFieldsAsJSON(logic.EditableRowsToHeaderFields(*headers)), locales.WorkspaceHttpRequestRequestHeadersCopiedJson())
 			})
@@ -202,7 +195,7 @@ func (e *Editor) headersPane(c *ui.Context, theme nui.Theme, headers *[]logic.Ed
 
 func (e *Editor) queryPane(c *ui.Context, theme nui.Theme, params *[]logic.EditableRow) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, locales.WorkspaceHttpRequestQueryList(), func() {
+		widgets.PaneTitle(c, theme, locales.WorkspaceHttpRequestQueryList(), func() {
 			iconAction(c, theme, "copy", lucide.Copy(), locales.WorkspaceHttpRequestCopyQuery(), false, func() {
 				e.copy(logic.SerializeRequestQueryRows(*params), locales.WorkspaceHttpRequestQueryCopied())
 			})
@@ -220,7 +213,7 @@ func (e *Editor) queryPane(c *ui.Context, theme nui.Theme, params *[]logic.Edita
 
 func (e *Editor) cookiesPane(c *ui.Context, theme nui.Theme, shared *requestRows, headers *[]logic.EditableRow) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, locales.WorkspaceHttpRequestCookieList(), func() {
+		widgets.PaneTitle(c, theme, locales.WorkspaceHttpRequestCookieList(), func() {
 			iconAction(c, theme, "copy", lucide.Copy(), locales.DetailCopyCookieHeader(), false, func() {
 				e.copy(logic.FormatHeaderFieldsAsText(logic.HeadersRecordToFields(logic.RequestCookieHeadersRecord(*headers))), locales.DetailCookieHeaderCopied())
 			})

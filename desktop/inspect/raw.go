@@ -86,7 +86,7 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 		return
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		ui.Row(c).FillWidth().Shrink(0).Justify(ui.End).Gap(4).Padding(4, 10).Children(func() {
+		widgets.PaneToolbar(c, nil, func() {
 			wrap := pane.view.WordWrap()
 			wrapColor := nui.Neutral
 			if wrap {
@@ -97,13 +97,11 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 			nui.Tooltip(c, theme, button, locales.DetailWrapBody(), nui.TooltipOptions{})
 			iconButton(c, theme, "copy", lucide.Copy(), locales.DetailCopyRawHttp(), pane.text == "" || unavailable || copyDisabled, func() { p.copyText(pane.text, locales.DetailRawHttpCopied()) })
 		})
+		widgets.PaneContent(c, func() { pane.view.Build(c, p.deps.Settings.CodeFont()) })
 		if unavailable {
-			warningAlert(c, theme, locales.DetailBodyUnavailable())
+			widgets.PaneWarning(c, theme, locales.DetailBodyUnavailable())
 		}
-		warningAlert(c, theme, warning)
-		ui.Box(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
-			pane.view.Build(c, p.deps.Settings.CodeFont())
-		})
+		widgets.PaneWarning(c, theme, warning)
 	})
 }
 

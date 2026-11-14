@@ -211,7 +211,7 @@ func (r *responseView) fieldsPane(c *ui.Context, theme nui.Theme, title string, 
 
 func fieldsPane(c *ui.Context, theme nui.Theme, e *Editor, title string, fields []logic.HeaderField, warning, copyJSON, copyText, copiedJSON, copiedText string) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, title, func() {
+		widgets.PaneTitle(c, theme, title, func() {
 			iconAction(c, theme, "copy-json", lucide.Code(), copyJSON, false, func() {
 				e.copy(logic.FormatHeaderFieldsAsJSON(fields), copiedJSON)
 			})
@@ -219,22 +219,18 @@ func fieldsPane(c *ui.Context, theme nui.Theme, e *Editor, title string, fields 
 				e.copy(logic.FormatHeaderFieldsAsText(fields), copiedText)
 			})
 		})
-		if warning != "" {
-			ui.Box(c.Key("warning")).FillWidth().Shrink(0).Padding(0, 10, 8, 10).Children(func() {
-				nui.Alert(c, theme, nui.AlertOptions{Description: warning, Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
-			})
-		}
-		if len(fields) == 0 {
-			emptyPane(c, theme, lucide.Rows3(), locales.DetailNoHeaders(), "")
-			return
-		}
-		gridPane(c, func() {
+		widgets.PaneContent(c.Key("grid"), func() {
+			if len(fields) == 0 {
+				emptyPane(c, theme, lucide.Rows3(), locales.DetailNoHeaders(), "")
+				return
+			}
 			rows := make([]widgets.KeyValue, len(fields))
 			for index, field := range fields {
 				rows[index] = widgets.KeyValue{Key: field.Name, Value: field.Value}
 			}
 			widgets.FieldGrid(c, theme, rows, widgets.FieldGridOptions{Label: title})
 		})
+		widgets.PaneWarning(c.Key("warning"), theme, warning)
 	})
 }
 
@@ -258,22 +254,19 @@ func (r *responseView) errorPane(c *ui.Context, theme nui.Theme) {
 }
 
 func errorCard(c *ui.Context, theme nui.Theme, e *Editor, title, description, heading, details, copyLabel, copied string) {
-	ui.Scroll(c.Key("error")).Fill().MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Gap(12).Padding(16).Children(func() {
-			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, lucide.CircleAlert()).Size(18, 18).Shrink(0).TextColor(theme.Error)
-				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
-					ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
-					if description != "" {
-						ui.Text(c, description).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
-					}
-				})
-			})
+	widgets.PaneToolbar(c, func() {
+		ui.Icon(c, lucide.CircleAlert()).Size(18, 18).Shrink(0).TextColor(theme.Error)
+		ui.Text(c, title).Shrink(1).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
+	}, func() {
+		iconAction(c, theme, "copy-error", lucide.Copy(), copyLabel, false, func() { e.copy(details, copied) })
+	})
+	widgets.PaneContent(c, func() {
+		ui.Scroll(c.Key("error")).Fill().MinHeight(0).Children(func() {
 			ui.Column(c).FillWidth().Gap(6).Border(1, theme.Border).Radius(theme.Radius).Padding(10).Children(func() {
-				ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-					ui.Text(c, heading).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
-					iconAction(c, theme, "copy-error", lucide.Copy(), copyLabel, false, func() { e.copy(details, copied) })
-				})
+				if description != "" {
+					ui.Text(c, description).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
+				}
+				ui.Text(c, heading).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 				ui.Text(c, details).FontSize(apptheme.TextSize(c, 14)).Font(theme.MonoFont).TextColor(theme.Text).Selectable().FillWidth()
 			})
 		})

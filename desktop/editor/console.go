@@ -197,14 +197,13 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 	running := v.state.IsSending
 	v.closeGoneDetail(entries)
 	ui.Column(c.Key("console")).Fill().MinHeight(0).Children(func() {
-		ui.Row(c.Key("console-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(8, 10).Children(func() {
+		widgets.PaneToolbar(c.Key("console-head"), func() {
 			v.status(c, theme, running, len(entries))
-			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
-				empty := len(entries) == 0
-				iconAction(c, theme, "copy-all", lucide.Copy(), locales.WorkspaceHttpRequestConsoleCopyAll(), empty, func() { v.editor.copy(v.allText(), locales.WorkspaceHttpRequestConsoleCopied()) })
-				iconAction(c, theme, "save-all", lucide.Download(), locales.WorkspaceHttpRequestConsoleSave(), empty, func() { v.save(consoleFilename, v.allText()) })
-				iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestConsoleClear(), empty, v.clear)
-			})
+		}, func() {
+			empty := len(entries) == 0
+			iconAction(c, theme, "copy-all", lucide.Copy(), locales.WorkspaceHttpRequestConsoleCopyAll(), empty, func() { v.editor.copy(v.allText(), locales.WorkspaceHttpRequestConsoleCopied()) })
+			iconAction(c, theme, "save-all", lucide.Download(), locales.WorkspaceHttpRequestConsoleSave(), empty, func() { v.save(consoleFilename, v.allText()) })
+			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestConsoleClear(), empty, v.clear)
 		})
 		if len(entries) == 0 {
 			title := locales.WorkspaceHttpRequestConsoleEmpty()
@@ -214,7 +213,7 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 			emptyPane(c, theme, lucide.Terminal(), title, "")
 			return
 		}
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+		widgets.PaneContent(c, func() {
 			table := widgets.Table(c.Key("console-table"), theme, &v.table, v.columns(), nui.TableOptions{
 				Label: locales.WorkspaceHttpRequestConsole(),
 			}).Border(1, theme.Border)
@@ -243,7 +242,7 @@ func (v *consoleView) status(c *ui.Context, theme nui.Theme, running bool, count
 		} else {
 			dot.Background(theme.Muted)
 		}
-		ui.Text(c, text).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+		ui.Text(c, text).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 	})
 }
 

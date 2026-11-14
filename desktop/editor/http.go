@@ -251,70 +251,65 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 		{Value: logic.BodyTypeURLEncoded, Label: locales.WorkspaceHttpRequestBodyTypeUrlencoded()},
 	}
 	text := state.RequestBodyType == logic.BodyTypeJSON || state.RequestBodyType == logic.BodyTypeText || state.RequestBodyType == logic.BodyTypeXML
-	ui.Row(c.Key("body-type")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestBodyType()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-			ui.Box(c).Width(150).Children(func() {
-				nui.Select(c, theme, &state.RequestBodyType, options, nui.SelectOptions{Label: locales.WorkspaceHttpRequestBodyType(), Size: nui.SM})
-			})
-		})
-		if text {
-			wordWrapButton(c, theme, p.body)
-		}
-	})
-	ui.Box(c.Key("body-content")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+	widgets.PaneToolbar(c.Key("body-type"), func() {
+		paneSelect(c, theme, locales.WorkspaceHttpRequestBodyType(), &state.RequestBodyType, options)
+	}, func() {
 		switch {
 		case text:
-			ui.Box(c).Fill().MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
-				p.body.Build(c, p.editor.Data.Settings.CodeFont())
-			})
-		case state.RequestBodyType == logic.BodyTypeFile:
-			p.editor.fileControl(c, theme, p.key+":body", &state.RequestBodyFile, &p.bodyGuard)
+			wordWrapButton(c, theme, p.body)
 		case state.RequestBodyType == logic.BodyTypeFormData:
-			p.formData.build(c, theme, p.editor, p.key, &state.RequestBodyFormData)
+			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestFormDataClearAll(), false, func() {
+				p.formData.guards = nil
+				state.RequestBodyFormData = []logic.FormDataItem{logic.NewFormDataRow()}
+			})
+			iconAction(c, theme, "add", lucide.Plus(), locales.WorkspaceHttpRequestFormDataAddRow(), false, func() {
+				state.RequestBodyFormData = append(state.RequestBodyFormData, logic.NewFormDataRow())
+			})
 		case state.RequestBodyType == logic.BodyTypeURLEncoded:
-			p.urlEncodedPane(c, theme)
-		}
-	})
-}
-
-func (p *httpPane) urlEncodedPane(c *ui.Context, theme nui.Theme) {
-	state := p.state
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, locales.WorkspaceHttpRequestBodyTypeUrlencoded(), func() {
 			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestUrlencodedClearAll(), false, func() {
 				state.RequestBodyURLEncoded = []logic.EditableRow{{Enabled: true}}
 			})
 			iconAction(c, theme, "add", lucide.Plus(), locales.WorkspaceHttpRequestUrlencodedAddRow(), false, func() {
 				state.RequestBodyURLEncoded = append(state.RequestBodyURLEncoded, logic.EditableRow{Enabled: true})
 			})
-		})
-		editableRows(c, theme, &state.RequestBodyURLEncoded, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestUrlencodedNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestUrlencodedValuePlaceholder()})
+		}
+	})
+	ui.Column(c.Key(state.RequestBodyType)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		switch {
+		case text:
+			widgets.PaneContent(c, func() {
+				p.body.Build(c, p.editor.Data.Settings.CodeFont())
+			})
+		case state.RequestBodyType == logic.BodyTypeFile:
+			widgets.PaneContent(c, func() {
+				p.editor.fileControl(c, theme, p.key+":body", &state.RequestBodyFile, &p.bodyGuard)
+			})
+		case state.RequestBodyType == logic.BodyTypeFormData:
+			p.formData.build(c, theme, p.editor, p.key, &state.RequestBodyFormData)
+		case state.RequestBodyType == logic.BodyTypeURLEncoded:
+			editableRows(c, theme, &state.RequestBodyURLEncoded, rowsOptions{KeyPlaceholder: locales.WorkspaceHttpRequestUrlencodedNamePlaceholder(), ValuePlaceholder: locales.WorkspaceHttpRequestUrlencodedValuePlaceholder()})
+		}
 	})
 }
 
 func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
-	ui.Row(c.Key("script-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(8, 10).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, locales.WorkspaceHttpRequestInlineScriptEnable()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-			nui.Switch(c.Key("script-enabled"), theme, &state.InlineScriptEnabled, nui.SwitchOptions{Disabled: p.busy(), Size: nui.SM}).Label(locales.WorkspaceHttpRequestInlineScriptEnable())
-		})
-		ui.Row(c).Gap(4).Children(func() {
-			if p.editor.Host.ShowPythonHelp != nil {
-				iconAction(c, theme, "help", lucide.BookOpen(), locales.PythonPluginHelpTitle(), false, p.editor.Host.ShowPythonHelp)
-			}
-			wordWrapButton(c, theme, p.script)
-		})
+	label := locales.WorkspaceHttpRequestInlineScriptEnable()
+	widgets.PaneToolbar(c.Key("script-head"), func() {
+		ui.Text(c, label).Shrink(1).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+		nui.Switch(c.Key("script-enabled"), theme, &state.InlineScriptEnabled, nui.SwitchOptions{Disabled: p.busy(), Size: nui.SM}).Label(label).Shrink(0)
+	}, func() {
+		if p.editor.Host.ShowPythonHelp != nil {
+			iconAction(c, theme, "help", lucide.BookOpen(), locales.PythonPluginHelpTitle(), false, p.editor.Host.ShowPythonHelp)
+		}
+		wordWrapButton(c, theme, p.script)
 	})
-	if !p.editor.pythonEnabled() {
-		ui.Box(c.Key("script-warning")).FillWidth().Shrink(0).Padding(0, 10, 8, 10).Children(func() {
-			nui.Alert(c, theme, nui.AlertOptions{Description: locales.WorkspaceHttpRequestInlineScriptRuntimeDisabled(), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
-		})
-	}
-	ui.Box(c.Key("script-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+	widgets.PaneContent(c.Key("script-editor"), func() {
 		p.script.Build(c, p.editor.Data.Settings.CodeFont())
 	})
+	if !p.editor.pythonEnabled() {
+		widgets.PaneWarning(c.Key("script-warning"), theme, locales.WorkspaceHttpRequestInlineScriptRuntimeDisabled())
+	}
 }
 
 func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
@@ -325,24 +320,22 @@ func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
 		{Value: string(logic.ProtocolHTTP1), Label: "HTTP/1.1"},
 		{Value: string(logic.ProtocolHTTP2), Label: "HTTP/2"},
 	}
-	ui.Scroll(c.Key("settings")).Fill().MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Gap(6).Padding(10).Children(func() {
-			selectRow(c, theme, "protocol", locales.WorkspaceHttpRequestProtocol(), &settings.Protocol, protocols, func() {
-				state.Headers = logic.ConvertRequestRouteHeaders(state.Headers, logic.RequestProtocol(settings.Protocol), state.URL)
-			})
-			proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
-			settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
-				nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
-			})
-			selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
-			settingRow(c, theme, "h2", locales.WorkspaceHttpRequestHttp2Fingerprint(), func() {
-				nui.Input(c.Key("input"), theme, &settings.HTTP2Fingerprint, nui.InputOptions{Label: locales.WorkspaceHttpRequestHttp2Fingerprint(), Size: nui.SM, Disabled: settings.Protocol == string(logic.ProtocolHTTP1)}).FillWidth()
-			})
-			p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
-			redirects := int64(settings.MaxRedirects)
-			p.redirects.build(c, theme, "redirects", locales.WorkspaceHttpRequestMaxRedirects(), "", &redirects, 0, 1)
-			settings.MaxRedirects = logic.NormalizeHTTPMaxRedirects(float64(redirects))
+	settingsContent(c, theme, locales.WorkspaceHttpRequestSettings(), func() {
+		selectRow(c, theme, "protocol", locales.WorkspaceHttpRequestProtocol(), &settings.Protocol, protocols, func() {
+			state.Headers = logic.ConvertRequestRouteHeaders(state.Headers, logic.RequestProtocol(settings.Protocol), state.URL)
 		})
+		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
+		settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
+			nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
+		})
+		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
+		settingRow(c, theme, "h2", locales.WorkspaceHttpRequestHttp2Fingerprint(), func() {
+			nui.Input(c.Key("input"), theme, &settings.HTTP2Fingerprint, nui.InputOptions{Label: locales.WorkspaceHttpRequestHttp2Fingerprint(), Size: nui.SM, Disabled: settings.Protocol == string(logic.ProtocolHTTP1)}).FillWidth()
+		})
+		p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
+		redirects := int64(settings.MaxRedirects)
+		p.redirects.build(c, theme, "redirects", locales.WorkspaceHttpRequestMaxRedirects(), "", &redirects, 0, 1)
+		settings.MaxRedirects = logic.NormalizeHTTPMaxRedirects(float64(redirects))
 	})
 }
 
@@ -375,46 +368,35 @@ func (v *formDataView) build(c *ui.Context, theme nui.Theme, e *Editor, key stri
 	if len(*items) == 0 {
 		*items = []logic.FormDataItem{logic.NewFormDataRow()}
 	}
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		paneHeader(c, theme, locales.WorkspaceHttpRequestBodyTypeFormData(), func() {
-			iconAction(c, theme, "clear", lucide.Trash(), locales.WorkspaceHttpRequestFormDataClearAll(), false, func() {
-				v.guards = nil
-				*items = []logic.FormDataItem{logic.NewFormDataRow()}
-			})
-			iconAction(c, theme, "add", lucide.Plus(), locales.WorkspaceHttpRequestFormDataAddRow(), false, func() {
-				*items = append(*items, logic.NewFormDataRow())
-			})
-		})
-		number := func(index int) string { return strconv.Itoa(index + 1) }
-		gridPane(c, func() {
-			widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
-				Label: locales.WorkspaceHttpRequestBodyTypeFormData(), Rows: len(*items),
-				RowKey:  func(i int) any { return (*items)[i].ID },
-				Enabled: func(i int) *bool { return &(*items)[i].Enabled },
-				Key:     func(i int) *string { return &(*items)[i].Name },
-				Value: func(i int) *string {
-					if (*items)[i].ItemType == logic.FormDataItemFile {
-						return nil
-					}
-					return &(*items)[i].Value
-				},
-				EnabledLabel:     func(i int) string { return locales.WorkspaceHttpRequestFormDataColEnabled() + " " + number(i) },
-				KeyLabel:         func(i int) string { return locales.WorkspaceHttpRequestFormDataNamePlaceholder() + " " + number(i) },
-				ValueLabel:       func(i int) string { return locales.WorkspaceHttpRequestFormDataValuePlaceholder() + " " + number(i) },
-				KeyPlaceholder:   locales.WorkspaceHttpRequestFormDataNamePlaceholder(),
-				ValuePlaceholder: locales.WorkspaceHttpRequestFormDataValuePlaceholder(),
-				Row: func(i int, row ui.Element) {
-					id := (*items)[i].ID
-					if row.FileDragOver() {
-						row.Background(theme.Accented).Border(1, theme.Primary)
-					}
-					if dropped := row.DroppedFiles(); len(dropped) > 0 {
-						e.useDroppedFile(key+":"+id, dropped, v.begin(id), v.setFile(items, id))
-					}
-				},
-				ValueCell: func(i int) { v.fileCell(c, theme, e, key, items, i) },
-				Actions:   func(i int) { v.rowMenu(c, theme, e, key, items, i) },
-			})
+	number := func(index int) string { return strconv.Itoa(index + 1) }
+	widgets.PaneContent(c.Key("grid"), func() {
+		widgets.EditableGrid(c, theme, widgets.EditableGridOptions{
+			Label: locales.WorkspaceHttpRequestBodyTypeFormData(), Rows: len(*items),
+			RowKey:  func(i int) any { return (*items)[i].ID },
+			Enabled: func(i int) *bool { return &(*items)[i].Enabled },
+			Key:     func(i int) *string { return &(*items)[i].Name },
+			Value: func(i int) *string {
+				if (*items)[i].ItemType == logic.FormDataItemFile {
+					return nil
+				}
+				return &(*items)[i].Value
+			},
+			EnabledLabel:     func(i int) string { return locales.WorkspaceHttpRequestFormDataColEnabled() + " " + number(i) },
+			KeyLabel:         func(i int) string { return locales.WorkspaceHttpRequestFormDataNamePlaceholder() + " " + number(i) },
+			ValueLabel:       func(i int) string { return locales.WorkspaceHttpRequestFormDataValuePlaceholder() + " " + number(i) },
+			KeyPlaceholder:   locales.WorkspaceHttpRequestFormDataNamePlaceholder(),
+			ValuePlaceholder: locales.WorkspaceHttpRequestFormDataValuePlaceholder(),
+			Row: func(i int, row ui.Element) {
+				id := (*items)[i].ID
+				if row.FileDragOver() {
+					row.Background(theme.Accented).Border(1, theme.Primary)
+				}
+				if dropped := row.DroppedFiles(); len(dropped) > 0 {
+					e.useDroppedFile(key+":"+id, dropped, v.begin(id), v.setFile(items, id))
+				}
+			},
+			ValueCell: func(i int) { v.fileCell(c, theme, e, key, items, i) },
+			Actions:   func(i int) { v.rowMenu(c, theme, e, key, items, i) },
 		})
 	})
 }
