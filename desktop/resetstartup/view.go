@@ -13,8 +13,8 @@ import (
 	"github.com/josexy/flowlens/desktop/locale"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // Service is how the window talks to the application process.

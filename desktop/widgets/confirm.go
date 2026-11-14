@@ -2,7 +2,7 @@ package widgets
 
 import (
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // ConfirmAction is a button in a confirmation dialog.

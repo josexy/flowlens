@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	desktoptheme "github.com/josexy/flowlens/desktop/theme"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // cellPaddingX is the table's horizontal cell padding, Space(2.5).

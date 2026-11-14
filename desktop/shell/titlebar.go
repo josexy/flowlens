@@ -4,7 +4,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func (a *App) titleBar(c *ui.Context, theme nui.Theme) {

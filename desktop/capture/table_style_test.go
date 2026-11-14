@@ -10,7 +10,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func pixel(tester *ui.Tester, x, y float32) color.RGBA {
@@ -242,6 +242,46 @@ func TestInspectedRowHasMarkerAndOutline(t *testing.T) {
 	}
 	if !foundOutline {
 		t.Fatal("no outline along the inspected row's top")
+	}
+}
+
+func TestClickedRowOutlineSpansAllCells(t *testing.T) {
+	request := entry(101, "selected.test")
+	request.StatusCode = 200
+	f := newFixtureSized(t, []*logic.TrafficEntry{request, entry(102, "other.test")}, 2048, 640)
+	f.click("selected.test")
+	f.tester.Move(1, 1)
+	for _, dark := range []bool{false, true} {
+		f.setDark(dark)
+		theme := f.theme()
+		alpha := float32(0.22)
+		if dark {
+			alpha = 0.35
+		}
+		line := rgba(theme.Primary.Alpha(alpha).Over(selectedRowColor(theme)))
+		for _, scale := range []float32{1, 1.25, 1.5, 2} {
+			f.tester.SetScale(scale)
+			for _, zoom := range []float32{1, 1.19} {
+				f.tester.SetZoom(zoom)
+				f.settle()
+				row, ok := f.tester.AccessByRole(ui.RoleRow, "101")
+				if !ok || !row.Selected {
+					t.Fatalf("clicked row is missing or unselected: %+v", row)
+				}
+				pixelEdge := func(dip float32) int { return int(math.Round(float64(dip * scale))) }
+				left, right := pixelEdge(row.Bounds.X), pixelEdge(row.Bounds.X+row.Bounds.W)
+				top, bottom := pixelEdge(row.Bounds.Y), pixelEdge(row.Bounds.Y+row.Bounds.H)
+				frame := f.tester.Image()
+				// Skip the accent marker at the start of the row.
+				for x := left + pixelEdge(4*zoom); x < right; x++ {
+					for _, y := range []int{top, bottom - 1} {
+						if got := frame.RGBAAt(x, y); !near(got, line) {
+							t.Fatalf("dark=%v scale=%v zoom=%v: broken outline at (%d,%d): %v, want %v", dark, scale, zoom, x, y, got, line)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 

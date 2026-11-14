@@ -3,6 +3,7 @@ package capture
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -12,7 +13,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/menutest"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // menuLabels returns the labels of items, "-" for separators.
@@ -84,6 +85,55 @@ func TestTrafficMenuLastItemIsFullyVisibleWithoutScrolling(t *testing.T) {
 	}
 	if err := f.tester.Click(locales.ContextMenuTrafficTableDelete()); err != nil {
 		t.Fatalf("last item cannot be clicked without scrolling: %v", err)
+	}
+}
+
+func TestTrafficContextMenuSeparatorsAreOnePhysicalPixel(t *testing.T) {
+	f := newHistoryFixture(t, entry(1, "a.test"))
+	checkGaps := func(scale float32, pairs [][2]string) {
+		t.Helper()
+		frame := f.tester.Image()
+		line := rgba(f.theme().Border)
+		for _, pair := range pairs {
+			before, beforeOK := menutest.Item(f.tester, pair[0])
+			after, afterOK := menutest.Item(f.tester, pair[1])
+			if !beforeOK || !afterOK {
+				t.Fatalf("missing menu items around separator %q", pair)
+			}
+			x := int((before.Bounds.X + before.Bounds.W/2) * scale)
+			top := int(math.Round(float64((before.Bounds.Y + before.Bounds.H) * scale)))
+			bottom := int(math.Round(float64(after.Bounds.Y * scale)))
+			pixels := 0
+			for y := top; y < bottom; y++ {
+				if frame.RGBAAt(x, y) == line {
+					pixels++
+				}
+			}
+			if pixels != 1 {
+				t.Fatalf("scale=%v: separator between %q and %q is %d physical pixels, want 1", scale, pair[0], pair[1], pixels)
+			}
+		}
+	}
+	for _, dark := range []bool{false, true} {
+		f.setDark(dark)
+		for _, scale := range []float32{1, 1.25, 1.5, 2} {
+			f.tester.SetScale(scale)
+			for _, zoom := range []float32{1, 1.19} {
+				f.tester.SetZoom(zoom)
+				openRowMenu(t, f.fixture, "a.test")
+				f.tester.Advance(time.Second)
+				f.settle()
+				checkGaps(scale, [][2]string{{"Export", "Copy as cURL"}, {"Copy as cURL", "Copy"}, {"Copy", "Edit"}, {"Resend", "Highlight"}, {"Highlight", "Delete"}})
+				f.choose("Copy")
+				f.tester.Advance(time.Second)
+				f.settle()
+				checkGaps(scale, [][2]string{
+					{locales.ContextMenuTrafficTableCopyPath(), locales.ContextMenuTrafficTableCopyServerip()},
+					{locales.ContextMenuTrafficTableCopyClientaddr(), locales.ContextMenuTrafficTableCopyRow()},
+				})
+				menutest.Close(f.tester, f.settle)
+			}
+		}
 	}
 }
 

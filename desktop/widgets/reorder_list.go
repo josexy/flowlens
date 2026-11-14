@@ -4,8 +4,8 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // ReorderListState keeps native list drags tied to the order and revision at

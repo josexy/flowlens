@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // InputNumber keeps nui's parsing, keyboard, validation and stepper behavior.

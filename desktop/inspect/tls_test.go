@@ -11,7 +11,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	desktoptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func tlsEntryFixture(t *testing.T) *fixture {

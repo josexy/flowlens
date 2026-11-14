@@ -9,8 +9,8 @@ import (
 	"github.com/josexy/flowlens/desktop/store"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // helpWidth is the help panel's width, as 1.0.5's.

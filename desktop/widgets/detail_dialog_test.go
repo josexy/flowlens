@@ -6,8 +6,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 type detailProbe struct {

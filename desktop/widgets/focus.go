@@ -2,7 +2,7 @@ package widgets
 
 import (
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // AutoFocus returns an InputOptions.Style that gives the input's editor the

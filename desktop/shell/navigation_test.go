@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/internal/keytest"
 	"github.com/josexy/flowlens/desktop/store"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func TestHiddenSidebarCannotKeepKeyboardActivation(t *testing.T) {

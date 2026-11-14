@@ -14,7 +14,7 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func avifFixture(t *testing.T, name string) []byte {

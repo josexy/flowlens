@@ -7,13 +7,13 @@ tool github.com/egoist/mygo/cmd/mygo
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/andybalholm/brotli v1.2.2
-	github.com/egoist/mygo v0.8.3
+	github.com/egoist/mygo v0.9.0
 	github.com/fyne-io/oksvg v0.2.0
 	github.com/gen2brain/gav1d v0.2.7
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
 	github.com/josexy/mitmproxy-go/v2 v2.0.2-0.20261024062624-9a3b2cf7565d
-	github.com/josexy/nuxt-ui-go v0.0.3-0.20261114043304-18c6da155286
+	github.com/josexy/nuxt-ui-go v0.1.0
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
 	github.com/josexy/xhttp v0.0.0-20261024062155-5f478641bbf0
 	github.com/klauspost/compress v1.19.0
@@ -26,6 +26,8 @@ require (
 )
 
 require (
+	github.com/ProtonMail/go-crypto v1.4.1 // indirect
+	github.com/cloudflare/circl v1.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
@@ -33,6 +35,8 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/ulikunitz/xz v0.5.15 // indirect
+	go.digitalxero.dev/rpm v0.3.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	modernc.org/libc v1.73.4 // indirect

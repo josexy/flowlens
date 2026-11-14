@@ -2,7 +2,7 @@ package widgets
 
 import (
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // ContextMenu gives anchor a context menu drawn in the window,

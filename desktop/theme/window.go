@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/egoist/mygo/ui"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // Begin applies the appearance and accessibility scale at a window's root.

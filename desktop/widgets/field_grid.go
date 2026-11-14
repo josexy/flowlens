@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // FieldGrid measurements, from FlowLens 1.0.5's HeadersTable: h-10 rows,

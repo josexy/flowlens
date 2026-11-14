@@ -6,7 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 var (

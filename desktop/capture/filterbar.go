@@ -6,8 +6,8 @@ import (
 	"github.com/josexy/flowlens/desktop/store"
 	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func filterTabLabel(tab string) string {

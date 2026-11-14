@@ -3,7 +3,7 @@ package widgets
 import (
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // EmptyState is the borderless, small empty state the panes share: an icon,

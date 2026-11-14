@@ -3,7 +3,7 @@ package widgets
 import (
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // EditableGrid measurements, from FlowLens 1.0.5's EditableKeyValueTable:

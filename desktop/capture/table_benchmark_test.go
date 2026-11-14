@@ -9,7 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/store"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // BenchmarkTrafficTableLive measures a complete capture-pane update after one
@@ -40,9 +40,10 @@ func BenchmarkTrafficTableLive(b *testing.B) {
 				revision, nextID := uint64(2), uint64(count+1)
 				step := func() {
 					batch := 100
-					if mode == "Patch1" || mode == "SelectedPatch1" {
+					switch mode {
+					case "Patch1", "SelectedPatch1":
 						batch = 1
-					} else if mode == "Patch1000" || mode == "Churn1000" {
+					case "Patch1000", "Churn1000":
 						batch = 1000
 					}
 					if mode != "Idle" {

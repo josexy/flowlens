@@ -8,8 +8,8 @@ import (
 	"github.com/josexy/flowlens/desktop/logic"
 	desktoptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // requestLineHeight is the height of the controls of a request line.

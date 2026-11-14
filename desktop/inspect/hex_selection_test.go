@@ -9,7 +9,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/logic"
 	desktoptheme "github.com/josexy/flowlens/desktop/theme"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func TestHexDragAcrossRows(t *testing.T) {

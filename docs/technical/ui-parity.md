@@ -91,6 +91,16 @@ Traffic tables now use MyGo selection directly. Enter, an unmodified native doub
 
 Memory Statistics now wraps its toolbar and summary cards and stacks metric cards according to the content area's available width. This preserves the native chart's inspection and series toggles, without drag zoom. Tester checks cover content widths 558/770/820/1360 DIPs (including a 1024-wide window with a 42% sidebar), paused/running resize cycles, retained samples and hidden series, both languages/themes, the maximum configured interface font, and 150% rendering scale. Narrow light/dark renders were inspected. These checks do not replace the real-window platform matrix.
 
+## MyGo 0.9.0 and NuxtUI-Go 0.1.0, 2026-11-14
+
+Component imports now use `github.com/josexy/nuxt-ui-go/ui`. Menu separators and the shared traffic/SSE/console table header divider use NuxtUI-Go's pixel-aligned rendering; FlowLens no longer overlays those components with its own divider drawing. The shared table still extends cell content across native padding, including vertical stretching, so row backgrounds, outlines, and hit targets cover the full cell.
+
+The custom title/status bars retain their one-device-pixel drawing: MyGo's ordinary borders use rounded DIP widths, and these bars are not NuxtUI-Go components. `desktop/theme.Begin` still applies Windows accessibility text scaling once to the whole window. Neither behavior is replaced by the upstream divider fixes.
+
+The migration audit also checked table column-change notifications, programmatic focus scrolling, tab-panel names, and landmark roles. FlowLens does not use TableOptions.OnChange as a selection-only callback, its tab strips build their content separately, and it does not nest the new landmark components. Existing selection, column-layout persistence, menu, tab, and focus tests cover the affected interactions.
+
+The full Go suite (with CPython 3.12), Go lint, MyGo UI vet, formatting/catalog checks, and Windows build passed. Existing pixel tests cover light/dark themes, 100%/125%/150%/200% display scales, and 100%/119% zoom. Traffic/menu/SSE/console renders were inspected under `bin/ui-upgrade-v090/`; cross-monitor transitions and macOS/Linux real windows remain unverified.
+
 ## Historical render review
 
 Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`desktop/internal/rendertest`):

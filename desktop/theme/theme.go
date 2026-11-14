@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
-	nui "github.com/josexy/nuxt-ui-go"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // Theme modes as they are saved in settings.

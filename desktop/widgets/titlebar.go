@@ -7,8 +7,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/resources"
-	nui "github.com/josexy/nuxt-ui-go"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 const (
