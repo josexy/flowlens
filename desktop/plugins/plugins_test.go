@@ -28,7 +28,15 @@ type serviceBackend struct {
 	*pythonpluginservice.PythonPluginService
 	validate func(string) (*store.Plugin, error)
 	reload   func(string) (*store.Plugin, error)
+	reorder  func([]string) error
 	opened   []string
+}
+
+func (b *serviceBackend) ReorderPlugins(ids []string) error {
+	if b.reorder != nil {
+		return b.reorder(ids)
+	}
+	return b.PythonPluginService.ReorderPlugins(ids)
 }
 
 func (b *serviceBackend) ValidatePlugin(id string) (*store.Plugin, error) {
@@ -250,6 +258,43 @@ func TestDragSavesPluginOrder(t *testing.T) {
 	}
 	if f.data.Plugins.Plugins[0].ID != second.ID {
 		t.Fatal("the list follows")
+	}
+}
+
+func TestPluginDragKeepsOrderUntilDropAndRestoresOnFailure(t *testing.T) {
+	f := newFixture(t)
+	first := f.create("First", "")
+	second := f.create("Second", "")
+	writes := 0
+	f.backend.reorder = func(ids []string) error {
+		writes++
+		if !slices.Equal(ids, []string{second.ID, first.ID}) {
+			t.Errorf("unexpected order %v", ids)
+		}
+		return errors.New("disk full")
+	}
+	x, y := f.center("drag First")
+	f.tester.Press(x, y)
+	f.tester.Move(x, y+pluginRowHeight*1.2)
+	f.tester.Frame()
+	if f.data.Plugins.Plugins[0].ID != first.ID || writes != 0 {
+		t.Fatal("drag changed the store before drop")
+	}
+	f.tester.Key(0, ui.KeyEscape)
+	f.tester.Release(x, y+pluginRowHeight*1.2)
+	f.settle()
+	if writes != 0 || f.data.Plugins.SelectedPluginID != second.ID {
+		t.Fatal("canceling a drag saved or selected the dragged plugin")
+	}
+	f.drag("drag First", pluginRowHeight*1.2)
+	if writes != 1 || f.data.Plugins.Plugins[0].ID != first.ID || !f.has(locales.PythonPluginsReorderFailed("disk full")) {
+		t.Fatal("failed reorder did not restore the saved order", writes)
+	}
+	f.view.search = "First"
+	f.settle()
+	f.drag("drag First", pluginRowHeight*1.2)
+	if writes != 1 {
+		t.Fatal("filtered list reordered")
 	}
 }
 

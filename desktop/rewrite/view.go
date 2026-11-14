@@ -3,7 +3,6 @@ package rewrite
 
 import (
 	"context"
-	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,7 +38,7 @@ type View struct {
 	Notifier   *widgets.Notifier
 
 	search      string
-	drag        ruleDrag
+	list        widgets.ReorderListState
 	localOrder  []string
 	forms       map[string]*ruleForm
 	remove      deleteDialog
@@ -70,7 +69,7 @@ func filterRow(row store.RewriteRow, query string) bool {
 	return strings.Contains(strings.ToLower(rule.Name+"\n"+rule.Method+"\n"+rule.URLPattern), query)
 }
 
-// rows returns the rows in display order, following a drag in progress.
+// rows returns the rows in display order, including an order being saved.
 func (v *View) rows() []store.RewriteRow {
 	rows := v.Data.Rewrite.Rows()
 	query := strings.ToLower(strings.TrimSpace(v.search))
@@ -124,15 +123,16 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 			nui.Input(c.Key("search"), theme, &v.search, nui.InputOptions{Label: locales.RewriteRulesSearch(), Placeholder: locales.RewriteRulesSearch(), Leading: lucide.Search(), Size: nui.SM}).FillWidth()
 		})
 		rows := v.rows()
-		ui.Scroll(c.Key("rules")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Padding(6).Children(func() {
-				for index, row := range rows {
-					v.row(c, theme, index, row, rows)
-				}
-				if len(rows) == 0 {
-					v.emptyList(c, theme)
-				}
-			})
+		if len(rows) == 0 {
+			v.emptyList(c, theme)
+		}
+		usable := strings.TrimSpace(v.search) == "" && !rewrite.Busy() && rewrite.Ready()
+		v.list.Build(c.Key("rules"), savedIDs(rows), strconv.FormatInt(rewrite.State.Revision, 10), usable, len(rows), func(ids []string) {
+			v.localOrder = ids
+			rewrite.Reorder(ids, func(bool) { v.localOrder = nil })
+		}).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingY(6).
+			ItemKey(func(index int) any { return rows[index].Key }).Rows(func(item ui.ListRow) {
+			v.row(item.Context, theme, rows[item.Index], usable)
 		})
 	})
 }
@@ -178,36 +178,32 @@ func actionLabel(rule *store.RewriteRule) string {
 	}
 }
 
-// Rule row height, used to place a dragged row.
+// Minimum rule row pitch, scaled with the app font size.
 const ruleRowHeight float32 = 92
 
-func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteRow, rows []store.RewriteRow) {
+func (v *View) row(c *ui.Context, theme nui.Theme, row store.RewriteRow, reorderable bool) {
 	rewrite := v.Data.Rewrite
 	selected := rewrite.SelectedID == row.Key
 	name := row.Rule.Name
 	if name == "" {
 		name = locales.RewriteRulesNewName()
 	}
-	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleListItem).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))-4).Margin(0, 0, 4, 0).Padding(8).Gap(4).Radius(theme.Radius).Border(1, ui.Transparent).FocusRing(true).AccessSelected(selected).Label(name)
-	dragged := v.drag.active && v.drag.key == row.Key
+	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleGroup).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))).Padding(8, 8, 8, 5).Gap(4).FocusRing(true).AccessSelected(selected).Label(name)
+	box.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent).Background(theme.Background)
 	switch {
 	case selected:
-		box.Border(1, theme.Primary.Alpha(0.4)).Background(theme.Primary.Alpha(0.1))
-	case dragged || box.Hovered():
+		box.BorderColor(theme.Primary).Background(theme.Primary.Alpha(0.1).Over(theme.Background))
+	case box.Hovered():
 		box.Background(theme.Elevated)
 	}
-	if dragged {
-		// The row follows the pointer above the others, which make room
-		// for it where it would drop, as 1.0.5's sortable list did.
-		box.Translate(0, v.drag.offset(index)).ZIndex(1).Shadow(0, 6, 16, 0, ui.RGBA(15, 23, 42, 0.18))
-		if !selected {
-			box.Border(1, theme.Border)
-		}
+	if row.Saved == nil {
+		// Drafts keep their position and cannot initiate a native row drag.
+		box.Dragged()
 	}
 	box.OnClick(func() { v.selectRule(row.Key) })
 	box.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
-			v.gripHandle(c, theme, index, row, rows)
+			widgets.ReorderGrip(c.Key("grip"), theme, "drag "+row.Rule.Name, reorderable && row.Saved != nil)
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, name).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Highlighted).MinWidth(0)
 				if rewrite.IsDirty(row.Key) {
@@ -227,11 +223,6 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.RewriteR
 			if row.Saved == nil {
 				ui.Text(c, locales.RewriteRulesDraft()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
-			ui.Box(c).Grow(1).Basis(0)
-			if row.Saved != nil && strings.TrimSpace(v.search) == "" {
-				v.arrow(c, theme, row, rows, -1, "up", lucide.ArrowUp(), locales.RewriteRulesMoveUp())
-				v.arrow(c, theme, row, rows, 1, "down", lucide.ArrowDown(), locales.RewriteRulesMoveDown())
-			}
 		})
 	})
 }
@@ -242,7 +233,7 @@ func (v *View) ruleSwitch(c *ui.Context, theme nui.Theme, row store.RewriteRow) 
 	before := enabled
 	loading := rewrite.Pending != nil && rewrite.Pending.Kind == store.RewriteMutationRuleEnabled && rewrite.Pending.ID == row.Key
 	disabled := row.Saved == nil || row.Saved.UnavailableReason != "" || rewrite.Busy()
-	nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.XS, Disabled: disabled, Loading: loading}).Label(locales.RewriteRulesEnableRule(row.Rule.Name))
+	nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: disabled, Loading: loading}).Label(locales.RewriteRulesEnableRule(row.Rule.Name))
 	if enabled != before {
 		rewrite.SetRuleEnabled(row.Key, enabled, func(bool) {})
 	}
@@ -256,131 +247,6 @@ func savedIDs(rows []store.RewriteRow) []string {
 		}
 	}
 	return ids
-}
-
-func (v *View) arrow(c *ui.Context, theme nui.Theme, row store.RewriteRow, rows []store.RewriteRow, delta int, key string, icon *ui.SVG, label string) {
-	rewrite := v.Data.Rewrite
-	ids := savedIDs(rows)
-	index := slices.Index(ids, row.Key)
-	disabled := rewrite.Busy() || index+delta < 0 || index+delta >= len(ids)
-	button := nui.Button(c.Key(key), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: icon, Disabled: disabled, AccessibleLabel: label + " " + row.Rule.Name})
-	if !disabled {
-		button.OnClick(func() {
-			next := slices.Clone(ids)
-			next[index], next[index+delta] = next[index+delta], next[index]
-			rewrite.Reorder(next, func(bool) {})
-		})
-	}
-}
-
-// ruleDragThreshold is how far the pointer moves before a press on a grip
-// drags its row, as 1.0.5's fallback tolerance.
-const ruleDragThreshold float32 = 3
-
-type ruleDrag struct {
-	key string
-	// from is where the row was among the rows when the press began.
-	from int
-	// travel is how far the pointer has moved since the press.
-	travel   float32
-	pitch    float32
-	revision int64
-	active   bool
-}
-
-// offset is how far the dragged row, now at index, is drawn from its place,
-// so that it stays under the pointer.
-func (d ruleDrag) offset(index int) float32 {
-	return d.travel - float32(index-d.from)*max(ruleRowHeight, d.pitch)
-}
-
-func (v *View) gripHandle(c *ui.Context, theme nui.Theme, index int, row store.RewriteRow, rows []store.RewriteRow) {
-	rewrite := v.Data.Rewrite
-	usable := row.Saved != nil && strings.TrimSpace(v.search) == "" && !rewrite.Busy()
-	grip := ui.Icon(c.Key("grip"), lucide.GripVertical()).Size(14, 14).Shrink(0).TextColor(theme.Dimmed).Label("drag " + row.Rule.Name)
-	if !usable {
-		return
-	}
-	grip.Cursor(ui.CursorGrab).OnClick(func() {})
-	if grip.PressedInside() {
-		v.drag = ruleDrag{key: row.Key, from: index, revision: rewrite.State.Revision, pitch: max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))}
-	}
-	if v.drag.key != row.Key {
-		return
-	}
-	if v.drag.active {
-		grip.Cursor(ui.CursorGrabbing)
-	}
-	_, dy, held := grip.Dragged()
-	if held && dy != 0 {
-		v.drag.travel += dy
-		if !v.drag.active && (v.drag.travel >= ruleDragThreshold || v.drag.travel <= -ruleDragThreshold) {
-			v.drag.active = true
-			v.localOrder = make([]string, len(rows))
-			for position := range rows {
-				v.localOrder[position] = rows[position].Key
-			}
-		}
-		if v.drag.active {
-			v.placeDragged(row.Key)
-		}
-	}
-	if _, _, ended := grip.DragEnded(); ended && v.drag.active {
-		v.finishDrag()
-		return
-	}
-	if !held && v.drag.active {
-		// The press was canceled, as by the window losing the pointer:
-		// the rows go back.
-		v.drag, v.localOrder = ruleDrag{}, nil
-	}
-}
-
-// placeDragged moves the dragged row to the slot under the pointer, among
-// the saved rows: drafts stay last.
-func (v *View) placeDragged(key string) {
-	order := slices.DeleteFunc(slices.Clone(v.localOrder), func(other string) bool { return other == key })
-	saved := 0
-	for _, other := range order {
-		if !v.isUnsaved(other) {
-			saved++
-		}
-	}
-	target := v.drag.from + int(math.Round(float64(v.drag.travel/max(ruleRowHeight, v.drag.pitch))))
-	target = min(max(target, 0), saved)
-	v.localOrder = slices.Insert(order, target, key)
-}
-
-func (v *View) isUnsaved(key string) bool {
-	return !slices.ContainsFunc(v.Data.Rewrite.State.Rules, func(rule store.RewriteRule) bool { return rule.ID == key })
-}
-
-func (v *View) finishDrag() {
-	rewrite := v.Data.Rewrite
-	drag := v.drag
-	v.drag = ruleDrag{}
-	order := v.localOrder
-	if strings.TrimSpace(v.search) != "" || rewrite.Busy() || drag.revision != rewrite.State.Revision {
-		v.localOrder = nil
-		return
-	}
-	ids := make([]string, 0, len(order))
-	for _, key := range order {
-		if !v.isUnsaved(key) {
-			ids = append(ids, key)
-		}
-	}
-	unchanged := true
-	for index, rule := range rewrite.State.Rules {
-		if index >= len(ids) || ids[index] != rule.ID {
-			unchanged = false
-		}
-	}
-	if unchanged {
-		v.localOrder = nil
-		return
-	}
-	rewrite.Reorder(ids, func(bool) { v.localOrder = nil })
 }
 
 func (v *View) prune() {

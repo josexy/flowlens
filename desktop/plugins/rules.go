@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -28,7 +27,7 @@ type rulesPane struct {
 	signature string
 	drafts    []*ruleDraft
 	err       string
-	drag      listDrag
+	list      widgets.ReorderListState
 }
 
 func rulesSignature(plugin *store.Plugin) string {
@@ -87,22 +86,34 @@ func (r *rulesPane) build(c *ui.Context, theme nui.Theme, v *View, plugin *store
 		})
 		return
 	}
-	ui.Scroll(c.Key("rule-list")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Children(func() {
-			for index, draft := range slices.Clone(r.drafts) {
-				r.row(c, theme, v, plugin, index, draft)
+	drafts := r.drafts
+	ids := make([]string, len(drafts))
+	for index, draft := range drafts {
+		ids[index] = draft.id
+	}
+	usable := !plugins.IsMutating("rule:reorder:" + plugin.ID)
+	r.list.Build(c.Key("rule-list"), ids, r.signature, usable, len(drafts), func(ids []string) {
+		r.err = ""
+		plugins.ReorderRules(plugin.ID, ids, func(err error) {
+			if err != nil {
+				r.err = err.Error()
+				r.signature = ""
 			}
 		})
+	}).FillWidth().Grow(1).Basis(0).MinHeight(0).
+		ItemKey(func(index int) any { return drafts[index].id }).Rows(func(item ui.ListRow) {
+		r.row(item.Context, theme, v, plugin, item.Index, drafts[item.Index], usable)
 	})
 }
 
-func (r *rulesPane) row(c *ui.Context, theme nui.Theme, v *View, plugin *store.Plugin, index int, draft *ruleDraft) {
+func (r *rulesPane) row(c *ui.Context, theme nui.Theme, v *View, plugin *store.Plugin, index int, draft *ruleDraft, reorderable bool) {
 	plugins := v.Data.Plugins
 	number := strconv.Itoa(index + 1)
 	busy := plugins.IsMutating("rule:update:" + plugin.ID + ":" + draft.id)
 	line := ui.Row(c.Key(draft.id)).FillWidth().Height(ruleRowHeight).AlignItems(ui.Center).Gap(6).PaddingX(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderMuted)
+	line.Background(theme.Background)
 	line.Children(func() {
-		r.grip(c, theme, v, plugin, number, draft)
+		widgets.ReorderGrip(c.Key("grip"), theme, "drag rule "+number, reorderable)
 		method := draft.method
 		methodBox := ui.Box(c.Key("method")).Width(100).Shrink(0).Children(func() {
 			nui.Input(c, theme, &draft.method, nui.InputOptions{Label: "Method " + number, Size: nui.SM, Disabled: busy, OnSubmit: func(string) { r.save(v, plugin, draft) }}).FillWidth()
@@ -139,47 +150,4 @@ func (r *rulesPane) row(c *ui.Context, theme nui.Theme, v *View, plugin *store.P
 		})
 		nui.Tooltip(c, theme, remove, locales.PythonPluginsDeleteRule(), nui.TooltipOptions{})
 	})
-}
-
-func (r *rulesPane) grip(c *ui.Context, theme nui.Theme, v *View, plugin *store.Plugin, number string, draft *ruleDraft) {
-	grip := ui.Icon(c.Key("grip"), lucide.GripVertical()).Size(14, 14).Shrink(0).TextColor(theme.Dimmed).Cursor(ui.CursorGrab).Label("drag rule " + number)
-	grip.OnClick(func() {})
-	if grip.PressedInside() {
-		r.drag = listDrag{key: draft.id}
-	}
-	if r.drag.key != draft.id {
-		return
-	}
-	if _, dy, moved := grip.Dragged(); moved {
-		r.drag.active = true
-		r.drag.y += dy
-		for r.drag.y > ruleRowHeight/2 || r.drag.y < -ruleRowHeight/2 {
-			direction := 1
-			if r.drag.y < 0 {
-				direction = -1
-			}
-			index := slices.Index(r.drafts, draft)
-			target := index + direction
-			if index < 0 || target < 0 || target >= len(r.drafts) {
-				r.drag.y = 0
-				break
-			}
-			r.drafts[index], r.drafts[target] = r.drafts[target], r.drafts[index]
-			r.drag.y -= float32(direction) * ruleRowHeight
-		}
-	}
-	if _, _, ended := grip.DragEnded(); ended && r.drag.active {
-		r.drag = listDrag{}
-		ids := make([]string, len(r.drafts))
-		for index, item := range r.drafts {
-			ids[index] = item.id
-		}
-		r.err = ""
-		v.Data.Plugins.ReorderRules(plugin.ID, ids, func(err error) {
-			if err != nil {
-				r.err = err.Error()
-				r.signature = ""
-			}
-		})
-	}
 }

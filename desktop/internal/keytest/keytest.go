@@ -19,7 +19,7 @@ func TabTo(t testing.TB, tester *ui.Tester, label string, modifiers ...ui.Modifi
 	for range 256 {
 		// A group or virtual-list wrapper can share its child's name.
 		// Match the actual control, never a focused ancestor of a switch.
-		for _, role := range []ui.Role{ui.RoleButton, ui.RoleCheckBox, ui.RoleSwitch, ui.RoleListItem} {
+		for _, role := range []ui.Role{ui.RoleButton, ui.RoleCheckBox, ui.RoleSwitch, ui.RoleListItem, ui.RoleGroup} {
 			if control, ok := tester.AccessByRole(role, label); ok && control.Focused {
 				return
 			}

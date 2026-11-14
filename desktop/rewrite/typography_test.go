@@ -24,6 +24,6 @@ func TestLargeFontDragFollowsVisibleRowPitch(t *testing.T) {
 	if f.ids() != "a,b" {
 		t.Fatalf("short drag crossed the wrong row: %s", f.ids())
 	}
-	dragGrip(f, "a", pitch*1.2)
+	dragGrip(f, "a", pitch*1.6)
 	f.await("reordered large rows", func() bool { return f.ids() == "b,a" })
 }

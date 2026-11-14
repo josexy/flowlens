@@ -395,9 +395,14 @@ func TestCreatedRuleStartsDisabledAndTogglesSaveImmediately(t *testing.T) {
 	}
 }
 
-func TestArrowsReorderSavedRulesImmediately(t *testing.T) {
+func TestSidebarReordersByDragWithoutArrows(t *testing.T) {
 	f := newFixture(t)
-	f.click(locales.RewriteRulesMoveDown() + " a")
+	for _, label := range []string{locales.RewriteRulesMoveUp() + " a", locales.RewriteRulesMoveDown() + " a"} {
+		if _, ok := f.tester.Find(label); ok {
+			t.Fatalf("sidebar still shows %q", label)
+		}
+	}
+	dragGrip(f, "a", ruleRowHeight*1.6)
 	f.idle()
 	if f.ids() != "b,a" || f.backend.count("reorder") != 1 {
 		t.Fatal(f.ids(), f.backend.log())
@@ -432,7 +437,7 @@ func TestDragUsesLocalOrderAndExcludesDrafts(t *testing.T) {
 		<-release
 		return f.backend.applyOrder(ids)
 	}
-	dragGrip(f, "a", ruleRowHeight*1.2)
+	dragGrip(f, "a", ruleRowHeight*1.6)
 	f.await("reorder call", func() bool {
 		mu.Lock()
 		defer mu.Unlock()
@@ -466,7 +471,7 @@ func TestDragRestoresOnFailureAndIgnoresFilteredOrStale(t *testing.T) {
 	f.backend.reorder = func([]string, int64) (store.RewriteState, error) {
 		return store.RewriteState{}, errors.New("disk full")
 	}
-	dragGrip(f, "Alpha", ruleRowHeight*1.2)
+	dragGrip(f, "Alpha", ruleRowHeight*1.6)
 	f.await("failure", func() bool { return f.data.Rewrite.Error != "" })
 	f.idle()
 	if rows := f.view.rows(); rows[0].Key != "a" || rows[1].Key != "b" || !strings.Contains(f.data.Rewrite.Error, "disk full") {
@@ -504,9 +509,9 @@ func TestDragRestoresOnFailureAndIgnoresFilteredOrStale(t *testing.T) {
 	f.backend.setServer(next)
 	f.emit(next.Revision)
 	f.await("snapshot", func() bool { return f.data.Rewrite.State.Enabled })
-	f.tester.Move(x, y+ruleRowHeight*1.2)
+	f.tester.Move(x, y+ruleRowHeight*1.6)
 	f.tester.Frame()
-	f.tester.Release(x, y+ruleRowHeight*1.2)
+	f.tester.Release(x, y+ruleRowHeight*1.6)
 	f.tester.Frame()
 	f.settle()
 	if rows := f.view.rows(); writes != 0 || rows[0].Key != "a" {
@@ -1127,45 +1132,31 @@ func TestUnsupportedRuleStaysVisibleAndLocked(t *testing.T) {
 	}
 }
 
-// While dragged, a row follows the pointer above the others, which make room
-// for it; where it drops follows the pointer's whole travel, so a drag past
-// the end and back lands where the pointer is.
-func TestDraggedRowFollowsThePointer(t *testing.T) {
+// Native reordering leaves the source in place, draws a preview and commits
+// only on drop. Passing the end and returning still uses the drop position.
+func TestNativeDragCommitsAtTheInsertionLine(t *testing.T) {
 	f := newFixture(t, store.RewriteState{Revision: 1, Rules: []store.RewriteRule{testRule("a"), testRule("b"), testRule("c")}})
 	x, y := f.center("drag a")
 	start, _ := f.tester.Find("a")
 	f.tester.Press(x, y)
 	f.tester.Frame()
-	move := func(dy float32) {
-		for step := 1; step <= 8; step++ {
-			f.tester.Move(x, y+dy*float32(step)/8)
-			f.tester.Frame()
-		}
+	f.tester.Move(x, y+ruleRowHeight*4)
+	f.tester.Frame()
+	if keys := rowKeys(f.view.rows()); keys != "a,b,c" || f.backend.count("reorder") != 0 {
+		t.Fatalf("drag changed the saved order: %s", keys)
 	}
-	move(ruleRowHeight * 0.4)
-	if row, _ := f.tester.Find("a"); row.Y-start.Y < ruleRowHeight*0.4-1 || row.Y-start.Y > ruleRowHeight*0.4+1 {
-		t.Fatalf("row at %v, moved %v from %v", row.Y, ruleRowHeight*0.4, start.Y)
+	if row, _ := f.tester.Find("a"); row.Y != start.Y {
+		t.Fatalf("native source moved from %v to %v", start.Y, row.Y)
 	}
-	if keys := rowKeys(f.view.rows()); keys != "a,b,c" {
-		t.Fatalf("moved early: %s", keys)
-	}
-	// Past the end, then back over c: it drops between b and c.
-	move(ruleRowHeight * 4)
-	if keys := rowKeys(f.view.rows()); keys != "b,c,a" {
-		t.Fatalf("past the end: %s", keys)
-	}
-	move(ruleRowHeight * 1.2)
-	if keys := rowKeys(f.view.rows()); keys != "b,a,c" {
-		t.Fatalf("back: %s", keys)
-	}
-	if row, _ := f.tester.Find("a"); row.Y-start.Y < ruleRowHeight*1.2-1 || row.Y-start.Y > ruleRowHeight*1.2+1 {
-		t.Fatalf("row at %v, want %v below %v", row.Y, ruleRowHeight*1.2, start.Y)
-	}
-	f.tester.Release(x, y+ruleRowHeight*1.2)
+	c, _ := f.tester.Find("c")
+	dropY := c.Y + c.H/4
+	f.tester.Move(x, dropY)
+	f.tester.Frame()
+	f.tester.Release(x, dropY)
 	f.tester.Frame()
 	f.idle()
-	if f.ids() != "b,a,c" {
-		t.Fatal(f.ids())
+	if f.ids() != "b,a,c" || f.backend.count("reorder") != 1 {
+		t.Fatal(f.ids(), f.backend.log())
 	}
 }
 
@@ -1184,13 +1175,13 @@ func TestCanceledDragRestoresTheRows(t *testing.T) {
 		f.tester.Move(x, y+ruleRowHeight*float32(step)/6)
 		f.tester.Frame()
 	}
-	if keys := rowKeys(f.view.rows()); keys != "b,a" {
-		t.Fatalf("drag shows %s", keys)
+	if keys := rowKeys(f.view.rows()); keys != "a,b" {
+		t.Fatalf("drag changes source order: %s", keys)
 	}
 	f.tester.CancelPress()
 	f.settle()
-	if keys := rowKeys(f.view.rows()); keys != "a,b" || writes != 0 || f.view.drag.active {
-		t.Fatalf("rows %s, writes %d, drag %+v", keys, writes, f.view.drag)
+	if keys := rowKeys(f.view.rows()); keys != "a,b" || writes != 0 {
+		t.Fatalf("rows %s, writes %d", keys, writes)
 	}
 }
 

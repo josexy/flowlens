@@ -3,6 +3,7 @@ package plugins
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -34,7 +35,7 @@ type View struct {
 	Select func()
 
 	search    string
-	drag      listDrag
+	list      widgets.ReorderListState
 	create    pluginDialog
 	metadata  pluginDialog
 	fileModal fileDialog
@@ -47,12 +48,6 @@ type View struct {
 	shownText string
 	paramsSet string
 	rules     rulesPane
-}
-
-type listDrag struct {
-	key    string
-	y      float32
-	active bool
 }
 
 type confirmState struct {
@@ -169,26 +164,34 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 			nui.Input(c.Key("search"), theme, &v.search, nui.InputOptions{Label: locales.PythonPluginsSearchPlaceholder(), Placeholder: locales.PythonPluginsSearchPlaceholder(), Leading: lucide.Search(), Size: nui.SM}).FillWidth()
 		})
 		visible := v.filtered()
-		ui.Scroll(c.Key("plugin-list")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().PaddingY(6).Children(func() {
-				switch {
-				case plugins.LoadingPlugins && len(plugins.Plugins) == 0:
-					ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() { ui.Spinner(c) })
-				case len(visible) == 0:
-					title := locales.PythonPluginsEmpty()
-					if strings.TrimSpace(v.search) != "" {
-						title = locales.PythonPluginsNoSearchResults()
-					}
-					widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: title})
-				}
-				for index, plugin := range visible {
-					v.pluginRow(c, theme, index, plugin, visible)
-				}
-				if plugins.Error != "" {
-					ui.Text(c.Key("error"), plugins.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Error).FillWidth().Padding(8)
+		switch {
+		case plugins.LoadingPlugins && len(plugins.Plugins) == 0:
+			ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() { ui.Spinner(c) })
+		case len(visible) == 0:
+			title := locales.PythonPluginsEmpty()
+			if strings.TrimSpace(v.search) != "" {
+				title = locales.PythonPluginsNoSearchResults()
+			}
+			widgets.EmptyState(c.Key("empty"), theme, nui.EmptyOptions{Icon: lucide.FileCode(), Title: title})
+		}
+		ids := make([]string, len(visible))
+		for index, plugin := range visible {
+			ids[index] = plugin.ID
+		}
+		usable := strings.TrimSpace(v.search) == "" && !plugins.LoadingPlugins && !plugins.IsMutating("plugin:reorder")
+		v.list.Build(c.Key("plugin-list"), ids, strconv.FormatUint(plugins.Version, 10), usable, len(visible), func(ids []string) {
+			plugins.ReorderPlugins(ids, func(err error) {
+				if err != nil {
+					v.Notifier.Error(locales.PythonPluginsReorderFailed(err.Error()))
 				}
 			})
+		}).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingY(6).
+			ItemKey(func(index int) any { return visible[index].ID }).Rows(func(item ui.ListRow) {
+			v.pluginRow(item.Context, theme, visible[item.Index], usable)
 		})
+		if plugins.Error != "" {
+			ui.Text(c.Key("error"), plugins.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Error).FillWidth().Padding(8)
+		}
 	})
 	v.create.build(c, theme, v, locales.PythonPluginsCreateTitle(), locales.PythonPluginsCreate(), "plugin:create", v.submitCreate)
 }
@@ -220,21 +223,21 @@ func (v *View) selectPlugin(id string) {
 	})
 }
 
-func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *store.Plugin, visible []*store.Plugin) {
+func (v *View) pluginRow(c *ui.Context, theme nui.Theme, plugin *store.Plugin, reorderable bool) {
 	plugins := v.Data.Plugins
 	selected := plugins.SelectedPluginID == plugin.ID
-	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleListItem).FillWidth().MinHeight(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
-	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent)
+	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleGroup).FillWidth().MinHeight(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
+	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent).Background(theme.Background)
 	hovered := row.Hovered()
 	switch {
 	case selected:
-		row.BorderColor(theme.Primary).Background(theme.Primary.Alpha(0.1))
+		row.BorderColor(theme.Primary).Background(theme.Primary.Alpha(0.1).Over(theme.Background))
 	case hovered:
 		row.Background(theme.Elevated)
 	}
 	row.OnClick(func() { v.selectPlugin(plugin.ID) })
 	row.Children(func() {
-		v.grip(c, theme, plugin, visible, hovered)
+		widgets.ReorderGrip(c.Key("grip"), theme, "drag "+plugin.Name, reorderable)
 		ui.Box(c.Key("icon")).Size(16, 16).Shrink(0).Children(func() {
 			ui.Icon(c, lucide.FileCode()).Size(16, 16).TextColor(theme.Muted)
 			dot := ui.Box(c.Key("status")).Absolute().Right(-2).Bottom(-2).Size(7, 7).Radius(3.5).Border(2, theme.Background).
@@ -259,56 +262,6 @@ func (v *View) pluginRow(c *ui.Context, theme nui.Theme, index int, plugin *stor
 			})
 		}
 	})
-}
-
-func (v *View) grip(c *ui.Context, theme nui.Theme, plugin *store.Plugin, visible []*store.Plugin, shown bool) {
-	plugins := v.Data.Plugins
-	grip := ui.Icon(c.Key("grip"), lucide.GripVertical()).Size(14, 14).Shrink(0).TextColor(theme.Dimmed).Label("drag " + plugin.Name)
-	if !shown && v.drag.key != plugin.ID {
-		grip.Opacity(0)
-	}
-	if strings.TrimSpace(v.search) != "" {
-		return
-	}
-	grip.Cursor(ui.CursorGrab).OnClick(func() {})
-	if grip.PressedInside() {
-		v.drag = listDrag{key: plugin.ID}
-	}
-	if v.drag.key != plugin.ID {
-		return
-	}
-	if _, dy, moved := grip.Dragged(); moved {
-		v.drag.active = true
-		v.drag.y += dy
-		for v.drag.y > pluginRowHeight/2 || v.drag.y < -pluginRowHeight/2 {
-			direction := 1
-			if v.drag.y < 0 {
-				direction = -1
-			}
-			ordered := slices.Clone(plugins.Plugins)
-			index := slices.IndexFunc(ordered, func(item *store.Plugin) bool { return item.ID == plugin.ID })
-			target := index + direction
-			if index < 0 || target < 0 || target >= len(ordered) {
-				v.drag.y = 0
-				break
-			}
-			ordered[index], ordered[target] = ordered[target], ordered[index]
-			plugins.SetOrderLocal(ordered)
-			v.drag.y -= float32(direction) * pluginRowHeight
-		}
-	}
-	if _, _, ended := grip.DragEnded(); ended && v.drag.active {
-		v.drag = listDrag{}
-		ids := make([]string, len(plugins.Plugins))
-		for index, item := range plugins.Plugins {
-			ids[index] = item.ID
-		}
-		plugins.ReorderPlugins(ids, func(err error) {
-			if err != nil {
-				v.Notifier.Error(locales.PythonPluginsReorderFailed(err.Error()))
-			}
-		})
-	}
 }
 
 func fileLanguage(path string) string {
