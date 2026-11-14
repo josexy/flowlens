@@ -425,7 +425,7 @@ func (v *View) closeDialog(c *ui.Context, theme nui.Theme) {
 		Title: locales.UpdaterCloseConfirmTitle(), Description: locales.UpdaterCloseConfirmDescription(), Width: nui.Set[float32](480), Dismissible: nui.Set(!v.closing),
 		Footer: func(c *ui.Context, theme nui.Theme) {
 			ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-				back := nui.Button(c.Key("back"), theme, locales.UpdaterActionReturn(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Disabled: v.closing})
+				back := nui.Button(c.Key("back"), theme, locales.UpdaterActionReturn(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: v.closing})
 				cancel := nui.Button(c.Key("cancel-close"), theme, locales.UpdaterActionCancelAndClose(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Error, Loading: v.closing})
 				background := nui.Button(c.Key("background"), theme, locales.UpdaterActionBackground(), nui.ButtonOptions{Leading: lucide.Minimize2(), Disabled: v.closing})
 				if !v.closing {

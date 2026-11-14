@@ -82,12 +82,12 @@ func (d *ConfirmDialog) Build(c *ui.Context, theme nui.Theme) {
 		Footer: func(c *ui.Context, theme nui.Theme) {
 			ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Children(func() {
 				if request.CancelLabel != "" {
-					nui.Button(c.Key("cancel"), theme, request.CancelLabel, nui.ButtonOptions{Variant: nui.Soft, Color: nui.Neutral}).
+					nui.Button(c.Key("cancel"), theme, request.CancelLabel, nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).
 						OnClick(func() { d.finish(request.OnCancel) })
 				}
 				if request.Secondary != nil {
 					secondary := *request.Secondary
-					nui.Button(c.Key("secondary"), theme, secondary.Label, nui.ButtonOptions{Variant: nui.Soft, Color: secondary.Color}).
+					nui.Button(c.Key("secondary"), theme, secondary.Label, nui.ButtonOptions{Variant: nui.Outline, Color: secondary.Color}).
 						OnClick(func() { d.finish(secondary.Run) })
 				}
 				nui.Button(c.Key("confirm"), theme, request.Confirm.Label, nui.ButtonOptions{Color: request.Confirm.Color}).
