@@ -179,7 +179,7 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 				o.KeyTrailing(index)
 			}
 			if o.Resizable {
-				editableGridResizer(c, theme, state, key)
+				editableGridResizer(c, state, key)
 			}
 		})
 		var value ui.Element
@@ -244,9 +244,8 @@ func editableGridTextCell(c *ui.Context, theme nui.Theme, state *editableGridSta
 	}
 }
 
-// editableGridResizer is the key column's edge; it highlights in the accent
-// color while hovered, as 1.0.5's.
-func editableGridResizer(c *ui.Context, theme nui.Theme, state *editableGridState, key ui.Element) {
+// editableGridResizer handles dragging the key column's edge within its limits.
+func editableGridResizer(c *ui.Context, state *editableGridState, key ui.Element) {
 	handle := ui.Box(c.Key("resize")).Absolute().Top(0).Bottom(0).Right(-3).Width(6).ZIndex(2).Cursor(ui.CursorResizeEW).Label("resize-key-column")
 	if dx, _, held := handle.Dragged(); held && dx != 0 {
 		width := state.keyWidth
@@ -254,9 +253,6 @@ func editableGridResizer(c *ui.Context, theme nui.Theme, state *editableGridStat
 			width = key.Bounds().W
 		}
 		state.keyWidth = clampEditableGridKey(width+dx, state.width)
-	}
-	if handle.Hovered() || handle.Pressed() {
-		handle.Background(theme.Primary.Alpha(0.35))
 	}
 }
 

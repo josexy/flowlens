@@ -130,7 +130,7 @@ func fieldGridRow(c *ui.Context, theme nui.Theme, state *fieldGridState, rows []
 		}
 		name.Children(func() {
 			ui.Text(c, field.Key).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.45).FontWeight(500).TextColor(theme.Text).Hidden(state.editing(index, false))
-			fieldGridResizer(c, theme, state, name)
+			fieldGridResizer(c, state, name)
 		})
 		value := ui.Row(c.Key("value")).Grow(1).Basis(0).Shrink(0).MinWidth(FieldGridValueMinWidth).AlignItems(ui.Center).PaddingX(fieldGridCellPaddingX).Cursor(ui.CursorText)
 		fieldGridCellClick(value, state, index, true, field)
@@ -163,15 +163,12 @@ func (s *fieldGridState) editing(index int, value bool) bool {
 
 // fieldGridResizer is the name column's edge: dragging it resizes the
 // column within its limits, as a share of the row.
-func fieldGridResizer(c *ui.Context, theme nui.Theme, state *fieldGridState, name ui.Element) {
+func fieldGridResizer(c *ui.Context, state *fieldGridState, name ui.Element) {
 	handle := ui.Box(c.Key("resize")).Absolute().Top(0).Bottom(0).Right(-fieldGridResizeHandle / 2).Width(fieldGridResizeHandle).ZIndex(2).Cursor(ui.CursorResizeEW).Label("resize-name-column")
 	if dx, _, held := handle.Dragged(); held && dx != 0 {
 		if width, current := state.width, name.Bounds().W; width > 0 && current > 0 {
 			state.nameShare = clampFieldGridName(current+dx, width) / width
 		}
-	}
-	if handle.Hovered() || handle.Pressed() {
-		handle.Background(theme.Primary.Alpha(0.35))
 	}
 }
 
