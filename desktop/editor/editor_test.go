@@ -603,6 +603,48 @@ func TestDropOnOneFormRowOnly(t *testing.T) {
 	}
 }
 
+func TestFormDataRowMenuActions(t *testing.T) {
+	f := newFake(t)
+	state := f.newHTTP().HTTP
+	state.ActiveRequestTab, state.RequestBodyType = logic.RequestTabBody, logic.BodyTypeFormData
+	first := logic.FormDataItem{ID: "one", Enabled: true, Name: "first", ItemType: logic.FormDataItemText, Value: "keep"}
+	state.RequestBodyFormData = []logic.FormDataItem{
+		first,
+		{ID: "two", Enabled: true, Name: "second", ItemType: logic.FormDataItemText, Value: "replace"},
+	}
+	f.settle()
+
+	choose := func(label string) {
+		t.Helper()
+		f.click(locales.WorkspaceHttpRequestFormDataRowMenuActions() + " 2")
+		if err := menutest.Choose(f.tester, f.settle, label); err != nil {
+			t.Fatal(err)
+		}
+		if menutest.Shown(f.tester) {
+			t.Fatal("row menu remained open after selection")
+		}
+		if state.RequestBodyFormData[0] != first {
+			t.Fatalf("other row changed: %+v", state.RequestBodyFormData[0])
+		}
+	}
+	choose(locales.WorkspaceHttpRequestFormDataRowMenuFile())
+	if row := state.RequestBodyFormData[1]; row.ItemType != logic.FormDataItemFile || row.Value != "" {
+		t.Fatalf("row did not switch to file: %+v", row)
+	}
+	choose(locales.WorkspaceHttpRequestFormDataRowMenuUpload())
+	if file := state.RequestBodyFormData[1].File; file == nil || file.Path != "/tmp/picked.bin" {
+		t.Fatalf("row did not receive the picked file: %+v", file)
+	}
+	choose(locales.WorkspaceHttpRequestFormDataRowMenuText())
+	if row := state.RequestBodyFormData[1]; row.ItemType != logic.FormDataItemText || row.File != nil {
+		t.Fatalf("row did not switch to text: %+v", row)
+	}
+	choose(locales.WorkspaceHttpRequestFormDataRowMenuDelete())
+	if len(state.RequestBodyFormData) != 1 {
+		t.Fatalf("row was not deleted: %+v", state.RequestBodyFormData)
+	}
+}
+
 func TestSettingsDefaultsAndRouting(t *testing.T) {
 	f := newFake(t)
 	saved := &apicollectionservice.SavedHTTPRequest{Method: "GET", URL: "http://example.com/"}

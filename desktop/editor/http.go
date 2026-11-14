@@ -457,7 +457,6 @@ func (v *formDataView) rowMenu(c *ui.Context, theme nui.Theme, e *Editor, key st
 	number := strconv.Itoa(index + 1)
 	state := v.menu(id)
 	anchor := nui.Button(c.Key("row-menu"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Ellipsis(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuActions() + " " + number})
-	anchor.OnClick(func() { state.Open = !state.Open })
 	nui.DropdownMenu(c.Key("row-menu-items"), theme, anchor, state, []nui.MenuItem{
 		{ID: "text", Label: locales.WorkspaceHttpRequestFormDataRowMenuText(), OnSelect: func() {
 			v.begin(id)
