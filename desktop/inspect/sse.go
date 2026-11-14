@@ -21,22 +21,20 @@ import (
 // asyncParseThreshold is how much new text is parsed off the main thread.
 const asyncParseThreshold = 256 * 1024
 
-// sseRowHeight is 1.0.5's message row: 44 px, with the cells' padding.
-const sseRowHeight = 44
+// sseRowHeight matches the console's row height, including cell padding.
+const sseRowHeight = 40
 
 // sseColumnIDs are the message list's columns in the order sseColumns gives
 // them.
 var sseColumnIDs = []string{"id", "event", "preview"}
 
-// sseColumns are 1.0.5's message list columns, 3rem and 6rem wide, and the
-// preview taking the rest, which the user neither moves nor resizes. Widths
-// count the cells' 10 px padding on each side, and the table scrolls sideways
-// below 1.0.5's 480 px.
+// sseColumns use the same native resize grips as the console. The preview
+// takes the remaining width and the table scrolls if the columns overflow.
 func sseColumns() []ui.TableColumn {
 	return []ui.TableColumn{
-		{ID: sseColumnIDs[0], Title: locales.DetailSseId(), Width: 68, Fixed: true},
-		{ID: sseColumnIDs[1], Title: locales.DetailSseEventType(), Width: 116, Fixed: true},
-		{ID: sseColumnIDs[2], Title: locales.DetailSsePreview(), MinWidth: 296, Fixed: true},
+		{ID: sseColumnIDs[0], Title: locales.DetailSseId(), Width: 68, MinWidth: 48, MaxWidth: 360},
+		{ID: sseColumnIDs[1], Title: locales.DetailSseEventType(), Width: 116, MinWidth: 96, MaxWidth: 420},
+		{ID: sseColumnIDs[2], Title: locales.DetailSsePreview(), MinWidth: 296},
 	}
 }
 
@@ -81,9 +79,9 @@ func (s *SSEView) reset() {
 	s.resetList()
 }
 
-// resetList starts the message list at the top, following new messages.
+// resetList starts following a new stream with the current column layout.
 func (s *SSEView) resetList() {
-	s.list = ui.ListState{FollowEnd: true}
+	s.list = ui.ListState{FollowEnd: true, Columns: s.list.Columns}
 	s.list.Label = func(row int) string {
 		if row >= len(s.events) {
 			return ""

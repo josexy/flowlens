@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"iter"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -813,8 +814,8 @@ func TestSSEOpensByDefaultAndListsEvents(t *testing.T) {
 
 func TestSSEMessageListColumns(t *testing.T) {
 	f := sseFixture(t, "event: hello\ndata: first\n\nid: 7\nevent: next\ndata: second\n\n")
-	// As 1.0.5: a header of ID, Event type and Data preview, 44 px rows,
-	// and a dash for a message before any ID.
+	// The columns share the console's row height, with a dash for a message
+	// before any ID.
 	for _, title := range []string{locales.DetailSseId(), locales.DetailSseEventType(), locales.DetailSsePreview()} {
 		f.has(title)
 	}
@@ -825,6 +826,58 @@ func TestSSEMessageListColumns(t *testing.T) {
 	second, _ := f.tester.Find("second")
 	if second.Y-first.Y != sseRowHeight {
 		t.Fatalf("rows are %v apart, want %v", second.Y-first.Y, sseRowHeight)
+	}
+}
+
+func TestSSEMessageListResizesColumns(t *testing.T) {
+	f := sseFixture(t, "id: 7\nevent: hello\ndata: first\n\n")
+	view := f.panel.responseBody.sse
+	for _, column := range []struct {
+		id, title, nextCell string
+	}{
+		{"id", locales.DetailSseId(), "hello"},
+		{"event", locales.DetailSseEventType(), "first"},
+	} {
+		header, ok := f.tester.AccessByRole(ui.RoleColumnHeader, column.title)
+		if !ok {
+			t.Fatalf("missing header %q", column.title)
+		}
+		cell, ok := f.tester.Find(column.nextCell)
+		if !ok {
+			t.Fatalf("missing cell %q", column.nextCell)
+		}
+		x, y := header.Bounds.X+header.Bounds.W-2, header.Bounds.Y+header.Bounds.H/2
+		f.tester.Move(x, y)
+		f.settle()
+		if got := f.tester.Cursor(); got != ui.CursorResizeEW {
+			t.Fatalf("%q resize edge has cursor %v", column.title, got)
+		}
+		const delta = 40
+		f.tester.Press(x, y)
+		f.tester.Frame()
+		f.tester.Move(x+delta, y)
+		f.tester.Frame()
+		f.tester.Release(x+delta, y)
+		f.settle()
+		if got, want := view.list.Columns.Widths[column.id], header.Bounds.W+delta; got != want {
+			t.Fatalf("column %q width = %v, want %v", column.title, got, want)
+		}
+		if moved, ok := f.tester.Find(column.nextCell); !ok || moved.X != cell.X+delta {
+			t.Fatalf("column resize did not move cell %q: before %v, after %v", column.nextCell, cell, moved)
+		}
+		if view.open {
+			t.Fatal("resizing opened the message detail")
+		}
+	}
+	f.click(locales.DetailSseOpenMessage("1"))
+	f.has(locales.DetailSseMessageDetail())
+
+	// Replacing the stream closes its detail and keeps the column widths.
+	widths := view.list.Columns.Widths
+	f.data.body = &proxyservice.TrafficBodyView{ResponseBody: "data: replacement\n\n"}
+	f.settle()
+	if view.open || !maps.Equal(view.list.Columns.Widths, widths) {
+		t.Fatalf("stream reset: detail open %v, widths %v", view.open, view.list.Columns.Widths)
 	}
 }
 
