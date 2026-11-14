@@ -122,9 +122,6 @@ func section(c *ui.Context, theme nui.Theme, key, title string, open *bool, body
 		}
 		header.OnClick(func() { *open = !*open })
 		header.Children(func() {
-			if *open {
-				ui.Box(c.Key("bar")).Absolute().Left(0).Top(0).Bottom(0).Width(3).Background(theme.Primary).IgnoreInput(true)
-			}
 			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).TextColor(color)
 			icon := lucide.ChevronRight()
 			if *open {
