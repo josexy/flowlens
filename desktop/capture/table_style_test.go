@@ -56,20 +56,23 @@ func headerRect(t *testing.T, f *fixture, title string) ui.Rect {
 	return rect
 }
 
-func TestHeaderHasNoRestingDividers(t *testing.T) {
+func TestHeaderShowsNativeDividersAtRest(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		f := newRenderFixture(t)
 		f.setDark(dark)
 		theme := f.theme()
 		host := headerRect(t, f, locales.TrafficHost())
 		y := host.Y + host.H/2
-		want := rgba(theme.Elevated)
 		f.tester.Move(1, 1)
 		f.settle()
 		boundary := host.X + host.W
 		for x := boundary - 4; x <= boundary+4; x++ {
+			want := rgba(theme.Elevated)
+			if x == boundary-1 {
+				want = rgba(theme.BorderAccented)
+			}
 			if got := pixel(f.tester, x, y); !near(got, want) {
-				t.Fatalf("dark=%v: header pixel at x=%v is %v, want the band %v (no divider)", dark, x, got, want)
+				t.Fatalf("dark=%v: header pixel at x=%v is %v, want %v", dark, x, got, want)
 			}
 		}
 	}
@@ -90,7 +93,7 @@ func TestHoveredResizeEdgeUsesOnlyNativeGrip(t *testing.T) {
 				t.Fatalf("dark=%v: extra resize strip at %v: %v, want header %v", dark, x, got, want)
 			}
 		}
-		if got, want := pixel(f.tester, edge-1, y), rgba(tableTheme(theme).Accent); !near(got, want) {
+		if got, want := pixel(f.tester, edge-1, y), rgba(theme.Primary); !near(got, want) {
 			t.Fatalf("dark=%v: native grip pixel %v, want %v", dark, got, want)
 		}
 		if f.tester.Cursor() != ui.CursorResizeEW {

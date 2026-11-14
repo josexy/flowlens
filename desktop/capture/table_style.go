@@ -9,23 +9,14 @@ import (
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 )
 
-// The traffic table follows FlowLens 1.0.5: a 32 px header band on the
-// elevated background, semibold titles in the primary text color, no
-// dividers between titles, and an accent sort arrow. MyGo draws and handles
-// the resize grips.
 // cellPaddingX is the table's horizontal cell padding, Space(2.5).
 const cellPaddingX float32 = 10
 
-// tableTheme is the table's theme: chosen rows take a tint of the accent,
-// keeping their text and badges in their own colors. Its Border is clear, so
-// the table draws no dividers between titles and no resize edge at rest; the
-// header cells draw the titles and arrows (headerCell).
+// tableTheme uses the application theme for MyGo's header divider and resize
+// grips. cellBackground applies the traffic selection tint to the body cells.
 func tableTheme(theme nui.Theme) *ui.Theme {
 	native := theme.Native()
-	native.Background = theme.Background
-	chosen := selectedRowColor(theme)
-	native.Accent, native.InactiveAccent, native.AccentText = chosen, chosen, theme.Text
-	native.Border = ui.Transparent
+	native.AccentText = theme.Text
 	return native
 }
 
@@ -44,11 +35,8 @@ func headerBackground(theme nui.Theme, hovered bool) ui.Color {
 	return theme.Elevated
 }
 
-// headerCell draws a column's header over the one the table builds: the
-// table's title, arrow, and edge colors are fixed to its theme, which also
-// colors chosen rows. It covers the cell, so the table's own title and arrow
-// do not show, and lets input through to the table, which still sorts,
-// moves, and resizes.
+// headerCell draws the traffic header's band, title, and sort arrow. The
+// overlay lets input through to MyGo's sorting, moving, and resizing controls.
 func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefinition) func(cell ui.Element, col int) {
 	return func(cell ui.Element, col int) {
 		if col < 0 || col >= len(visible) {
@@ -61,7 +49,6 @@ func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefin
 		}
 		overlay := ui.Row(c.Key("header-face")).Absolute().Top(0).Bottom(0).Left(0).Right(0).IgnoreInput(true).
 			AlignItems(ui.Center).PaddingX(cellPaddingX).Background(headerBackground(theme, cell.Hovered()))
-		overlay.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 		overlay.Children(func() {
 			ui.Text(c, column.title()).SingleLine().Shrink(1).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
 			if t.sort.Column == string(column.key) {

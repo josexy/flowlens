@@ -471,7 +471,7 @@ func cellFill(c *ui.Context, key string) ui.Element {
 	return ui.Box(c.Key(key)).Absolute().Top(0).Bottom(0).Left(0).Right(0).ZIndex(-1).IgnoreInput(true)
 }
 
-// cellBackground stripes every other row, colors highlighted rows, and marks
+// cellBackground colors selected and highlighted rows, stripes other rows, and marks
 // the entry the detail panel shows, and highlighted rows, with a bar along
 // the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
 // stronger in the dark theme. first and last say whether the cell starts or
@@ -482,6 +482,7 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 	highlight := t.source.Highlight(entry.ID)
 	switch {
 	case chosen:
+		cellFill(c, "selected").Background(selectedRowColor(theme))
 	case highlight != "":
 		alpha := float32(0.15)
 		if theme.Dark {
