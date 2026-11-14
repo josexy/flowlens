@@ -16,12 +16,11 @@ func TestProcessPathCopyShowsTooltip(t *testing.T) {
 	rendertest.RequireTooltip(t, f.tester, locales.DetailCopyProcessPath(), locales.DetailCopyProcessPath())
 }
 
-func TestWebSocketStreamIconActionsShowTooltips(t *testing.T) {
+func TestWebSocketDirectionFilterShowsTooltip(t *testing.T) {
 	entry := httpEntry()
 	entry.Type = "ws"
 	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{{Direction: "send", MsgType: "text", Data: "outgoing", DataSize: 8}}})
 	rendertest.RequireTooltip(t, f.tester, locales.WorkspaceWebsocketClientFilterAll(), locales.WorkspaceWebsocketClientFilterAll())
-	rendertest.RequireTooltip(t, f.tester, locales.WorkspaceWebsocketClientViewModeList(), locales.WorkspaceWebsocketClientViewModeList())
 }
 
 func TestSSEJumpToLatestShowsTooltip(t *testing.T) {

@@ -101,9 +101,6 @@ func TestRenderWebSocketMessageList(t *testing.T) {
 	f.tester.SetSize(rendertest.Width, 520)
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "ws-list", f.setDark)
-	f.panel.messages.Conversation = true
-	f.settle()
-	rendertest.ShootThemes(t, f.tester, "ws-conversation", f.setDark)
 }
 
 func TestRenderSSEMessageList(t *testing.T) {

@@ -32,7 +32,6 @@ const (
 	socketStatusClosed       = "closed"
 	socketStatusIdle         = "idle"
 	draftTypeBinaryFile      = "binary-file"
-	viewModeConversation     = "conversation"
 )
 
 // socketPane shows one WebSocket Client tab.
@@ -52,7 +51,6 @@ type socketPane struct {
 	stream       *inspect.MessageStream
 	cookiesView  *inspect.CookieList
 	seenCount    int
-	seenFilter   string
 	seenFirst    string
 	rightTab     string
 }
@@ -100,14 +98,10 @@ func (p *socketPane) syncState() {
 	if len(state.Messages) > 0 {
 		first = state.Messages[0].ID
 	}
-	if filter := state.DirectionFilter; filter != "" && filter != p.stream.Filter {
-		p.stream.Filter, p.seenCount = filter, -1
-	}
-	if len(state.Messages) != p.seenCount || p.stream.Filter != p.seenFilter || first != p.seenFirst {
-		p.seenCount, p.seenFilter, p.seenFirst = len(state.Messages), p.stream.Filter, first
+	if len(state.Messages) != p.seenCount || first != p.seenFirst {
+		p.seenCount, p.seenFirst = len(state.Messages), first
 		p.stream.SetMessages(state.Messages)
 	}
-	p.stream.Conversation = state.ViewMode == viewModeConversation
 }
 
 func (p *socketPane) canSend() bool {
@@ -364,11 +358,6 @@ func (p *socketPane) rightPanel(c *ui.Context, theme nui.Theme) {
 				p.cookiesView.Build(c, theme, fields, "")
 			case socketTabResponse:
 				p.stream.Build(c, theme, false)
-				state.DirectionFilter, p.seenFilter = p.stream.Filter, p.stream.Filter
-				state.ViewMode = "list"
-				if p.stream.Conversation {
-					state.ViewMode = viewModeConversation
-				}
 			default:
 				fieldsPane(c, theme, p.editor, locales.WorkspaceHttpRequestResponseHeaderList(), fields, "", locales.WorkspaceHttpRequestCopyResponseHeadersJson(), locales.WorkspaceHttpRequestCopyResponseHeadersText(), locales.WorkspaceHttpRequestResponseHeadersCopiedJson(), locales.WorkspaceHttpRequestResponseHeadersCopiedText())
 			}

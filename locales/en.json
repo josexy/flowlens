@@ -2346,7 +2346,5 @@
   "workspaceWebsocketClientStop": "Stop",
   "workspaceWebsocketClientStopConnecting": "Stop connection attempt",
   "workspaceWebsocketClientUrlPlaceholder": "Enter WebSocket URL",
-  "workspaceWebsocketClientViewModeConversation": "Conversation Mode",
-  "workspaceWebsocketClientViewModeList": "List Mode",
   "workspaceWordWrap": "Word wrap"
 }

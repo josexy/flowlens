@@ -173,8 +173,6 @@ type WebSocketClientState struct {
 	DraftType, DraftText   string
 	DraftFile              *RequestFileValue
 	Messages               []WebSocketDisplayMessage
-	DirectionFilter        string
-	ViewMode               string
 	ConnectionStatus       string
 }
 
@@ -330,7 +328,7 @@ func BuildEmptyHTTPEditorState(source RequestDraftSource) *HTTPEditorState {
 func BuildEmptyWebSocketClientState(source RequestDraftSource) *WebSocketClientState {
 	return &WebSocketClientState{
 		Source: source, ActiveLeftTab: "message", ActiveRightTab: "response-headers", Params: []EditableRow{emptyRow()}, Headers: []EditableRow{emptyRow()},
-		Settings: defaultWebSocketSettings(), DraftType: "text", DirectionFilter: "all", ViewMode: "list", ConnectionStatus: "idle",
+		Settings: defaultWebSocketSettings(), DraftType: "text", ConnectionStatus: "idle",
 	}
 }
 

@@ -322,6 +322,24 @@ func TestWebSocketAgainstLocalServer(t *testing.T) {
 	if !f.tester.HasText("echo:second") {
 		t.Fatalf("%v", f.tester.Texts())
 	}
+	session := state.SessionID
+	f.click(locales.WorkspaceWebsocketClientClearMessages())
+	if len(state.Messages) != 0 || !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
+		t.Fatalf("messages after clearing: %+v, %v", state.Messages, f.tester.Texts())
+	}
+	if state.SessionID != session || state.ConnectionStatus != socketStatusConnected {
+		t.Fatal("clearing messages changed the connection")
+	}
+	if button, ok := f.tester.Access(locales.WorkspaceWebsocketClientClearMessages()); !ok || !button.Disabled {
+		t.Fatalf("clear button should be disabled when empty: %+v", button)
+	}
+	state.DraftText = "after clear"
+	f.settle2()
+	f.click(locales.WorkspaceWebsocketClientSendMessage())
+	f.waitFor("echo after clearing", func() bool { return f.tester.HasText("echo:after clear") })
+	if len(state.Messages) != 2 || state.Messages[0].Data != "after clear" || state.Messages[1].Data != "echo:after clear" {
+		t.Fatalf("messages after sending again: %+v", state.Messages)
+	}
 	close(closeNow)
 	f.waitFor("closed", func() bool {
 		return state.ConnectionStatus == socketStatusClosed || state.ConnectionStatus == socketStatusError

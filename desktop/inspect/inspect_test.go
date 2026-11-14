@@ -373,21 +373,6 @@ func TestWebSocketMessageRows(t *testing.T) {
 	}
 }
 
-func TestWebSocketConversationOpensBinaryMessagesByTheirButton(t *testing.T) {
-	f := wsFixture(t,
-		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello there", DataSize: 11},
-		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
-	)
-	f.panel.messages.Conversation = true
-	f.settle()
-	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
-	f.has(locales.WorkspaceWebsocketClientMessageDetailSend())
-	f.panel.messages.open = false
-	f.settle()
-	f.openMessage("hello there")
-	f.has(locales.WorkspaceWebsocketClientMessageDetailReceive())
-}
-
 func TestWebSocketHexExportWaitsForTheDialogsSave(t *testing.T) {
 	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3})
 	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))

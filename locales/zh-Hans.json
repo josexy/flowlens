@@ -1379,7 +1379,5 @@
   "workspaceWebsocketClientStop": "终止",
   "workspaceWebsocketClientStopConnecting": "终止连接过程",
   "workspaceWebsocketClientUrlPlaceholder": "输入 WebSocket URL",
-  "workspaceWebsocketClientViewModeConversation": "对话模式",
-  "workspaceWebsocketClientViewModeList": "列表模式",
   "workspaceWordWrap": "自动换行"
 }

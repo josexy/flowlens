@@ -68,7 +68,7 @@ The full Go suite, MyGo UI vet, and Windows GUI build passed. Headless coverage 
 | Error toasts when writing to the clipboard fails | No such toasts | Native clipboard writes cannot fail. |
 | Shift-click toggles a row; Ctrl/Cmd-click toggles details; no table keys | Native single/additive/range/drag selection and keyboard movement; Enter or unmodified double-click opens details; Close details preserves selection | The toolkit owns selection and activation. Modifier clicks only select. |
 | Each Python console and SSE message row a tab stop, opened with Enter or Space | Each table one tab stop: the arrow keys move between rows, and Enter opens one | MyGo's table is one focusable list. |
-| A WebSocket text message in the conversation opens nothing when clicked | It opens its details, as in the list | It gives the conversation a path to a text message's actions, and conflicts with nothing in 1.0.5. |
+| WebSocket messages can switch between list and conversation modes | WebSocket messages use a list | Both the client and the traffic detail panel use the same message list. |
 | A press on a selected traffic row released on the next row, under the drag threshold, clicks the row pressed | It clicks no row | MyGo leaves such a press to the release, and the table cannot tell it from a press on the scroll bar. |
 | Python API help docked beside the content in a workspace 1100 px wide or more, a Slideover in a narrower one | A Slideover at the window's right edge, 420 px wide, at any width | One placement at every size; the Slideover keeps the content's width and closes with Escape or a click beside it. |
 | Dragging the secondary splitter to zero collapses it | Clicking the active primary section toggles the sidebar; dragging changes its width within bounds | Keep the explicit native collapse action. |
@@ -138,7 +138,7 @@ A review of the change found that two of these still differed and restored them:
 
 ## Tooltips
 
-Every `UTooltip` and `AppTooltip` in the 1.0.5 templates (`frontend/src`), with the locale keys its text uses. Where the text is chosen at run time, every key it can show is listed. Rows marked *dynamic* show data rather than copy.
+Tooltips carried over from the 1.0.5 templates (`frontend/src`) and their locale keys. Rows marked *dynamic* show data.
 
 `TestTooltipInventoryKeysHaveTooltipCallSites` in `desktop/internal/parity` reads the keys in this table and fails unless each one's accessor is referenced from Go code that builds a tooltip. Keep the table in step when a tooltip is added or removed.
 
@@ -152,9 +152,8 @@ Every `UTooltip` and `AppTooltip` in the 1.0.5 templates (`frontend/src`), with 
 | `common/StatusBar.vue` | GitHub | `status.action_github` |
 | `common/StatusBar.vue` | Update | `status.update_ready`, `status.update_error` |
 | `common/StatusBar.vue` | Detail layout | `status.switch_horizontal_layout`, `status.switch_vertical_layout` |
-| `common/websocket/WebSocketMessageStream.vue` | Direction filter | `workspace.websocket_client.filter_send`, `workspace.websocket_client.filter_receive` |
+| `common/websocket/WebSocketMessageStream.vue` | Direction filter | `workspace.websocket_client.filter_all`, `workspace.websocket_client.filter_send`, `workspace.websocket_client.filter_receive` |
 | `common/websocket/WebSocketMessageStream.vue` | Clear | `workspace.websocket_client.clear_messages` |
-| `common/websocket/WebSocketMessageStream.vue` | View mode | `workspace.websocket_client.view_mode_list`, `workspace.websocket_client.view_mode_conversation` |
 | `modal/WebSocketMessageDetailModal.vue` | Wrap, copy, save | `detail.wrap_body`, `detail.copy_body`, `detail.save_body` |
 | `python-plugins/PythonPluginRulesPane.vue` | Delete rule | `python_plugins.delete_rule` |
 | `python-plugins/PythonPluginSurface.vue` | Save file (with binding) | `python_plugins.save_file` |

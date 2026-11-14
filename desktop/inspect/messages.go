@@ -28,9 +28,7 @@ type MessageStream struct {
 	OnClear func()
 	deps    Dependencies
 
-	Filter       string
-	Conversation bool
-
+	filter   string
 	source   []logic.WebSocketDisplayMessage
 	filtered []logic.WebSocketDisplayMessage
 
@@ -51,7 +49,7 @@ type MessageStream struct {
 
 // NewMessageStream returns an empty stream.
 func NewMessageStream(deps Dependencies) *MessageStream {
-	stream := &MessageStream{deps: deps, Filter: DirectionAll, view: widgets.NewCodeView("plaintext", true), hex: NewHexView(deps)}
+	stream := &MessageStream{deps: deps, filter: DirectionAll, view: widgets.NewCodeView("plaintext", true), hex: NewHexView(deps)}
 	stream.hex.SelectionFilename = "websocket-selection.bin"
 	stream.hex.Exporting = &stream.exporting
 	stream.list.FollowEnd = true
@@ -65,39 +63,39 @@ func (m *MessageStream) SetMessages(messages []logic.WebSocketDisplayMessage) {
 }
 
 func (m *MessageStream) applyFilter() {
-	if m.Filter == DirectionAll {
+	if m.filter == DirectionAll {
 		m.filtered = m.source
 		return
 	}
 	m.filtered = m.filtered[:0:0]
 	for _, message := range m.source {
-		if message.Direction == m.Filter {
+		if message.Direction == m.filter {
 			m.filtered = append(m.filtered, message)
 		}
 	}
 }
 
 func (m *MessageStream) cycleFilter() {
-	switch m.Filter {
+	switch m.filter {
 	case DirectionAll:
-		m.Filter = DirectionSend
+		m.filter = DirectionSend
 	case DirectionSend:
-		m.Filter = DirectionReceive
+		m.filter = DirectionReceive
 	default:
-		m.Filter = DirectionAll
+		m.filter = DirectionAll
 	}
 	m.applyFilter()
 }
 
-func (m *MessageStream) filterLabel() string {
-	switch m.Filter {
+func (m *MessageStream) filterButton(c *ui.Context, theme nui.Theme) {
+	icon, label := lucide.ArrowUpDown(), locales.WorkspaceWebsocketClientFilterAll()
+	switch m.filter {
 	case DirectionSend:
-		return locales.WorkspaceWebsocketClientFilterSend()
+		icon, label = lucide.ArrowUp(), locales.WorkspaceWebsocketClientFilterSend()
 	case DirectionReceive:
-		return locales.WorkspaceWebsocketClientFilterReceive()
-	default:
-		return locales.WorkspaceWebsocketClientFilterAll()
+		icon, label = lucide.ArrowDown(), locales.WorkspaceWebsocketClientFilterReceive()
 	}
+	iconButton(c, theme, "filter", icon, label, false, m.cycleFilter)
 }
 
 // Build shows the stream. truncated tells that older messages were dropped.
@@ -109,15 +107,10 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).PaddingY(4).Children(func() {
 			ui.Box(c).Grow(1)
-			iconButton(c, theme, "filter", lucide.ArrowUpDown(), m.filterLabel(), false, m.cycleFilter)
+			m.filterButton(c, theme)
 			if m.OnClear != nil {
 				iconButton(c, theme, "clear", lucide.Trash(), locales.WorkspaceWebsocketClientClearMessages(), len(m.source) == 0, m.OnClear)
 			}
-			label, icon := locales.WorkspaceWebsocketClientViewModeList(), lucide.List()
-			if m.Conversation {
-				label, icon = locales.WorkspaceWebsocketClientViewModeConversation(), lucide.MessagesSquare()
-			}
-			iconButton(c, theme, "mode", icon, label, false, func() { m.Conversation = !m.Conversation })
 		})
 		if truncated {
 			warningAlert(c, theme, locales.TrafficWsMsgsTruncated())
@@ -126,23 +119,10 @@ func (m *MessageStream) Build(c *ui.Context, theme nui.Theme, truncated bool) {
 			emptyState(c, theme, lucide.MessagesSquare(), locales.WorkspaceWebsocketClientNoMessages())
 			return
 		}
-		// As 1.0.5: the list in a bordered box 10 px in, the conversation
-		// 14 px in without one.
-		padding := float32(10)
-		if m.Conversation {
-			padding = 14
-		}
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(padding).Children(func() {
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(10).Children(func() {
 			list := ui.List(c.Key("messages"), &m.list, len(m.filtered), func(index int) {
-				if m.Conversation {
-					m.bubble(c, theme, index)
-					return
-				}
 				m.row(c, theme, index)
-			}).Fill().MinHeight(0)
-			if !m.Conversation {
-				list.Border(1, theme.Border)
-			}
+			}).Fill().MinHeight(0).Border(1, theme.Border)
 			m.listHeight = list.Bounds().H
 		})
 	})
@@ -205,42 +185,6 @@ func (m *MessageStream) row(c *ui.Context, theme nui.Theme, index int) {
 		})
 		ui.Row(c).Width(88).Shrink(0).Children(func() { directionTag(c, theme, message.Direction) })
 		ui.Text(c, m.preview(message)).Grow(1).Basis(0).MinWidth(0).SingleLine().FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text)
-	})
-}
-
-// bubble is a message of the conversation as 1.0.5 drew it: its tag above
-// its text, or above a button with its size that opens a binary message. A
-// click on a text message opens it too, which 1.0.5's did not.
-func (m *MessageStream) bubble(c *ui.Context, theme nui.Theme, index int) {
-	message := m.filtered[index]
-	send := message.Direction == DirectionSend
-	colors := desktoptheme.WebSocketPalette(theme.Dark)
-	background := colors.ReceiveBubble
-	if send {
-		background = colors.SendBubble
-	}
-	justify := ui.Start
-	if send {
-		justify = ui.End
-	}
-	ui.Row(c.Key(message.ID)).FillWidth().Padding(0, 0, 10, 0).Justify(justify).Children(func() {
-		ui.Column(c).MaxWidthPercent(76).Children(func() {
-			bubble := ui.Column(c).MaxWidth(720).Gap(6).PaddingX(12).PaddingY(10).Radius(16).Border(1, theme.Border).Background(background)
-			bubble.Shadow(0, 6, 16, 0, ui.Hex("#0f172a").Alpha(0.04))
-			if message.MsgType != "binary" {
-				bubble.OnClick(func() { m.open_(message) })
-			}
-			bubble.Children(func() {
-				ui.Row(c).Children(func() { directionTag(c, theme, message.Direction) })
-				if message.MsgType == "binary" {
-					button := ui.Row(c).Radius(999).PaddingX(12).PaddingY(8).Background(ui.Hex("#0f172a").Alpha(0.08)).Role(ui.RoleButton)
-					button.OnClick(func() { m.open_(message) })
-					button.Children(func() { ui.Text(c, m.preview(message)).FontSize(desktoptheme.TextSize(c, 14)).TextColor(theme.Text) })
-					return
-				}
-				ui.Text(c, message.Data).FontSize(desktoptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Text)
-			})
-		})
 	})
 }
 

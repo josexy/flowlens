@@ -7,6 +7,7 @@ This guide covers day-to-day FlowLens behavior and operational details. For inst
 - Capture, history, categories, API collections, rewrite rules, Python plugins, and memory statistics share the same workbench shell.
 - In capture and history traffic tables, a click selects one row; Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. Repeated single clicks keep the row selected. With the table focused, arrows move the selection, Shift+arrows extend it, and Primary+A selects all. Enter, an unmodified double-click, or the row menu's **Show** opens details. **Close details** hides the panel without clearing the selection and returns focus to the table. Selection changes update an open panel but do not reopen a closed one.
 - HTTP Request Editor and WebSocket Client tabs can be saved into API Collection folders from the tab context menu.
+- WebSocket messages appear in a list. The arrow button cycles through all, sent, and received messages. **Clear Messages** empties the client's list while the connection stays open.
 - Saving an editor tab already linked to an API Collection entry updates that request directly.
 - Drag an API Collection row or its grip onto a folder to move it. Hover over a collapsed folder to expand it, or hold near the tree's edge to scroll. Nested folders can be dropped on **Move to root**; requests must remain in a folder. Release to save the move, or press Escape to cancel.
 - HTTP and WebSocket requests support `No Proxy`, `System Proxy`, `MITM Proxy`, and `Custom Proxy` modes.

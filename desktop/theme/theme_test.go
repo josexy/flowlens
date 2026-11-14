@@ -145,8 +145,5 @@ func TestWebSocketPalette(t *testing.T) {
 				t.Errorf("dark %v: %v, want %s", tc.dark, pair.got, pair.want)
 			}
 		}
-		if got.SendBubble != ui.Hex("#f59e0b").Alpha(0.08) || got.ReceiveBubble != ui.Hex("#2563eb").Alpha(0.08) {
-			t.Errorf("dark %v: bubbles %v %v", tc.dark, got.SendBubble, got.ReceiveBubble)
-		}
 	}
 }

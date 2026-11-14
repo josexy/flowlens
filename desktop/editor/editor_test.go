@@ -850,12 +850,32 @@ func TestWebSocketClientMessageStream(t *testing.T) {
 		t.Fatalf("suggested %v, want %v", got, want)
 	}
 
-	// A direction filter that hides every message.
+	binary := locales.WorkspaceWebsocketClientBinarySize("3")
+	f.click(locales.WorkspaceWebsocketClientFilterAll())
+	if f.tester.HasText("hello, world") || !f.tester.HasText(binary) {
+		t.Fatalf("sent messages: %v", f.tester.Texts())
+	}
+	f.click(locales.WorkspaceWebsocketClientFilterSend())
+	if !f.tester.HasText("hello, world") || f.tester.HasText(binary) {
+		t.Fatalf("received messages: %v", f.tester.Texts())
+	}
+	f.click(locales.WorkspaceWebsocketClientFilterReceive())
+	if !f.tester.HasText("hello, world") || !f.tester.HasText(binary) {
+		t.Fatalf("all messages: %v", f.tester.Texts())
+	}
+	if _, ok := f.tester.Access("List Mode"); ok {
+		t.Fatal("the message list offers a view mode toggle")
+	}
+
 	state.Messages = state.Messages[:1]
-	state.DirectionFilter = "send"
 	f.settle()
+	f.click(locales.WorkspaceWebsocketClientFilterAll())
 	if f.tester.HasText("hello, world") || !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
-		t.Fatalf("filtered stream: %v", f.tester.Texts())
+		t.Fatalf("empty sent messages: %v", f.tester.Texts())
+	}
+	f.click(locales.WorkspaceWebsocketClientClearMessages())
+	if len(state.Messages) != 0 {
+		t.Fatalf("clear left messages hidden by the filter: %+v", state.Messages)
 	}
 }
 

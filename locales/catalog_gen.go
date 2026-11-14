@@ -14862,30 +14862,6 @@ func (msgs Messages) WorkspaceWebsocketClientUrlPlaceholder() string {
 	return Catalog.Format(msgs.locale, "workspaceWebsocketClientUrlPlaceholder", nil)
 }
 
-// WorkspaceWebsocketClientViewModeConversation says "Conversation Mode"
-// in the language the app shows.
-func WorkspaceWebsocketClientViewModeConversation() string {
-	return In(i18n.Locale()).WorkspaceWebsocketClientViewModeConversation()
-}
-
-// WorkspaceWebsocketClientViewModeConversation says "Conversation Mode"
-// in the language of msgs.
-func (msgs Messages) WorkspaceWebsocketClientViewModeConversation() string {
-	return Catalog.Format(msgs.locale, "workspaceWebsocketClientViewModeConversation", nil)
-}
-
-// WorkspaceWebsocketClientViewModeList says "List Mode"
-// in the language the app shows.
-func WorkspaceWebsocketClientViewModeList() string {
-	return In(i18n.Locale()).WorkspaceWebsocketClientViewModeList()
-}
-
-// WorkspaceWebsocketClientViewModeList says "List Mode"
-// in the language of msgs.
-func (msgs Messages) WorkspaceWebsocketClientViewModeList() string {
-	return Catalog.Format(msgs.locale, "workspaceWebsocketClientViewModeList", nil)
-}
-
 // WorkspaceWordWrap says "Word wrap"
 // in the language the app shows.
 func WorkspaceWordWrap() string { return In(i18n.Locale()).WorkspaceWordWrap() }
