@@ -67,7 +67,7 @@ func TestRenderCaptureWithDetail(t *testing.T) {
 	table := f.workspace.Table
 	table.replaceSelection(table.rowIndex(rendertest.Inspected))
 	f.settle()
-	if !f.data.Traffic.ShowDetailPanel || table.selection.Len() != 1 {
+	if !f.data.Traffic.ShowDetailPanel || table.state.Selection.Len() != 1 {
 		t.Fatal("the inspected row is not shown")
 	}
 	rendertest.ShootThemes(t, f.tester, "capture-detail", f.setDark)

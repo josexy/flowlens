@@ -18,8 +18,8 @@ func TestNativeSelectionFollowsIdentityAndDisplayedRange(t *testing.T) {
 	f := newFixture(t, entry(1, "d.test"), entry(2, "b.test"), entry(3, "a.test"), entry(4, "c.test"))
 	f.clickRow(0, "b.test")
 	table := f.workspace.Table
-	table.sort = ui.SortOrder{Column: string(logic.ColumnHost)}
-	table.lastSort = table.sort
+	table.state.Sort = ui.SortOrder{Column: string(logic.ColumnHost)}
+	table.lastSort = table.state.Sort
 	f.settle()
 	f.requireSelection([]uint64{2}, 2, false)
 	f.clickRow(ui.Shift, "d.test")
@@ -71,7 +71,7 @@ func TestDetailCloseRetainsSelectionAndReturnsFocus(t *testing.T) {
 			keytest.TabTo(t, f.tester, locales.DetailClosePanel())
 			f.tester.Key(0, ui.KeySpace)
 			f.settle()
-			if table.source.ShowDetail() || !table.selection.Has(row.ID) || table.selection.Len() != 1 || !f.tester.Focused(locales.TrafficColumns()) {
+			if table.source.ShowDetail() || !table.state.Selection.Has(trafficRowID(row.ID)) || table.state.Selection.Len() != 1 || !f.tester.Focused(locales.TrafficColumns()) {
 				t.Fatalf("close: visible %v selected %v focus %v", table.source.ShowDetail(), table.selectedIDs(), f.tester.Focused(locales.TrafficColumns()))
 			}
 			f.tester.Key(0, ui.KeyDown)

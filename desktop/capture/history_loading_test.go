@@ -115,7 +115,7 @@ func TestHistoryLoadingKeepsRowsAndDetail(t *testing.T) {
 				f.tester.ClickAt(bounds.X+bounds.W/2, bounds.Y+bounds.H/2)
 			}
 			f.tester.Frame()
-			if f.data.History.Traffic.Selected.ID != 11 || f.workspace.HistoryTable.sort.Column != "" || detailClicks != 1 {
+			if f.data.History.Traffic.Selected.ID != 11 || f.workspace.HistoryTable.state.Sort.Column != "" || detailClicks != 1 {
 				t.Fatal("mask did not isolate table input from the detail panel")
 			}
 			f.settle()

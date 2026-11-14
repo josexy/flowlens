@@ -24,18 +24,25 @@ const asyncParseThreshold = 256 * 1024
 // sseRowHeight matches the console's row height, including cell padding.
 const sseRowHeight = 40
 
-// sseColumnIDs are the message list's columns in the order sseColumns gives
+// sseColumnIDs are the message list's columns in the order columns gives
 // them.
 var sseColumnIDs = []string{"id", "event", "preview"}
 
-// sseColumns use the same native resize grips as the console. The preview
+// columns use the same native resize grips as the console. The preview
 // takes the remaining width and the table scrolls if the columns overflow.
-func sseColumns() []ui.TableColumn {
-	return []ui.TableColumn{
+func (s *SSEView) columns() []nui.TableColumn[*logic.SSEEvent] {
+	columns := []nui.TableColumn[*logic.SSEEvent]{
 		{ID: sseColumnIDs[0], Title: locales.DetailSseId(), Width: 68, MinWidth: 48, MaxWidth: 360},
 		{ID: sseColumnIDs[1], Title: locales.DetailSseEventType(), Width: 116, MinWidth: 96, MaxWidth: 420},
 		{ID: sseColumnIDs[2], Title: locales.DetailSsePreview(), MinWidth: 296},
 	}
+	columns[0].Value = func(event *logic.SSEEvent) string { return locales.DetailSseOpenMessage(strconv.Itoa(event.Sequence)) }
+	for index := range columns {
+		columns[index].Cell = func(c *ui.Context, theme nui.Theme, event *logic.SSEEvent, _ bool) {
+			s.cell(c, theme, event, index)
+		}
+	}
+	return columns
 }
 
 // SSEView lists the events of a stream.
@@ -51,7 +58,7 @@ type SSEView struct {
 	parsing  bool
 	sequence uint64
 
-	list ui.ListState
+	table nui.TableState[*logic.SSEEvent]
 	// rows opens a message on a click or Enter, as 1.0.5's row buttons did.
 	rows *widgets.RowActivator
 
@@ -81,14 +88,8 @@ func (s *SSEView) reset() {
 
 // resetList starts following a new stream with the current column layout.
 func (s *SSEView) resetList() {
-	s.list = ui.ListState{FollowEnd: true, Columns: s.list.Columns}
-	s.list.Label = func(row int) string {
-		if row >= len(s.events) {
-			return ""
-		}
-		return locales.DetailSseOpenMessage(strconv.Itoa(s.events[row].Sequence))
-	}
-	s.rows = widgets.NewRowActivator(&s.list)
+	s.table = nui.TableState[*logic.SSEEvent]{List: ui.ListState{FollowEnd: true, Columns: s.table.List.Columns}}
+	s.rows = widgets.NewRowActivator(&s.table.List, &s.table.Selection)
 }
 
 func (s *SSEView) closeDetail() { s.open, s.selected = false, nil }
@@ -131,6 +132,9 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		s.clipboard = nil
 	}
 	s.update(content)
+	if len(s.events) != s.table.Len() {
+		s.table.SetRows(s.events, func(event *logic.SSEEvent) string { return strconv.Itoa(event.Sequence) })
+	}
 	s.detail(c, theme)
 	if content.Encoding == "base64" {
 		emptyState(c, theme, lucide.Binary(), locales.DetailSseUnavailable())
@@ -143,7 +147,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 				ui.Text(c, locales.DetailSseParsing()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 			ui.Box(c).Grow(1)
-			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.list.ScrollToEnd)
+			iconButton(c, theme, "latest", lucide.ArrowDownToLine(), locales.DetailSseJumpToLatest(), len(s.events) == 0, s.table.List.ScrollToEnd)
 		})
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingX(10).Children(func() {
 			// As 1.0.5: the empty state only once parsing found nothing.
@@ -151,12 +155,10 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 				emptyState(c, theme, lucide.Radio(), locales.DetailSseEmpty())
 				return
 			}
-			table := ui.Table(c.Key("sse-table"), &s.list, sseColumns(), len(s.events), func(row, col int) {
-				if row < len(s.events) {
-					s.cell(c, theme, s.events[row], col)
-				}
-			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.DetailSseTab())
-			widgets.TableHeaderDivider(c, theme, table)
+			table := widgets.Table(c.Key("sse-table"), theme, &s.table, s.columns(), nui.TableOptions{
+				Label:      locales.DetailSseTab(),
+				BuildEmpty: func(*ui.Context, nui.Theme) {},
+			}).Border(1, theme.Border)
 			s.rows.Attach(table)
 			if row, ok := s.rows.Activated(table, len(s.events)); ok {
 				s.openDetail(s.events[row])

@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"slices"
@@ -57,8 +58,51 @@ func TestPythonConsoleColumns(t *testing.T) {
 	}
 	f.tester.Release(edge+480, y)
 	f.settle()
-	if got := view.list.Columns.Widths[consoleColumnSource]; got != 420 {
-		t.Fatalf("Source is %v wide, want 420 (widths %v)", got, view.list.Columns.Widths)
+	if got := view.table.List.Columns.Widths[consoleColumnSource]; got != 420 {
+		t.Fatalf("Source is %v wide, want 420 (widths %v)", got, view.table.List.Columns.Widths)
+	}
+}
+
+func TestPythonConsoleVirtualizesAndRefreshesRollingEntries(t *testing.T) {
+	entries := make([]logic.PluginLogEntry, 2000)
+	for index := range entries {
+		entries[index] = consoleEntry(uint64(index+1), "alpha", "stdout", "info", fmt.Sprintf("message-%d", index+1))
+	}
+	f, state, view := consoleFixture(t, entries...)
+	checkVirtualized := func() {
+		t.Helper()
+		if cells := view.table.CellBuilds; cells == 0 || cells > 50*len(consoleColumnIDs) {
+			t.Fatalf("built %d cells for a 2000-row console", cells)
+		}
+	}
+	checkVirtualized()
+	if !f.tester.HasText("message-2000") {
+		t.Fatal("console did not follow the latest entry")
+	}
+	view.table.List.ScrollTo(0, ui.Start)
+	f.settle()
+	if !f.tester.HasText("message-1") {
+		t.Fatal("console did not scroll to its first entry")
+	}
+	checkVirtualized()
+
+	// A full console replaces its oldest rows while its count stays constant.
+	view.table.List.ScrollToEnd()
+	f.settle()
+	state.ScriptConsoleEntries = logic.AppendPythonLogBatch(state.ScriptConsoleEntries, []logic.PluginLogEntry{
+		consoleEntry(2001, "alpha", "stdout", "info", "replacement-message"),
+	}, len(entries))
+	f.settle()
+	if !f.tester.HasText("replacement-message") {
+		t.Fatal("console did not follow the replacement entry")
+	}
+	if view.table.Row(0).EventID != 2 || view.table.Len() != len(entries) {
+		t.Fatal("the table retained the old console snapshot")
+	}
+	checkVirtualized()
+	f.click("replacement-message")
+	if view.detail == nil || view.detail.EventID != 2001 {
+		t.Fatalf("opened the wrong entry after rotation: %+v", view.detail)
 	}
 }
 

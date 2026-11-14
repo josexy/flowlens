@@ -12,14 +12,6 @@ import (
 // cellPaddingX is the table's horizontal cell padding, Space(2.5).
 const cellPaddingX float32 = 10
 
-// tableTheme uses the application theme for MyGo's header divider and resize
-// grips. cellBackground applies the traffic selection tint to the body cells.
-func tableTheme(theme nui.Theme) *ui.Theme {
-	native := theme.Native()
-	native.AccentText = theme.Text
-	return native
-}
-
 // selectedRowColor is 1.0.5's --app-accent-selected: the primary color at 12%
 // over the accented background.
 func selectedRowColor(theme nui.Theme) ui.Color {
@@ -51,9 +43,9 @@ func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefin
 			AlignItems(ui.Center).PaddingX(cellPaddingX).Background(headerBackground(theme, cell.Hovered()))
 		overlay.Children(func() {
 			ui.Text(c, column.title()).SingleLine().Shrink(1).MinWidth(0).FontSize(desktoptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
-			if t.sort.Column == string(column.key) {
+			if t.state.Sort.Column == string(column.key) {
 				icon := lucide.ArrowUp()
-				if t.sort.Descending {
+				if t.state.Sort.Descending {
 					icon = lucide.ArrowDown()
 				}
 				ui.Icon(c.Key("sort-arrow"), icon).Size(12, 12).Shrink(0).MarginStart(4).TextColor(theme.Primary).Label("sort-arrow")
@@ -70,7 +62,7 @@ func (t *Table) displayOrder(visible []columnDefinition) []string {
 		shown[string(column.key)] = true
 	}
 	order := make([]string, 0, len(visible))
-	for _, key := range t.list.Columns.Order {
+	for _, key := range t.state.List.Columns.Order {
 		if shown[key] && !slices.Contains(order, key) {
 			order = append(order, key)
 		}

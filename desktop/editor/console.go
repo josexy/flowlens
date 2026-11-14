@@ -37,26 +37,32 @@ const (
 	consoleColumnOutput = "output"
 )
 
-// consoleColumnIDs are the console's columns in the order consoleColumns
+// consoleColumnIDs are the console's columns in the order columns
 // gives them.
 var consoleColumnIDs = []string{consoleColumnTime, consoleColumnType, consoleColumnSource, consoleColumnOutput}
 
-func consoleColumns() []ui.TableColumn {
-	return []ui.TableColumn{
+func (v *consoleView) columns() []nui.TableColumn[logic.PluginLogEntry] {
+	columns := []nui.TableColumn[logic.PluginLogEntry]{
 		{ID: consoleColumnTime, Title: locales.WorkspaceHttpRequestConsoleColumnTime(), Width: 152, MinWidth: 120, MaxWidth: 360},
 		{ID: consoleColumnType, Title: locales.WorkspaceHttpRequestConsoleColumnType(), Width: 96, MinWidth: 80, MaxWidth: 260},
 		{ID: consoleColumnSource, Title: locales.WorkspaceHttpRequestConsoleColumnSource(), Width: 120, MinWidth: 96, MaxWidth: 420},
 		{ID: consoleColumnOutput, Title: locales.WorkspaceHttpRequestConsoleColumnOutput(), MinWidth: 240, MaxWidth: 900},
 	}
+	for index := range columns {
+		columns[index].Cell = func(c *ui.Context, theme nui.Theme, entry logic.PluginLogEntry, _ bool) {
+			v.cell(c, theme, &entry, index)
+		}
+	}
+	return columns
 }
 
 type consoleView struct {
 	editor *Editor
 	key    string
 	state  *logic.HTTPEditorState
-	// list keeps the column widths while the tab is open; they are not
+	// table keeps the column widths while the tab is open; they are not
 	// saved, as in 1.0.5.
-	list ui.ListState
+	table nui.TableState[logic.PluginLogEntry]
 	// rows opens an entry on a click or Enter, as 1.0.5's row buttons did.
 	rows   *widgets.RowActivator
 	detail *logic.PluginLogEntry
@@ -68,8 +74,8 @@ type consoleView struct {
 
 func newConsoleView(e *Editor, key string, state *logic.HTTPEditorState) *consoleView {
 	view := &consoleView{editor: e, key: key, state: state, view: widgets.NewCodeView("plaintext", true)}
-	view.list.FollowEnd = true
-	view.rows = widgets.NewRowActivator(&view.list)
+	view.table.List.FollowEnd = true
+	view.rows = widgets.NewRowActivator(&view.table.List, &view.table.Selection)
 	return view
 }
 
@@ -183,6 +189,11 @@ func (v *consoleView) closeGoneDetail(entries []logic.PluginLogEntry) {
 
 func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 	entries := v.state.ScriptConsoleEntries
+	// Console events are immutable. Count and endpoint IDs also detect a
+	// bounded console replacing its oldest entries without changing length.
+	if len(entries) != v.table.Len() || len(entries) > 0 && (entries[0].EventID != v.table.Row(0).EventID || entries[len(entries)-1].EventID != v.table.Row(v.table.Len()-1).EventID) {
+		v.table.SetRows(entries, func(entry logic.PluginLogEntry) string { return strconv.FormatUint(entry.EventID, 10) })
+	}
 	running := v.state.IsSending
 	v.closeGoneDetail(entries)
 	ui.Column(c.Key("console")).Fill().MinHeight(0).Children(func() {
@@ -204,12 +215,9 @@ func (v *consoleView) build(c *ui.Context, theme nui.Theme) {
 			return
 		}
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
-			table := ui.Table(c.Key("console-table"), &v.list, consoleColumns(), len(entries), func(row, col int) {
-				if row < len(entries) {
-					v.cell(c, theme, &entries[row], col)
-				}
-			}).Fill().MinHeight(0).Border(1, theme.Border).Label(locales.WorkspaceHttpRequestConsole())
-			widgets.TableHeaderDivider(c, theme, table)
+			table := widgets.Table(c.Key("console-table"), theme, &v.table, v.columns(), nui.TableOptions{
+				Label: locales.WorkspaceHttpRequestConsole(),
+			}).Border(1, theme.Border)
 			v.rows.Attach(table)
 			if row, ok := v.rows.Activated(table, len(entries)); ok {
 				chosen := entries[row]

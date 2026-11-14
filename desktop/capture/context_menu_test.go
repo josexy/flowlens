@@ -215,7 +215,7 @@ func TestHeaderMenuAfterScrollingKeepsSelection(t *testing.T) {
 				f.click("session one")
 				table = f.workspace.HistoryTable
 			}
-			table.list.ScrollTo(40, ui.Start)
+			table.state.List.ScrollTo(40, ui.Start)
 			f.settle()
 			f.click("host41.test")
 			for _, title := range []string{locales.TrafficHost(), locales.TrafficPath()} {

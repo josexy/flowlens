@@ -39,9 +39,9 @@ var errRequestBodyUnavailable = errors.New("request body unavailable")
 
 // selectedEntries returns the chosen rows in table order.
 func (t *Table) selectedEntries() []*logic.TrafficEntry {
-	entries := make([]*logic.TrafficEntry, 0, t.selection.Len())
+	entries := make([]*logic.TrafficEntry, 0, t.state.Selection.Len())
 	for _, entry := range t.rows {
-		if t.selection.Has(entry.ID) {
+		if t.state.Selection.Has(trafficRowID(entry.ID)) {
 			entries = append(entries, entry)
 		}
 	}
@@ -80,7 +80,7 @@ func (t *Table) resolveMenu(table ui.Element) {
 			// The header takes precedence over those offscreen row bounds.
 			t.menuTarget = tableMenuTarget{header: true}
 		case id != 0:
-			if index := t.rowIndex(id); index >= 0 && !t.selection.Has(id) {
+			if index := t.rowIndex(id); index >= 0 && !t.state.Selection.Has(trafficRowID(id)) {
 				t.replaceSelection(index)
 				t.focusEntry(t.rows[index])
 			}

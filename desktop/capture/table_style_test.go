@@ -140,8 +140,8 @@ func TestHoveredResizeEdgeUsesOnlyNativeGrip(t *testing.T) {
 
 func TestSortedHeaderShowsAccentArrow(t *testing.T) {
 	f := newRenderFixture(t)
-	f.workspace.Table.sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
-	f.workspace.Table.lastSort = f.workspace.Table.sort
+	f.workspace.Table.state.Sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
+	f.workspace.Table.lastSort = f.workspace.Table.state.Sort
 	f.settle()
 	arrow, ok := f.tester.Find("sort-arrow")
 	if !ok {
@@ -201,8 +201,8 @@ func TestBadgeStaysOpaqueOnSelectedDarkRow(t *testing.T) {
 	before := sample()
 	for _, entry := range f.workspace.Table.Rows() {
 		if entry.ID == 72 {
-			f.workspace.Table.selection.Clear()
-			f.workspace.Table.selection.Add(72)
+			f.workspace.Table.state.Selection.Clear()
+			f.workspace.Table.state.Selection.Add(trafficRowID(72))
 		}
 	}
 	f.settle()
@@ -256,7 +256,7 @@ func TestDurationAndSizeUseTabularNumerals(t *testing.T) {
 
 func TestRenderTrafficTable(t *testing.T) {
 	f := newRenderFixture(t)
-	f.workspace.Table.sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
+	f.workspace.Table.state.Sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "traffic-table", f.setDark)
 }

@@ -844,7 +844,7 @@ func TestSSEMessageListResizesColumns(t *testing.T) {
 		f.tester.Frame()
 		f.tester.Release(x+delta, y)
 		f.settle()
-		if got, want := view.list.Columns.Widths[column.id], header.Bounds.W+delta; got != want {
+		if got, want := view.table.List.Columns.Widths[column.id], header.Bounds.W+delta; got != want {
 			t.Fatalf("column %q width = %v, want %v", column.title, got, want)
 		}
 		if moved, ok := f.tester.Find(column.nextCell); !ok || moved.X != cell.X+delta {
@@ -858,11 +858,11 @@ func TestSSEMessageListResizesColumns(t *testing.T) {
 	f.has(locales.DetailSseMessageDetail())
 
 	// Replacing the stream closes its detail and keeps the column widths.
-	widths := view.list.Columns.Widths
+	widths := view.table.List.Columns.Widths
 	f.data.body = &proxyservice.TrafficBodyView{ResponseBody: "data: replacement\n\n"}
 	f.settle()
-	if view.open || !maps.Equal(view.list.Columns.Widths, widths) {
-		t.Fatalf("stream reset: detail open %v, widths %v", view.open, view.list.Columns.Widths)
+	if view.open || !maps.Equal(view.table.List.Columns.Widths, widths) {
+		t.Fatalf("stream reset: detail open %v, widths %v", view.open, view.table.List.Columns.Widths)
 	}
 }
 
@@ -1009,13 +1009,23 @@ func TestSSEFollowAndJumpToLatest(t *testing.T) {
 	f := sseFixture(t, body.String())
 	view := f.panel.responseBody.sse
 	f.has("row-499")
-	view.list.ScrollTo(0, ui.Start)
+	checkVirtualized := func() {
+		t.Helper()
+		if cells := view.table.CellBuilds; cells == 0 || cells > 50*len(sseColumnIDs) {
+			t.Fatalf("built %d cells for a 500-event stream", cells)
+		}
+	}
+	checkVirtualized()
+	view.table.List.ScrollTo(0, ui.Start)
 	f.settle()
 	f.settle()
+	f.has("row-0")
+	checkVirtualized()
 	f.has(locales.DetailSseJumpToLatest())
 	f.click(locales.DetailSseJumpToLatest())
 	f.settle()
 	f.has("row-499")
+	checkVirtualized()
 }
 
 func TestLoadingAndMissingBody(t *testing.T) {

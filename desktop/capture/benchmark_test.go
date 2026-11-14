@@ -18,7 +18,7 @@ func rangeOfEntries(count int) []*logic.TrafficEntry {
 // patchVisibleRow changes the status of a row on screen, as a live update does.
 func patchVisibleRow(f *fixture, revision uint64) {
 	table := f.workspace.Table
-	first, _ := table.list.Visible()
+	first, _ := table.state.List.Visible()
 	current := table.rows[first]
 	updated := *current
 	updated.Revision, updated.StatusCode = revision, 200+int(revision%300)

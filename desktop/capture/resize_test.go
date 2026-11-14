@@ -17,7 +17,7 @@ func TestHeaderResizeKeepsCaptureAcrossFastMoves(t *testing.T) {
 				f.setDark(dark)
 				table := f.workspace.Table
 				header := headerRect(t, f, title)
-				order, sort := slices.Clone(table.list.Columns.Order), table.sort
+				order, sort := slices.Clone(table.state.List.Columns.Order), table.state.Sort
 				x, y := header.X+header.W-2, header.Y+header.H/2
 				f.tester.Move(x, y)
 				f.settle()
@@ -35,7 +35,7 @@ func TestHeaderResizeKeepsCaptureAcrossFastMoves(t *testing.T) {
 				if got := headerRect(t, f, title).W; got != header.W+180 {
 					t.Fatalf("release: width %v, want %v", got, header.W+180)
 				}
-				if !slices.Equal(order, table.list.Columns.Order) || sort != table.sort {
+				if !slices.Equal(order, table.state.List.Columns.Order) || sort != table.state.Sort {
 					t.Fatal("resizing also reordered or sorted columns")
 				}
 				snapshot, err := f.service.Snapshot()

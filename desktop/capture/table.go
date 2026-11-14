@@ -61,10 +61,9 @@ type Table struct {
 	source Source
 	deps   TableDependencies
 
-	list        ui.ListState
-	selection   ui.Selection[uint64]
+	// state stores indices into rows, whose order is owned by the traffic sorter.
+	state       nui.TableState[int]
 	selectedRow int
-	sort        ui.SortOrder
 	lastSort    ui.SortOrder
 
 	sorter       *logic.TrafficTableSorter
@@ -119,32 +118,26 @@ type Table struct {
 // NewTable returns a table of source.
 func NewTable(source Source, deps TableDependencies) *Table {
 	t := &Table{source: source, deps: deps, selectedRow: -1, sorter: logic.NewTrafficTableSorter(), lastFirst: -1}
-	t.list.Selected = &t.selectedRow
-	t.list.Selection = &t.selection
-	t.list.DragSelect = true
-	t.list.Sort = &t.sort
-	t.list.Key = func(row int) any {
-		if row < len(t.rows) {
-			return t.rows[row].ID
-		}
-		return uint64(0)
-	}
+	t.state.List.Selected = &t.selectedRow
+	t.state.List.DragSelect = true
 	t.observer = t.observePointer
 	return t
 }
+
+func trafficRowID(id uint64) string { return strconv.FormatUint(id, 10) }
 
 // Rows returns the rows in table order.
 func (t *Table) Rows() []*logic.TrafficEntry { return t.rows }
 
 func (t *Table) trafficSort() logic.TrafficSort {
-	if t.sort.Column == "" {
+	if t.state.Sort.Column == "" {
 		return logic.TrafficSort{}
 	}
 	order := logic.SortAsc
-	if t.sort.Descending {
+	if t.state.Sort.Descending {
 		order = logic.SortDesc
 	}
-	return logic.TrafficSort{Key: logic.TrafficColumnKey(t.sort.Column), Order: order}
+	return logic.TrafficSort{Key: logic.TrafficColumnKey(t.state.Sort.Column), Order: order}
 }
 
 func (t *Table) visibleColumns() []columnDefinition {
@@ -168,14 +161,14 @@ func (t *Table) loadLayout() {
 	t.loaded = true
 	order, widths := t.deps.Settings.TrafficColumnLayout()
 	t.fullOrder = logic.CompleteColumnOrder(order)
-	t.list.Columns = ui.TableLayout{Order: slices.Clone(t.fullOrder), Widths: widths}
+	t.state.List.Columns = ui.TableLayout{Order: slices.Clone(t.fullOrder), Widths: widths}
 	t.layoutOrder, t.layoutWidth = slices.Clone(t.fullOrder), maps.Clone(widths)
 }
 
 // syncLayout merges the table's new column order into the full order and
 // saves a change the user made.
 func (t *Table) syncLayout(visible []columnDefinition) {
-	order := t.list.Columns.Order
+	order := t.state.List.Columns.Order
 	if !slices.Equal(order, t.layoutOrder) {
 		shown := make(map[string]bool, len(visible))
 		for _, column := range visible {
@@ -188,29 +181,29 @@ func (t *Table) syncLayout(visible []columnDefinition) {
 			}
 		}
 		t.fullOrder = logic.MergeVisibleColumnOrder(t.fullOrder, movedVisible)
-		t.list.Columns.Order = slices.Clone(t.fullOrder)
+		t.state.List.Columns.Order = slices.Clone(t.fullOrder)
 		t.layoutOrder = slices.Clone(t.fullOrder)
-		t.deps.Settings.SetTrafficColumnLayout(t.fullOrder, t.list.Columns.Widths)
-		t.layoutWidth = maps.Clone(t.list.Columns.Widths)
+		t.deps.Settings.SetTrafficColumnLayout(t.fullOrder, t.state.List.Columns.Widths)
+		t.layoutWidth = maps.Clone(t.state.List.Columns.Widths)
 		return
 	}
-	if !maps.Equal(t.list.Columns.Widths, t.layoutWidth) && !t.list.DragSelecting() {
-		t.layoutWidth = maps.Clone(t.list.Columns.Widths)
-		t.deps.Settings.SetTrafficColumnLayout(t.fullOrder, t.list.Columns.Widths)
+	if !maps.Equal(t.state.List.Columns.Widths, t.layoutWidth) && !t.state.List.DragSelecting() {
+		t.layoutWidth = maps.Clone(t.state.List.Columns.Widths)
+		t.deps.Settings.SetTrafficColumnLayout(t.fullOrder, t.state.List.Columns.Widths)
 	}
 }
 
 // applySortCycle turns the table's two-way header click into ascending,
 // descending, then unsorted.
 func (t *Table) applySortCycle(visible []columnDefinition) {
-	if t.sort != t.lastSort {
-		if t.sort.Column == t.lastSort.Column && t.lastSort.Descending && !t.sort.Descending {
-			t.sort = ui.SortOrder{}
+	if t.state.Sort != t.lastSort {
+		if t.state.Sort.Column == t.lastSort.Column && t.lastSort.Descending && !t.state.Sort.Descending {
+			t.state.Sort = ui.SortOrder{}
 		}
-		t.lastSort = t.sort
+		t.lastSort = t.state.Sort
 	}
-	if t.sort.Column != "" && !slices.ContainsFunc(visible, func(column columnDefinition) bool { return string(column.key) == t.sort.Column }) {
-		t.sort, t.lastSort = ui.SortOrder{}, ui.SortOrder{}
+	if t.state.Sort.Column != "" && !slices.ContainsFunc(visible, func(column columnDefinition) bool { return string(column.key) == t.state.Sort.Column }) {
+		t.state.Sort, t.lastSort = ui.SortOrder{}, ui.SortOrder{}
 	}
 }
 
@@ -223,34 +216,41 @@ func (t *Table) refreshRows() bool {
 	}
 	t.rowsComputed, t.rowsVersion, t.rowsSort = true, version, sort
 	t.rows = t.sorter.Sort(filter.Filtered(), sort)
+	t.pruneSelection()
+	indices := make([]int, len(t.rows))
+	for index := range indices {
+		indices[index] = index
+	}
+	// Manual sorting keeps these indices in the business sorter's order.
+	t.state.SetRows(indices, func(index int) string { return trafficRowID(t.rows[index].ID) })
 	return true
 }
 
 // pruneSelection removes rows that left the table and moves
 // the focus to the first row still selected in table order.
 func (t *Table) pruneSelection() {
-	if t.selection.Len() == 0 {
+	if t.state.Selection.Len() == 0 {
 		return
 	}
-	present := make(map[uint64]bool, len(t.rows))
+	present := make(map[string]bool, len(t.rows))
 	for _, entry := range t.rows {
-		present[entry.ID] = true
+		present[trafficRowID(entry.ID)] = true
 	}
-	for id := range t.selection.All() {
+	for id := range t.state.Selection.All() {
 		if !present[id] {
-			t.selection.Remove(id)
+			t.state.Selection.Remove(id)
 		}
 	}
-	if t.selection.Len() == 0 {
+	if t.state.Selection.Len() == 0 {
 		t.selectedRow = -1
 		t.source.SelectEntry(nil)
 		return
 	}
-	if focused := t.source.SelectedEntry(); focused != nil && t.selection.Has(focused.ID) {
+	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(trafficRowID(focused.ID)) {
 		return
 	}
 	for _, entry := range t.rows {
-		if t.selection.Has(entry.ID) {
+		if t.state.Selection.Has(trafficRowID(entry.ID)) {
 			t.selectedRow = t.rowIndex(entry.ID)
 			t.source.SelectEntry(entry)
 			return
@@ -270,7 +270,7 @@ func (t *Table) followHistory() {
 		return
 	}
 	t.historyShown = key
-	t.selection.Clear()
+	t.state.Selection.Clear()
 	t.selectedRow = -1
 	t.menuPress, t.menuTarget = nil, tableMenuTarget{}
 	t.menu.Open = false
@@ -278,9 +278,9 @@ func (t *Table) followHistory() {
 }
 
 func (t *Table) replaceSelection(index int) {
-	t.selection.Clear()
+	t.state.Selection.Clear()
 	entry := t.rows[index]
-	t.selection.Add(entry.ID)
+	t.state.Selection.Add(trafficRowID(entry.ID))
 	t.selectedRow = index
 }
 
@@ -295,7 +295,7 @@ func (t *Table) applyPendingFocus() {
 	}
 	t.replaceSelection(index)
 	t.source.SelectEntry(t.rows[index])
-	t.list.ScrollTo(index, ui.Start)
+	t.state.List.ScrollTo(index, ui.Start)
 	t.source.ClearPendingFocus()
 }
 
@@ -306,9 +306,9 @@ func (t *Table) atLatestEdge(first, last int) bool {
 // followNewest keeps the newest requests in view while the user is at them.
 func (t *Table) followNewest(rowsChanged bool) {
 	edge := logic.TrafficLatestEdge(t.rowsSort)
-	t.list.FollowEnd = edge == logic.EdgeEnd
+	t.state.List.FollowEnd = edge == logic.EdgeEnd
 	if edge == logic.EdgeStart && rowsChanged && t.wasAtEdge && (t.source.Live() == nil || t.source.Live().PendingLiveEntryCount() == 0) {
-		t.list.ScrollTo(0, ui.Start)
+		t.state.List.ScrollTo(0, ui.Start)
 	}
 }
 
@@ -316,7 +316,7 @@ func (t *Table) followNewest(rowsChanged bool) {
 // table or the user has scrolled away from the newest requests.
 func (t *Table) holdWhileReading(element ui.Element) {
 	live := t.source.Live()
-	first, last := t.list.Visible()
+	first, last := t.state.List.Visible()
 	atEdge := t.atLatestEdge(first, last)
 	hovered := element.Hovered()
 	if live != nil {
@@ -326,7 +326,7 @@ func (t *Table) holdWhileReading(element ui.Element) {
 		} else if (hovered && !t.hovered) || (moved && !atEdge) {
 			live.PauseLiveEviction()
 		}
-		if !hovered && t.hovered && !t.list.DragSelecting() && atEdge && live.PendingLiveEntryCount() == 0 {
+		if !hovered && t.hovered && !t.state.List.DragSelecting() && atEdge && live.PendingLiveEntryCount() == 0 {
 			live.ResumeLiveEviction()
 		}
 	}
@@ -349,7 +349,7 @@ func (t *Table) showNewRequests() {
 		}
 	}
 	if newest >= 0 {
-		t.list.ScrollTo(newest, ui.Start)
+		t.state.List.ScrollTo(newest, ui.Start)
 	}
 	if t.hovered {
 		live.PauseLiveEviction()
@@ -367,72 +367,71 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.applySortCycle(visible)
 	t.followHistory()
 	rowsChanged := t.refreshRows()
-	if rowsChanged {
-		t.pruneSelection()
-	}
 	t.applyPendingFocus()
 	t.followNewest(rowsChanged)
 
-	columns := make([]ui.TableColumn, len(visible))
+	columns := make([]nui.TableColumn[int], len(visible))
 	var fixedWidth float32
 	for _, column := range visible {
 		if column.key != logic.ColumnPath {
 			width := column.width
-			if saved := t.list.Columns.Widths[string(column.key)]; saved > 0 {
+			if saved := t.state.List.Columns.Widths[string(column.key)]; saved > 0 {
 				width = saved
 			}
 			fixedWidth += max(width, column.minWidth)
 		}
 	}
+	order := t.displayOrder(visible)
 	var totalWidth float32
 	for index, column := range visible {
 		width := column.width
-		if column.key == logic.ColumnPath && t.list.Columns.Widths[string(column.key)] <= 0 {
+		if column.key == logic.ColumnPath && t.state.List.Columns.Widths[string(column.key)] <= 0 {
 			// Default width and drag minimum are separate: the first drag
 			// must be able to shrink below the readable 300-DIP default.
 			width = max(300, t.viewportWidth-fixedWidth)
 		}
-		columns[index] = ui.TableColumn{
-			Title: column.title(), ID: string(column.key), Width: width, MinWidth: column.minWidth, Align: column.align, Sortable: true,
+		columns[index] = nui.TableColumn[int]{
+			Title: column.title(), ID: string(column.key), Width: width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
+			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
+				t.CellBuilds++
+				key := string(column.key)
+				if key == order[0] {
+					t.noteRowSpan(cellFill(c, "row-span"), row)
+				}
+				t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
+				t.cell(c, theme, t.rows[row], column.key)
+			},
 		}
-		if saved := t.list.Columns.Widths[string(column.key)]; saved > 0 {
+		if saved := t.state.List.Columns.Widths[string(column.key)]; saved > 0 {
 			width = saved
 		}
 		totalWidth += max(width, column.minWidth)
 	}
-	t.list.HeaderCell = t.headerCell(c, theme, visible)
-	order := t.displayOrder(visible)
+	t.state.List.HeaderCell = t.headerCell(c, theme, visible)
 	if spare := t.viewportWidth - totalWidth; spare > 0 && len(order) > 0 {
 		// Saved widths (including Path), or a hidden Path, can leave unused
 		// room. Extend the last displayed column without saving that extra
 		// width; shrinking the viewport restores the user's preferred size.
-		last := slices.IndexFunc(columns, func(column ui.TableColumn) bool { return column.ID == order[len(order)-1] })
+		last := slices.IndexFunc(columns, func(column nui.TableColumn[int]) bool { return column.ID == order[len(order)-1] })
 		column := &columns[last]
 		width := column.Width
-		if saved := t.list.Columns.Widths[column.ID]; saved > 0 {
+		if saved := t.state.List.Columns.Widths[column.ID]; saved > 0 {
 			width = saved
 		}
 		column.MinWidth = max(width, column.MinWidth) + spare
 	}
 	t.menuSpans = t.menuSpans[:0]
 	var element ui.Element
-	ui.Themed(c, tableTheme(theme)).Fill().MinHeight(0).Children(func() {
-		element = ui.Table(c.Key("traffic-table"), &t.list, columns, len(t.rows), func(row, col int) {
-			t.CellBuilds++
-			key := string(visible[col].key)
-			if key == order[0] {
-				t.noteRowSpan(cellFill(c, "row-span"), row)
-			}
-			t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
-			t.cell(c, theme, t.rows[row], visible[col].key)
-		}).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.TrafficColumns()).ObserveInput(t.observer).OnSubmit(func() {
-			// Native submission includes double-click. Modifier clicks only
-			// change selection, even when they arrive within a double-click.
+	ui.Box(c.Key("traffic-table-pane")).Fill().MinHeight(0).Children(func() {
+		element = widgets.Table(c.Key("traffic-table"), theme, &t.state, columns, nui.TableOptions{
+			Label: locales.TrafficColumns(), ManualSorting: true,
+			BuildEmpty: func(*ui.Context, nui.Theme) {},
+		}).ObserveInput(t.observer).OnSubmit(func() {
+			// Modifier double-clicks only change selection.
 			if c.Modifiers() == 0 {
 				t.openFocusedDetails()
 			}
 		})
-		widgets.TableHeaderDivider(c, theme, element)
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}
@@ -445,7 +444,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	}
 	t.resolveMenu(element)
 	t.syncChoice(element.Changed() || rowsChanged)
-	if t.focusRequested && t.list.Focus(c) {
+	if t.focusRequested && t.state.List.Focus(c) {
 		t.focusRequested = false
 	}
 	t.syncLayout(visible)
@@ -479,7 +478,7 @@ func cellFill(c *ui.Context, key string) ui.Element {
 // ends the row as shown.
 func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, last bool) {
 	entry := t.rows[row]
-	chosen := t.selection.Has(entry.ID)
+	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
 	highlight := t.source.Highlight(entry.ID)
 	switch {
 	case chosen:

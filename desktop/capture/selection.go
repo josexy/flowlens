@@ -57,25 +57,25 @@ func (t *Table) focusEntry(entry *logic.TrafficEntry) {
 // The keyboard cursor may be on a deselected row; inspection must still refer
 // to a selected entry, or close when the selection is empty.
 func (t *Table) syncChoice(changed bool) {
-	t.source.SetSelectedCount(t.selection.Len())
+	t.source.SetSelectedCount(t.state.Selection.Len())
 	if !changed {
 		return
 	}
-	if t.selection.Len() == 0 {
+	if t.state.Selection.Len() == 0 {
 		t.focusEntry(nil)
 		return
 	}
 	if t.selectedRow >= 0 && t.selectedRow < len(t.rows) {
-		if entry := t.rows[t.selectedRow]; t.selection.Has(entry.ID) {
+		if entry := t.rows[t.selectedRow]; t.state.Selection.Has(trafficRowID(entry.ID)) {
 			t.focusEntry(entry)
 			return
 		}
 	}
-	if focused := t.source.SelectedEntry(); focused != nil && t.selection.Has(focused.ID) {
+	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(trafficRowID(focused.ID)) {
 		return
 	}
 	for _, entry := range t.rows {
-		if t.selection.Has(entry.ID) {
+		if t.state.Selection.Has(trafficRowID(entry.ID)) {
 			t.focusEntry(entry)
 			return
 		}
@@ -83,7 +83,7 @@ func (t *Table) syncChoice(changed bool) {
 }
 
 func (t *Table) showDetails(entry *logic.TrafficEntry) {
-	if entry == nil || t.rowIndex(entry.ID) < 0 || !t.selection.Has(entry.ID) {
+	if entry == nil || t.rowIndex(entry.ID) < 0 || !t.state.Selection.Has(trafficRowID(entry.ID)) {
 		return
 	}
 	t.focusEntry(entry)

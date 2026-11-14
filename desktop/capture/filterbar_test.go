@@ -14,9 +14,9 @@ func wheelOverFilterTabs(t *testing.T, width int) (tabMoved float32, firstBefore
 	t.Helper()
 	f := newFixtureSized(t, manyEntries(300), width, 800)
 	table := f.workspace.Table
-	table.list.ScrollTo(100, ui.Start)
+	table.state.List.ScrollTo(100, ui.Start)
 	f.settle()
-	firstBefore, _ = table.list.Visible()
+	firstBefore, _ = table.state.List.Visible()
 	before, ok := f.tester.Find("Binary")
 	if !ok {
 		t.Fatal("Binary tab")
@@ -29,7 +29,7 @@ func wheelOverFilterTabs(t *testing.T, width int) (tabMoved float32, firstBefore
 	f.settle()
 	f.tester.Advance(time.Second)
 	f.settle()
-	firstAfter, _ = table.list.Visible()
+	firstAfter, _ = table.state.List.Visible()
 	after, _ := f.tester.Find("Binary")
 	return before.X - after.X, firstBefore, firstAfter
 }

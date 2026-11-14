@@ -33,12 +33,12 @@ func TestTableFillsViewportWithSavedOrHiddenPath(t *testing.T) {
 			f := newFixture(t, rendertest.Traffic()...)
 			table := f.workspace.Table
 			widths := map[string]float32{"path": 150, "size": 110}
-			table.list.Columns.Widths = maps.Clone(widths)
+			table.state.List.Columns.Widths = maps.Clone(widths)
 			if name == "hidden-path" {
 				f.data.Settings.SetTrafficColumnVisible(logic.ColumnPath, false, nil)
 			}
 			if name == "reordered" {
-				table.list.Columns.Order = append(slices.DeleteFunc(slices.Clone(table.list.Columns.Order), func(key string) bool { return key == "host" }), "host")
+				table.state.List.Columns.Order = append(slices.DeleteFunc(slices.Clone(table.state.List.Columns.Order), func(key string) bool { return key == "host" }), "host")
 			}
 			for _, width := range []int{2000, 2400, 2000} {
 				f.tester.SetSize(width, 800)
@@ -97,7 +97,7 @@ func TestPathColumnDefaultAndUserWidth(t *testing.T) {
 	if !ok || header.Bounds.W <= 300 {
 		t.Fatalf("default path did not grow into spare room: %+v", header)
 	}
-	f.workspace.Table.list.Columns.Widths = map[string]float32{"path": 150}
+	f.workspace.Table.state.List.Columns.Widths = map[string]float32{"path": 150}
 	f.tester.SetSize(1400, 800)
 	f.settle()
 	header, ok = f.tester.AccessByRole(ui.RoleColumnHeader, locales.TrafficPath())

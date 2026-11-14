@@ -618,22 +618,22 @@ func TestSortCycleAndIncompleteValues(t *testing.T) {
 	f.tester.Scroll(700, 150, 400, 0)
 	f.settle()
 	f.click("Duration")
-	if table.sort.Column != "duration" || table.sort.Descending {
-		t.Fatalf("first click %+v", table.sort)
+	if table.state.Sort.Column != "duration" || table.state.Sort.Descending {
+		t.Fatalf("first click %+v", table.state.Sort)
 	}
 	if got := rowIDs(table); !slices.Equal(got, []uint64{2, 1, 3}) {
 		t.Fatal(got)
 	}
 	f.click("Duration")
-	if !table.sort.Descending {
-		t.Fatalf("second click %+v", table.sort)
+	if !table.state.Sort.Descending {
+		t.Fatalf("second click %+v", table.state.Sort)
 	}
 	if got := rowIDs(table); !slices.Equal(got, []uint64{2, 1, 3}) {
 		t.Fatal(got)
 	}
 	f.click("Duration")
-	if table.sort.Column != "" {
-		t.Fatalf("third click %+v", table.sort)
+	if table.state.Sort.Column != "" {
+		t.Fatalf("third click %+v", table.state.Sort)
 	}
 	if got := rowIDs(table); !slices.Equal(got, []uint64{1, 2, 3}) {
 		t.Fatal(got)
@@ -652,7 +652,7 @@ func TestHidingColumnsPersistsAndClearsItsSort(t *testing.T) {
 	f := newFixture(t, entry(1, "a.test"))
 	table := f.workspace.Table
 	f.click("Host")
-	if table.sort.Column != "host" {
+	if table.state.Sort.Column != "host" {
 		t.Fatal("sort")
 	}
 	if !f.data.Settings.SetTrafficColumnVisible(logic.ColumnHost, false, nil) {
@@ -660,8 +660,8 @@ func TestHidingColumnsPersistsAndClearsItsSort(t *testing.T) {
 	}
 	f.settle()
 	f.requireNoText("a.test")
-	if table.sort.Column != "" {
-		t.Fatalf("sort stayed on a hidden column: %+v", table.sort)
+	if table.state.Sort.Column != "" {
+		t.Fatalf("sort stayed on a hidden column: %+v", table.state.Sort)
 	}
 	snapshot, err := f.service.Snapshot()
 	if err != nil || !slices.Contains(snapshot.TrafficTableConfig.HiddenColumns, "host") {
@@ -672,10 +672,10 @@ func TestHidingColumnsPersistsAndClearsItsSort(t *testing.T) {
 func TestColumnLayoutPersists(t *testing.T) {
 	f := newFixture(t, entry(1, "a.test"))
 	table := f.workspace.Table
-	order := slices.Clone(table.list.Columns.Order)
+	order := slices.Clone(table.state.List.Columns.Order)
 	order[0], order[1] = order[1], order[0]
-	table.list.Columns.Order = order
-	table.list.Columns.Widths = map[string]float32{"host": 333}
+	table.state.List.Columns.Order = order
+	table.state.List.Columns.Widths = map[string]float32{"host": 333}
 	f.settle()
 	snapshot, err := f.service.Snapshot()
 	if err != nil {
@@ -687,8 +687,8 @@ func TestColumnLayoutPersists(t *testing.T) {
 	}
 	restored := NewTable(table.source, table.deps)
 	restored.loadLayout()
-	if restored.list.Columns.Order[0] != "method" || restored.list.Columns.Widths["host"] != 333 {
-		t.Fatalf("%+v", restored.list.Columns)
+	if restored.state.List.Columns.Order[0] != "method" || restored.state.List.Columns.Widths["host"] != 333 {
+		t.Fatalf("%+v", restored.state.List.Columns)
 	}
 }
 
@@ -819,7 +819,7 @@ func TestKeyboardSelectionLeavesDetailsAsTheyWere(t *testing.T) {
 func TestClickAfterTheTableScrollsUnderAStillPointer(t *testing.T) {
 	f := newFixture(t, manyEntries(200)...)
 	table := f.workspace.Table
-	table.list.ScrollTo(0, ui.Start)
+	table.state.List.ScrollTo(0, ui.Start)
 	f.settle()
 	row, ok := f.tester.Find("host5.test")
 	if !ok {
@@ -828,7 +828,7 @@ func TestClickAfterTheTableScrollsUnderAStillPointer(t *testing.T) {
 	x, y := row.X+row.W/2, row.Y+row.H/2
 	f.tester.Move(x, y)
 	f.settle()
-	table.list.ScrollTo(40, ui.Start)
+	table.state.List.ScrollTo(40, ui.Start)
 	f.settle()
 	var under uint64
 	for _, entry := range table.rows {
@@ -925,8 +925,8 @@ func TestAReleaseAfterAPressElsewhereClicksNoRow(t *testing.T) {
 func TestEvictionFocusesTheFirstRowLeftInTableOrder(t *testing.T) {
 	f := newFixture(t, entry(1, "d.test"), entry(2, "b.test"), entry(3, "a.test"), entry(4, "c.test"))
 	table := f.workspace.Table
-	table.sort = ui.SortOrder{Column: string(logic.ColumnHost)}
-	table.lastSort = table.sort
+	table.state.Sort = ui.SortOrder{Column: string(logic.ColumnHost)}
+	table.lastSort = table.state.Sort
 	f.settle()
 	f.clickRow(0, "d.test")
 	f.clickRow(ui.Cmd, "c.test")
@@ -997,13 +997,13 @@ func TestHoldWhileReadingAndShowNew(t *testing.T) {
 	}
 	f := newFixtureSized(t, entries, 1400, 800)
 	table := f.workspace.Table
-	table.list.ScrollTo(100, ui.Start)
+	table.state.List.ScrollTo(100, ui.Start)
 	f.settle()
 	f.settle()
 	if !f.data.Traffic.LiveEvictionPaused() {
 		t.Fatal("scrolling away should hold the window")
 	}
-	first, _ := table.list.Visible()
+	first, _ := table.state.List.Visible()
 	if first < 90 {
 		t.Fatalf("first %d", first)
 	}
@@ -1011,7 +1011,7 @@ func TestHoldWhileReadingAndShowNew(t *testing.T) {
 	if f.data.Traffic.PendingLiveEntryCount() != 1 {
 		t.Fatalf("queued %d", f.data.Traffic.PendingLiveEntryCount())
 	}
-	now, _ := table.list.Visible()
+	now, _ := table.state.List.Visible()
 	if now != first {
 		t.Fatalf("view moved from %d to %d", first, now)
 	}
@@ -1129,8 +1129,8 @@ func TestDeleteSingleAndMultiple(t *testing.T) {
 		t.Fatal(f.backend.deleted)
 	}
 	table := f.workspace.Table
-	table.selection.Add(2)
-	table.selection.Add(3)
+	table.state.Selection.Add(trafficRowID(2))
+	table.state.Selection.Add(trafficRowID(3))
 	f.settle()
 	openRowMenu(t, f, "b.test")
 	f.choose("Delete")
@@ -1254,7 +1254,7 @@ func TestEditLimit(t *testing.T) {
 	f := newFixtureSized(t, entries, 1400, 800)
 	table := f.workspace.Table
 	for _, item := range entries {
-		table.selection.Add(item.ID)
+		table.state.Selection.Add(trafficRowID(item.ID))
 	}
 	f.settle()
 	openRowMenu(t, f, "/p51")
@@ -1263,7 +1263,7 @@ func TestEditLimit(t *testing.T) {
 		t.Fatalf("%v", f.opened)
 	}
 	f.requireText("50")
-	table.selection.Remove(1)
+	table.state.Selection.Remove(trafficRowID(1))
 	f.settle()
 	openRowMenu(t, f, "/p51")
 	f.choose("Edit")
@@ -1462,10 +1462,10 @@ func TestDragSelectsRangeOfRows(t *testing.T) {
 func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
 	f := newFixture(t, manyEntries(200)...)
 	table := f.workspace.Table
-	table.list.ScrollTo(0, ui.Start)
+	table.state.List.ScrollTo(0, ui.Start)
 	f.settle()
 	f.clickRow(0, "host1.test")
-	first, last := table.list.Visible()
+	first, last := table.state.List.Visible()
 	if first != 0 {
 		t.Fatalf("first %d", first)
 	}
@@ -1485,7 +1485,7 @@ func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
 	}
 	f.tester.Release(x, 790)
 	f.settle()
-	if now, _ := table.list.Visible(); now == 0 {
+	if now, _ := table.state.List.Visible(); now == 0 {
 		t.Fatal("the table did not scroll")
 	}
 	ids := selectedIDs(table)
@@ -1516,7 +1516,7 @@ func TestDraggingAHeaderReordersAndSaves(t *testing.T) {
 	}
 	f.tester.Release(host.X+host.W+40, y)
 	f.settle()
-	order := f.workspace.Table.list.Columns.Order
+	order := f.workspace.Table.state.List.Columns.Order
 	if slices.Index(order, "method") < slices.Index(order, "host") {
 		t.Fatalf("order %v", order)
 	}

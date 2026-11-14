@@ -14,20 +14,20 @@ import "github.com/egoist/mygo/ui"
 // the table tells a click from the keys.
 type RowActivator struct {
 	cursor    int
-	selection ui.Selection[int]
+	selection *ui.Selection[string]
 	released  bool
 	observer  func(ui.InputEvent)
 }
 
-// NewRowActivator returns an activator of list's rows, keyed by row index.
-func NewRowActivator(list *ui.ListState) *RowActivator {
-	a := &RowActivator{cursor: -1}
+// NewRowActivator uses the Nuxt table's selection and owns its keyboard cursor.
+func NewRowActivator(list *ui.ListState, selection *ui.Selection[string]) *RowActivator {
+	a := &RowActivator{cursor: -1, selection: selection}
 	a.observer = func(ev ui.InputEvent) {
 		if ev.Kind == ui.InputPointerUp && ev.Button == 0 && !ev.Canceled {
 			a.released = true
 		}
 	}
-	list.Selected, list.Selection, list.DragSelect = &a.cursor, &a.selection, false
+	list.Selected, list.DragSelect = &a.cursor, false
 	return a
 }
 
