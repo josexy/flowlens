@@ -228,7 +228,7 @@ func fieldsPane(c *ui.Context, theme nui.Theme, e *Editor, title string, fields 
 			emptyPane(c, theme, lucide.Rows3(), locales.DetailNoHeaders(), "")
 			return
 		}
-		ui.Column(c.Key("fields")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		gridPane(c, func() {
 			rows := make([]widgets.KeyValue, len(fields))
 			for index, field := range fields {
 				rows[index] = widgets.KeyValue{Key: field.Name, Value: field.Value}
