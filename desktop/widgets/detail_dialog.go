@@ -70,9 +70,6 @@ type DetailDialogOptions struct {
 	Actions []DetailAction
 	// Wrap, when set, is turned off as the dialog opens.
 	Wrap *DetailWrap
-	// SquareContent leaves the content area's corners square, as 1.0.5's
-	// SSE message detail had them.
-	SquareContent bool
 	// Content fills the content area.
 	Content func(c *ui.Context, theme nui.Theme)
 }
@@ -102,12 +99,8 @@ func DetailDialog(c *ui.Context, theme nui.Theme, open *bool, o DetailDialogOpti
 					}
 				})
 			})
-			box := ui.Column(c.Key("detail-content")).FillWidth().Height(height).Shrink(0).MinHeight(0).Clip()
-			box.Border(1, palette.Border).Background(palette.Elevated)
-			if !o.SquareContent {
-				box.Radius(8)
-			}
-			box.Children(func() {
+			ui.Column(c.Key("detail-content")).FillWidth().Height(height).Shrink(0).MinHeight(0).
+				Border(1, palette.Border).Background(palette.Elevated).Clip().Children(func() {
 				if o.Content != nil {
 					o.Content(c, palette)
 				}

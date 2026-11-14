@@ -252,8 +252,7 @@ func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
 			}},
 			{Key: "save", Icon: lucide.Download(), Label: locales.DetailSseSaveMessage(), Disabled: s.exporting, Run: s.saveMessage},
 		},
-		Wrap:          &s.wrap,
-		SquareContent: true,
+		Wrap: &s.wrap,
 		Content: func(c *ui.Context, palette nui.Theme) {
 			language := "plaintext"
 			if s.detailTab == "formatted" {

@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -83,6 +84,26 @@ func TestDetailDialogSize(t *testing.T) {
 		// The content area's 1 px border is inside its height.
 		if p.content.H != tc.content-2 {
 			t.Fatalf("%dx%d: the content area is %v tall inside its border, want %v", tc.width, tc.height, p.content.H, tc.content-2)
+		}
+	}
+}
+
+func TestDetailDialogContentHasSquareCorners(t *testing.T) {
+	p := &detailProbe{}
+	tester := openDetailDialog(t, p, 1600, 1000)
+	for _, theme := range []nui.Theme{nui.Light(), nui.Dark()} {
+		tester.SetDark(theme.Dark)
+		tester.Frame()
+		frame := tester.Image()
+		// The renderer snaps the frame to device pixels. The child is inset by the border.
+		left := int(math.Round(float64(p.content.X))) - 1
+		right := int(math.Round(float64(p.content.X + p.content.W)))
+		top := int(math.Round(float64(p.content.Y))) - 1
+		bottom := int(math.Round(float64(p.content.Y + p.content.H)))
+		for _, point := range [][2]int{{left, top}, {right, top}, {left, bottom}, {right, bottom}} {
+			if got := frame.RGBAAt(point[0], point[1]); !sameColor(got, theme.Border) {
+				t.Errorf("dark=%v: border at %v is %v, want %v", theme.Dark, point, got, theme.Border)
+			}
 		}
 	}
 }

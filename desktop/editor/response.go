@@ -262,7 +262,7 @@ func errorCard(c *ui.Context, theme nui.Theme, e *Editor, title, description, he
 	})
 	widgets.PaneContent(c, func() {
 		ui.Scroll(c.Key("error")).Fill().MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Gap(6).Border(1, theme.Border).Radius(theme.Radius).Padding(10).Children(func() {
+			ui.Column(c).FillWidth().Gap(6).Border(1, theme.Border).Padding(10).Children(func() {
 				if description != "" {
 					ui.Text(c, description).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 				}

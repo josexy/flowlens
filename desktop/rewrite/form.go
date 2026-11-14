@@ -531,7 +531,7 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 			ui.Text(c, locales.RewriteRulesRegexTest()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 			ui.Text(c, locales.RewriteRulesRegexTestHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 		})
-		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Clip().Children(func() {
+		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Clip().Children(func() {
 			p.toolbar(c, theme, body)
 			ui.Box(c.Key("content")).FillWidth().Height(288).Background(theme.Background).Children(func() { p.content(c, theme) })
 		})
