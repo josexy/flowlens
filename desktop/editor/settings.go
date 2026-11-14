@@ -4,7 +4,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/logic"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -69,7 +68,7 @@ func (f *numberField) build(c *ui.Context, theme nui.Theme, key, label, placehol
 		f.value, f.seen, f.ready = nui.Set(float64(*target)), *target, true
 	}
 	settingRow(c, theme, key, label, func() {
-		widgets.InputNumber(c.Key("number"), theme, &f.value, &f.state, nui.InputNumberOptions{
+		nui.InputNumber(c.Key("number"), theme, &f.value, &f.state, nui.InputNumberOptions{
 			InputOptions: nui.InputOptions{Label: label, Placeholder: placeholder}, Orientation: nui.Vertical, Min: nui.Set(minimum), Step: step,
 		})
 	})

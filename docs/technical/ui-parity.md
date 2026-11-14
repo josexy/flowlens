@@ -35,14 +35,14 @@ The follow-up comparison reran both Windows applications with the same synthetic
 | Checklist item | Result |
 | --- | --- |
 | Traffic column widths | The path column keeps a 300-DIP default and grows into spare space. Saved/custom widths retain the 120-DIP minimum. Later columns remain available by native horizontal scrolling. The 100-DIP method column remains intentional. |
-| Numeric fields | Shared nui number inputs show thousands separators when unfocused. Focus reveals the native editable number; invalid drafts remain visible and retain native validation. Grouping never changes the numeric value, caret, or parser. |
+| Numeric fields | Use `nui.InputNumber` for display, editing, stepping, and validation. The field shows ungrouped digits when focused or blurred. |
 | WebSocket send action | The circular XL button sits at the message editor's lower right, with the existing shortcut, loading state, and send guards. The draft selector and surrounding spacing match the original proportions. |
 | Code appearance | Native editors use VS-like light/dark token colors, an 18/13 line-height ratio, and consistent framing/left inset. The settings store now supplies the actual code font size to request, response, plugin, SSE, and rewrite editors, including preview/discard. Native token categories, folding and gutter mechanics remain in use. The initial audit's description of Python string colors was corrected: ordinary strings are red in the original light theme. |
 | Dialogs | Plugin forms use the shared 512-DIP modal width, 16-DIP field spacing, and subdued header/footer borders. Descriptions grow from three to eight lines using native Textarea sizing rather than a WebView resize handle. Domain-filter controls use standard button sizing, readable count pills, and bounded scrollable groups. |
 | Memory Statistics | Summary-card line heights now match the calibrated density. No sample still means unknown; an actual zero-valued sample displays zero and its absent GC time displays “No GC yet”. This intentionally avoids claiming that an unobserved runtime has no GC activity. |
 | Already-correct behavior | Empty plugin names still fail validation, duplicate headers remain separate, and missing raw header order still produces its degradation warning. |
 
-Regression coverage includes default/custom path widths, horizontally reached sort controls, grouped-number focus and invalid input, code-font preview/discard, and the floating send button after repeated rebuilds and resizes. The full Go suite (using real CPython 3), MyGo UI vet, and the Windows GUI build pass. The new local screenshot report is `bin/ui-audit/round2/report.html`; it also records the retained native differences. The cross-platform and cross-monitor limits described above still apply.
+Regression coverage includes default/custom path widths, horizontally reached sort controls, numeric bounds and invalid input, code-font preview/discard, and the floating send button after repeated rebuilds and resizes. The full Go suite (using real CPython 3), MyGo UI vet, and the Windows GUI build pass. The new local screenshot report is `bin/ui-audit/round2/report.html`; it also records the retained native differences. The cross-platform and cross-monitor limits described above still apply.
 
 ## Font settings follow-up, 2026-11-13
 

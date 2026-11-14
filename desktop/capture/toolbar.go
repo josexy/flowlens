@@ -13,7 +13,6 @@ import (
 	"github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
@@ -434,7 +433,7 @@ func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settings
 			problem = locales.ToolbarInvalidPort()
 		}
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarPort(), Error: problem, Disabled: saving}, func(field nui.Theme) {
-			widgets.InputNumber(c.Key("port-number"), field, &state.portValue, &state.portNumber, nui.InputNumberOptions{
+			nui.InputNumber(c.Key("port-number"), field, &state.portValue, &state.portNumber, nui.InputNumberOptions{
 				InputOptions: nui.InputOptions{Label: locales.ToolbarPort(), Disabled: saving},
 				Orientation:  nui.Vertical,
 				Step:         1, AllowInvalid: true,
@@ -495,7 +494,7 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 		}
 		nui.Switch(c.Key("dns-enabled"), palette, &state.dnsEnabled, nui.SwitchOptions{Label: locales.ToolbarDnsCacheEnabled(), Disabled: busy})
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarDnsCacheTtl(), Error: problem, Disabled: busy}, func(field nui.Theme) {
-			widgets.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
+			nui.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
 				InputOptions: nui.InputOptions{Label: locales.ToolbarDnsCacheTtl(), Disabled: busy},
 				Orientation:  nui.Vertical,
 				Step:         1, AllowInvalid: true,

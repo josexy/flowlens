@@ -6,7 +6,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
-	"github.com/josexy/flowlens/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
@@ -35,7 +34,7 @@ func (f *integerField) build(c *ui.Context, theme nui.Theme, key, label string, 
 		f.value, f.seen, f.ready = nui.Set(float64(*target)), *target, true
 	}
 	ui.Box(c.Key(key)).Width(176).Children(func() {
-		widgets.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{InputOptions: nui.InputOptions{Label: label, Disabled: disabled}, Orientation: nui.Vertical, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
+		nui.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{InputOptions: nui.InputOptions{Label: label, Disabled: disabled}, Orientation: nui.Vertical, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
 	})
 	if f.value.Set {
 		*target = int(f.value.Value)

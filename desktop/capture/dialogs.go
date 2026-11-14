@@ -327,7 +327,7 @@ func (d *resendDialog) numberRow(c *ui.Context, theme nui.Theme, key, label stri
 			options.InputOptions = nui.InputOptions{Label: label, Disabled: d.sending}
 			options.Orientation = nui.Vertical
 			options.AllowInvalid = true
-			widgets.InputNumber(c, theme, value, state, options)
+			nui.InputNumber(c, theme, value, state, options)
 		})
 	})
 }
