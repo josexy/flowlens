@@ -98,7 +98,7 @@ Take the single-instance lock before opening SQLite so a second process exits be
 
 Use the Go version from `go.mod`. Task is recommended; Python 3 is optional outside hook tests. Windows and Linux use `CGO_ENABLED=0`, macOS `CGO_ENABLED=1`; the Taskfile sets this.
 
-Run the smallest checks matching the risk. Full verification is `task verify`, which needs no display. Root tasks: `task dev`, `task build`, `task package`, `task run`. Without Task, run `go tool mygo dev`.
+Run the smallest checks matching the risk. Full verification is `task verify`, which needs no display. Root tasks: `task dev`, `task package`, `task run`. Without Task, run `go tool mygo dev`.
 
 | Scope | Relevant Go test packages |
 | --- | --- |

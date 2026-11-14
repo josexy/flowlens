@@ -1,10 +1,5 @@
 version: "3"
 
-vars:
-  APP_NAME: flowlens
-  BIN_DIR: bin
-  EXE: '{{if eq OS "windows"}}.exe{{end}}'
-
 # macOS keeps its cgo integrations (process attribution and the managed system
 # proxy). Windows and Linux build without cgo.
 env:
@@ -24,16 +19,14 @@ tasks:
     cmds:
       - go tool mygo dev
 
-  build:
-    desc: Builds the application binary into bin/
-    cmds:
-      - go build -o "{{.BIN_DIR}}/{{.APP_NAME}}{{.EXE}}" .
-
   run:
-    desc: Builds and runs the application
-    deps: [build]
+    desc: Builds with MyGo and runs the application once
+    vars:
+      RUN_DIR: .mygo/run
+      EXECUTABLE: '{{if eq OS "darwin"}}FlowLens.app/Contents/MacOS/FlowLens{{else if eq OS "windows"}}FlowLens.exe{{else}}flowlens{{end}}'
     cmds:
-      - '"./{{.BIN_DIR}}/{{.APP_NAME}}{{.EXE}}"'
+      - go tool mygo build -o "{{.RUN_DIR}}" -skip-installer -skip-dmg
+      - '"./{{.RUN_DIR}}/{{OS}}-{{ARCH}}/{{.EXECUTABLE}}"'
 
   package:
     desc: Packages a production build for the current platform

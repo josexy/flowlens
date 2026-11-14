@@ -86,7 +86,8 @@ Run commands from the repository root.
 | Command | Purpose |
 | --- | --- |
 | `task dev` | Run with live reload |
-| `task build` / `task package` / `task run` | Build, package, or run for the current platform |
+| `task run` | Build with MyGo and launch once |
+| `task package` | Build release packages for the current platform |
 | `task test` | Run all Go tests |
 | `task verify` | Run formatting, lint, UI lifecycle, catalog, and test checks |
 | `task lint:go` / `task lint:go:fix` | Check Go lint and formatting, or apply safe fixes |

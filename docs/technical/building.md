@@ -14,12 +14,14 @@ The Taskfile sets this from the host system. A production `mygo build` for macOS
 ## Common Builds
 
 ```shell
-task build                    # bin/flowlens for this system
+task run                      # build under .mygo/run/ and launch once
 task package                  # packages for this system, under build/
 task package -- -platform windows/amd64,linux/amd64,linux/arm64 -skip-installer
 ```
 
-`mygo build` writes to `build/<target>/`:
+`task run` skips the Windows installer and macOS disk image. MyGo still generates its Linux distribution packages under `.mygo/run/` on Linux.
+
+`task package` writes to `build/<target>/`:
 
 | Target | Output |
 | --- | --- |
