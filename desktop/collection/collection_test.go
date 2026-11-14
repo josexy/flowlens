@@ -39,7 +39,17 @@ func (requestStub) RecoverRequestBodyForEditing(string, []logic.HeaderField, pro
 
 type failingList struct {
 	*apicollectionservice.APICollectionService
-	err error
+	err       error
+	moveErr   error
+	moveCalls int
+}
+
+func (f *failingList) MoveNode(id, parent string) error {
+	f.moveCalls++
+	if f.moveErr != nil {
+		return f.moveErr
+	}
+	return f.APICollectionService.MoveNode(id, parent)
 }
 
 func (f *failingList) ListCollection() (*store.CollectionTree, error) {

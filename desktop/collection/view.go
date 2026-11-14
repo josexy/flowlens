@@ -17,13 +17,9 @@ import (
 )
 
 const (
-	rowHeight        float32 = 32
-	rootZoneHeight   float32 = 32
-	dragThreshold    float32 = 4
-	dragExpandDelay          = 600 * time.Millisecond
-	autoScrollEdge   float32 = 32
-	autoScrollStep   float32 = 12
-	autoScrollPeriod         = 16 * time.Millisecond
+	rowHeight       float32 = 32
+	rootZoneHeight  float32 = 32
+	dragExpandDelay         = 600 * time.Millisecond
 )
 
 var methodColors = map[string]ui.Color{
@@ -44,9 +40,7 @@ type View struct {
 	multi        bool
 	checked      map[string]bool
 	scroll       ui.ScrollState
-	viewport     float32
 	drag         treeDrag
-	suppress     string
 	renaming     renameDialog
 	save         saveDialog
 	openSequence int
@@ -55,15 +49,20 @@ type View struct {
 }
 
 type treeDrag struct {
-	id           string
-	index        int
-	dy           float32
-	startScroll  float32
+	source       collectionDrag
+	valid        bool
 	active       bool
 	target       string
 	root         bool
 	hoverFolder  string
 	hoverStarted time.Time
+}
+
+// collectionDrag identifies a node in the tree snapshot at pointer-down.
+type collectionDrag struct {
+	owner   *View
+	id      string
+	version uint64
 }
 
 // New returns the view of a window.
@@ -236,6 +235,10 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		}
 	}
 	v.pruneChecked()
+	if v.dragDisabled() || v.drag.source.version != collection.Version {
+		v.drag.valid = false
+		v.drag.active, v.drag.target, v.drag.root = false, "", false
+	}
 	rows := collection.Rows()
 	ui.Column(c.Key("api-collection")).Fill().MinHeight(0).Children(func() {
 		v.toolbar(c, theme, rows)
@@ -312,44 +315,49 @@ func (v *View) dragDisabled() bool {
 
 func (v *View) tree(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) {
 	collection := v.Data.Collection
-	area := ui.Scroll(c.Key("tree")).TrackScroll(&v.scroll).Fill().MinHeight(0)
-	if bounds := area.Bounds(); bounds.H > 0 {
-		v.viewport = bounds.H
-	}
-	area.Children(func() {
-		ui.Column(c).FillWidth().Children(func() {
-			if v.creating && v.folderParent == "" {
-				v.createRow(c, theme, 0)
-			}
-			for index, row := range rows {
-				v.row(c, theme, index, row, rows)
-				if v.creating && row.ID == v.folderParent {
-					v.createRow(c, theme, row.Depth+1)
+	wasActive := v.drag.active
+	v.drag.active, v.drag.target, v.drag.root = false, "", false
+	ui.Column(c.Key("tree-layout")).Fill().MinHeight(0).Children(func() {
+		rootSlot := ui.Box(c.Key("root-slot")).FillWidth().Shrink(0).Height(0)
+		ui.Scroll(c.Key("tree")).TrackScroll(&v.scroll).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+			ui.Column(c).FillWidth().Children(func() {
+				if v.creating && v.folderParent == "" {
+					v.createRow(c, theme, 0)
 				}
-			}
+				for _, row := range rows {
+					v.row(c, theme, row)
+					if v.creating && row.ID == v.folderParent {
+						v.createRow(c, theme, row.Depth+1)
+					}
+				}
+			})
 		})
+		// Keep the target for the release build, when the native source is
+		// no longer dragging but the drop still needs to be consumed. It has
+		// its own space above the scroll viewport, leaving every row reachable.
+		if (wasActive || v.drag.active) && v.validDrag(v.drag.source) && collection.CanMoveToRoot(v.drag.source.id) {
+			rootSlot.Height(rootZoneHeight+4).Padding(0, 6, 4, 6).Children(func() { v.rootZone(c, theme) })
+		}
 	})
 	v.menus.Sweep()
-	if v.drag.active {
-		v.continueDrag(c, rows)
-		if collection.CanMoveToRoot(v.drag.id) {
-			v.rootZone(c, theme, area)
-		}
+	if v.drag.target == "" || !v.drag.active {
+		v.drag.hoverFolder = ""
 	}
 }
 
-func (v *View) rootZone(c *ui.Context, theme nui.Theme, area ui.Element) {
-	ui.Overlay(c, func() {
-		bounds := area.Bounds()
-		zone := ui.Row(c.Key("root-zone")).Absolute().Left(bounds.X + 6).Top(bounds.Y).Width(bounds.W - 12).Height(rootZoneHeight).AlignItems(ui.Center).Gap(6).PaddingX(10).IgnoreInput(true)
-		zone.Radius(theme.Radius).Border(1, theme.BorderAccented).BorderStyle(ui.BorderDashed).Background(theme.Elevated)
-		if v.drag.root {
-			zone.Background(theme.Accented).Border(1, theme.Primary)
-		}
-		zone.Children(func() {
-			ui.Icon(c, lucide.FolderOpen()).Size(14, 14).TextColor(theme.Muted)
-			ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
-		})
+func (v *View) rootZone(c *ui.Context, theme nui.Theme) {
+	zone := ui.Row(c.Key("root-zone")).FillWidth().Height(rootZoneHeight).AlignItems(ui.Center).Gap(6).PaddingX(10).Label(locales.ApiCollectionMoveToRoot())
+	zone.Radius(theme.Radius).Border(1, theme.BorderAccented).BorderStyle(ui.BorderDashed).Background(theme.Elevated)
+	if source, over := ui.DragOver[collectionDrag](zone); over && v.canDrop(source, "") {
+		v.drag.root = true
+		zone.Background(theme.Accented).Border(1, theme.Primary)
+	}
+	if source, dropped := ui.Drop[collectionDrag](zone); dropped {
+		v.drop(source, "")
+	}
+	zone.Children(func() {
+		ui.Icon(c, lucide.FolderOpen()).Size(14, 14).TextColor(theme.Muted)
+		ui.Text(c, locales.ApiCollectionMoveToRoot()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 	})
 }
 
@@ -364,31 +372,39 @@ func (v *View) createRow(c *ui.Context, theme nui.Theme, depth int) {
 	})
 }
 
-// row shows a tree row as 1.0.5 did: 32 px and rounded, with a grip shown
-// on hover that alone drags the row, a 20 px icon, a request's method, the
-// name with a tooltip of it, a folder's child count, and an end-aligned
-// chevron that turns when the folder opens.
-func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.CollectionRow, rows []store.CollectionRow) {
+// row uses MyGo's native drag preview and folder drop targets while retaining
+// the tree's indentation, request method, child count and keyboard activation.
+func (v *View) row(c *ui.Context, theme nui.Theme, row store.CollectionRow) {
 	collection := v.Data.Collection
 	selected := collection.SelectedNodeID == row.ID
 	line := ui.ButtonBase(c.Key(row.ID)).Role(ui.RoleListItem).FillWidth().Height(rowHeight).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, float32(row.Depth)*14+10).FocusRing(true).AccessSelected(selected).Label(row.Name)
+	line.Background(theme.Background)
 	hovered := line.Hovered()
+	target := false
+	if !v.dragDisabled() {
+		if v.dragSource(line, row.ID) {
+			line.Opacity(0.4)
+		}
+		if row.Folder {
+			if source, over := ui.DragOver[collectionDrag](line); over && v.canDrop(source, row.ID) {
+				target = true
+				v.drag.target = row.ID
+				v.hoverFolder(c, row)
+			}
+			if source, dropped := ui.Drop[collectionDrag](line); dropped {
+				v.drop(source, row.ID)
+			}
+		}
+	}
 	switch {
-	case v.drag.active && v.drag.target == row.ID:
-		line.Background(theme.Primary.Alpha(0.1)).Border(1, theme.Primary)
+	case target:
+		line.Background(theme.Primary.Alpha(0.1).Over(theme.Background)).Border(1, theme.Primary)
 	case selected:
 		line.Background(theme.Accented)
 	case hovered:
 		line.Background(theme.Elevated)
 	}
-	if v.drag.active && v.drag.id == row.ID {
-		line.Opacity(0.5)
-	}
 	activate := func() {
-		if v.suppress == row.ID {
-			v.suppress = ""
-			return
-		}
 		switch {
 		case v.multi:
 			v.toggleChecked(row.ID)
@@ -412,7 +428,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, index int, row store.Collecti
 			}
 		}
 		if !v.dragDisabled() {
-			v.grip(c, theme, index, row, hovered)
+			widgets.ReorderGrip(c.Key("grip"), theme, "drag "+row.Name, true)
 		}
 		ui.Icon(c, rowIcon(row)).Size(20, 20).Shrink(0).TextColor(theme.Muted)
 		label := ui.Row(c.Key("label")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6)
@@ -457,26 +473,6 @@ func rowIcon(row store.CollectionRow) *ui.SVG {
 	default:
 		return lucide.FileText()
 	}
-}
-
-// grip is the handle that drags its row, shown while the row is hovered or
-// dragged, as 1.0.5's.
-func (v *View) grip(c *ui.Context, theme nui.Theme, index int, row store.CollectionRow, hovered bool) {
-	dragging := v.drag.active && v.drag.id == row.ID
-	// Hidden from assistive technology, as 1.0.5's; a click on it does not
-	// reach the row.
-	handle := ui.Box(c.Key("grip")).Size(14, 14).Shrink(0).Center().Cursor(ui.CursorGrab).OnClick(func() {})
-	if handle.Pressed() {
-		handle.Cursor(ui.CursorGrabbing)
-	}
-	opacity := float32(0)
-	if hovered || dragging {
-		opacity = 1
-	}
-	handle.Opacity(opacity).Children(func() {
-		ui.Icon(c, lucide.GripVertical()).Size(14, 14).TextColor(theme.Dimmed)
-	})
-	v.dragRow(handle, index, row, v.Data.Collection.Rows())
 }
 
 func (v *View) toggleChecked(id string) {
@@ -534,83 +530,67 @@ func (v *View) move(id, parent string) {
 	})
 }
 
-func (v *View) dragRow(line ui.Element, index int, row store.CollectionRow, rows []store.CollectionRow) {
-	if line.PressedInside() {
-		v.drag = treeDrag{id: row.ID, index: index, startScroll: v.scroll.Y}
-		v.suppress = ""
-	}
-	if v.drag.id != row.ID {
-		return
-	}
-	if _, dy, moved := line.Dragged(); moved {
-		v.drag.dy += dy
-		if !v.drag.active && (v.drag.dy > dragThreshold || v.drag.dy < -dragThreshold) {
-			v.drag.active = true
+// dragSource lets MyGo own the threshold, preview, scrolling and cancellation.
+// Freeze the tree version at pointer-down, including a press on the grip.
+func (v *View) dragSource(line ui.Element, id string) bool {
+	line.ObserveInput(func(event ui.InputEvent) {
+		if event.Kind == ui.InputPointerDown && event.Button == 0 {
+			v.drag = treeDrag{source: collectionDrag{owner: v, id: id, version: v.Data.Collection.Version}, valid: !v.dragDisabled()}
 		}
+		if event.Kind == ui.InputPointerUp && event.Canceled {
+			v.drag.valid = false
+		}
+	})
+	source := collectionDrag{owner: v, id: id, version: v.Data.Collection.Version}
+	if v.drag.source.id == id {
+		source = v.drag.source
 	}
-	if _, _, ended := line.DragEnded(); !ended || !v.drag.active {
-		return
+	line.Drag(source)
+	dragging := line.Dragging()
+	if dragging && v.validDrag(source) {
+		v.drag.active = true
 	}
-	drag := v.drag
-	v.drag = treeDrag{}
-	v.suppress = row.ID
-	v.finishDrag(drag)
+	return dragging
 }
 
-func (v *View) finishDrag(drag treeDrag) {
-	collection := v.Data.Collection
-	switch {
-	case drag.root && collection.CanMoveToRoot(drag.id):
-		v.move(drag.id, "")
-	case drag.target != "" && collection.CanMove(drag.id, drag.target):
-		v.move(drag.id, drag.target)
-	}
+func (v *View) validDrag(source collectionDrag) bool {
+	return v.drag.valid && source.owner == v && source == v.drag.source &&
+		!v.dragDisabled() && source.version == v.Data.Collection.Version && v.Data.Collection.Exists(source.id)
 }
 
-// continueDrag finds what the dragged row is over, scrolls at the edges, and
-// opens a folder the row rests on.
-func (v *View) continueDrag(c *ui.Context, rows []store.CollectionRow) {
-	collection := v.Data.Collection
-	drag := &v.drag
-	contentY := float32(drag.index)*rowHeight + rowHeight/2 + drag.dy + v.scroll.Y - drag.startScroll
-	viewportY := contentY - v.scroll.Y
-	drag.root = collection.CanMoveToRoot(drag.id) && viewportY >= 0 && viewportY < rootZoneHeight
-	drag.target = ""
-	if !drag.root && contentY >= 0 {
-		if index := int(contentY / rowHeight); index < len(rows) && collection.CanMove(drag.id, rows[index].ID) {
-			drag.target = rows[index].ID
-		}
+func (v *View) canDrop(source collectionDrag, parent string) bool {
+	if !v.validDrag(source) {
+		return false
 	}
-	if target := drag.target; target != "" && !collection.Expanded[target] && collection.IsFolder(target) && v.hasChildren(rows, target) {
-		if drag.hoverFolder != target {
-			drag.hoverFolder, drag.hoverStarted = target, c.Now()
-		}
-		if elapsed := c.Now().Sub(drag.hoverStarted); elapsed >= dragExpandDelay {
-			collection.ToggleExpanded(target)
-			drag.hoverFolder = ""
-		} else {
-			c.After(dragExpandDelay - elapsed)
-		}
+	if parent == "" {
+		return v.Data.Collection.CanMoveToRoot(source.id)
+	}
+	return v.Data.Collection.CanMove(source.id, parent)
+}
+
+func (v *View) drop(source collectionDrag, parent string) {
+	if !v.canDrop(source, parent) {
+		return
+	}
+	v.drag.valid = false
+	v.move(source.id, parent)
+}
+
+// hoverFolder opens a collapsed drop target without changing the tree snapshot.
+func (v *View) hoverFolder(c *ui.Context, row store.CollectionRow) {
+	if row.Expanded || !row.HasChildren {
+		v.drag.hoverFolder = ""
+		return
+	}
+	if v.drag.hoverFolder != row.ID {
+		v.drag.hoverFolder, v.drag.hoverStarted = row.ID, c.Now()
+	}
+	if elapsed := c.Now().Sub(v.drag.hoverStarted); elapsed >= dragExpandDelay {
+		v.Data.Collection.ToggleExpanded(row.ID)
+		v.drag.hoverFolder = ""
 	} else {
-		drag.hoverFolder = ""
+		c.After(dragExpandDelay - elapsed)
 	}
-	switch {
-	case viewportY < autoScrollEdge && v.scroll.Y > 0:
-		v.scroll.Y = max(0, v.scroll.Y-autoScrollStep)
-		c.After(autoScrollPeriod)
-	case v.viewport > 0 && viewportY > v.viewport-autoScrollEdge && v.scroll.Y < v.scroll.MaxY:
-		v.scroll.Y = min(v.scroll.MaxY, v.scroll.Y+autoScrollStep)
-		c.After(autoScrollPeriod)
-	}
-}
-
-func (v *View) hasChildren(rows []store.CollectionRow, id string) bool {
-	for _, row := range rows {
-		if row.ID == id {
-			return row.HasChildren
-		}
-	}
-	return false
 }
 
 type renameDialog struct {

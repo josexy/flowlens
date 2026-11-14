@@ -36,7 +36,7 @@ func TestTruncatedNameHasTooltip(t *testing.T) {
 	rendertest.RequireTooltip(t, f.tester, name, name)
 }
 
-func TestPressOnNameOpensWithoutDragging(t *testing.T) {
+func TestRowDragDoesNotOpenRequest(t *testing.T) {
 	f := newFixture(t)
 	folder := f.folder("", "Folder")
 	request := f.request(folder, "Open Me", "http://a/")
@@ -44,18 +44,22 @@ func TestPressOnNameOpensWithoutDragging(t *testing.T) {
 	f.data.Collection.Expanded[folder] = true
 	f.settle()
 	x, y := f.center("Open Me")
-	// A press on the name that moves follows no drag.
+	// A moving press on the row uses native dragging; releasing outside a
+	// folder neither moves nor opens the request. A later click still opens it.
 	f.tester.Press(x, y)
 	f.tester.Frame()
 	f.tester.Move(x, y+40)
 	f.tester.Frame()
-	if f.view.drag.active {
-		t.Fatal("a press on the name started a drag")
+	if !f.view.drag.active {
+		t.Fatal("a moving press on the row did not start a native drag")
 	}
 	f.tester.Release(x, y+40)
 	f.settle()
 	if f.data.Collection.ParentOf(request) != folder {
 		t.Fatal("moved")
+	}
+	if f.view.drag.active || f.data.Workspace.FindTabByAPIID(request) != nil {
+		t.Fatal("a missed drop left a drag active or opened the request")
 	}
 	f.click("Open Me")
 	if tab := f.data.Workspace.FindTabByAPIID(request); tab == nil {
