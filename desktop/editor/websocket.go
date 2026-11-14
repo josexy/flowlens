@@ -283,16 +283,11 @@ func (p *socketPane) settingsPane(c *ui.Context, theme nui.Theme) {
 	settings := &p.state.Settings
 	ui.Scroll(c.Key("settings")).Fill().MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Gap(6).Padding(10).Children(func() {
-			selectRow(c, theme, "proxy", locales.WorkspaceHttpRequestProxyMode(), &settings.ProxyMode, proxyModeOptions(), nil)
+			proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
 			settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
 				nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
 			})
 			selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
-			if settings.ProxyMode == logic.ProxyModeCustom {
-				settingRow(c, theme, "custom", locales.WorkspaceHttpRequestCustomProxy(), func() {
-					nui.Input(c.Key("input"), theme, &settings.CustomProxy, nui.InputOptions{Label: locales.WorkspaceHttpRequestCustomProxy(), Placeholder: locales.WorkspaceHttpRequestCustomProxyPlaceholder(), Size: nui.SM}).FillWidth()
-				})
-			}
 			p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
 		})
 	})

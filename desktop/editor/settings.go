@@ -9,12 +9,19 @@ import (
 	nui "github.com/josexy/nuxt-ui-go"
 )
 
-func proxyModeOptions() []nui.Option[string] {
-	return []nui.Option[string]{
+func proxySettings(c *ui.Context, theme nui.Theme, mode, customProxy *string) {
+	options := []nui.Option[string]{
 		{Value: logic.ProxyModeNone, Label: locales.WorkspaceHttpRequestProxyModeNone()},
 		{Value: logic.ProxyModeSystem, Label: locales.WorkspaceHttpRequestProxyModeSystem()},
 		{Value: logic.ProxyModeMITM, Label: locales.WorkspaceHttpRequestProxyModeMitm()},
 		{Value: logic.ProxyModeCustom, Label: locales.WorkspaceHttpRequestProxyModeCustom()},
+	}
+	selectRow(c, theme, "proxy", locales.WorkspaceHttpRequestProxyMode(), mode, options, nil)
+	if *mode == logic.ProxyModeCustom {
+		label := locales.WorkspaceHttpRequestCustomProxy()
+		settingRow(c, theme, "custom", label, func() {
+			nui.Input(c.Key("input"), theme, customProxy, nui.InputOptions{Label: label, Placeholder: locales.WorkspaceHttpRequestCustomProxyPlaceholder(), Size: nui.SM}).FillWidth()
+		})
 	}
 }
 

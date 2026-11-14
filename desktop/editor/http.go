@@ -328,7 +328,7 @@ func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
 			selectRow(c, theme, "protocol", locales.WorkspaceHttpRequestProtocol(), &settings.Protocol, protocols, func() {
 				state.Headers = logic.ConvertRequestRouteHeaders(state.Headers, logic.RequestProtocol(settings.Protocol), state.URL)
 			})
-			selectRow(c, theme, "proxy", locales.WorkspaceHttpRequestProxyMode(), &settings.ProxyMode, proxyModeOptions(), nil)
+			proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
 			settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
 				nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
 			})
@@ -336,11 +336,6 @@ func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
 			settingRow(c, theme, "h2", locales.WorkspaceHttpRequestHttp2Fingerprint(), func() {
 				nui.Input(c.Key("input"), theme, &settings.HTTP2Fingerprint, nui.InputOptions{Label: locales.WorkspaceHttpRequestHttp2Fingerprint(), Size: nui.SM, Disabled: settings.Protocol == string(logic.ProtocolHTTP1)}).FillWidth()
 			})
-			if settings.ProxyMode == logic.ProxyModeCustom {
-				settingRow(c, theme, "custom", locales.WorkspaceHttpRequestCustomProxy(), func() {
-					nui.Input(c.Key("input"), theme, &settings.CustomProxy, nui.InputOptions{Label: locales.WorkspaceHttpRequestCustomProxy(), Placeholder: locales.WorkspaceHttpRequestCustomProxyPlaceholder(), Size: nui.SM}).FillWidth()
-				})
-			}
 			p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
 			redirects := int64(settings.MaxRedirects)
 			p.redirects.build(c, theme, "redirects", locales.WorkspaceHttpRequestMaxRedirects(), "", &redirects, 0, 1)
