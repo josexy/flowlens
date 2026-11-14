@@ -338,11 +338,7 @@ func (w *Workspace) dropTarget(c *ui.Context, theme nui.Theme, element ui.Elemen
 // historyPane builds the opened saved session.
 func (w *Workspace) historyPane(c *ui.Context, theme nui.Theme) {
 	history := w.Data.History
-	switch {
-	case history.LoadingHistory:
-		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
-		return
-	case history.Traffic.Key == "":
+	if history.Traffic.Key == "" && !history.LoadingHistory {
 		ui.Column(c).Fill().Center().Children(func() {
 			ui.Text(c, locales.HistorySelectHint()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
@@ -356,8 +352,25 @@ func (w *Workspace) historyPane(c *ui.Context, theme nui.Theme) {
 func (w *Workspace) historyTableAndDetail(c *ui.Context, theme nui.Theme) {
 	traffic := w.Data.History.Traffic
 	if w.HistoryDetail == nil || traffic.Selected == nil || !traffic.ShowDetailPanel {
-		w.HistoryTable.Build(c, theme)
+		w.historyTable(c, theme)
 		return
 	}
-	w.buildSplit(c, theme, "history", func() { w.HistoryTable.Build(c, theme) }, func() { w.HistoryDetail(c, theme) })
+	w.buildSplit(c, theme, "history", func() { w.historyTable(c, theme) }, func() { w.HistoryDetail(c, theme) })
+}
+
+func (w *Workspace) historyTable(c *ui.Context, theme nui.Theme) {
+	loading := w.Data.History.LoadingHistory
+	ui.Box(c.Key("history-table")).Fill().MinWidth(0).MinHeight(0).Children(func() {
+		// Keep the table mounted so its header, rows and scroll position remain
+		// visible while the next session loads, without accepting row actions.
+		ui.Box(c.Key("content")).Fill().Disabled(loading).DimDisabled(false).Children(func() {
+			w.HistoryTable.Build(c, theme)
+		})
+		if loading {
+			ui.Column(c.Key("loading")).Absolute().Top(0).Bottom(0).Left(0).Right(0).ZIndex(1).
+				Center().Background(theme.Background.Alpha(0.65)).Role(ui.RoleStatus).Label(locales.AppLoading()).Busy(true).Children(func() {
+				ui.Spinner(c).Size(24, 24).TextColor(theme.Primary)
+			})
+		}
+	})
 }
