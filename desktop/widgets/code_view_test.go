@@ -1,11 +1,13 @@
 package widgets
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func TestRequiresPlainText(t *testing.T) {
@@ -42,6 +44,33 @@ func codeViewTester(view *CodeView) *ui.Tester {
 	return ui.NewTester(func(c *ui.Context) {
 		view.Build(c, ui.Font{Size: 13}).Fill().AutoFocus()
 	}, 400, 300)
+}
+
+func TestCodeViewFrameSurroundsTheNativeEditor(t *testing.T) {
+	for _, theme := range []nui.Theme{nui.Light(), nui.Dark()} {
+		for _, readOnly := range []bool{false, true} {
+			view := NewCodeView("json", readOnly)
+			view.SetText(`{"sample":true}`)
+			palette := theme.Native()
+			tester := ui.NewTester(func(c *ui.Context) {
+				c.SetTheme(palette)
+				ui.Box(c).Fill().Padding(10).Children(func() {
+					view.Build(c, ui.Font{Size: 13})
+				})
+			}, 400, 300)
+			frame := tester.Image()
+			border := palette.Border
+			want := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
+			for _, point := range [][2]int{
+				{10, 150}, {389, 150}, {200, 10}, {200, 289},
+				{10, 10}, {389, 10}, {10, 289}, {389, 289},
+			} {
+				if got := frame.RGBAAt(point[0], point[1]); got != want {
+					t.Errorf("dark=%v readOnly=%v: border at %v is %v, want %v", theme.Dark, readOnly, point, got, want)
+				}
+			}
+		}
+	}
 }
 
 func TestLargeReadOnlyTextIsPlain(t *testing.T) {

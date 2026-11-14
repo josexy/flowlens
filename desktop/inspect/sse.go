@@ -265,7 +265,7 @@ func (s *SSEView) detail(c *ui.Context, theme nui.Theme) {
 				s.detailView.SetText(text)
 			}
 			s.detailView.SetWordWrap(s.wrap.On())
-			s.detailView.Build(c, s.deps.Settings.CodeFont()).Fill()
+			s.detailView.BuildUnframed(c, s.deps.Settings.CodeFont())
 		},
 	})
 	if !s.open {

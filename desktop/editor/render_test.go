@@ -6,6 +6,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/locales"
 )
 
 func (f *fixture) setDark(dark bool) {
@@ -32,6 +33,10 @@ func TestRenderRequestEditor(t *testing.T) {
 	}
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "request-editor", f.setDark)
+	tab.HTTP.RequestBodyType = logic.BodyTypeJSON
+	tab.HTTP.RequestBodyText = `{"sample":true}`
+	f.click(locales.WorkspaceHttpRequestRequestBody())
+	rendertest.ShootThemes(t, f.tester, "request-editor-body", f.setDark)
 }
 
 func TestRenderPythonConsole(t *testing.T) {

@@ -295,7 +295,7 @@ func (v *consoleView) detailDialog(c *ui.Context, theme nui.Theme) {
 				v.view.SetText(entry.Message)
 			}
 			v.view.SetWordWrap(v.wrap.On())
-			v.view.Build(c, ui.Font{Family: palette.Font, Size: apptheme.TextSize(c, 14)}).Fill()
+			v.view.BuildUnframed(c, ui.Font{Family: palette.Font, Size: apptheme.TextSize(c, 14)})
 		},
 	})
 	if !v.open {

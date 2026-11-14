@@ -109,6 +109,45 @@ func TestTrafficTableHeaderDividerIsOnePixel(t *testing.T) {
 	}
 }
 
+func TestTrafficRowsAlternateInCaptureAndHistory(t *testing.T) {
+	for _, source := range []struct {
+		name string
+		ids  [2]string
+	}{
+		{"capture", [2]string{"1", "2"}},
+		{"history", [2]string{"11", "12"}},
+	} {
+		t.Run(source.name, func(t *testing.T) {
+			f := newHistoryFixture(t, entry(1, "first.test"), entry(2, "second.test")).fixture
+			if source.name == "history" {
+				f.click("session one")
+				f.requireText("saved.test")
+			}
+			f.tester.Move(1, 1)
+			for _, dark := range []bool{false, true} {
+				f.setDark(dark)
+				var colors [2]color.RGBA
+				for index, id := range source.ids {
+					row, ok := f.tester.AccessByRole(ui.RoleRow, id)
+					if !ok {
+						t.Fatalf("no row %s", id)
+					}
+					firstCell := headerRect(t, f, locales.TrafficId())
+					colors[index] = pixel(f.tester, firstCell.X+firstCell.W-6, row.Bounds.Y+row.Bounds.H/2)
+				}
+				base := rgba(f.theme().Background)
+				stripe := rgba(trafficStripeColor(f.theme()).Over(f.theme().Background))
+				if colors[1] == base {
+					colors[0], colors[1] = colors[1], colors[0]
+				}
+				if colors[0] != base || near(colors[1], base) || !near(colors[1], stripe) {
+					t.Fatalf("dark=%v: row colors %v, want %v and %v", dark, colors, base, stripe)
+				}
+			}
+		})
+	}
+}
+
 func TestHoveredResizeEdgeUsesOnlyNativeGrip(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		f := newRenderFixture(t)
@@ -235,7 +274,7 @@ func TestInspectedRowHasMarkerAndOutline(t *testing.T) {
 		got := pixel(f.tester, rect.X+20, top+dy)
 		want := rgba(theme.Primary.Alpha(0.22).Over(selectedRowColor(theme)))
 		wantPlain := rgba(theme.Primary.Alpha(0.22).Over(theme.Background))
-		wantStripe := rgba(theme.Primary.Alpha(0.22).Over(theme.Elevated.Alpha(0.52).Over(theme.Background)))
+		wantStripe := rgba(theme.Primary.Alpha(0.22).Over(trafficStripeColor(theme).Over(theme.Background)))
 		if near(got, want) || near(got, wantPlain) || near(got, wantStripe) {
 			foundOutline = true
 		}

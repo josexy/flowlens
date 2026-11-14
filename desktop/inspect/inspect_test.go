@@ -295,6 +295,16 @@ func TestWebSocketMessageDetailContent(t *testing.T) {
 	if got := f.panel.messages.view.Text(); got != "hello, world" {
 		t.Fatalf("text %q", got)
 	}
+	title, ok := f.tester.AccessByRole(ui.RoleHeading, locales.WorkspaceWebsocketClientMessageDetailReceive())
+	if !ok {
+		t.Fatal("message detail heading is missing")
+	}
+	field, ok := f.tester.AccessByRole(ui.RoleTextField, "Code editor")
+	// The title and content frame share a left edge. Only the frame's
+	// one-point border should inset the editor.
+	if !ok || field.Bounds.X != title.Bounds.X+1 {
+		t.Fatalf("editor bounds %v, want left edge at %v", field.Bounds, title.Bounds.X+1)
+	}
 	for _, label := range []string{locales.DetailWrapBody(), locales.DetailCopyBody(), locales.DetailSaveBody()} {
 		if _, ok := f.tester.Access(label); !ok {
 			t.Fatalf("text message without %q", label)

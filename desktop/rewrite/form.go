@@ -267,8 +267,8 @@ func (f *ruleForm) body(c *ui.Context, theme nui.Theme, rule *store.RewriteRule,
 			label = locales.RewriteRulesRegexReplacement()
 		}
 		ui.Text(c.Key("label"), label).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
-		ui.Box(c.Key("editor")).FillWidth().Height(224).Border(1, theme.Border).Radius(theme.Radius).Children(func() {
-			f.replacement.Build(c, f.view.Data.Settings.CodeFont()).Fill()
+		ui.Box(c.Key("editor")).FillWidth().Height(224).Children(func() {
+			f.replacement.Build(c, f.view.Data.Settings.CodeFont())
 		})
 	})
 }
@@ -531,7 +531,7 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 			ui.Text(c, locales.RewriteRulesRegexTest()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 			ui.Text(c, locales.RewriteRulesRegexTestHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
 		})
-		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Children(func() {
+		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Radius(theme.Radius).Clip().Children(func() {
 			p.toolbar(c, theme, body)
 			ui.Box(c.Key("content")).FillWidth().Height(288).Background(theme.Background).Children(func() { p.content(c, theme) })
 		})
@@ -592,8 +592,8 @@ func (p *bodyPreview) content(c *ui.Context, theme nui.Theme) {
 		p.diff.Wrap = p.effectiveWrap()
 		editor.DiffView(c.Key("diff"), p.diff).Fill()
 	case p.hasPreview():
-		p.outputView.Build(c.Key("output"), font).Fill()
+		p.outputView.BuildUnframed(c.Key("output"), font)
 	default:
-		p.sampleView.Build(c.Key("sample"), font).Fill()
+		p.sampleView.BuildUnframed(c.Key("sample"), font)
 	}
 }

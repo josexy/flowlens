@@ -119,7 +119,7 @@ func (p *httpPane) build(c *ui.Context, theme nui.Theme) {
 	p.syncState()
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.requestLine(c, theme)
-		nui.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
+		widgets.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
 			func() { p.requestPanel(c, theme) },
 			func() { p.response.build(c, theme) },
 		).Fill()
@@ -265,7 +265,9 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 	ui.Box(c.Key("body-content")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 		switch {
 		case text:
-			p.body.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
+			ui.Box(c).Fill().MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+				p.body.Build(c, p.editor.Data.Settings.CodeFont())
+			})
 		case state.RequestBodyType == logic.BodyTypeFile:
 			p.editor.fileControl(c, theme, p.key+":body", &state.RequestBodyFile, &p.bodyGuard)
 		case state.RequestBodyType == logic.BodyTypeFormData:
@@ -310,8 +312,8 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 			nui.Alert(c, theme, nui.AlertOptions{Description: locales.WorkspaceHttpRequestInlineScriptRuntimeDisabled(), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
 		})
 	}
-	ui.Box(c.Key("script-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		p.script.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
+	ui.Box(c.Key("script-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+		p.script.Build(c, p.editor.Data.Settings.CodeFont())
 	})
 }
 

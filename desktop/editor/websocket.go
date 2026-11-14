@@ -177,7 +177,7 @@ func (p *socketPane) build(c *ui.Context, theme nui.Theme) {
 	p.syncState()
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.connectionLine(c, theme)
-		nui.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
+		widgets.Splitter(c.Key("split"), theme, &p.split, nui.SplitterOptions{Percent: true, Min: nui.Set[float32](30), Max: nui.Set[float32](82)},
 			func() { p.leftPanel(c, theme) },
 			func() { p.rightPanel(c, theme) },
 		).Fill()
@@ -260,7 +260,7 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 			if binary {
 				p.editor.fileControl(c, theme, p.key+":draft", &state.DraftFile, &p.fileGuard)
 			} else {
-				p.draft.Build(c, p.editor.Data.Settings.CodeFont()).Fill()
+				p.draft.Build(c, p.editor.Data.Settings.CodeFont())
 			}
 			ui.Box(c.Key("send-position")).Absolute().Right(20).Bottom(12).Children(func() {
 				button := nui.Button(c.Key("send-message"), theme, "", nui.ButtonOptions{Size: nui.XL, Square: true, Leading: lucide.Send(), AccessibleLabel: locales.WorkspaceWebsocketClientSendMessage(), Disabled: !p.canSend() || state.IsSendingMessage, Loading: state.IsSendingMessage}).Radius(100)

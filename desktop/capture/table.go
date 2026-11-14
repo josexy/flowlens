@@ -422,7 +422,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	}
 	t.menuSpans = t.menuSpans[:0]
 	var element ui.Element
-	ui.Box(c.Key("traffic-table-pane")).Fill().MinHeight(0).Children(func() {
+	ui.Box(c.Key("traffic-table-pane")).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		element = widgets.Table(c.Key("traffic-table"), theme, &t.state, columns, nui.TableOptions{
 			Label: locales.TrafficColumns(), ManualSorting: true,
 			BuildEmpty: func(*ui.Context, nui.Theme) {},
@@ -490,7 +490,7 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 		}
 		cellFill(c, "highlight").Background(ui.Hex(highlight).Alpha(alpha))
 	case row%2 == 0:
-		cellFill(c, "stripe").Background(theme.Elevated.Alpha(0.52))
+		cellFill(c, "stripe").Background(trafficStripeColor(theme))
 	}
 	var bar, outline ui.Color
 	switch {

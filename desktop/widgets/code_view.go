@@ -139,13 +139,20 @@ func (v *CodeView) State() *editor.State { return &v.state }
 // Build fills its parent with the framed view and reports edits to OnChange.
 // It returns the editor itself so focus and accessibility stay on the input.
 func (v *CodeView) Build(c *ui.Context, font ui.Font) ui.Element {
+	var element ui.Element
+	// The native editor paints its background over its own box.
+	ui.Box(c).Fill().MinWidth(0).MinHeight(0).Border(1, c.Theme().Border).Clip().Children(func() {
+		element = v.BuildUnframed(c, font)
+	})
+	return element
+}
+
+// BuildUnframed fills a container that supplies its own border.
+func (v *CodeView) BuildUnframed(c *ui.Context, font ui.Font) ui.Element {
 	v.state.Font = font
 	v.state.LineHeight = 18.0 / 13.0
 	v.state.Theme = theme.Editor(c.Theme())
-	var element ui.Element
-	ui.Box(c).Fill().MinWidth(0).MinHeight(0).Padding(0, 0, 0, 8).Children(func() {
-		element = editor.View(c, &v.state).Fill().Border(1, c.Theme().Border)
-	})
+	element := editor.View(c, &v.state).Fill().MinWidth(0).MinHeight(0)
 	if version := v.state.Buffer.Version(); version != v.version {
 		v.version = version
 		if v.OnChange != nil && !v.state.ReadOnly {

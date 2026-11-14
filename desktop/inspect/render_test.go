@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,18 +61,28 @@ func TestRenderDetailHeaders(t *testing.T) {
 	f.panel.requestTab, f.panel.responseTab = tabRequestHeaders, tabResponseCookies
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "detail-headers", f.setDark)
+	f.panel.responseTab = tabResponseRaw
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "detail-raw", f.setDark)
 }
 
 func TestRenderWebSocketMessageDetails(t *testing.T) {
 	entry := httpEntry()
 	entry.Type = "ws"
+	payload := `{"type":"hello","payload":"` + strings.Repeat("a received text message. ", 18) + `"}`
 	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
-		{Direction: "receive", MsgType: "text", Data: `{"type":"hello","payload":"a received text message"}`, DataSize: 53},
+		{Direction: "receive", MsgType: "text", Data: payload, DataSize: len(payload)},
 		{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte("\x00\x01binary frame\xff")), DataSize: 16},
 	}})
 	f.tester.SetSize(rendertest.Width, rendertest.Height)
 	f.settle()
-	f.openMessage(`{"type":"hello","payload":"a received text message"}`)
+	f.openMessage(payload)
+	view := f.panel.messages.view.State()
+	unwrapped := view.LineTop(1)
+	f.click(locales.DetailWrapBody())
+	if view.LineTop(1) <= unwrapped {
+		t.Fatal("the long message did not wrap")
+	}
 	rendertest.ShootThemes(t, f.tester, "ws-detail-receive-text", f.setDark)
 	f.panel.messages.open = false
 	f.settle()

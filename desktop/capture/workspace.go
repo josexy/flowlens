@@ -326,7 +326,7 @@ func (w *Workspace) buildSplit(c *ui.Context, theme nui.Theme, prefix string, fi
 	if name != w.splitName {
 		w.splitName, w.split = name, settings.TrafficDetailSplit(name, defaultTableSplit)
 	}
-	nui.Splitter(c.Key(prefix), theme, &w.split, nui.SplitterOptions{
+	widgets.Splitter(c.Key(prefix), theme, &w.split, nui.SplitterOptions{
 		Percent: true, Vertical: layout == settingservice.TrafficDetailLayoutHorizontal,
 		Min: nui.Set[float32](minTableSplit), Max: nui.Set[float32](maxTableSplit),
 		OnChange: func(percent float32) { settings.SetTrafficDetailSplit(name, percent) },

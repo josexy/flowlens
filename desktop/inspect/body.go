@@ -167,10 +167,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 				emptyState(c, theme, lucide.File(), locales.DetailBodyEmpty())
 				return
 			}
-			font := b.deps.Settings.CodeFont()
 			switch b.active {
-			case logic.BodyTabFormatted:
-				b.formatted.Build(c, font).Fill()
 			case logic.BodyTabImage:
 				b.image.build(c, theme, b)
 			case logic.BodyTabSSE:
@@ -178,7 +175,13 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 			case logic.BodyTabHex:
 				b.hex.Build(c, theme, content.Identity, content.Body, content.Encoding)
 			default:
-				b.raw.Build(c, font).Fill()
+				view := b.raw
+				if b.active == logic.BodyTabFormatted {
+					view = b.formatted
+				}
+				ui.Box(c).Fill().MinHeight(0).Padding(0, 10, 10, 10).Children(func() {
+					view.Build(c, b.deps.Settings.CodeFont())
+				})
 			}
 		})
 	})

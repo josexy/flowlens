@@ -217,9 +217,10 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 	}
 	actions = append(actions, widgets.DetailAction{Key: "save", Icon: lucide.Download(), Label: locales.DetailSaveBody(), Disabled: saving, Run: func() { m.save(active) }})
 	options := widgets.DetailDialogOptions{
-		Title:   m.detailTitle(),
-		Actions: actions,
-		Wrap:    &m.wrap,
+		Title:         m.detailTitle(),
+		Actions:       actions,
+		Wrap:          &m.wrap,
+		SquareContent: !binary,
 		Header: func(c *ui.Context, palette nui.Theme) {
 			direction, color := locales.WorkspaceWebsocketClientFilterReceive(), nui.Info
 			if active.Direction == DirectionSend {
@@ -242,7 +243,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 				m.view.SetText(active.Data)
 			}
 			m.view.SetWordWrap(m.wrap.On())
-			m.view.Build(c, ui.Font{Family: palette.Font, Size: desktoptheme.TextSize(c, 14)}).Fill()
+			m.view.BuildUnframed(c, ui.Font{Family: palette.Font, Size: desktoptheme.TextSize(c, 14)})
 		},
 	}
 	if active != nil && active.Error != "" {

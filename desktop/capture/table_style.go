@@ -18,6 +18,10 @@ func selectedRowColor(theme nui.Theme) ui.Color {
 	return theme.Primary.Alpha(0.12).Over(theme.Accented)
 }
 
+func trafficStripeColor(theme nui.Theme) ui.Color {
+	return theme.Accented.Alpha(0.4)
+}
+
 // headerBackground is the header band's color, and its color under the
 // pointer.
 func headerBackground(theme nui.Theme, hovered bool) ui.Color {

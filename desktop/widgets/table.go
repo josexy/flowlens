@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"maps"
+
 	"github.com/egoist/mygo/ui"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -10,12 +12,21 @@ import (
 // Nuxt's layout root, so input notices, focus and context menus target the table.
 // Like any Element, the returned panel is valid only during this build.
 func Table[T any](c *ui.Context, theme nui.Theme, state *nui.TableState[T], columns []nui.TableColumn[T], options nui.TableOptions) ui.Element {
+	// Nuxt draws its root border as an inset shadow. Disable it in the
+	// recipe so it does not add an extra line beside a pane's divider.
+	styles := make(nui.Styles, len(options.UI)+1)
+	maps.Copy(styles, options.UI)
+	root := styles[nui.Root]
+	root.BorderWidth = nui.Set[float32](0)
+	styles[nui.Root] = root
+	options.UI = styles
+
 	var panel ui.Element
 	style := options.Style
 	options.Style = func(slot nui.Slot, element ui.Element) {
 		switch slot {
 		case nui.Root:
-			element.Fill().Radius(0).Border(0, ui.Transparent)
+			element.Fill().Radius(0)
 		case nui.Item:
 			// Extend Nuxt's cell content over the native padding so row
 			// backgrounds and hit-test bounds still cover the entire cell.
