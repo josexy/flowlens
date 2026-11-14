@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 	"github.com/josexy/flowlens/desktop/logic"
+	"github.com/josexy/flowlens/desktop/runtime"
 	"github.com/josexy/flowlens/desktop/shortcuts"
 	apptheme "github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
@@ -22,12 +24,14 @@ const (
 	maxProxyPort = 65535
 	minDNSTTL    = 1
 	maxDNSTTL    = 3600
+	localIPsJob  = "capture/local-ips"
 )
 
 var addressSchemePattern = regexp.MustCompile(`(?i)^[a-z][a-z\d+\-.]*://`)
 
 type toolbarState struct {
 	modeMenu, hostMenu nui.MenuState
+	hostOptions        []settingservice.LocalIPAddress
 
 	portOpen    bool
 	portWasOpen bool
@@ -360,11 +364,24 @@ func (w *Workspace) modeMenu(c *ui.Context, theme nui.Theme, config *settingserv
 	}, nui.MenuOptions{Label: tooltip})
 }
 
-func (w *Workspace) localIPs() []settingservice.LocalIPAddress {
-	if w.Host.ListLocalIPs != nil {
-		if options := w.Host.ListLocalIPs(); len(options) > 0 {
-			return options
+func (w *Workspace) refreshLocalIPs() {
+	list := w.Host.ListLocalIPs
+	jobs := w.Data.Runtime.Jobs
+	if list == nil || jobs.Active(localIPsJob) {
+		return
+	}
+	runtime.Run(jobs, localIPsJob, func(context.Context) ([]settingservice.LocalIPAddress, error) {
+		return list(), nil
+	}, func(options []settingservice.LocalIPAddress, err error) {
+		if err == nil {
+			w.toolbar.hostOptions = options
 		}
+	})
+}
+
+func (w *Workspace) localIPs() []settingservice.LocalIPAddress {
+	if len(w.toolbar.hostOptions) > 0 {
+		return w.toolbar.hostOptions
 	}
 	return []settingservice.LocalIPAddress{{Label: "ALL", Value: "0.0.0.0"}, {Label: "127.0.0.1", Value: "127.0.0.1"}}
 }
@@ -383,7 +400,14 @@ func (w *Workspace) hostMenu(c *ui.Context, theme nui.Theme, config *settingserv
 			}})
 		}
 	}
-	nui.DropdownMenu(c.Key("host-menu"), theme, anchor, &w.toolbar.hostMenu, items, nui.MenuOptions{Label: tooltip})
+	nui.DropdownMenu(c.Key("host-menu"), theme, anchor, &w.toolbar.hostMenu, items, nui.MenuOptions{
+		Label: tooltip,
+		OnOpenChange: func(open bool) {
+			if open {
+				w.refreshLocalIPs()
+			}
+		},
+	})
 }
 
 func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settingservice.ProxyConfig) {

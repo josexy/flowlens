@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -455,6 +456,58 @@ func TestProxyDisplayAddress(t *testing.T) {
 	}
 	if got := ProxyDisplayAddress("http://x", settingservice.ProxyModeSOCKS5); got != "http://x" {
 		t.Fatal(got)
+	}
+}
+
+func TestHostMenuRefreshesWithoutBlocking(t *testing.T) {
+	f := newFixture(t)
+	responses := make(chan []settingservice.LocalIPAddress, 1)
+	defer close(responses)
+	var calls atomic.Int32
+	f.workspace.Host.ListLocalIPs = func() []settingservice.LocalIPAddress {
+		calls.Add(1)
+		select {
+		case options := <-responses:
+			return options
+		case <-time.After(2 * time.Second):
+			t.Error("address lookup did not receive its result while the menu was open")
+			return nil
+		}
+	}
+	openMenu := func() {
+		t.Helper()
+		if err := f.tester.Click(locales.ToolbarQuickHost("127.0.0.1")); err != nil {
+			t.Fatal(err)
+		}
+		for range 3 {
+			f.tester.Frame()
+		}
+	}
+
+	openMenu()
+	f.requireText("ALL")
+	f.requireText("127.0.0.1")
+	first := settingservice.LocalIPAddress{Value: "192.0.2.1", Label: "192.0.2.1 (Ethernet)"}
+	responses <- []settingservice.LocalIPAddress{first}
+	f.settle()
+	f.requireText(first.Label)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("address lookups after one opening and several frames = %d, want 1", got)
+	}
+
+	menutest.Close(f.tester, f.settle)
+	openMenu()
+	f.requireText(first.Label)
+	updated := settingservice.LocalIPAddress{Value: "192.0.2.2", Label: "192.0.2.2 (Ethernet)"}
+	responses <- []settingservice.LocalIPAddress{updated}
+	f.settle()
+	f.requireText(updated.Label)
+	f.requireNoText(first.Label)
+	if err := menutest.Choose(f.tester, f.settle, updated.Label); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.data.Settings.Current.ProxyConfig.Host; got != updated.Value {
+		t.Fatalf("saved host = %q, want %q", got, updated.Value)
 	}
 }
 

@@ -30,7 +30,7 @@ const (
 
 // Host is what the workspace needs from the rest of the application.
 type Host struct {
-	// ListLocalIPs lists the addresses the proxy can listen on.
+	// ListLocalIPs lists the addresses the proxy can listen on. It runs in a background job.
 	ListLocalIPs func() []settingservice.LocalIPAddress
 	// Resend sends a captured request again.
 	Resend func(ctx context.Context, id uint64, config proxyservice.ResendConfig) (proxyservice.ResendResult, error)
@@ -109,6 +109,7 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 		}
 		w.History = w.historySidebar
 	}
+	w.refreshLocalIPs()
 	return w
 }
 
