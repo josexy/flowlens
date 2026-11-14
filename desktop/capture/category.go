@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
-// categoryRefreshInterval limits how often a live capture rebuilds the tree.
+// categoryRefreshInterval limits tree rebuilds from live traffic updates.
 const categoryRefreshInterval = 250 * time.Millisecond
 
 const (
@@ -51,11 +52,13 @@ type categoryView struct {
 	expanded   map[string]bool
 	activeLeaf string
 
-	context  string
-	version  uint64
-	computed time.Time
-	entries  []*logic.TrafficEntry
-	roots    []*logic.StructureNode
+	context             string
+	version             uint64
+	computed            time.Time
+	selectedHosts       []string
+	selectedProcessKeys []string
+	entries             []*logic.TrafficEntry
+	roots               []*logic.StructureNode
 
 	list ui.ListState
 }
@@ -88,14 +91,21 @@ func (w *Workspace) categoryDataset() *categorySource {
 }
 
 func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
-	base := source.filter.Base()
-	version := source.filter.Version()
-	now := c.Now()
+	filter := source.filter
+	v.entries = filter.Base()
+	version := filter.Version()
 	changedContext := source.key != v.context
-	if !changedContext && version == v.version && v.entries != nil {
+	changedSelection := !slices.Equal(v.selectedHosts, filter.SelectedHosts) ||
+		!slices.Equal(v.selectedProcessKeys, filter.SelectedProcessKeys)
+	if changedSelection {
+		v.selectedHosts = slices.Clone(filter.SelectedHosts)
+		v.selectedProcessKeys = slices.Clone(filter.SelectedProcessKeys)
+	}
+	if !changedContext && version == v.version {
 		return
 	}
-	if !changedContext && source.key == "capture" {
+	now := c.Now()
+	if !changedContext && !changedSelection && source.key == "capture" {
 		if remaining := categoryRefreshInterval - now.Sub(v.computed); remaining > 0 {
 			c.After(remaining)
 			return
@@ -105,8 +115,7 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 		v.activeLeaf = ""
 	}
 	v.context, v.version, v.computed = source.key, version, now
-	v.entries = base
-	v.roots = logic.BuildStructureTree(base)
+	v.roots = logic.BuildStructureTree(filter.Filtered())
 }
 
 func toSet(values []string) map[string]bool {

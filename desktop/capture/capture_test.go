@@ -1908,3 +1908,52 @@ func TestCategoryStructureExpandsAndFocuses(t *testing.T) {
 		t.Fatalf("%+v", f.data.Traffic.Selected)
 	}
 }
+
+func TestCategoryStructureFollowsSelections(t *testing.T) {
+	for _, source := range []string{"capture", "history"} {
+		t.Run(source, func(t *testing.T) {
+			entries := []*logic.TrafficEntry{entry(1, "api.test"), entry(2, "api.test"), entry(3, "cdn.test"), entry(4, "other.test")}
+			for _, i := range []int{0, 2} {
+				entries[i].Metadata = &proxyservice.Metadata{Process: &proxyservice.ProcessInfo{
+					Status: proxyservice.ProcessStatusResolved, AppID: "com.browser", DisplayName: "Browser",
+				}}
+			}
+			var f *fixture
+			if source == "history" {
+				history := newHistoryFixture(t)
+				history.history.entries["k1"] = entries
+				f = history.fixture
+				f.click("session one")
+			} else {
+				f = newFixture(t, entries...)
+			}
+			f.showCategories = true
+			f.settle()
+
+			for _, step := range []struct {
+				label string
+				ids   []uint64
+			}{
+				{"api.test", []uint64{1, 2}},
+				{"cdn.test", []uint64{1, 2, 3}},
+				{"other.test", []uint64{1, 2, 3, 4}},
+				{"Browser", []uint64{1, 3}},
+				{"api.test", []uint64{3}},
+				{"cdn.test", nil},
+				{"other.test", []uint64{1, 3}},
+				{"Browser", []uint64{1, 2, 3, 4}},
+			} {
+				f.click(locales.CategoryTitle() + ": " + step.label)
+				var ids []uint64
+				for _, root := range f.workspace.category.roots {
+					for _, leaf := range root.Children {
+						ids = append(ids, leaf.EntryIDs...)
+					}
+				}
+				if !slices.Equal(ids, step.ids) {
+					t.Fatalf("after clicking %q, structure contains requests %v, want %v", step.label, ids, step.ids)
+				}
+			}
+		})
+	}
+}
