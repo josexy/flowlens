@@ -10,9 +10,6 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 )
 
-//go:fix inline
-func ptr[T any](value T) *T { return new(value) }
-
 func TestRawHTTP1RequestKeepsEscapedTargetsAndFields(t *testing.T) {
 	got := FormatRawHTTPRequest(RawHTTPRequestInput{
 		Method: "GET", URL: "https://example.test/a%2Fb?q=hello%20world&empty=#fragment",
