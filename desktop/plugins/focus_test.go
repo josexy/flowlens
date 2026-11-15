@@ -40,6 +40,7 @@ func TestFileDialogTakesTypingWithoutClick(t *testing.T) {
 	}
 	f.view.fileModal.open = false
 	f.settle()
+	f.click("helpers.py")
 	f.click(locales.PythonPluginsRenameFile())
 	f.tester.Key(ui.Ctrl, ui.KeyA)
 	f.tester.Type("renamed.py")

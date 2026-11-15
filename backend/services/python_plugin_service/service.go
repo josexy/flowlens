@@ -382,6 +382,19 @@ func (s *PythonPluginService) ReadPluginFile(pluginID, relativePath string) (*Ma
 	return &ManagedPluginFile{Path: filepath.ToSlash(relativePath), Content: string(value)}, nil
 }
 
+// CreatePluginFile creates an empty file without replacing existing content.
+func (s *PythonPluginService) CreatePluginFile(pluginID, relativePath string) (*Plugin, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	plugin, err := s.packages.createFile(s.operationContext(), pluginID, relativePath)
+	if err != nil {
+		s.emitRegistry("validation_failed", strings.TrimSpace(pluginID))
+		return nil, err
+	}
+	s.emitRegistry("files_changed", plugin.ID)
+	return plugin, nil
+}
+
 func (s *PythonPluginService) WritePluginFile(pluginID, relativePath, content string) (*Plugin, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()

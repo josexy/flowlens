@@ -74,6 +74,9 @@ func TestServiceExposesPluginFilesRulesOrderingAndEnableValidation(t *testing.T)
 	if err != nil || mainFile.Path != mainFileName || mainFile.Content != defaultMainSource {
 		t.Fatalf("ReadPluginFile = %+v, %v", mainFile, err)
 	}
+	if _, err := service.CreatePluginFile(first.ID, "extra.py"); err != nil {
+		t.Fatalf("CreatePluginFile: %v", err)
+	}
 	if _, err := service.WritePluginFile(first.ID, "extra.py", "VALUE = 1\n"); err != nil {
 		t.Fatalf("WritePluginFile: %v", err)
 	}

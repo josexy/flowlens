@@ -168,7 +168,7 @@ Tooltips carried over from the 1.0.5 templates (`frontend/src`) and their locale
 | `python-plugins/PythonPluginRulesPane.vue` | Delete rule | `python_plugins.delete_rule` |
 | `python-plugins/PythonPluginSurface.vue` | Save file (with binding) | `python_plugins.save_file` |
 | `python-plugins/PythonPluginSurface.vue` | Validate, reload | `python_plugins.validate_hint`, `python_plugins.reload_hint` |
-| `python-plugins/PythonPluginSurface.vue` | Plugin actions | `python_plugins.rename_plugin`, `python_plugins.open_directory`, `python_plugins.delete_plugin` |
+| `python-plugins/PythonPluginSurface.vue` | Plugin actions (directory access is in the sidebar) | `python_plugins.rename_plugin`, `python_plugins.delete_plugin` |
 | `python-plugins/PythonPluginSurface.vue` | File actions | `python_plugins.new_file`, `python_plugins.rename_file`, `python_plugins.delete_file` |
 | `python-plugins/PythonPluginSurface.vue` | Active revision | *dynamic*, falls back to `python_plugins.no_revision` |
 | `python-plugins/PythonPluginSurface.vue` | Validation error | *dynamic* |

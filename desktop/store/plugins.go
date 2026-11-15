@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	pathpkg "path"
 	"slices"
+	"strconv"
 	"strings"
 
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
@@ -36,6 +38,7 @@ type PluginBackend interface {
 	ReloadPlugin(id string) (*Plugin, error)
 	ListPluginFiles(id string) ([]string, error)
 	ReadPluginFile(id, path string) (*PluginFile, error)
+	CreatePluginFile(id, path string) (*Plugin, error)
 	WritePluginFile(id, path, content string) (*Plugin, error)
 	RenamePluginFile(id, oldPath, newPath string) (*Plugin, error)
 	DeletePluginFile(id, path string) (*Plugin, error)
@@ -85,6 +88,7 @@ type PluginsStore struct {
 	paramsDrafts  map[string]pluginDraft
 
 	listSequence, pluginSequence, filesSequence, fileSequence, statusSequence int
+	readSequence                                                              uint64
 	refreshing                                                                bool
 	pendingEvents                                                             []PluginRegistryEvent
 	off                                                                       func()
@@ -213,7 +217,11 @@ func (s *PluginsStore) clearEditor() {
 }
 
 func runPlugin[T any](s *PluginsStore, job string, work func() (T, error), done func(T, error)) {
-	runtime.Run(s.rt.Jobs, "plugins:"+job, func(context.Context) (T, error) { return work() }, done)
+	// Reads reject stale data with their own sequence checks, but must still
+	// finish their callbacks (dialogs and registry refreshes depend on them).
+	// Reusing a Jobs key would silently discard a superseded read's callback.
+	s.readSequence++
+	runtime.Run(s.rt.Jobs, "plugins:"+job+":"+strconv.FormatUint(s.readSequence, 10), func(context.Context) (T, error) { return work() }, done)
 }
 
 // mutate runs one change per key; a second call joins the first.
@@ -349,6 +357,13 @@ func (s *PluginsStore) loadFile(id, path string, force bool, done func(error)) {
 			done(err)
 			return
 		}
+		// A registry refresh may have started while the editor was clean.
+		// Preserve text entered while its file read was in flight.
+		if s.editorPluginID == id && s.SelectedFilePath == path && s.EditorDirty() {
+			s.stashEditor()
+			done(nil)
+			return
+		}
 		delete(s.editorDrafts, key)
 		s.editorPluginID, s.SelectedFilePath = id, value.Path
 		s.EditorContent, s.SavedEditor, s.EditorError = value.Content, value.Content, ""
@@ -357,6 +372,10 @@ func (s *PluginsStore) loadFile(id, path string, force bool, done func(error)) {
 }
 
 func (s *PluginsStore) loadFiles(id string, reloadClean bool, done func(error)) {
+	if s.SelectedPluginID != id {
+		done(nil)
+		return
+	}
 	if id == "" {
 		s.Files = nil
 		s.clearEditor()
@@ -393,6 +412,7 @@ func (s *PluginsStore) loadFiles(id string, reloadClean bool, done func(error)) 
 			done(nil)
 			return
 		}
+		s.stashEditor()
 		draft, drafted := s.editorDrafts[pluginDraftKey(id, path)]
 		editorDirty := s.editorPluginID == id && s.SelectedFilePath == path && s.EditorContent != s.SavedEditor
 		force := reloadClean && !editorDirty && (!drafted || draft.content == draft.saved)
@@ -744,15 +764,20 @@ func (s *PluginsStore) reloadFiles(id string, plugin *Plugin, done func(*Plugin,
 	s.loadFiles(id, false, func(err error) { done(plugin, err) })
 }
 
+func normalizePluginFilePath(path string) string {
+	return pathpkg.Clean(strings.ReplaceAll(strings.TrimSpace(path), "\\", "/"))
+}
+
 // CreateFile adds an empty file and opens it.
 func (s *PluginsStore) CreateFile(path string, done func(*Plugin, error)) {
+	path = normalizePluginFilePath(path)
 	id := s.SelectedPluginID
 	if id == "" {
 		done(nil, errors.New("select a plugin before creating a file"))
 		return
 	}
 	mutate(s, pluginMutationKey("file:create", id, path), func() (*Plugin, error) {
-		return s.backend.WritePluginFile(id, path, "")
+		return s.backend.CreatePluginFile(id, path)
 	}, s.upsertAfter("create file returned no plugin"), func(plugin *Plugin, err error) {
 		if err != nil {
 			done(nil, err)
@@ -766,6 +791,7 @@ func (s *PluginsStore) CreateFile(path string, done func(*Plugin, error)) {
 
 // RenameFile renames the open file, keeping its draft.
 func (s *PluginsStore) RenameFile(next string, done func(*Plugin, error)) {
+	next = normalizePluginFilePath(next)
 	id, current := s.SelectedPluginID, s.SelectedFilePath
 	if id == "" || current == "" {
 		done(nil, errors.New("select a plugin file before renaming"))
@@ -779,13 +805,16 @@ func (s *PluginsStore) RenameFile(next string, done func(*Plugin, error)) {
 			done(nil, err)
 			return
 		}
+		if s.SelectedPluginID == id && s.SelectedFilePath == current {
+			s.stashEditor()
+			s.clearEditor()
+		}
 		oldKey := pluginDraftKey(id, current)
 		if draft, ok := s.editorDrafts[oldKey]; ok {
 			delete(s.editorDrafts, oldKey)
 			s.editorDrafts[pluginDraftKey(id, next)] = draft
 		}
 		s.selectedFiles[id] = next
-		s.SelectedFilePath = ""
 		s.reloadFiles(id, plugin, done)
 	})
 }
@@ -805,7 +834,12 @@ func (s *PluginsStore) DeleteFile(done func(*Plugin, error)) {
 			return
 		}
 		delete(s.editorDrafts, pluginDraftKey(id, path))
-		delete(s.selectedFiles, id)
+		if s.SelectedPluginID == id && s.SelectedFilePath == path {
+			s.clearEditor()
+		}
+		if s.selectedFiles[id] == path {
+			delete(s.selectedFiles, id)
+		}
 		s.reloadFiles(id, plugin, done)
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -278,6 +279,38 @@ func TestPackageSaveActivatesAtomicallyAndKeepsLastGoodOnFailure(t *testing.T) {
 	}
 	if stored.ActiveRevision != updated.ActiveRevision || stored.LastGoodRevision != updated.ActiveRevision || stored.ValidationStatus != ValidationStatusInvalid {
 		t.Fatalf("failed save changed last-good revision: %+v", stored)
+	}
+}
+
+func TestPackageCreateFileRejectsExistingContent(t *testing.T) {
+	manager, repository, _, _ := newTestPackageManager(t, &recordingRevisionValidator{})
+	ctx := context.Background()
+	if _, err := manager.createPlugin(ctx, CreatePluginInput{ID: testPluginIDOne, Name: "Files", ParamsJSON: `{}`}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.createFile(ctx, testPluginIDOne, "lib/extra.py"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := manager.writeFile(ctx, testPluginIDOne, "lib/extra.py", []byte("VALUE = 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{"lib/extra.py", "lib\\extra.py", "./lib/extra.py", mainFileName, manifestFileName}
+	if runtime.GOOS == "windows" {
+		paths = append(paths, "LIB/EXTRA.PY")
+	}
+	for _, path := range paths {
+		if _, err := manager.createFile(ctx, testPluginIDOne, path); err == nil {
+			t.Errorf("creating existing %q succeeded", path)
+		}
+	}
+	content, err := manager.readFile(ctx, testPluginIDOne, "lib/extra.py")
+	if err != nil || string(content) != "VALUE = 1\n" {
+		t.Fatalf("existing file changed: %q, %v", content, err)
+	}
+	after, err := repository.getPlugin(ctx, testPluginIDOne)
+	if err != nil || after.ActiveRevision != before.ActiveRevision {
+		t.Fatalf("duplicate create changed revision: %+v, %v", after, err)
 	}
 }
 

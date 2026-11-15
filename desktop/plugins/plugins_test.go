@@ -11,6 +11,7 @@ import (
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/backend/host"
 	"github.com/josexy/flowlens/backend/pkg/database"
 	pythonpluginservice "github.com/josexy/flowlens/backend/services/python_plugin_service"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
@@ -26,10 +27,26 @@ import (
 // serviceBackend uses the real plugin service, except what needs Python.
 type serviceBackend struct {
 	*pythonpluginservice.PythonPluginService
-	validate func(string) (*store.Plugin, error)
-	reload   func(string) (*store.Plugin, error)
-	reorder  func([]string) error
-	opened   []string
+	validate   func(string) (*store.Plugin, error)
+	reload     func(string) (*store.Plugin, error)
+	reorder    func([]string) error
+	createFile func(string, string) (*store.Plugin, error)
+	deleteFile func(string, string) (*store.Plugin, error)
+	opened     []string
+}
+
+func (b *serviceBackend) CreatePluginFile(id, path string) (*store.Plugin, error) {
+	if b.createFile != nil {
+		return b.createFile(id, path)
+	}
+	return b.PythonPluginService.CreatePluginFile(id, path)
+}
+
+func (b *serviceBackend) DeletePluginFile(id, path string) (*store.Plugin, error) {
+	if b.deleteFile != nil {
+		return b.deleteFile(id, path)
+	}
+	return b.PythonPluginService.DeletePluginFile(id, path)
 }
 
 func (b *serviceBackend) ReorderPlugins(ids []string) error {
@@ -85,6 +102,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
 	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +132,20 @@ func newFixture(t *testing.T) *fixture {
 	window := &runtimetest.Window{}
 	rt.Dispatcher.SetMain(window)
 	t.Cleanup(rt.Close)
-	data := store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: settings}, Plugins: backend})
+	bus := host.NewBus()
+	service.SetEventBus(bus)
+	data := store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: settings}, Plugins: backend,
+		PluginEvents: func(registry func(store.PluginRegistryEvent), status func(store.PluginStatusEvent)) func() {
+			offRegistry := bus.On(pythonpluginservice.RegistryEventName, func(event host.Event) {
+				rt.Dispatcher.Post(func() { registry(event.Data.(store.PluginRegistryEvent)) })
+			})
+			offStatus := bus.On(pythonpluginservice.StatusEventName, func(event host.Event) {
+				rt.Dispatcher.Post(func() { status(event.Data.(store.PluginStatusEvent)) })
+			})
+			return func() { offRegistry(); offStatus() }
+		},
+	})
+	t.Cleanup(data.Plugins.Cleanup)
 	if err := data.Settings.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -308,8 +339,7 @@ func TestFilesCreateSaveRenameDeleteAndEscape(t *testing.T) {
 	f.click(locales.PythonPluginsNewFile())
 	f.view.fileModal.path = "../outside.py"
 	f.settle()
-	f.view.fileModal.submit(f.view)
-	f.settle()
+	f.click(locales.PythonPluginsConfirm())
 	if !f.view.fileModal.open || f.view.fileModal.err == "" || !f.has(f.view.fileModal.err) {
 		t.Fatalf("escape rejected: %+v", f.view.fileModal)
 	}
@@ -320,8 +350,10 @@ func TestFilesCreateSaveRenameDeleteAndEscape(t *testing.T) {
 	}
 	f.view.fileModal.show(false, "lib/util.py")
 	f.settle()
-	f.view.fileModal.submit(f.view)
-	f.settle()
+	f.click(locales.PythonPluginsConfirm())
+	if f.view.fileModal.open || f.view.fileModal.busy {
+		t.Fatal("create file dialog did not close")
+	}
 	if plugins.SelectedFilePath != "lib/util.py" || !slices.Contains(plugins.Files, "lib/util.py") {
 		t.Fatalf("%q %v", plugins.SelectedFilePath, plugins.Files)
 	}
@@ -346,8 +378,10 @@ func TestFilesCreateSaveRenameDeleteAndEscape(t *testing.T) {
 	f.click(locales.PythonPluginsRenameFile())
 	f.view.fileModal.path = "lib/renamed.py"
 	f.settle()
-	f.view.fileModal.submit(f.view)
-	f.settle()
+	f.click(locales.PythonPluginsConfirm())
+	if f.view.fileModal.open || f.view.fileModal.busy {
+		t.Fatal("rename file dialog did not close")
+	}
 	if plugins.SelectedFilePath != "lib/renamed.py" || plugins.EditorContent != "unsaved" {
 		t.Fatalf("draft follows the rename: %q %q", plugins.SelectedFilePath, plugins.EditorContent)
 	}
@@ -359,6 +393,9 @@ func TestFilesCreateSaveRenameDeleteAndEscape(t *testing.T) {
 		t.Fatal("the confirmation mentions unsaved content")
 	}
 	f.click(locales.PythonPluginsDelete())
+	if f.view.deleting.file || f.view.deleting.fileBusy {
+		t.Fatal("delete file dialog did not close")
+	}
 	if slices.Contains(plugins.Files, "lib/renamed.py") || plugins.SelectedFilePath != "main.py" {
 		t.Fatalf("%q %v", plugins.SelectedFilePath, plugins.Files)
 	}

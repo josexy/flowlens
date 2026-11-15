@@ -238,6 +238,14 @@ func (m *packageManager) activateCurrent(ctx context.Context, pluginID string) (
 }
 
 func (m *packageManager) writeFile(ctx context.Context, pluginID, relativePath string, content []byte) (*Plugin, error) {
+	return m.writeManagedFile(ctx, pluginID, relativePath, content, false)
+}
+
+func (m *packageManager) createFile(ctx context.Context, pluginID, relativePath string) (*Plugin, error) {
+	return m.writeManagedFile(ctx, pluginID, relativePath, nil, true)
+}
+
+func (m *packageManager) writeManagedFile(ctx context.Context, pluginID, relativePath string, content []byte, createOnly bool) (*Plugin, error) {
 	if len(content) > maxManagedFileBytes {
 		return nil, fmt.Errorf("python plugin file exceeds %d bytes", maxManagedFileBytes)
 	}
@@ -251,6 +259,16 @@ func (m *packageManager) writeFile(ctx context.Context, pluginID, relativePath s
 		}
 		if err := rejectSymlinkPath(stageRoot, path); err != nil && !os.IsNotExist(err) {
 			return err
+		}
+		// The staged package is private and mutatePackage holds the package lock.
+		// Check here so creation cannot overwrite an existing file, including
+		// case aliases on case-insensitive filesystems.
+		if createOnly {
+			if _, err := os.Lstat(path); err == nil {
+				return fmt.Errorf("python plugin file %q already exists", relativePath)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("inspect python plugin destination %q: %w", relativePath, err)
+			}
 		}
 		return atomicWriteManagedFile(path, content)
 	})

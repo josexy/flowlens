@@ -51,7 +51,8 @@ type View struct {
 }
 
 type confirmState struct {
-	file, plugin bool
+	file, plugin         bool
+	fileBusy, pluginBusy bool
 }
 
 // New returns the section of a window.
@@ -433,7 +434,6 @@ func (v *View) header(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 		reload.OnClick(v.reload)
 		nui.Tooltip(c, theme, reload, locales.PythonPluginsReloadHint(), nui.TooltipOptions{})
 		action(c, theme, "edit", lucide.Pencil(), locales.PythonPluginsRenamePlugin(), nui.Neutral, nui.Ghost, false, func() { v.metadata.show(plugin.Name, plugin.Description) })
-		action(c, theme, "open", lucide.FolderOpen(), locales.PythonPluginsOpenDirectory(), nui.Neutral, nui.Ghost, false, func() { plugins.OpenPluginDirectory(plugin.ID, v.reportDirectory) })
 		action(c, theme, "delete", lucide.Trash(), locales.PythonPluginsDeletePlugin(), nui.Error, nui.Ghost, false, func() { v.deleting.plugin = true })
 	})
 }
@@ -511,10 +511,10 @@ func (v *View) filesPane(c *ui.Context, theme nui.Theme) {
 		ui.Row(c.Key("files-head")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(6, 8).Children(func() {
 			ui.Text(c, locales.PythonPluginsFiles()).FontSize(apptheme.TextSize(c, 12)).Bold().TextColor(theme.Muted)
 			ui.Row(c).Gap(2).Children(func() {
-				none := plugins.SelectedFilePath == ""
+				protected := plugins.SelectedFilePath == "" || plugins.SelectedFilePath == "main.py" || plugins.SelectedFilePath == "manifest.json"
 				action(c, theme, "new-file", lucide.FilePlus(), locales.PythonPluginsNewFile(), nui.Neutral, nui.Ghost, false, func() { v.fileModal.show(false, "") })
-				action(c, theme, "rename-file", lucide.Pencil(), locales.PythonPluginsRenameFile(), nui.Neutral, nui.Ghost, none, func() { v.fileModal.show(true, plugins.SelectedFilePath) })
-				action(c, theme, "delete-file", lucide.Trash(), locales.PythonPluginsDeleteFile(), nui.Error, nui.Ghost, none, func() { v.deleting.file = true })
+				action(c, theme, "rename-file", lucide.Pencil(), locales.PythonPluginsRenameFile(), nui.Neutral, nui.Ghost, protected, func() { v.fileModal.show(true, plugins.SelectedFilePath) })
+				action(c, theme, "delete-file", lucide.Trash(), locales.PythonPluginsDeleteFile(), nui.Error, nui.Ghost, protected, func() { v.deleting.file = true })
 			})
 		})
 		ui.Scroll(c.Key("file-tree")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
@@ -708,6 +708,7 @@ func (d *pluginDialog) build(c *ui.Context, theme nui.Theme, v *View, title, con
 
 type fileDialog struct {
 	open   bool
+	busy   bool
 	rename bool
 	path   string
 	err    string
@@ -718,13 +719,18 @@ func (d *fileDialog) show(rename bool, path string) {
 }
 
 func (d *fileDialog) submit(v *View) {
+	if !d.open || d.busy {
+		return
+	}
 	path := strings.TrimSpace(d.path)
 	if path == "" {
 		d.err = locales.PythonPluginsFilePathRequired()
 		return
 	}
 	d.err = ""
+	d.busy = true
 	finish := func(_ *store.Plugin, err error) {
+		d.busy = false
 		if err != nil {
 			d.err = err.Error()
 			return
@@ -747,15 +753,15 @@ func (d *fileDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	if d.rename {
 		title = locales.PythonPluginsRenameFile()
 	}
-	nui.ModalWithOptions(c.Key("file-dialog"), theme, &d.open, nui.ModalOptions{Title: title, Footer: func(c *ui.Context, palette nui.Theme) {
+	nui.ModalWithOptions(c.Key("file-dialog"), theme, &d.open, nui.ModalOptions{Title: title, Dismissible: nui.Set(!d.busy), Close: &nui.ButtonOptions{Disabled: d.busy}, Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral}).OnClick(func() { d.open = false })
-			nui.Button(c.Key("submit"), palette, locales.PythonPluginsConfirm(), nui.ButtonOptions{}).OnClick(func() { d.submit(v) })
+			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.busy}).OnClick(func() { d.open = false })
+			nui.Button(c.Key("submit"), palette, locales.PythonPluginsConfirm(), nui.ButtonOptions{Loading: d.busy}).OnClick(func() { d.submit(v) })
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("path"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsFilePath(), Hint: locales.PythonPluginsFilePathHint()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
+				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})
@@ -785,8 +791,9 @@ func (v *View) dialogs(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 	}
 	v.fileModal.build(c, theme, v)
 	if v.deleting.file {
-		v.confirmModal(c, theme, "delete-file-confirm", locales.PythonPluginsDeleteFile(), locales.PythonPluginsDeleteFileConfirm(plugins.SelectedFilePath), &v.deleting.file, "file:delete:"+plugins.SelectedPluginID+":"+plugins.SelectedFilePath, func() {
+		v.confirmModal(c, theme, "delete-file-confirm", locales.PythonPluginsDeleteFile(), locales.PythonPluginsDeleteFileConfirm(plugins.SelectedFilePath), &v.deleting.file, &v.deleting.fileBusy, func() {
 			plugins.DeleteFile(func(_ *store.Plugin, err error) {
+				v.deleting.fileBusy = false
 				if err != nil {
 					v.Notifier.Error(locales.PythonPluginsDeleteFileFailed(err.Error()))
 					return
@@ -797,8 +804,9 @@ func (v *View) dialogs(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 		})
 	}
 	if v.deleting.plugin && plugin != nil {
-		v.confirmModal(c, theme, "delete-plugin-confirm", locales.PythonPluginsDeletePlugin(), locales.PythonPluginsDeletePluginConfirm(plugin.Name), &v.deleting.plugin, "plugin:delete:"+plugin.ID, func() {
+		v.confirmModal(c, theme, "delete-plugin-confirm", locales.PythonPluginsDeletePlugin(), locales.PythonPluginsDeletePluginConfirm(plugin.Name), &v.deleting.plugin, &v.deleting.pluginBusy, func() {
 			plugins.DeletePlugin(plugin.ID, func(err error) {
+				v.deleting.pluginBusy = false
 				if err != nil {
 					v.Notifier.Error(locales.PythonPluginsDeleteFailed(err.Error()))
 					return
@@ -810,13 +818,18 @@ func (v *View) dialogs(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 	}
 }
 
-func (v *View) confirmModal(c *ui.Context, theme nui.Theme, key, title, message string, open *bool, mutation string, run func()) {
+func (v *View) confirmModal(c *ui.Context, theme nui.Theme, key, title, message string, open, pending *bool, run func()) {
 	v.Dispatcher.NoteModal()
-	busy := v.Data.Plugins.IsMutating(mutation)
-	nui.ModalWithOptions(c.Key(key), theme, open, nui.ModalOptions{Title: title, Width: nui.Set[float32](440), Footer: func(c *ui.Context, palette nui.Theme) {
+	busy := *pending
+	nui.ModalWithOptions(c.Key(key), theme, open, nui.ModalOptions{Title: title, Width: nui.Set[float32](440), Dismissible: nui.Set(!busy), Close: &nui.ButtonOptions{Disabled: busy}, Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { *open = false })
-			nui.Button(c.Key("confirm"), palette, locales.PythonPluginsDelete(), nui.ButtonOptions{Color: nui.Error, Loading: busy}).OnClick(run)
+			nui.Button(c.Key("confirm"), palette, locales.PythonPluginsDelete(), nui.ButtonOptions{Color: nui.Error, Loading: busy}).OnClick(func() {
+				if !*pending {
+					*pending = true
+					run()
+				}
+			})
 		})
 	}}, func(palette nui.Theme) {
 		ui.Text(c, message).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).FillWidth()
