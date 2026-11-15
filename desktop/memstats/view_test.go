@@ -2,11 +2,13 @@ package memstats
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/backend/host"
 	memstatsservice "github.com/josexy/flowlens/backend/services/mem_stats_service"
+	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/desktop/store"
 	"github.com/josexy/flowlens/desktop/theme"
@@ -104,6 +106,24 @@ func (f *fixture) emit(timestamp int64) {
 func TestNoDataBeforeTheFirstSample(t *testing.T) {
 	f := newFixture(t, memstatsservice.MonitoringStatus{})
 	f.want(locales.MemstatsNoData(), locales.MemstatsStart(), locales.MemstatsTitle())
+}
+
+func TestChartHoverShowsOneReading(t *testing.T) {
+	f := newFixture(t, memstatsservice.MonitoringStatus{})
+	f.emit(1000)
+	f.emit(2000)
+	plot, ok := f.tester.AccessByRole(ui.RoleGroup, locales.MemstatsChartTitle())
+	if !ok {
+		t.Fatal("no memory chart")
+	}
+	f.tester.Move(plot.Bounds.X+plot.Bounds.W/4, plot.Bounds.Y+plot.Bounds.H/2)
+	f.tester.Advance(time.Second)
+	f.settle()
+	f.want("HeapAlloc: " + formatBytes(2048) + " · Sys: " + formatBytes(8192) + " · StackInuse: " + formatBytes(1024))
+	if tip, ok := f.tester.AccessByRole(ui.RoleTooltip, ""); ok {
+		t.Fatalf("unexpected chart tooltip: %+v", tip)
+	}
+	rendertest.Shoot(t, f.tester, "memstats-hover")
 }
 
 func TestStartAndPause(t *testing.T) {

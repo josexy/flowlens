@@ -188,7 +188,7 @@ func (v *View) chartCard(c *ui.Context, theme nui.Theme) {
 		}
 		v.syncChart()
 		nui.Chart(c.Key("plot"), theme, &v.chart, nui.ChartOptions{
-			Label: locales.MemstatsChartTitle(), Kind: nui.ChartLine, Height: 220, Legend: nui.Set(true), Grid: nui.Set(true),
+			Label: locales.MemstatsChartTitle(), Kind: nui.ChartLine, Height: 220, Legend: nui.Set(true), Grid: nui.Set(true), Tooltip: nui.Set(false),
 			Animate: nui.Set(false), FormatY: func(value float64) string { return formatBytes(uint64(max(value, 0))) },
 			FormatTime: func(at time.Time) string { return at.Local().Format("15:04:05") },
 		}).FillWidth()
