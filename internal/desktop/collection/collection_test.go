@@ -268,7 +268,7 @@ func TestCreateRenameCopyDelete(t *testing.T) {
 	}
 	f.menu("Req", locales.ApiCollectionRename())
 	f.click(locales.ApiCollectionRenameNamePlaceholder())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("Renamed")
 	f.settle()
 	f.tester.Key(0, ui.KeyEnter)

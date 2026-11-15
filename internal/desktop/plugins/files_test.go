@@ -55,7 +55,7 @@ func TestFileDialogFailuresRetryAndPreserveDrafts(t *testing.T) {
 		t.Fatal("duplicate create changed file or draft", err)
 	}
 	f.click(locales.PythonPluginsFilePath())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("lib\\extra.py")
 	f.tester.Key(0, ui.KeyEnter)
 	f.settle()
@@ -67,7 +67,7 @@ func TestFileDialogFailuresRetryAndPreserveDrafts(t *testing.T) {
 		t.Fatal("creating a file lost the previous draft")
 	}
 	f.click(locales.PythonPluginsRenameFile())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("lib/extra.py")
 	f.click(locales.PythonPluginsConfirm())
 	if !f.view.fileModal.open || f.view.fileModal.err == "" || plugins.EditorContent != "unsaved helper" {

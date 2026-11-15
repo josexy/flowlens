@@ -102,7 +102,7 @@ func TestFieldGridClickOpensReadOnlyEditor(t *testing.T) {
 		t.Fatalf("rows moved from %v to %v", before.Y, after.Y)
 	}
 	// The whole value is selected: copying gives it back.
-	p.tester.Key(ui.Ctrl, ui.KeyC)
+	p.tester.Key(ui.Cmd, ui.KeyC)
 	p.tester.Frame()
 	if p.tester.Clipboard() != long {
 		t.Fatalf("copied %q", p.tester.Clipboard())

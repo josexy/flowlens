@@ -83,7 +83,7 @@ func TestGridEditorStaysInsideViewport(t *testing.T) {
 				if !ok || inside.Bounds != editor.Bounds {
 					t.Fatalf("scrolling the textarea moved its cell: %v -> %v", editor.Bounds, inside.Bounds)
 				}
-				tester.Key(ui.Ctrl, ui.KeyC)
+				tester.Key(ui.Cmd, ui.KeyC)
 				if tester.Clipboard() != rows[index].value {
 					t.Fatal("copy omitted text outside the editor's viewport")
 				}

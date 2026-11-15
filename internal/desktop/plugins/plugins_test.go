@@ -526,7 +526,7 @@ func TestRulesAddEditReorderDelete(t *testing.T) {
 		t.Fatalf("%+v", rules())
 	}
 	f.click("Method 1")
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("post")
 	f.settle()
 	f.tester.Key(0, ui.KeyEnter)
@@ -535,7 +535,7 @@ func TestRulesAddEditReorderDelete(t *testing.T) {
 		t.Fatalf("%+v", rules()[0])
 	}
 	f.click("URL pattern 2")
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("https://api.example.com/*")
 	f.settle()
 	f.click("Method 1")

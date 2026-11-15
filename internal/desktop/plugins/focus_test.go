@@ -21,7 +21,7 @@ func TestRenameDialogTakesTypingWithoutClick(t *testing.T) {
 	f := newFixture(t)
 	f.create("Old", "")
 	f.click(locales.PythonPluginsRenamePlugin())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("New")
 	f.settle()
 	if f.view.metadata.name != "New" {
@@ -42,7 +42,7 @@ func TestFileDialogTakesTypingWithoutClick(t *testing.T) {
 	f.settle()
 	f.click("helpers.py")
 	f.click(locales.PythonPluginsRenameFile())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("renamed.py")
 	f.settle()
 	if f.view.fileModal.path != "renamed.py" {

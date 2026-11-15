@@ -427,7 +427,7 @@ func TestQuerySynchronizesWithURL(t *testing.T) {
 	state.ActiveRequestTab = logic.RequestTabQuery
 	f.settle()
 	f.click(locales.WorkspaceHttpRequestQueryValuePlaceholder() + " 1")
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("9")
 	f.settle()
 	if state.URL != "https://example.com/a?x=9&y=2" {
@@ -514,7 +514,7 @@ func TestCookiesRewriteHeaders(t *testing.T) {
 	state.ActiveRequestTab = logic.RequestTabCookies
 	f.settle()
 	f.click(locales.WorkspaceHttpRequestCookieValuePlaceholder() + " 2")
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("7")
 	f.settle()
 	if state.Headers[1].Value != "a=1; b=7" {

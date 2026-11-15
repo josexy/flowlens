@@ -43,7 +43,7 @@ func TestRenameDialogTakesTypingWithoutClick(t *testing.T) {
 	f.folder("", "Old")
 	f.reload()
 	f.menu("Old", locales.ApiCollectionRename())
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("New")
 	f.settle()
 	f.tester.Key(0, ui.KeyEnter)
@@ -61,7 +61,7 @@ func TestSaveDialogTakesTypingWithoutClick(t *testing.T) {
 	key := f.data.Workspace.CreateHTTPRequestTab(logic.DraftNew, nil)
 	f.view.SaveTab(key)
 	f.settle()
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("Typed request")
 	f.settle()
 	if f.view.save.name != "Typed request" {

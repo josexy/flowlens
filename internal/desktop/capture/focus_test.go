@@ -10,7 +10,7 @@ func TestAliasDialogTakesTypingWithoutClick(t *testing.T) {
 	f := newFixture(t)
 	f.workspace.ShowAliasDialog()
 	f.settle()
-	f.tester.Key(ui.Ctrl, ui.KeyA)
+	f.tester.Key(ui.Cmd, ui.KeyA)
 	f.tester.Type("session")
 	f.settle()
 	if f.workspace.alias.draft != "session" {
