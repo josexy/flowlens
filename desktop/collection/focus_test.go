@@ -23,7 +23,7 @@ func TestNewFolderInputTakesTypingWithoutClick(t *testing.T) {
 	}
 }
 
-func TestEscapeCancelsInlineFolderCreation(t *testing.T) {
+func TestEscapeCancelsFolderCreationDialog(t *testing.T) {
 	f := newFixture(t)
 	f.click(locales.ApiCollectionNewFolder())
 	f.tester.Type("Dropped")
@@ -34,7 +34,7 @@ func TestEscapeCancelsInlineFolderCreation(t *testing.T) {
 		t.Fatalf("creating %v, rows %+v", f.view.creating, f.data.Collection.Rows())
 	}
 	if f.has(locales.ApiCollectionFolderNamePlaceholder()) {
-		t.Fatal("inline input still shown")
+		t.Fatal("creation dialog still shown")
 	}
 }
 

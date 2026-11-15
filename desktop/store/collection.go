@@ -194,13 +194,22 @@ func (s *CollectionStore) CanMoveToRoot(id string) bool {
 
 // Rows returns the rows the expanded folders reveal.
 func (s *CollectionStore) Rows() []CollectionRow {
+	return s.rows(false)
+}
+
+// AllRows returns every node in tree order, including descendants of collapsed folders.
+func (s *CollectionStore) AllRows() []CollectionRow {
+	return s.rows(true)
+}
+
+func (s *CollectionStore) rows(includeCollapsed bool) []CollectionRow {
 	var rows []CollectionRow
 	var visit func(folder *CollectionFolder, parent string, depth int)
 	visit = func(folder *CollectionFolder, parent string, depth int) {
 		folders, requests := sortedFolders(folder.Folders), sortedRequests(folder.Requests)
 		expanded := s.Expanded[folder.ID]
 		rows = append(rows, CollectionRow{ID: folder.ID, ParentID: parent, Name: folder.Name, Folder: true, Depth: depth, Expanded: expanded, HasChildren: len(folders)+len(requests) > 0, Children: len(folders) + len(requests)})
-		if !expanded {
+		if !expanded && !includeCollapsed {
 			return
 		}
 		for _, child := range folders {

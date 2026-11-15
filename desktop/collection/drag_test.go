@@ -104,18 +104,19 @@ func TestNativeDragScrollsAndMovesToHiddenFolder(t *testing.T) {
 	for range 70 {
 		f.tester.Advance(time.Second / 60)
 	}
-	if f.view.scroll.Y < 200 {
-		t.Fatalf("native edge scrolling stopped at %v", f.view.scroll.Y)
+	if first, _ := f.view.treeState.Outline.List.Visible(); first < 5 {
+		t.Fatalf("native edge scrolling stopped at row %d", first)
 	}
 	targetX, targetY := f.center("Last target")
 	if targetY < 40 || targetY >= 700 {
 		t.Fatalf("target is still outside the viewport: %v", targetY)
 	}
 	f.tester.Move(targetX, targetY)
+	f.tester.Frame()
 	f.tester.Release(targetX, targetY)
 	f.settle()
 	if f.data.Collection.ParentOf(id) != target || f.backend.moveCalls != 1 {
-		t.Fatal("drop after scrolling did not move once")
+		t.Fatalf("drop after scrolling: parent=%s calls=%d drag=%+v", f.data.Collection.ParentOf(id), f.backend.moveCalls, f.view.drag)
 	}
 }
 
@@ -128,13 +129,13 @@ func TestNativeFolderDragScrollsBelowRootTarget(t *testing.T) {
 	f.reload()
 	f.data.Collection.Expanded[parent] = true
 	f.settle()
-	f.view.scroll.Y = f.view.scroll.MaxY
+	f.view.treeState.Outline.List.ScrollToEnd()
 	f.settle()
 	x, y := f.grip("Child 34", 1)
 	f.tester.Press(x, y)
 	f.tester.Move(x, y-8)
 	f.tester.Frame()
-	before := f.view.scroll.Y
+	before, _ := f.view.treeState.Outline.List.Visible()
 	root, ok := f.tester.Find(locales.ApiCollectionMoveToRoot())
 	if !ok {
 		t.Fatal("missing root target")
@@ -144,8 +145,8 @@ func TestNativeFolderDragScrollsBelowRootTarget(t *testing.T) {
 	for range 15 {
 		f.tester.Advance(time.Second / 60)
 	}
-	if f.view.scroll.Y >= before-50 {
-		t.Fatalf("root target blocked native scrolling: %v -> %v", before, f.view.scroll.Y)
+	if after, _ := f.view.treeState.Outline.List.Visible(); after >= before-1 {
+		t.Fatalf("root target blocked native scrolling: row %d -> %d", before, after)
 	}
 	f.tester.Key(0, ui.KeyEscape)
 	f.tester.CancelPress()

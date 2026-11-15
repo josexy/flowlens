@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	rowHeight       float32 = 32
 	rootZoneHeight  float32 = 32
 	dragExpandDelay         = 600 * time.Millisecond
 )
@@ -33,19 +32,27 @@ type View struct {
 	Notifier *widgets.Notifier
 	Confirm  *widgets.ConfirmDialog
 
-	started      bool
-	creating     bool
-	folderName   string
-	folderParent string
-	multi        bool
-	checked      map[string]bool
-	scroll       ui.ScrollState
-	drag         treeDrag
-	renaming     renameDialog
-	save         saveDialog
-	openSequence int
-	copying      bool
-	menus        widgets.MenuStates
+	started            bool
+	creating           bool
+	folderName         string
+	folderParent       string
+	createBusy         bool
+	multi              bool
+	checked            map[string]bool
+	treeState          nui.TreeState
+	treeVersion        uint64
+	treeItems          map[string]*collectionTreeItem
+	visibleItems       []*collectionTreeItem
+	treeViewport       ui.Handle
+	treeSelected       string
+	treeSelectedParent string
+	menu               widgets.PointMenu
+	menuID             string
+	drag               treeDrag
+	renaming           renameDialog
+	save               saveDialog
+	openSequence       int
+	copying            bool
 }
 
 type treeDrag struct {
@@ -79,6 +86,9 @@ func (v *View) refresh() {
 }
 
 func (v *View) beginCreate(parent string) {
+	if v.createBusy || v.Data.Collection.Mutating {
+		return
+	}
 	if v.multi {
 		v.exitMulti()
 	}
@@ -90,15 +100,24 @@ func (v *View) beginCreate(parent string) {
 	collection.SelectNode(parent)
 }
 
-func (v *View) cancelCreate() { v.creating, v.folderName, v.folderParent = false, "", "" }
+func (v *View) cancelCreate() {
+	if !v.createBusy {
+		v.creating, v.folderName, v.folderParent = false, "", ""
+	}
+}
 
 func (v *View) submitCreate() {
+	if !v.creating || v.createBusy || v.Data.Collection.Mutating {
+		return
+	}
 	name := strings.TrimSpace(v.folderName)
 	if name == "" {
 		v.Notifier.Warning(locales.ApiCollectionFolderNameRequired())
 		return
 	}
+	v.createBusy = true
 	v.Data.Collection.CreateFolder(v.folderParent, name, func(_ *store.CollectionFolder, err error) {
+		v.createBusy = false
 		if err != nil {
 			v.Notifier.Error(locales.ApiCollectionCreateFolderFailed(err.Error()))
 			return
@@ -235,6 +254,9 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		}
 	}
 	v.pruneChecked()
+	if v.menuID != "" && !collection.Exists(v.menuID) {
+		v.menuID, v.menu = "", widgets.PointMenu{}
+	}
 	if v.dragDisabled() || v.drag.source.version != collection.Version {
 		v.drag.valid = false
 		v.drag.active, v.drag.target, v.drag.root = false, "", false
@@ -242,8 +264,9 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	rows := collection.Rows()
 	ui.Column(c.Key("api-collection")).Fill().MinHeight(0).Children(func() {
 		v.toolbar(c, theme, rows)
-		ui.Box(c.Key("tree-area")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() { v.area(c, theme, rows) })
+		ui.Box(c.Key("tree-area")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() { v.area(c, theme) })
 	})
+	v.createDialog(c, theme)
 	v.renaming.build(c, theme, v)
 }
 
@@ -265,7 +288,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRo
 		ui.Text(c, locales.ApiCollectionTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted).SingleLine().Shrink(1)
 		ui.Row(c).Gap(6).Shrink(0).Children(func() {
 			action("refresh", lucide.RefreshCw(), locales.ApiCollectionRefresh(), collection.Loading, false, v.refresh)
-			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), false, false, func() { v.beginCreate("") })
+			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), collection.Mutating, false, func() { v.beginCreate("") })
 			label, icon := locales.ApiCollectionExpandAll(), lucide.ListChevronsUpDown()
 			if collection.AllExpanded() {
 				label, icon = locales.ApiCollectionCollapseAll(), lucide.ListChevronsDownUp()
@@ -289,7 +312,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRo
 	})
 }
 
-func (v *View) area(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) {
+func (v *View) area(c *ui.Context, theme nui.Theme) {
 	collection := v.Data.Collection
 	status := func(text string) {
 		ui.Column(c).Fill().Center().Padding(16).Children(func() {
@@ -301,48 +324,16 @@ func (v *View) area(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) 
 		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c) })
 	case collection.Error != "":
 		status(collection.Error)
-	case collection.Empty() && !v.creating:
+	case collection.Empty():
 		status(locales.ApiCollectionEmpty())
 	default:
-		v.tree(c, theme, rows)
+		v.tree(c, theme)
 	}
 }
 
 func (v *View) dragDisabled() bool {
 	collection := v.Data.Collection
 	return collection.Loading || collection.Mutating || v.creating || v.multi
-}
-
-func (v *View) tree(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) {
-	collection := v.Data.Collection
-	wasActive := v.drag.active
-	v.drag.active, v.drag.target, v.drag.root = false, "", false
-	ui.Column(c.Key("tree-layout")).Fill().MinHeight(0).Children(func() {
-		rootSlot := ui.Box(c.Key("root-slot")).FillWidth().Shrink(0).Height(0)
-		ui.Scroll(c.Key("tree")).TrackScroll(&v.scroll).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Children(func() {
-				if v.creating && v.folderParent == "" {
-					v.createRow(c, theme, 0)
-				}
-				for _, row := range rows {
-					v.row(c, theme, row)
-					if v.creating && row.ID == v.folderParent {
-						v.createRow(c, theme, row.Depth+1)
-					}
-				}
-			})
-		})
-		// Keep the target for the release build, when the native source is
-		// no longer dragging but the drop still needs to be consumed. It has
-		// its own space above the scroll viewport, leaving every row reachable.
-		if (wasActive || v.drag.active) && v.validDrag(v.drag.source) && collection.CanMoveToRoot(v.drag.source.id) {
-			rootSlot.Height(rootZoneHeight+4).Padding(0, 6, 4, 6).Children(func() { v.rootZone(c, theme) })
-		}
-	})
-	v.menus.Sweep()
-	if v.drag.target == "" || !v.drag.active {
-		v.drag.hoverFolder = ""
-	}
 }
 
 func (v *View) rootZone(c *ui.Context, theme nui.Theme) {
@@ -361,107 +352,6 @@ func (v *View) rootZone(c *ui.Context, theme nui.Theme) {
 	})
 }
 
-func (v *View) createRow(c *ui.Context, theme nui.Theme, depth int) {
-	ui.Row(c.Key("create-folder")).FillWidth().Height(36).AlignItems(ui.Center).Gap(4).Padding(0, 6, 0, float32(depth)*14+6).Children(func() {
-		ui.Icon(c, lucide.Folder()).Size(14, 14).Shrink(0).TextColor(theme.Muted)
-		ui.Box(c.Key("name")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			widgets.InlineInput(c, theme, &v.folderName, widgets.InlineInputOptions{Label: locales.ApiCollectionFolderNamePlaceholder(), Placeholder: locales.ApiCollectionFolderNamePlaceholder(), Size: nui.XS, OnSubmit: func(string) { v.submitCreate() }, OnCancel: v.cancelCreate}).FillWidth()
-		})
-		nui.Button(c.Key("create"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Primary, Size: nui.XS, Square: true, Leading: lucide.Check(), AccessibleLabel: locales.ApiCollectionCreate()}).OnClick(v.submitCreate)
-		nui.Button(c.Key("cancel"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.X(), AccessibleLabel: locales.ApiCollectionCancel()}).OnClick(v.cancelCreate)
-	})
-}
-
-// row uses MyGo's native drag preview and folder drop targets while retaining
-// the tree's indentation, request method, child count and keyboard activation.
-func (v *View) row(c *ui.Context, theme nui.Theme, row store.CollectionRow) {
-	collection := v.Data.Collection
-	selected := collection.SelectedNodeID == row.ID
-	line := ui.ButtonBase(c.Key(row.ID)).Role(ui.RoleListItem).FillWidth().Height(rowHeight).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, float32(row.Depth)*14+10).FocusRing(true).AccessSelected(selected).Label(row.Name)
-	line.Background(theme.Background)
-	hovered := line.Hovered()
-	target := false
-	if !v.dragDisabled() {
-		if v.dragSource(line, row.ID) {
-			line.Opacity(0.4)
-		}
-		if row.Folder {
-			if source, over := ui.DragOver[collectionDrag](line); over && v.canDrop(source, row.ID) {
-				target = true
-				v.drag.target = row.ID
-				v.hoverFolder(c, row)
-			}
-			if source, dropped := ui.Drop[collectionDrag](line); dropped {
-				v.drop(source, row.ID)
-			}
-		}
-	}
-	switch {
-	case target:
-		line.Background(theme.Primary.Alpha(0.1).Over(theme.Background)).Border(1, theme.Primary)
-	case selected:
-		line.Background(theme.Accented)
-	case hovered:
-		line.Background(theme.Elevated)
-	}
-	activate := func() {
-		switch {
-		case v.multi:
-			v.toggleChecked(row.ID)
-		case row.Folder:
-			collection.SelectNode(row.ID)
-			collection.ToggleExpanded(row.ID)
-		default:
-			v.open(row.ID)
-		}
-	}
-	line.OnClick(activate)
-	// The full name shows to the right of the row, for names the sidebar
-	// cuts short.
-	nui.Tooltip(c, theme, line, row.Name, nui.TooltipOptions{Placement: nui.Set(nui.RightCenter)})
-	line.Children(func() {
-		if v.multi {
-			checked := v.checked[row.ID]
-			nui.Checkbox(c.Key("check"), theme, &checked, nui.CheckboxOptions{Size: nui.XS}).Label(locales.ApiCollectionSelectItem(row.Name))
-			if checked != v.checked[row.ID] {
-				v.toggleChecked(row.ID)
-			}
-		}
-		if !v.dragDisabled() {
-			widgets.ReorderGrip(c.Key("grip"), theme, "drag "+row.Name, true)
-		}
-		ui.Icon(c, rowIcon(row)).Size(20, 20).Shrink(0).TextColor(theme.Muted)
-		label := ui.Row(c.Key("label")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6)
-		label.Children(func() {
-			if !row.Folder {
-				v.requestMethod(c, theme, row)
-			}
-			ui.Text(c, row.Name).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14).TextColor(theme.Text)
-			if row.Folder {
-				ui.Row(c.Key("count")).Shrink(0).MinHeight(20).MinWidth(20).PaddingX(6).Radius(10).Center().Background(theme.Elevated.Alpha(0.92)).
-					Label("child-count").Children(func() {
-					ui.Text(c, strconv.Itoa(row.Children)).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-				})
-			}
-		})
-		if row.Folder && row.Children > 0 {
-			chevron := lucide.ChevronDown()
-			if row.Expanded {
-				chevron = lucide.ChevronUp()
-			}
-			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).MarginStart(4).TextColor(theme.Muted)
-		}
-	})
-	// As 1.0.5's, opening the menu selects its row.
-	widgets.ContextMenu(c.Key("menu:"+row.ID), theme, line, v.menus.For(row.ID), func() []nui.MenuItem { return v.menuItems(row) }, nui.MenuOptions{
-		Label: row.Name, OnOpenChange: func(open bool) {
-			if open {
-				v.Data.Collection.SelectNode(row.ID)
-			}
-		},
-	})
-}
-
 func rowIcon(row store.CollectionRow) *ui.SVG {
 	switch {
 	case row.Folder && row.Expanded:
@@ -473,14 +363,6 @@ func rowIcon(row store.CollectionRow) *ui.SVG {
 	default:
 		return lucide.FileText()
 	}
-}
-
-func (v *View) toggleChecked(id string) {
-	if v.checked[id] {
-		delete(v.checked, id)
-		return
-	}
-	v.checked[id] = true
 }
 
 // requestMethod is a request's method, or WS, in 14 px semibold in its color.
@@ -528,29 +410,6 @@ func (v *View) move(id, parent string) {
 			v.Notifier.Error(locales.ApiCollectionMoveFailed(err.Error()))
 		}
 	})
-}
-
-// dragSource lets MyGo own the threshold, preview, scrolling and cancellation.
-// Freeze the tree version at pointer-down, including a press on the grip.
-func (v *View) dragSource(line ui.Element, id string) bool {
-	line.ObserveInput(func(event ui.InputEvent) {
-		if event.Kind == ui.InputPointerDown && event.Button == 0 {
-			v.drag = treeDrag{source: collectionDrag{owner: v, id: id, version: v.Data.Collection.Version}, valid: !v.dragDisabled()}
-		}
-		if event.Kind == ui.InputPointerUp && event.Canceled {
-			v.drag.valid = false
-		}
-	})
-	source := collectionDrag{owner: v, id: id, version: v.Data.Collection.Version}
-	if v.drag.source.id == id {
-		source = v.drag.source
-	}
-	line.Drag(source)
-	dragging := line.Dragging()
-	if dragging && v.validDrag(source) {
-		v.drag.active = true
-	}
-	return dragging
 }
 
 func (v *View) validDrag(source collectionDrag) bool {

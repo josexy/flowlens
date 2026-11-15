@@ -39,9 +39,19 @@ func (requestStub) RecoverRequestBodyForEditing(string, []logic.HeaderField, pro
 
 type failingList struct {
 	*apicollectionservice.APICollectionService
-	err       error
-	moveErr   error
-	moveCalls int
+	err         error
+	moveErr     error
+	moveCalls   int
+	createErr   error
+	createCalls int
+}
+
+func (f *failingList) CreateFolder(parent, name string) (*store.CollectionFolder, error) {
+	f.createCalls++
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	return f.APICollectionService.CreateFolder(parent, name)
 }
 
 func (f *failingList) MoveNode(id, parent string) error {
@@ -60,15 +70,16 @@ func (f *failingList) ListCollection() (*store.CollectionTree, error) {
 }
 
 type fixture struct {
-	t        *testing.T
-	service  *apicollectionservice.APICollectionService
-	backend  *failingList
-	data     *store.Store
-	window   *runtimetest.Window
-	tester   *ui.Tester
-	notifier *widgets.Notifier
-	confirm  *widgets.ConfirmDialog
-	view     *View
+	t            *testing.T
+	service      *apicollectionservice.APICollectionService
+	backend      *failingList
+	data         *store.Store
+	window       *runtimetest.Window
+	tester       *ui.Tester
+	notifier     *widgets.Notifier
+	confirm      *widgets.ConfirmDialog
+	view         *View
+	sidebarWidth float32
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -104,9 +115,10 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f := &fixture{t: t, service: service, backend: backend, data: data, window: window, notifier: &widgets.Notifier{}, confirm: &widgets.ConfirmDialog{}}
 	f.view = New(data, f.notifier, f.confirm)
+	f.sidebarWidth = 320
 	f.tester = ui.NewTester(func(c *ui.Context) {
 		theme := nui.App(c, data.Settings.Theme().Config)
-		ui.Box(c).Width(320).Height(700).Children(func() { f.view.Sidebar(c, theme) })
+		ui.Box(c).Width(f.sidebarWidth).Height(700).Children(func() { f.view.Sidebar(c, theme) })
 		f.view.Dialogs(c, theme)
 		f.notifier.Show(c, theme)
 		nui.ToastViewport(c, theme, nui.ToastViewportOptions{Limit: 5})
@@ -155,16 +167,10 @@ func (f *fixture) menu(row string, path ...string) {
 	f.settle()
 }
 
-// grip returns the center of the drag handle of the row named label, at
-// depth in the tree: rows are inset 10 px and 14 px a level, and the grip
-// is the first thing in them.
-func (f *fixture) grip(label string, depth int) (float32, float32) {
+// grip locates the affordance independently of Tree's indentation and row size.
+func (f *fixture) grip(label string, _ int) (float32, float32) {
 	f.t.Helper()
-	rect, ok := f.tester.Find(label)
-	if !ok {
-		f.t.Fatalf("no %q in %v", label, f.tester.Texts())
-	}
-	return rect.X + 10 + float32(depth)*14 + 7, rect.Y + rect.H/2
+	return f.center("drag " + label)
 }
 
 func (f *fixture) drag(from string, depth int, x, y float32) {
@@ -230,9 +236,8 @@ func TestEmptyAndLoadFailure(t *testing.T) {
 func TestCreateRenameCopyDelete(t *testing.T) {
 	f := newFixture(t)
 	f.click(locales.ApiCollectionNewFolder())
-	f.click(locales.ApiCollectionCreate())
-	if !f.has(locales.ApiCollectionFolderNameRequired()) {
-		t.Fatalf("%v", f.tester.Texts())
+	if button, ok := f.tester.Access(locales.ApiCollectionCreate()); !ok || !button.Disabled {
+		t.Fatal("empty name must disable creation")
 	}
 	f.click(locales.ApiCollectionFolderNamePlaceholder())
 	f.tester.Type("Parent")
@@ -321,9 +326,9 @@ func TestMultiSelectDelete(t *testing.T) {
 	f.data.Collection.Expanded[one] = true
 	f.settle()
 	f.click(locales.ApiCollectionMultiSelect())
-	f.click(locales.ApiCollectionSelectItem("One"))
-	f.click(locales.ApiCollectionSelectItem("First"))
-	f.click(locales.ApiCollectionSelectItem("Two"))
+	f.click("One")
+	f.click("First")
+	f.click("Two")
 	if got := f.view.deleteRoots(f.data.Collection.Rows()); len(got) != 2 {
 		t.Fatalf("a checked folder absorbs its children: %v", got)
 	}

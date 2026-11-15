@@ -3,6 +3,7 @@ package collection
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/theme"
@@ -23,7 +24,7 @@ func TestFolderShowsChildCountPill(t *testing.T) {
 	if pill.H != 20 || pill.X < row.X || pill.X+pill.W > row.X+row.W {
 		t.Fatalf("pill %v in row %v", pill, row)
 	}
-	if row.H != rowHeight {
+	if row.H < pill.H || row.H > 44 {
 		t.Fatalf("row %v", row)
 	}
 }
@@ -105,6 +106,7 @@ func (f *fixture) setDark(dark bool) {
 		f.t.Fatal(err)
 	}
 	f.settle()
+	f.tester.Advance(300 * time.Millisecond)
 }
 
 func TestRenderCollectionTree(t *testing.T) {
@@ -119,4 +121,26 @@ func TestRenderCollectionTree(t *testing.T) {
 	f.data.Collection.Expanded[api] = true
 	f.settle()
 	rendertest.ShootThemes(t, f.tester, "collection-tree", f.setDark)
+}
+
+func TestRenderNarrowCollectionTree(t *testing.T) {
+	f := newFixture(t)
+	f.sidebarWidth = 240
+	parent := f.folder("", "A long collection folder name")
+	nested := f.folder(parent, "Nested folder")
+	id := f.request(nested, "A long request name in a narrow sidebar", "https://example.test")
+	f.reload()
+	f.data.Collection.SelectNode(id)
+	f.settle()
+	for _, label := range []string{"A long collection folder name", "Nested folder", "A long request name in a narrow sidebar"} {
+		row, ok := f.tester.Find(label)
+		if !ok || row.W <= 0 || row.X+row.W > f.sidebarWidth {
+			t.Fatalf("row %q overflows narrow sidebar: %+v", label, row)
+		}
+	}
+	rendertest.ShootThemes(t, f.tester, "collection-tree-narrow", f.setDark)
+	f.view.toggleMulti()
+	f.settle()
+	f.click("Nested folder")
+	rendertest.ShootThemes(t, f.tester, "collection-tree-multi-narrow", f.setDark)
 }

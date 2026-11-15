@@ -61,7 +61,11 @@ Open `Settings > Shortcuts` to search commands, record or clear a binding, and r
 
 `Primary` means Command on macOS and Ctrl on Windows/Linux. Menus and tooltips resolve labels from the active saved configuration.
 
-Tab and Shift+Tab move between sidebar entries, settings sections, and their controls. Enter or Space activates the focused entry: open a history or request, expand a collection folder, select a category, rule, plugin, or file. Row checkboxes and enable switches have their own focus and operate independently. Hidden sidebars and inactive pages do not handle these keys. Code editors retain Tab for indentation.
+Tab and Shift+Tab move between sidebar entries, settings sections, and their controls. Enter or Space activates the focused entry: open a history or request, select a category, rule, plugin, or file. Row checkboxes and enable switches have their own focus and operate independently. Hidden sidebars and inactive pages do not handle these keys. Code editors retain Tab for indentation.
+
+In API Collection, Tab enters the tree. Up/Down moves the highlight, Left/Right collapses or expands folders, and Enter or Space selects a folder or opens a request. Clicking a folder also toggles expansion; its arrow changes expansion independently. In multi-select mode, clicking a row or pressing Space toggles its selection without opening requests or expanding folders; Shift selects a range. Selecting a folder does not automatically select its children. Right-click a node, or press the Menu key or Shift+F10 on the highlighted node, for its actions. Drag rows or their grips into folders; nested folders can also be dropped on the **Move to Root** target.
+
+The toolbar's **New Folder** and a folder's **New Child Folder** action both open a name dialog. Type a name and press Enter or **Create** to save; Escape, **Cancel**, or the close button discards it. Failed creation retains the name for retry. A successful creation selects the new folder and scrolls it into view.
 
 In Categories, the domain, process, and structure groups share the sidebar's scrollbar. Tab reaches each collapsible group and its list. Up/Down moves between domains or processes; Enter or Space toggles the highlighted filter. Multiple filters can remain selected, including while hidden by the sidebar search. In the structure tree, Left/Right collapses or expands branches; Enter or Space toggles a branch or selects a request. Right-click a request, or press the Menu key or Shift+F10 on the highlighted request, to open its context menu.
 
