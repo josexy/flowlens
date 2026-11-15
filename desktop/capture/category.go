@@ -367,8 +367,8 @@ func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *ca
 		})
 		if view.tree.Active == node.Key {
 			open := func() { menu.Open = true }
-			view.tree.Outline.List.Handle.OnShortcut(c, 0, ui.KeyContextMenu, open)
-			view.tree.Outline.List.Handle.OnShortcut(c, ui.Shift, ui.KeyF10, open)
+			view.tree.Outline.List.OnShortcut(c, 0, ui.KeyContextMenu, open)
+			view.tree.Outline.List.OnShortcut(c, ui.Shift, ui.KeyF10, open)
 		}
 	}
 }
