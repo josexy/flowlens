@@ -34,10 +34,19 @@ func TestCachedDialerMultipleAddressesDualStackAndTrace(t *testing.T) {
 			_ = conn.Close()
 		}
 	}()
+	addresses := []net.IPAddr{{IP: net.ParseIP("::1")}}
+	// Linux routes all of 127/8 to loopback, so 127.0.0.2 refuses at once and
+	// exercises fallback within the IPv4 group. macOS binds only 127.0.0.1, where
+	// dialing 127.0.0.2 hangs until the deadline, so include it only when local.
+	if probe, err := net.Listen("tcp4", "127.0.0.2:0"); err == nil {
+		_ = probe.Close()
+		addresses = append(addresses, net.IPAddr{IP: net.ParseIP("127.0.0.2")})
+	}
+	addresses = append(addresses, net.IPAddr{IP: net.ParseIP("127.0.0.1")})
 	var calls, starts, dones atomic.Int64
 	cache := newDNSCache(dnsResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		calls.Add(1)
-		return []net.IPAddr{{IP: net.ParseIP("::1")}, {IP: net.ParseIP("127.0.0.2")}, {IP: net.ParseIP("127.0.0.1")}}, nil
+		return addresses, nil
 	}))
 	t.Cleanup(cache.close)
 	cache.configure(true, 60)
