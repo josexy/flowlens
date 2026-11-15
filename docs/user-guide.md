@@ -96,6 +96,7 @@ Version 1 supports one single-step binding per command. Multi-step chords and al
 - Window size, position, and maximized state are persisted when possible.
 - Settings use a dedicated window and confirm unsaved changes before closing.
 - Switching between the custom and native title bar requires an application restart.
+- The native title bar follows the theme selected in FlowLens. Use the sidebar theme control to switch between light, dark, and system appearance.
 
 ## Managed System Proxy
 

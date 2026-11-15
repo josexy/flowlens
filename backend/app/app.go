@@ -224,6 +224,7 @@ func launch(db *sql.DB, startupReset *resetManifest, startupProgress *resetStart
 	data = store.New(rt, store.Dependencies{
 		Settings: store.SettingsDependencies{
 			Backend: all.setting, Shortcuts: all.shortcut, Proxy: all.proxy, Python: all.python, ApplyLocale: locale.Apply,
+			ApplyThemeMode: applyNativeThemeMode,
 		},
 		Traffic:    all.proxy,
 		Proxy:      all.proxy,

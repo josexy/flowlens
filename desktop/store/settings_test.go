@@ -12,6 +12,7 @@ import (
 	shortcutservice "github.com/josexy/flowlens/backend/services/shortcut_service"
 	"github.com/josexy/flowlens/desktop/logic"
 	"github.com/josexy/flowlens/desktop/runtime/runtimetest"
+	"github.com/josexy/flowlens/desktop/theme"
 )
 
 type harness struct {
@@ -225,6 +226,36 @@ func TestPreviewAppliesEverywhereAndDiscardRestoresSavedPalette(t *testing.T) {
 	h.store.EndEdit()
 	if h.store.Theme().PrimaryColor != "blue" {
 		t.Fatalf("after discard = %q", h.store.Theme().PrimaryColor)
+	}
+}
+
+func TestThemeModeAppliesToNativeWindows(t *testing.T) {
+	h := newHarness(t, nil, nil)
+	if err := h.service.SetThemeMode(theme.ModeDark); err != nil {
+		t.Fatal(err)
+	}
+	var applied []string
+	settings := NewSettingsStore(h.rt, SettingsDependencies{
+		Backend:        h.service,
+		ApplyThemeMode: func(mode string) { applied = append(applied, mode) },
+	})
+	if err := settings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	settings.BeginEdit()
+	settings.Draft.CommonConfig.ThemePrimaryColor = "rose"
+	settings.PreviewDraftAppearance()
+	for _, mode := range []string{theme.ModeAuto, theme.ModeLight} {
+		if err := settings.SetThemeMode(mode); err != nil {
+			t.Fatal(err)
+		}
+		if resolved := settings.Theme(); resolved.Mode != mode || resolved.PrimaryColor != "rose" {
+			t.Fatalf("theme after selecting %q = %q, %q", mode, resolved.Mode, resolved.PrimaryColor)
+		}
+	}
+	settings.EndEdit()
+	if want := []string{theme.ModeDark, theme.ModeAuto, theme.ModeLight}; !slices.Equal(applied, want) {
+		t.Fatalf("applied native theme modes = %v, want %v", applied, want)
 	}
 }
 

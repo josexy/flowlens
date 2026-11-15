@@ -90,6 +90,8 @@ type SettingsDependencies struct {
 	Python    PythonRuntimeConfigurer
 	// ApplyLocale shows the interface in a saved language.
 	ApplyLocale func(language string)
+	// ApplyThemeMode updates the native appearance to match the interface.
+	ApplyThemeMode func(mode string)
 }
 
 // SaveResult reports a finished save.
@@ -178,7 +180,11 @@ func (s *SettingsStore) refreshTheme() {
 	if s.preview != nil {
 		appearance = *s.preview
 	}
+	previousMode := s.resolved.Mode
 	s.resolved = theme.Resolve(appearance)
+	if s.resolved.Mode != previousMode && s.deps.ApplyThemeMode != nil {
+		s.deps.ApplyThemeMode(s.resolved.Mode)
+	}
 }
 
 // Language returns the saved language.
@@ -449,6 +455,9 @@ func (s *SettingsStore) SetThemeMode(mode string) error {
 		if settings != nil && settings.CommonConfig != nil {
 			settings.CommonConfig.ThemeMode = mode
 		}
+	}
+	if s.preview != nil {
+		s.preview.Mode = mode
 	}
 	s.refreshTheme()
 	s.rt.Dispatcher.InvalidateAll()

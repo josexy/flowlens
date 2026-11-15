@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/egoist/mygo"
+	"github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/desktop/widgets"
 
 	"github.com/josexy/flowlens/backend/pkg/logger"
@@ -25,6 +26,17 @@ const (
 	updaterWindowMinWidth       = 520
 	updaterWindowMinHeight      = 520
 )
+
+func applyNativeThemeMode(mode string) {
+	source := mygo.ThemeSystem
+	switch mode {
+	case theme.ModeLight:
+		source = mygo.ThemeLight
+	case theme.ModeDark:
+		source = mygo.ThemeDark
+	}
+	mygo.Theme.SetSource(source)
+}
 
 // secondaryFrame prepares a Settings or Software Update window for the active
 // title bar mode and returns its title bar.
