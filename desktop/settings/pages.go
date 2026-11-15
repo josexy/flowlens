@@ -156,10 +156,10 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 		row(c, palette, "interpreter", locales.SettingsPythonInterpreterLabel(), "", func() {
 			ui.Row(c.Key("path")).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-					nui.Input(c, palette, &config.InterpreterPath, nui.InputOptions{Label: locales.SettingsPythonInterpreterLabel(), Placeholder: locales.SettingsPythonInterpreterPlaceholder(), Size: nui.SM}).FillWidth()
+					nui.Input(c, palette, &config.InterpreterPath, nui.InputOptions{Label: locales.SettingsPythonInterpreterLabel(), Placeholder: locales.SettingsPythonInterpreterPlaceholder()}).FillWidth()
 				})
 				blocked := state.finding || state.testing
-				browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: locales.SettingsPythonInterpreterBrowse(), Disabled: blocked, Loading: state.picking})
+				browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: locales.SettingsPythonInterpreterBrowse(), Disabled: blocked, Loading: state.picking})
 				if !blocked {
 					browse.OnClick(func() {
 						state.picking = true
@@ -180,12 +180,12 @@ func (v *View) pythonPage(c *ui.Context, palette nui.Theme, draft *settingservic
 				nui.Tooltip(c, palette, browse, locales.SettingsPythonInterpreterBrowse(), nui.TooltipOptions{})
 			})
 			ui.Row(c.Key("actions")).Gap(6).Children(func() {
-				detect := nui.Button(c.Key("detect"), palette, locales.SettingsPythonInterpreterDetect(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.ScanSearch(), Disabled: state.picking || state.testing, Loading: state.finding})
+				detect := nui.Button(c.Key("detect"), palette, locales.SettingsPythonInterpreterDetect(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.ScanSearch(), Disabled: state.picking || state.testing, Loading: state.finding})
 				if !state.picking && !state.testing {
 					detect.OnClick(func() { v.detectPython(config) })
 				}
 				disabled := strings.TrimSpace(config.InterpreterPath) == "" || state.finding
-				test := nui.Button(c.Key("test"), palette, locales.SettingsPythonInterpreterTest(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.FlaskConical(), Disabled: disabled, Loading: state.testing})
+				test := nui.Button(c.Key("test"), palette, locales.SettingsPythonInterpreterTest(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.FlaskConical(), Disabled: disabled, Loading: state.testing})
 				if !disabled {
 					test.OnClick(func() { v.testPython(config.InterpreterPath) })
 				}
@@ -311,7 +311,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 		})
 		row(c, palette, "level", locales.SettingsLogLevelLabel(), "", func() {
 			ui.Box(c.Key("menu")).Width(240).Children(func() {
-				nui.Select(c.Key("select"), palette, &state.level, logLevelOptions(), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Size: nui.SM, Disabled: state.updating})
+				nui.Select(c.Key("select"), palette, &state.level, logLevelOptions(), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Disabled: state.updating})
 			})
 			if state.level != string(state.status.Level) && !state.updating {
 				level := logger.LogLevel(state.level)
@@ -331,7 +331,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 	})
 	v.section(c, palette, "maintenance", locales.SettingsLogMaintenanceLabel(), false, nil, func() {
 		ui.Row(c.Key("actions")).Gap(8).Children(func() {
-			nui.Button(c.Key("open"), palette, locales.SettingsLogOpenDir(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.FolderOpen(), Loading: state.opening}).OnClick(func() {
+			nui.Button(c.Key("open"), palette, locales.SettingsLogOpenDir(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.FolderOpen(), Loading: state.opening}).OnClick(func() {
 				state.opening = true
 				run(v, "log-open", func() (struct{}, error) { return struct{}{}, v.Host.OpenLogDir() }, func(_ struct{}, err error) {
 					state.opening = false
@@ -340,7 +340,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 					}
 				})
 			})
-			nui.Button(c.Key("clear"), palette, locales.SettingsLogClearLogs(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.SM, Leading: lucide.Trash(), Loading: state.clearing}).OnClick(func() {
+			nui.Button(c.Key("clear"), palette, locales.SettingsLogClearLogs(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Leading: lucide.Trash(), Loading: state.clearing}).OnClick(func() {
 				v.Confirm.Ask(confirmRequest(locales.SettingsLogClearLogs(), locales.SettingsLogClearLogsConfirm(), locales.SettingsLogClearLogs(), nui.Warning, func() {
 					state.clearing = true
 					run(v, "log-clear", func() (struct{}, error) { return struct{}{}, v.Host.ClearLogs() }, func(_ struct{}, err error) {
@@ -464,7 +464,7 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 						option(string(settingservice.HistoryRetentionUnitHour), locales.SettingsHistoryRetentionUnitHour()), option(string(settingservice.HistoryRetentionUnitDay), locales.SettingsHistoryRetentionUnitDay()),
 						option(string(settingservice.HistoryRetentionUnitWeek), locales.SettingsHistoryRetentionUnitWeek()), option(string(settingservice.HistoryRetentionUnitMonth), locales.SettingsHistoryRetentionUnitMonth()),
 						option(string(settingservice.HistoryRetentionUnitYear), locales.SettingsHistoryRetentionUnitYear()),
-					}, nui.SelectOptions{Label: locales.SettingsHistoryRetentionUnitLabel(), Size: nui.SM, Disabled: !retention.Enabled})
+					}, nui.SelectOptions{Label: locales.SettingsHistoryRetentionUnitLabel(), Disabled: !retention.Enabled})
 				})
 				retention.Unit = settingservice.HistoryRetentionUnit(unit)
 			})
@@ -625,9 +625,9 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 	warnings = slices.Compact(warnings)
 	ui.Row(c.Key("toolbar")).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.Box(c.Key("search")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, palette, &state.search, nui.InputOptions{Label: locales.ShortcutsSearchPlaceholder(), Placeholder: locales.ShortcutsSearchPlaceholder(), Leading: lucide.Search(), Size: nui.SM}).FillWidth()
+			nui.Input(c, palette, &state.search, nui.InputOptions{Label: locales.ShortcutsSearchPlaceholder(), Placeholder: locales.ShortcutsSearchPlaceholder(), Leading: lucide.Search()}).FillWidth()
 		})
-		nui.Button(c.Key("reset-all"), palette, locales.ShortcutsResetAll(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.RotateCcw()}).OnClick(func() {
+		nui.Button(c.Key("reset-all"), palette, locales.ShortcutsResetAll(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RotateCcw()}).OnClick(func() {
 			v.Confirm.Ask(widgets.ConfirmRequest{Title: locales.ShortcutsResetAll(), Message: locales.ShortcutsResetAllConfirm(), CancelLabel: locales.ShortcutsCancel(), Confirm: widgets.ConfirmAction{Label: locales.ShortcutsResetAll(), Color: nui.Warning, Run: func() {
 				for _, command := range shortcuts.Catalog {
 					delete(config.Overrides, command.ID)
@@ -727,7 +727,7 @@ func (v *View) commandRow(c *ui.Context, palette nui.Theme, config *settingservi
 		} else if resolved.Binding != nil {
 			text = v.keyLabels(resolved.Binding)
 		}
-		record := nui.Button(c.Key("record"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, AccessibleLabel: locales.ShortcutsRecordFor(label)}).Width(160).MinHeight(32).Shrink(0).Center()
+		record := nui.Button(c.Key("record"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, AccessibleLabel: locales.ShortcutsRecordFor(label)}).Width(160).MinHeight(32).Shrink(0).Center()
 		record.Children(func() {
 			if recording || resolved.Binding == nil {
 				ui.Text(c, text).SingleLine().MinWidth(0)

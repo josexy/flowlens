@@ -132,6 +132,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 	state := &v.general
 	v.section(c, palette, "appearance", locales.SettingsSectionAppearance(), false, nil, func() {
 		colorRow := func(key, label string, names []string, target *string) {
+			const swatchSize, swatchGap = 12, 8
 			row(c, palette, key, label, "", func() {
 				ui.Box(c.Key("menu")).Width(320).Children(func() {
 					options := make([]nui.Option[string], len(names))
@@ -139,22 +140,25 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 						options[index] = option(item.ID, item.Label)
 						colors, _ := nui.PaletteByName(item.ID)
 						options[index].Build = func(c *ui.Context, _ nui.Theme) {
-							ui.Box(c).Size(12, 12).Radius(6).Background(colors.Shade(500)).Shrink(0).AccessHidden(true)
+							ui.Box(c).Size(swatchSize, swatchSize).Radius(swatchSize / 2).Background(colors.Shade(500)).Shrink(0).AccessHidden(true)
 							ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
 						}
 					}
 					select_ := nui.Select(c.Key("select"), palette, target, options, nui.SelectOptions{
 						Label: label, Disabled: v.committing,
 						Style: func(slot nui.Slot, element ui.Element) {
-							if slot == nui.Label {
-								element.PaddingStart(20)
+							switch slot {
+							case nui.Label:
+								element.PaddingStart(swatchSize + swatchGap)
+							case nui.Item:
+								element.AlignItems(ui.Center).Gap(swatchGap)
 							}
 						},
 					})
 					select_.Children(func() {
 						colors, _ := nui.PaletteByName(*target)
-						ui.Box(c.Key("swatch")).Absolute().Left(10).Top(0).Bottom(0).Width(12).Center().IgnoreInput(true).AccessHidden(true).Children(func() {
-							ui.Box(c).Size(12, 12).Radius(6).Background(colors.Shade(500))
+						ui.Box(c.Key("swatch")).Absolute().Left(10).Top(0).Bottom(0).Width(swatchSize).Center().IgnoreInput(true).AccessHidden(true).Children(func() {
+							ui.Box(c).Size(swatchSize, swatchSize).Radius(swatchSize / 2).Background(colors.Shade(500))
 						})
 					})
 				})

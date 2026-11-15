@@ -258,9 +258,9 @@ func (v *View) fileInput(c *ui.Context, palette nui.Theme, key, label, placehold
 	}
 	ui.Row(c.Key(key)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, palette, target, nui.InputOptions{Label: label, Placeholder: placeholder, Size: nui.SM}).FillWidth()
+			nui.Input(c, palette, target, nui.InputOptions{Label: label, Placeholder: placeholder}).FillWidth()
 		})
-		browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: picker.Title})
+		browse := nui.Button(c.Key("browse"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Square: true, Leading: lucide.FolderOpen(), AccessibleLabel: picker.Title})
 		browse.OnClick(func() { v.pickPath(key, picker, func(path string) { *target = path }) })
 		nui.Tooltip(c, palette, browse, buttonTitle, nui.TooltipOptions{})
 	})
@@ -274,7 +274,7 @@ func (v *View) upstream(c *ui.Context, palette nui.Theme, proxy *settingservice.
 				option(string(settingservice.UpstreamProxyModeNone), locales.SettingsUpstreamProxyModeNone()),
 				option(string(settingservice.UpstreamProxyModeSystem), locales.SettingsUpstreamProxyModeSystem()),
 				option(string(settingservice.UpstreamProxyModeCustom), locales.SettingsUpstreamProxyModeCustom()),
-			}, nui.SelectOptions{Label: locales.ToolbarUpstreamProxy(), Size: nui.SM})
+			}, nui.SelectOptions{Label: locales.ToolbarUpstreamProxy()})
 		})
 		if next := settingservice.UpstreamProxyMode(value); next != proxy.UpstreamMode {
 			proxy.UpstreamMode = next
@@ -283,7 +283,7 @@ func (v *View) upstream(c *ui.Context, palette nui.Theme, proxy *settingservice.
 			}
 		}
 		if proxy.UpstreamMode == settingservice.UpstreamProxyModeCustom {
-			nui.Input(c.Key("url"), palette, &proxy.UpstreamProxy, nui.InputOptions{Label: locales.SettingsUpstreamProxyModeCustom(), Placeholder: locales.SettingsUpstreamProxyCustomPlaceholder(), Size: nui.SM, Invalid: !validUpstream(proxy.UpstreamProxy)}).FillWidth()
+			nui.Input(c.Key("url"), palette, &proxy.UpstreamProxy, nui.InputOptions{Label: locales.SettingsUpstreamProxyModeCustom(), Placeholder: locales.SettingsUpstreamProxyCustomPlaceholder(), Invalid: !validUpstream(proxy.UpstreamProxy)}).FillWidth()
 		}
 	})
 }
@@ -341,7 +341,7 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 	if state.details {
 		icon, label = lucide.ChevronDown(), locales.SettingsCaHideDetails()
 	}
-	nui.Button(c.Key("details"), palette, label, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Leading: icon}).AlignSelf(ui.Start).OnClick(func() { state.details = !state.details })
+	nui.Button(c.Key("details"), palette, label, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Leading: icon}).AlignSelf(ui.Start).OnClick(func() { state.details = !state.details })
 	if !state.details {
 		return
 	}
@@ -472,7 +472,7 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 		summary = locales.SettingsRootCasCount(strconv.Itoa(count))
 	}
 	collapsibleHead(c, palette, "roots-head", locales.SettingsSectionRootCas(), summary, palette.Muted, &state.rootsOpen, func() {
-		anchor := nui.Button(c.Key("add"), palette, locales.SettingsAddRootCa(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.Plus(), Trailing: lucide.ChevronDown(), AccessibleLabel: locales.SettingsAddRootCaAction()})
+		anchor := nui.Button(c.Key("add"), palette, locales.SettingsAddRootCa(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.Plus(), Trailing: lucide.ChevronDown(), AccessibleLabel: locales.SettingsAddRootCaAction()})
 		nui.DropdownMenu(c.Key("add-menu"), palette, anchor, &state.rootMenu, []nui.MenuItem{
 			{ID: "files", Label: locales.SettingsSelectFiles(), Icon: lucide.FolderOpen(), OnSelect: func() { v.pickRoots(proxy) }},
 			{ID: "manual", Label: locales.SettingsAddPathManually(), Icon: lucide.Pencil(), OnSelect: func() {
@@ -562,7 +562,7 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 		}
 	}
 	collapsibleHead(c, palette, "certs-head", locales.SettingsSectionClientCerts(), summary, color, &state.certsOpen, func() {
-		nui.Button(c.Key("add"), palette, locales.SettingsAddClientCert(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.Plus()}).OnClick(func() {
+		nui.Button(c.Key("add"), palette, locales.SettingsAddClientCert(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.Plus()}).OnClick(func() {
 			proxy.ClientCerts = append(proxy.ClientCerts, settingservice.ClientCertConfig{Enabled: true})
 			state.certsOpen = true
 		})
@@ -598,13 +598,13 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 					proxy.ClientCerts = append(next, proxy.ClientCerts[position+1:]...)
 				})
 			})
-			nui.FormField(c.Key("host"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientCertTargetHost(), Help: locales.SettingsClientCertTargetHostHint()}, func(field nui.Theme) {
+			nui.FormField(c.Key("host"), palette, nui.FormFieldOptions{Label: locales.SettingsClientCertTargetHost(), Help: locales.SettingsClientCertTargetHostHint()}, func(field nui.Theme) {
 				nui.Input(c.Key("input"), field, &cert.Hostname, nui.InputOptions{Label: locales.SettingsClientCertTargetHost() + " " + number, Placeholder: locales.SettingsClientCertTargetHostPlaceholder()}).FillWidth()
 			})
-			nui.FormField(c.Key("cert"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientCertFile()}, func(field nui.Theme) {
+			nui.FormField(c.Key("cert"), palette, nui.FormFieldOptions{Label: locales.SettingsClientCertFile()}, func(field nui.Theme) {
 				v.fileInput(c, field, "file", locales.SettingsClientCertFile()+" "+number, locales.SettingsClientCertPathPlaceholder(), "", certificatePicker(locales.SettingsSelectClientCertFile(), locales.SettingsSelectClientCertFileMessage()), &cert.CertPath)
 			})
-			nui.FormField(c.Key("key"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientKeyFile()}, func(field nui.Theme) {
+			nui.FormField(c.Key("key"), palette, nui.FormFieldOptions{Label: locales.SettingsClientKeyFile()}, func(field nui.Theme) {
 				v.fileInput(c, field, "file", locales.SettingsClientKeyFile()+" "+number, locales.SettingsClientKeyPathPlaceholder(), "", keyPicker(locales.SettingsSelectClientKeyFile(), locales.SettingsSelectClientKeyFileMessage()), &cert.KeyPath)
 			})
 			if warning := certificateWarning(cert); warning != "" {

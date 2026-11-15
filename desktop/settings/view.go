@@ -528,7 +528,7 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 			ui.Column(c.Key("notice")).FillWidth().Shrink(0).Gap(6).Padding(10, 32).Background(theme.Elevated).Children(func() {
 				nui.Alert(c, theme, nui.AlertOptions{Title: v.notice, Color: v.noticeKind, Variant: nui.Subtle})
 				if proxy := settings.LastProxyApplyResult; proxy != nil && proxy.RestartRequired && v.Host.RestartProxy != nil {
-					nui.Button(c.Key("restart"), theme, locales.CaptureRestart(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.SM}).OnClick(v.Host.RestartProxy)
+					nui.Button(c.Key("restart"), theme, locales.CaptureRestart(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning}).OnClick(v.Host.RestartProxy)
 				}
 			})
 		}
