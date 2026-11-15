@@ -760,6 +760,9 @@ func TestHexResetsOnReplacement(t *testing.T) {
 func TestHexBuildsOnlyVisibleRowsOf500MB(t *testing.T) {
 	f := bodyFixture(t, "text/plain", "x", "")
 	f.click(locales.DetailHex())
+	// Frame does not advance the clock: let control transitions finish before
+	// measuring the work of two settled frames.
+	f.tester.Advance(time.Second)
 	hex := f.panel.responseBody.hex
 	hex.source = hugeSource{500 * 1024 * 1024}
 	hex.RowBuilds = 0
