@@ -884,6 +884,7 @@ func (s *SettingsStore) ResetDraftToDefaults(shortcutIDs []string) {
 	}
 	NormalizeSettings(draft)
 	common := draft.CommonConfig
+	common.DisableAnimations = false
 	common.LogLevel, common.LogDisabled, common.AppFontFamily, common.CodeFontFamily = defaultLogLevel, false, "", ""
 	common.AppFontSize, common.CodeFontSize = theme.DefaultAppFontSize, theme.DefaultCodeFontSize
 	common.ThemePrimaryColor, common.ThemeNeutralColor = theme.DefaultPrimaryColor, theme.DefaultNeutralColor

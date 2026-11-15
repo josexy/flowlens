@@ -136,7 +136,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 	ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 		switch {
 		case history.Loading && len(history.Metadata) == 0:
-			ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(20, 20).TextColor(theme.Muted) })
+			ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme).Size(20, 20).TextColor(theme.Muted) })
 		case len(history.Metadata) == 0:
 			ui.Column(c).Fill().Center().Padding(16).Children(func() {
 				ui.Text(c, locales.HistoryEmpty()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
@@ -369,7 +369,7 @@ func (w *Workspace) historyTable(c *ui.Context, theme nui.Theme) {
 		if loading {
 			ui.Column(c.Key("loading")).Absolute().Top(0).Bottom(0).Left(0).Right(0).ZIndex(1).
 				Center().Background(theme.Background.Alpha(0.65)).Role(ui.RoleStatus).Label(locales.AppLoading()).Busy(true).Children(func() {
-				ui.Spinner(c).Size(24, 24).TextColor(theme.Primary)
+				widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Primary)
 			})
 		}
 	})

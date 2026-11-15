@@ -4,9 +4,54 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/desktop/internal/keytest"
 	"github.com/josexy/flowlens/desktop/theme"
 	"github.com/josexy/flowlens/locales"
 )
+
+func TestAnimationsPreviewSaveDiscardAndReset(t *testing.T) {
+	f := newFixture(t)
+	label := locales.SettingsAnimationsLabel()
+	if control, ok := f.tester.AccessByRole(ui.RoleSwitch, label); !ok || !control.Checked {
+		t.Fatalf("animations must start enabled: %+v", control)
+	}
+	f.clickControl(label)
+	if !f.draft().CommonConfig.DisableAnimations || !f.data.Settings.Theme().Config.DisableAnimations || !f.view.Dirty() {
+		t.Fatal("turning animations off did not update the draft and preview")
+	}
+	f.click(locales.SettingsSave())
+	stored, err := f.service.Snapshot()
+	if err != nil || !stored.CommonConfig.DisableAnimations {
+		t.Fatalf("animation preference was not saved: %v", err)
+	}
+	f.view.finish()
+	f.view.Begin()
+	f.settle()
+	if control, ok := f.tester.AccessByRole(ui.RoleSwitch, label); !ok || control.Checked {
+		t.Fatalf("saved switch state did not survive reopening: %+v", control)
+	}
+	keytest.TabTo(t, f.tester, label)
+	f.tester.Key(0, ui.KeySpace)
+	f.settle()
+	if f.draft().CommonConfig.DisableAnimations || f.data.Settings.Theme().Config.DisableAnimations {
+		t.Fatal("keyboard toggle did not re-enable animations")
+	}
+	f.view.finish()
+	if !f.data.Settings.Theme().Config.DisableAnimations {
+		t.Fatal("discard did not restore the saved animation preference")
+	}
+	f.view.Begin()
+	f.view.reset()
+	f.settle()
+	if f.draft().CommonConfig.DisableAnimations || f.data.Settings.Theme().Config.DisableAnimations {
+		t.Fatal("restoring defaults did not enable animations")
+	}
+	f.view.finish()
+	if !f.data.Settings.Theme().Config.DisableAnimations {
+		t.Fatal("discarding restored defaults lost the saved animation preference")
+	}
+}
 
 func TestFontSelectionPreviewsPersistsAndReturnsToDefault(t *testing.T) {
 	f := newFixture(t)

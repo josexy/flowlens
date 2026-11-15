@@ -533,7 +533,7 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 		})
 		if p.busy {
 			ui.Row(c.Key("status")).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c)
+				widgets.Spinner(c, theme)
 				ui.Text(c, locales.RewriteRulesRegexTestUpdating()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			})
 		} else if p.hasPreview() {

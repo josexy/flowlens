@@ -170,7 +170,7 @@ func (a *App) shutdownOverlay(c *ui.Context, theme nui.Theme) {
 		Width: nui.Set[float32](384), Dismissible: nui.Set(false), CloseButton: nui.Set(false),
 	}, func(palette nui.Theme) {
 		ui.Row(c.Key("shutdown-progress")).FillWidth().Justify(ui.Center).Padding(8).Children(func() {
-			ui.Spinner(c).Size(32, 32).TextColor(palette.Primary).Label(locales.AppShutdownTitle())
+			widgets.Spinner(c, palette).Size(32, 32).TextColor(palette.Primary).Label(locales.AppShutdownTitle())
 		})
 	})
 	if !a.shutdownUI {

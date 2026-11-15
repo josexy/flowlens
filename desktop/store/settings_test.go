@@ -103,6 +103,7 @@ func TestNewerPreferencesSurviveASettingsSave(t *testing.T) {
 	}
 
 	h.store.Draft.CommonConfig.AppFontSize = 18
+	h.store.Draft.CommonConfig.DisableAnimations = true
 	h.store.MarkDirty(SectionCommon)
 	var saveErr error
 	if !h.store.Save(func(_ SaveResult, err error) { saveErr = err }) {
@@ -119,6 +120,9 @@ func TestNewerPreferencesSurviveASettingsSave(t *testing.T) {
 	}
 	if got.CommonConfig.AppFontSize != 18 {
 		t.Fatalf("saved font size = %d", got.CommonConfig.AppFontSize)
+	}
+	if !got.CommonConfig.DisableAnimations {
+		t.Fatal("animation preference was not saved with the common section")
 	}
 	if got.TrafficDetailConfig.Layout != settingservice.TrafficDetailLayoutHorizontal {
 		t.Fatalf("detail layout = %q", got.TrafficDetailConfig.Layout)
@@ -221,6 +225,29 @@ func TestPreviewAppliesEverywhereAndDiscardRestoresSavedPalette(t *testing.T) {
 	h.store.EndEdit()
 	if h.store.Theme().PrimaryColor != "blue" {
 		t.Fatalf("after discard = %q", h.store.Theme().PrimaryColor)
+	}
+}
+
+func TestAnimationPreviewInvalidatesAllWindowsAndDiscards(t *testing.T) {
+	h := newHarness(t, nil, nil)
+	settingsWindow, updateWindow := &runtimetest.Window{}, &runtimetest.Window{}
+	h.rt.Dispatcher.Register("settings", settingsWindow)
+	h.rt.Dispatcher.Register("update", updateWindow)
+	h.store.BeginEdit()
+	h.store.Draft.CommonConfig.DisableAnimations = true
+	h.store.PreviewDraftAppearance()
+	if !h.store.Theme().Config.DisableAnimations || h.store.Current.CommonConfig.DisableAnimations {
+		t.Fatal("preview must change the theme without changing saved settings")
+	}
+	for _, window := range []*runtimetest.Window{h.window, settingsWindow, updateWindow} {
+		if window.Invalidated() == 0 {
+			t.Fatal("preview did not redraw an open window")
+		}
+	}
+	before := updateWindow.Invalidated()
+	h.store.EndEdit()
+	if h.store.Theme().Config.DisableAnimations || updateWindow.Invalidated() <= before {
+		t.Fatal("discard did not restore animations across windows")
 	}
 }
 

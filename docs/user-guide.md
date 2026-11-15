@@ -179,7 +179,7 @@ Logs can contain target hosts, paths, API Collection names, and local file paths
 
 ## Settings and Local Storage
 
-- `Settings > General`: app/code fonts and title-bar mode.
+- `Settings > General`: theme colors, app/code fonts, animations, and title-bar mode. Animations are enabled by default and respect the system's reduced-motion preference. Turning them off makes component transitions and loading indicators static. Appearance changes preview across windows immediately; save to keep them or discard to restore the saved preferences.
 - `Settings > Proxy`: process attribution, upstream proxy, built-in or custom CA, extra trusted roots, and per-host client certificates.
 - `Settings > Python`: interpreter and global Python plugin behavior.
 - `Settings > Shortcuts`: application bindings and optional global shortcuts.

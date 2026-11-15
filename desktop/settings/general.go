@@ -162,6 +162,11 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 		}
 		colorRow("primary", locales.SettingsThemeColorsPrimary(), nui.PrimaryPaletteNames(), &common.ThemePrimaryColor)
 		colorRow("neutral", locales.SettingsThemeColorsNeutral(), nui.NeutralPaletteNames(), &common.ThemeNeutralColor)
+		row(c, palette, "animations", locales.SettingsAnimationsLabel(), locales.SettingsAnimationsHint(), func() {
+			enabled := !common.DisableAnimations
+			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: v.committing}).
+				Label(locales.SettingsAnimationsLabel()).OnClick(func() { common.DisableAnimations = !enabled })
+		})
 		items := v.fontItems(common)
 		v.fontRow(c, palette, "app-font", locales.SettingsAppFontLabel(), &common.AppFontFamily, common.AppFontSize, locales.SettingsFontPreviewText(), &state.appFont, &state.appValue, items, palette.Font)
 		v.sizeRow(c, palette, "app-size", locales.SettingsAppFontSizeLabel(), &state.appSize, &common.AppFontSize, apptheme.MinAppFontSize, apptheme.MaxAppFontSize, apptheme.DefaultAppFontSize)

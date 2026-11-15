@@ -613,7 +613,7 @@ func (t *Table) processCell(c *ui.Context, theme nui.Theme, entry *logic.Traffic
 	switch process.Status {
 	case proxyservice.ProcessStatusPending:
 		ui.Row(c).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
-			ui.Spinner(c).Size(14, 14).TextColor(theme.Muted)
+			widgets.Spinner(c, theme).Size(14, 14).TextColor(theme.Muted)
 			mutedText(c, theme, locales.TrafficProcessIdentifying())
 		})
 	case proxyservice.ProcessStatusResolved:

@@ -319,7 +319,7 @@ func (p *socketPane) rightPanel(c *ui.Context, theme nui.Theme) {
 		switch {
 		case state.ConnectionStatus == socketStatusConnecting:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
-				ui.Spinner(c)
+				widgets.Spinner(c, theme)
 				ui.Text(c, locales.WorkspaceWebsocketClientConnectionStatusConnecting()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 			return

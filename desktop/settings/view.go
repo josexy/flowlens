@@ -356,7 +356,7 @@ func ResetOverlay(data *store.Store, dispatcher *shortcuts.Dispatcher, exit func
 			Title: title, Description: description, Width: nui.Set[float32](420), Dismissible: nui.Set(false), CloseButton: nui.Set(false), Footer: footer,
 		}, func(nui.Theme) {
 			if !state.ResetAwaitingRestart {
-				ui.Row(c.Key("spinner")).FillWidth().Justify(ui.Center).Padding(8).Children(func() { ui.Spinner(c) })
+				ui.Row(c.Key("spinner")).FillWidth().Justify(ui.Center).Padding(8).Children(func() { widgets.Spinner(c, theme) })
 			}
 		})
 	}
@@ -491,7 +491,7 @@ func (v *View) page(c *ui.Context, theme nui.Theme) {
 				ui.Text(c, v.tabTitle()).FontSize(apptheme.TextSize(c, 18)).LineHeight(1.35).Bold().TextColor(theme.Text)
 			})
 			if draft == nil {
-				ui.Row(c.Key("loading")).FillWidth().MinHeight(160).Center().Children(func() { ui.Spinner(c) })
+				ui.Row(c.Key("loading")).FillWidth().MinHeight(160).Center().Children(func() { widgets.Spinner(c, theme) })
 				return
 			}
 			ui.Column(c.Key("content")).FillWidth().Children(func() {

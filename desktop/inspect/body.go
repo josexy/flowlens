@@ -125,7 +125,7 @@ func (p *Panel) bodyPane(c *ui.Context, theme nui.Theme, viewer *BodyViewer, ent
 	body := p.loadedBody(entry)
 	if body == nil {
 		if p.data.BodyLoading() {
-			ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
+			ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted) })
 			return
 		}
 		emptyState(c, theme, lucide.FileX(), locales.DetailBodyEmpty())

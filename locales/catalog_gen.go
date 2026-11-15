@@ -6416,6 +6416,26 @@ func (msgs Messages) SettingsAllFilesFilter() string {
 	return Catalog.Format(msgs.locale, "settingsAllFilesFilter", nil)
 }
 
+// SettingsAnimationsHint says "Control interface transitions and loading animations."
+// in the language the app shows.
+func SettingsAnimationsHint() string { return In(i18n.Locale()).SettingsAnimationsHint() }
+
+// SettingsAnimationsHint says "Control interface transitions and loading animations."
+// in the language of msgs.
+func (msgs Messages) SettingsAnimationsHint() string {
+	return Catalog.Format(msgs.locale, "settingsAnimationsHint", nil)
+}
+
+// SettingsAnimationsLabel says "Animations"
+// in the language the app shows.
+func SettingsAnimationsLabel() string { return In(i18n.Locale()).SettingsAnimationsLabel() }
+
+// SettingsAnimationsLabel says "Animations"
+// in the language of msgs.
+func (msgs Messages) SettingsAnimationsLabel() string {
+	return Catalog.Format(msgs.locale, "settingsAnimationsLabel", nil)
+}
+
 // SettingsAppFontLabel says "App Font"
 // in the language the app shows.
 func SettingsAppFontLabel() string { return In(i18n.Locale()).SettingsAppFontLabel() }

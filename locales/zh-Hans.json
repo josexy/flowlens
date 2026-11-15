@@ -614,6 +614,8 @@
   "settingsAddRootCa": "添加",
   "settingsAddRootCaAction": "添加 Root CA",
   "settingsAllFilesFilter": "所有文件",
+  "settingsAnimationsHint": "控制界面过渡和加载动画。",
+  "settingsAnimationsLabel": "动画效果",
   "settingsAppFontLabel": "界面字体",
   "settingsAppFontSizeLabel": "界面字号",
   "settingsCaActionsSaveFirst": "请先保存抓包证书配置。",

@@ -119,10 +119,11 @@ func TestAppearanceFromSettings(t *testing.T) {
 		t.Fatalf("nil config = %+v", got)
 	}
 	got := AppearanceFromSettings(&settingservice.CommonConfig{
-		ThemeMode: "dark", ThemePrimaryColor: "rose", ThemeNeutralColor: "zinc",
+		DisableAnimations: true,
+		ThemeMode:         "dark", ThemePrimaryColor: "rose", ThemeNeutralColor: "zinc",
 		AppFontFamily: "A", AppFontSize: 14, CodeFontFamily: "B", CodeFontSize: 15,
 	})
-	want := Appearance{Mode: "dark", PrimaryColor: "rose", NeutralColor: "zinc", AppFont: "A", AppFontSize: 14, CodeFont: "B", CodeFontSize: 15}
+	want := Appearance{DisableAnimations: true, Mode: "dark", PrimaryColor: "rose", NeutralColor: "zinc", AppFont: "A", AppFontSize: 14, CodeFont: "B", CodeFontSize: 15}
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}

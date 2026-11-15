@@ -77,7 +77,7 @@ func (r *responseView) build(c *ui.Context, theme nui.Theme) {
 		switch {
 		case state.IsSending && visible != logic.ResponseTabConsole:
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
-				ui.Spinner(c)
+				widgets.Spinner(c, theme)
 				ui.Text(c, locales.WorkspaceHttpRequestResponseSendingTitle()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		case !hasResponse && !hasConsole && !cancelled:

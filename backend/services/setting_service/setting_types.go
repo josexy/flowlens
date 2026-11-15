@@ -57,6 +57,8 @@ const (
 )
 
 type CommonConfig struct {
+	// DisableAnimations defaults to false, including for older saved settings.
+	DisableAnimations bool   `json:"disableAnimations"`
 	LogLevel          string `json:"logLevel"`
 	LogDisabled       bool   `json:"logDisabled"`
 	AppFontFamily     string `json:"appFontFamily"`

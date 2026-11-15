@@ -35,13 +35,14 @@ const interfaceTextRatio = 14.0 / 16.0
 
 // Appearance holds the user's look and feel choices.
 type Appearance struct {
-	Mode         string
-	PrimaryColor string
-	NeutralColor string
-	AppFont      string
-	AppFontSize  int
-	CodeFont     string
-	CodeFontSize int
+	DisableAnimations bool
+	Mode              string
+	PrimaryColor      string
+	NeutralColor      string
+	AppFont           string
+	AppFontSize       int
+	CodeFont          string
+	CodeFontSize      int
 }
 
 // AppearanceFromSettings reads the appearance from saved settings. A nil config
@@ -51,13 +52,14 @@ func AppearanceFromSettings(config *settingservice.CommonConfig) Appearance {
 		return Appearance{}
 	}
 	return Appearance{
-		Mode:         config.ThemeMode,
-		PrimaryColor: config.ThemePrimaryColor,
-		NeutralColor: config.ThemeNeutralColor,
-		AppFont:      config.AppFontFamily,
-		AppFontSize:  config.AppFontSize,
-		CodeFont:     config.CodeFontFamily,
-		CodeFontSize: config.CodeFontSize,
+		DisableAnimations: config.DisableAnimations,
+		Mode:              config.ThemeMode,
+		PrimaryColor:      config.ThemePrimaryColor,
+		NeutralColor:      config.ThemeNeutralColor,
+		AppFont:           config.AppFontFamily,
+		AppFontSize:       config.AppFontSize,
+		CodeFont:          config.CodeFontFamily,
+		CodeFontSize:      config.CodeFontSize,
 	}
 }
 
@@ -101,7 +103,7 @@ func Resolve(appearance Appearance) Resolved {
 		}})
 		return theme
 	}
-	resolved.Config = nui.AppConfig{Mode: nuiMode(resolved.Mode), Light: apply(false), Dark: apply(true)}
+	resolved.Config = nui.AppConfig{Mode: nuiMode(resolved.Mode), Light: apply(false), Dark: apply(true), DisableAnimations: appearance.DisableAnimations}
 	return resolved
 }
 

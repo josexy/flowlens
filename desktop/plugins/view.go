@@ -167,7 +167,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		visible := v.filtered()
 		switch {
 		case plugins.LoadingPlugins && len(plugins.Plugins) == 0:
-			ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() { ui.Spinner(c) })
+			ui.Row(c.Key("loading")).FillWidth().Height(96).Center().Children(func() { widgets.Spinner(c, theme) })
 		case len(visible) == 0:
 			title := locales.PythonPluginsEmpty()
 			if strings.TrimSpace(v.search) != "" {

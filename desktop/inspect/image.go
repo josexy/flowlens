@@ -156,7 +156,7 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 		i.scale = 1
 	}
 	if i.loading {
-		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
+		ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted) })
 		return
 	}
 	if i.failed {

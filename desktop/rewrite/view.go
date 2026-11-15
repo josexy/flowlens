@@ -337,7 +337,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 			})
 		case rewrite.Loading:
 			ui.Row(c.Key("loading")).FillWidth().Grow(1).Basis(0).Center().Gap(8).Children(func() {
-				ui.Spinner(c)
+				widgets.Spinner(c, theme)
 				ui.Text(c, locales.RewriteRulesLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		default:

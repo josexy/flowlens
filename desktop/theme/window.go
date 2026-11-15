@@ -11,6 +11,9 @@ import (
 // follow it together. Consume that factor once, instead of scaling nui text a
 // second time while leaving custom controls and code editors unchanged.
 func Begin(c *ui.Context, config nui.AppConfig) nui.Theme {
+	if config.DisableAnimations {
+		c.DisableAnimations()
+	}
 	preferences := c.Preferences()
 	scale := preferences.TextScale
 	if scale <= 0 {

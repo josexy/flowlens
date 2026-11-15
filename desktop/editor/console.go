@@ -235,10 +235,13 @@ func (v *consoleView) status(c *ui.Context, theme nui.Theme, running bool, count
 		text := locales.WorkspaceHttpRequestConsoleEntries(strconv.Itoa(count))
 		if running {
 			text = locales.WorkspaceHttpRequestConsoleRunning()
-			// Tailwind's animate-pulse: half opacity halfway through 2 s.
-			ease := ui.CubicBezier(0.4, 0, 0.6, 1)
-			opacity := dot.Keyframes("pulse", []ui.Keyframe{{At: 0, Value: 1}, {At: time.Second, Value: 0.5, Ease: ease}, {At: 2 * time.Second, Value: 1, Ease: ease}}, ui.KeyframeOptions{Repeat: ui.RepeatForever, NonMotion: true})
-			dot.Background(theme.Primary).Opacity(opacity)
+			dot.Background(theme.Primary)
+			if !theme.Motion.Disabled {
+				// Tailwind's animate-pulse: half opacity halfway through 2 s.
+				ease := ui.CubicBezier(0.4, 0, 0.6, 1)
+				opacity := dot.Keyframes("pulse", []ui.Keyframe{{At: 0, Value: 1}, {At: time.Second, Value: 0.5, Ease: ease}, {At: 2 * time.Second, Value: 1, Ease: ease}}, ui.KeyframeOptions{Repeat: ui.RepeatForever, NonMotion: true})
+				dot.Opacity(opacity)
+			}
 		} else {
 			dot.Background(theme.Muted)
 		}

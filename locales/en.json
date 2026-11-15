@@ -1581,6 +1581,8 @@
   "settingsAddRootCa": "Add",
   "settingsAddRootCaAction": "Add Root CA",
   "settingsAllFilesFilter": "All Files",
+  "settingsAnimationsHint": "Control interface transitions and loading animations.",
+  "settingsAnimationsLabel": "Animations",
   "settingsAppFontLabel": "App Font",
   "settingsAppFontSizeLabel": "App Font Size",
   "settingsCaActionsSaveFirst": "Save changes to the capture CA configuration first.",

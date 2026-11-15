@@ -321,7 +321,7 @@ func (v *View) area(c *ui.Context, theme nui.Theme) {
 	}
 	switch {
 	case collection.Loading:
-		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c) })
+		ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme) })
 	case collection.Error != "":
 		status(collection.Error)
 	case collection.Empty():

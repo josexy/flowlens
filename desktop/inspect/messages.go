@@ -269,7 +269,7 @@ func (m *MessageStream) save(message *logic.WebSocketDisplayMessage) {
 func (p *Panel) webSocketPane(c *ui.Context, theme nui.Theme) {
 	body := p.data.BodyView()
 	if body == nil && p.data.BodyLoading() {
-		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Size(24, 24).TextColor(theme.Muted) })
+		ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted) })
 		return
 	}
 	var messages []logic.WebSocketDisplayMessage

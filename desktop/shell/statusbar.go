@@ -192,7 +192,7 @@ func (a *App) environmentModal(c *ui.Context, theme nui.Theme) {
 		if info == nil {
 			if a.environment.loading {
 				ui.Row(c).FillWidth().MinHeight(112).Center().Gap(8).Children(func() {
-					ui.Spinner(c).Size(16, 16).TextColor(theme.Muted)
+					widgets.Spinner(c, theme).Size(16, 16).TextColor(theme.Muted)
 					ui.Text(c, locales.AppLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 				})
 			}

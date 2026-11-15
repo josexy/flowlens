@@ -149,7 +149,7 @@ func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body, e
 		return
 	case h.loading || h.source == nil:
 		ui.Column(c).Fill().Center().Gap(8).Children(func() {
-			ui.Spinner(c).Size(24, 24).TextColor(theme.Muted)
+			widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted)
 			ui.Text(c, locales.DetailHexLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 		return

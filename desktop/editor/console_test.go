@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"math"
@@ -13,6 +14,34 @@ import (
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
+
+func TestConsolePulseFollowsAnimationPreference(t *testing.T) {
+	config := nui.DefaultApp()
+	view := &consoleView{}
+	tester := ui.NewTesterWith(func(c *ui.Context) {
+		palette := nui.App(c, config)
+		view.status(c, palette, true, 0)
+	}, 400, 80, ui.TesterOptions{Preferences: ui.Preferences{ReduceMotion: true}})
+	before := slices.Clone(tester.Image().Pix)
+	tester.Advance(time.Second)
+	if bytes.Equal(before, tester.Image().Pix) {
+		t.Fatal("reduced motion must retain the running pulse")
+	}
+	config.DisableAnimations = true
+	tester.Frame()
+	before = slices.Clone(tester.Image().Pix)
+	tester.Advance(time.Second)
+	if !bytes.Equal(before, tester.Image().Pix) || tester.FramePending() {
+		t.Fatal("console pulse did not stop when animations were disabled")
+	}
+	config.DisableAnimations = false
+	tester.Frame()
+	before = slices.Clone(tester.Image().Pix)
+	tester.Advance(time.Second)
+	if bytes.Equal(before, tester.Image().Pix) {
+		t.Fatal("console pulse did not resume")
+	}
+}
 
 // consoleFixture shows the console of an HTTP tab holding entries.
 func consoleFixture(t *testing.T, entries ...logic.PluginLogEntry) (*fixture, *logic.HTTPEditorState, *consoleView) {
