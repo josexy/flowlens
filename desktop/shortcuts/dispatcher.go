@@ -1,6 +1,8 @@
 package shortcuts
 
 import (
+	"slices"
+
 	"github.com/egoist/mygo/ui"
 	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
 )
@@ -99,13 +101,7 @@ func (d *Dispatcher) selectHandler(ids []string) (Handler, bool) {
 	var selected Handler
 	found := false
 	for _, handler := range d.handlers {
-		matched := false
-		for _, id := range ids {
-			if id == handler.CommandID {
-				matched = true
-				break
-			}
-		}
+		matched := slices.Contains(ids, handler.CommandID)
 		if !matched || (handler.When != nil && !handler.When()) {
 			continue
 		}

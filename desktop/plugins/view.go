@@ -697,7 +697,7 @@ func (d *pluginDialog) build(c *ui.Context, theme nui.Theme, v *View, title, con
 				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }, Style: widgets.AutoFocus()}).FillWidth()
 			})
 			nui.FormField(c.Key("description"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsDescription()}, func(field nui.Theme) {
-				nui.Textarea(c, field, &d.description, nui.TextareaOptions{InputOptions: nui.InputOptions{Label: locales.PythonPluginsDescription(), Disabled: busy}, Rows: 3, MaxRows: 8, AutoResize: true}).FillWidth()
+				nui.Textarea(c, field, &d.description, nui.TextareaOptions{Label: locales.PythonPluginsDescription(), Disabled: busy, Rows: 3, MaxRows: 8, AutoResize: true}).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})

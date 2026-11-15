@@ -209,7 +209,7 @@ func pathSegments(entry *TrafficEntry) []string {
 		return []string{"/"}
 	}
 	var segments []string
-	for _, segment := range strings.Split(path, "/") {
+	for segment := range strings.SplitSeq(path, "/") {
 		if segment = strings.TrimSpace(segment); segment != "" {
 			segments = append(segments, segment)
 		}

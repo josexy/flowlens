@@ -38,12 +38,12 @@ func (v *View) updateTree() {
 			for _, id := range children[parent] {
 				item := items[id]
 				node := nui.TreeNode{ID: id, Label: item.row.Name,
-					Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+					Style: func(slot nui.Slot, element ui.Element) {
 						if slot == nui.Item {
 							element.Bind(&item.anchor)
 							v.visibleItems = append(v.visibleItems, item)
 						}
-					}},
+					},
 				}
 				if item.row.Folder {
 					node.Children = nodes(id)

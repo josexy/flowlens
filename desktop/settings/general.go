@@ -34,7 +34,7 @@ func (f *integerField) build(c *ui.Context, theme nui.Theme, key, label string, 
 		f.value, f.seen, f.ready = nui.Set(float64(*target)), *target, true
 	}
 	ui.Box(c.Key(key)).Width(176).Children(func() {
-		nui.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{InputOptions: nui.InputOptions{Label: label, Disabled: disabled}, Orientation: nui.Vertical, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
+		nui.InputNumber(c.Key("input"), theme, &f.value, &f.state, nui.InputNumberOptions{Label: label, Disabled: disabled, Orientation: nui.Vertical, Min: nui.Set(minimum), Max: nui.Set(maximum), Step: step})
 	})
 	if f.value.Set {
 		*target = int(f.value.Value)
@@ -145,11 +145,11 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 					}
 					select_ := nui.Select(c.Key("select"), palette, target, options, nui.SelectOptions{
 						Label: label, Disabled: v.committing,
-						Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+						Style: func(slot nui.Slot, element ui.Element) {
 							if slot == nui.Label {
 								element.PaddingStart(20)
 							}
-						}},
+						},
 					})
 					select_.Children(func() {
 						colors, _ := nui.PaletteByName(*target)

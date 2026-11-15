@@ -141,8 +141,8 @@ func RequestTargetFromURL(rawURL string) (string, bool) {
 		return "*", true
 	}
 	withoutFragment := trimmed
-	if index := strings.IndexByte(trimmed, '#'); index >= 0 {
-		withoutFragment = trimmed[:index]
+	if before, _, ok := strings.Cut(trimmed, "#"); ok {
+		withoutFragment = before
 	}
 	if separator := strings.Index(withoutFragment, "://"); separator >= 0 {
 		rest := withoutFragment[separator+3:]

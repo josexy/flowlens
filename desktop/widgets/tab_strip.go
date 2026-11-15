@@ -34,11 +34,11 @@ func TabStrip(c *ui.Context, theme nui.Theme, value *string, items []nui.TabItem
 		WheelScroll(c, strip).Children(func() {
 			nui.Tabs(c, theme, value, items, nui.TabsOptions{
 				Label: o.Label, Content: nui.Set(false), Underline: true, OnChange: o.OnChange,
-				Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+				Style: func(slot nui.Slot, element ui.Element) {
 					if slot == nui.List {
 						element.BorderColor(ui.Transparent)
 					}
-				}},
+				},
 			})
 		})
 		if o.Trailing != nil {

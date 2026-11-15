@@ -2,6 +2,7 @@ package logic
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -53,8 +54,8 @@ func firstPseudoHeader(fields []HeaderField, name string) (string, bool) {
 func authorityFormTarget(rawURL, fallbackHost string) string {
 	trimmed := strings.TrimSpace(rawURL)
 	withoutFragment := trimmed
-	if index := strings.IndexByte(trimmed, '#'); index >= 0 {
-		withoutFragment = trimmed[:index]
+	if before, _, ok := strings.Cut(trimmed, "#"); ok {
+		withoutFragment = before
 	}
 	authorityOf := func(value string) string {
 		if end := strings.IndexAny(value, "/?"); end >= 0 {
@@ -92,12 +93,7 @@ func rawRequestTarget(method, rawURL, host string) string {
 
 func transformHTTP2Headers(fields []HeaderField, consumed ...string) []HeaderField {
 	isConsumed := func(name string) bool {
-		for _, candidate := range consumed {
-			if candidate == name {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(consumed, name)
 	}
 	var authority, remaining []HeaderField
 	for _, field := range fields {

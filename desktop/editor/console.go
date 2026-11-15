@@ -139,7 +139,7 @@ func consoleTone(tone string) nui.Color {
 func consolePill(c *ui.Context, theme nui.Theme, entry *logic.PluginLogEntry, label string, icon *ui.SVG) ui.Element {
 	return nui.Badge(c, theme, label, nui.BadgeOptions{
 		Color: consoleTone(logic.PythonLogTone(entry.Stream, entry.Level)), Variant: nui.Soft, Size: nui.SM, Leading: icon,
-		Decoration: nui.Decoration{Style: func(_ nui.Slot, element ui.Element) { element.Radius(999) }},
+		Style: func(_ nui.Slot, element ui.Element) { element.Radius(999) },
 	}).MinWidth(0)
 }
 

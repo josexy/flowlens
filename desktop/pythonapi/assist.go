@@ -2,6 +2,7 @@ package pythonapi
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -60,7 +61,7 @@ func collectBindings(source string) *bindings {
 	result.set("response", "Response")
 	for _, match := range hookPattern.FindAllStringSubmatch(source, -1) {
 		var parameters []string
-		for _, part := range strings.Split(match[2], ",") {
+		for part := range strings.SplitSeq(match[2], ",") {
 			if name := parameterName(part); name != "" {
 				parameters = append(parameters, name)
 			}
@@ -326,16 +327,16 @@ func findActiveCallOpenParen(source string) int {
 		if expected == 0 {
 			return
 		}
-		for position := len(stack) - 1; position >= 0; position-- {
-			if stack[position].character == expected {
+		for position, s := range slices.Backward(stack) {
+			if s.character == expected {
 				stack = stack[:position]
 				return
 			}
 		}
 	})
-	for position := len(stack) - 1; position >= 0; position-- {
-		if stack[position].character == '(' {
-			return stack[position].index
+	for _, s := range slices.Backward(stack) {
+		if s.character == '(' {
+			return s.index
 		}
 	}
 	return -1

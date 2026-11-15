@@ -266,7 +266,7 @@ func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState
 	box := ui.Box(c.Key(open)).AttachTo(cell, ui.AnchorTopStart, ui.AnchorTopStart).Left(8).Top(4).Width(max(cell.Bounds().W-16, 80)).ZIndex(1)
 	box.Shadow(0, 8, 20, 0, ui.RGBA(15, 23, 42, 0.12)).Children(func() {
 		nui.Textarea(c, theme, text, nui.TextareaOptions{
-			InputOptions: nui.InputOptions{Size: nui.MD, Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
+			Size: nui.MD, Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
 				editor.AutoFocus()
 				// Composition confirmation must not become a grid command
 				// even on platforms forwarding its final key to the input.
@@ -296,7 +296,7 @@ func editableGridEditor(c *ui.Context, theme nui.Theme, state *editableGridState
 					state.committed = true
 				}
 				state.focused = focused
-			}},
+			},
 			Rows: 1, AutoResize: true, MaxRows: gridEditorMaxRows(theme, area.Bounds(), cell.Bounds()),
 		}).FillWidth()
 	})

@@ -86,19 +86,15 @@ func (h *Help) Build(c *ui.Context, theme nui.Theme) {
 	messages := pythonapi.MessagesFor(h.Locale())
 	nui.Slideover(c.Key("python-help"), theme, &h.open, nui.SlideoverOptions{
 		Side: nui.SideRight, Extent: nui.Set(helpWidth),
-		ModalOptions: nui.ModalOptions{
-			Title: messages.Title, Description: messages.Version, CloseLabel: messages.Close,
-			CloseButton: nui.Set(false),
-			// The close button, Escape and a click beside the panel close it
-			// after the build, which derives open from the store again.
-			OnClose: h.Workbench.ClosePythonHelp,
-			Header:  func(c *ui.Context, palette nui.Theme) { h.header(c, palette, messages) },
-			Decoration: nui.Decoration{
-				UI: nui.Styles{
-					nui.Header: {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](12)},
-					nui.Body:   {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](16), Gap: nui.Set[float32](16)},
-				},
-			},
+		Title: messages.Title, Description: messages.Version, CloseLabel: messages.Close,
+		CloseButton: nui.Set(false),
+		// The close button, Escape and a click beside the panel close it
+		// after the build, which derives open from the store again.
+		OnClose: h.Workbench.ClosePythonHelp,
+		Header:  func(c *ui.Context, palette nui.Theme) { h.header(c, palette, messages) },
+		UI: nui.Styles{
+			nui.Header: {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](12)},
+			nui.Body:   {PaddingX: nui.Set[float32](16), PaddingY: nui.Set[float32](16), Gap: nui.Set[float32](16)},
 		},
 	}, func(palette nui.Theme) {
 		if h.tab == "reference" {

@@ -10,7 +10,8 @@ import (
 	proxyservice "github.com/josexy/flowlens/backend/services/proxy_service"
 )
 
-func ptr[T any](value T) *T { return &value }
+//go:fix inline
+func ptr[T any](value T) *T { return new(value) }
 
 func TestRawHTTP1RequestKeepsEscapedTargetsAndFields(t *testing.T) {
 	got := FormatRawHTTPRequest(RawHTTPRequestInput{
@@ -106,12 +107,12 @@ func TestRawHTTPBodiesAppendOnlyWhenAvailable(t *testing.T) {
 		t.Fatalf("head %q", head)
 	}
 	text := input
-	text.Body = ptr("hello\nworld")
+	text.Body = new("hello\nworld")
 	if got := FormatRawHTTPRequest(text); got != head+"hello\nworld" {
 		t.Fatalf("text %q", got)
 	}
 	binary := input
-	binary.Body, binary.BodyEncoding = ptr("AAEC"), "base64"
+	binary.Body, binary.BodyEncoding = new("AAEC"), "base64"
 	if got := FormatRawHTTPRequest(binary); got != head+RawHTTPBinaryBody {
 		t.Fatalf("binary %q", got)
 	}

@@ -92,15 +92,13 @@ func TestBusConcurrentUse(t *testing.T) {
 	bus := host.NewBus()
 	var wg sync.WaitGroup
 	for range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 200 {
 				off := bus.On("a", func(host.Event) {})
 				bus.Emit("a", 1)
 				off()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

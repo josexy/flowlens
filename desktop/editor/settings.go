@@ -79,7 +79,7 @@ func (f *numberField) build(c *ui.Context, theme nui.Theme, key, label, placehol
 	}
 	settingRow(c, theme, key, label, func() {
 		nui.InputNumber(c.Key("number"), theme, &f.value, &f.state, nui.InputNumberOptions{
-			InputOptions: nui.InputOptions{Label: label, Placeholder: placeholder}, Orientation: nui.Vertical, Min: nui.Set(minimum), Step: step,
+			Label: label, Placeholder: placeholder, Orientation: nui.Vertical, Min: nui.Set(minimum), Step: step,
 		})
 	})
 	if f.value.Set {

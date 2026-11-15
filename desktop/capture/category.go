@@ -196,10 +196,10 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 			}},
 		}, nui.AccordionOptions{
 			Multiple: true, Collapsible: nui.Set(true),
-			Decoration: nui.Decoration{UI: nui.Styles{
+			UI: nui.Styles{
 				nui.Trigger: {PaddingX: nui.Set(float32(12)), PaddingY: nui.Set(float32(6))},
 				nui.Body:    {PaddingY: nui.Set(float32(0))},
-			}},
+			},
 		}).FillWidth()
 	})
 	w.categoryMenus.Sweep()
@@ -209,10 +209,10 @@ func categoryListOptions(theme nui.Theme, label string, height float32, viewport
 	return nui.ListboxOptions{
 		Label: locales.CategoryTitle() + ": " + label, Multiple: true, SelectionBehavior: nui.SelectionToggle,
 		Height: height, Size: nui.MD, EmptyText: locales.CategoryEmptyFiltered(),
-		Decoration: nui.Decoration{Style: viewport.style, UI: nui.Styles{
+		Style: viewport.style, UI: nui.Styles{
 			nui.Root:      {BorderWidth: nui.Set(float32(0)), Radius: nui.Set(float32(0))},
 			nui.Indicator: {Foreground: nui.Set(theme.Primary)},
-		}},
+		},
 	}
 }
 
@@ -291,12 +291,12 @@ func (v *categoryView) updateTree(roots []*logic.StructureNode) {
 			result = append(result, nui.TreeNode{
 				ID: node.Key, Label: node.Label, Children: build(node.Children),
 				DefaultExpanded: v.expanded[node.Key],
-				Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+				Style: func(slot nui.Slot, element ui.Element) {
 					if slot == nui.Item && node.Type == logic.StructureLeaf {
 						element.Bind(&item.anchor)
 						v.visible = append(v.visible, item)
 					}
-				}},
+				},
 			})
 		}
 		return result
@@ -327,7 +327,7 @@ func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *ca
 		nui.Tree(c, theme, &view.tree, nui.TreeOptions{
 			Label:  locales.CategoryTitle() + ": " + locales.CategoryStructure(),
 			Height: height, Size: nui.MD, EmptyText: locales.CategoryEmptyFiltered(),
-			Decoration:        nui.Decoration{Style: view.structureView.style},
+			Style:             view.structureView.style,
 			SelectionBehavior: nui.SelectionReplace, ExpandOnClick: nui.Set(false),
 			BuildLeading: func(c *ui.Context, theme nui.Theme, item nui.TreeItemState) {
 				size := apptheme.TextSize(c, 20)

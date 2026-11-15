@@ -183,7 +183,7 @@ func fieldGridEditor(c *ui.Context, theme nui.Theme, state *fieldGridState, cell
 	box := ui.Box(c.Key("flowlens-field-grid-editor:"+state.open.key+":"+strconv.FormatBool(state.open.value))).AttachTo(cell, ui.AnchorTopStart, ui.AnchorTopStart).Left(fieldGridEditorInsetX).Top(fieldGridEditorInsetTop).Width(max(cell.Bounds().W-2*fieldGridEditorInsetX, 80)).ZIndex(1)
 	box.Shadow(0, 8, 20, 0, ui.RGBA(15, 23, 42, 0.12)).Children(func() {
 		nui.Textarea(c, theme, &state.text, nui.TextareaOptions{
-			InputOptions: nui.InputOptions{ReadOnly: true, Size: nui.MD, Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
+			ReadOnly: true, Size: nui.MD, Variant: nui.Outline, Label: "cell-editor", Style: func(_, editor, _, _ ui.Element) {
 				editor.AutoFocus()
 				focused := editor.Focused()
 				if focused && state.selectNext {
@@ -194,7 +194,7 @@ func fieldGridEditor(c *ui.Context, theme nui.Theme, state *fieldGridState, cell
 					state.open = nil
 				}
 				state.focused = focused
-			}},
+			},
 			Rows: 1, AutoResize: true, MaxRows: gridEditorMaxRows(theme, area.Bounds(), cell.Bounds()),
 		}).FillWidth()
 	})

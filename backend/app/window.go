@@ -2,6 +2,7 @@ package app
 
 import (
 	"runtime"
+	"slices"
 	"sync/atomic"
 
 	"github.com/egoist/mygo"
@@ -221,12 +222,7 @@ func isWindowRectVisible(windowConfig *settingservice.WindowConfig, screens []wi
 		Width:  clampMin(windowConfig.Width, appservice.MIN_WINDOW_WIDTH),
 		Height: clampMin(windowConfig.Height, appservice.MIN_WINDOW_HEIGHT),
 	}
-	for _, screen := range screens {
-		if rect.intersects(screen) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(screens, rect.intersects)
 }
 
 func clampMin(value, minimum int) int {

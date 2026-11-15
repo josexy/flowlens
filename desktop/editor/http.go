@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/egoist/mygo/ui"
@@ -184,12 +185,7 @@ func (p *httpPane) primaryButton(c *ui.Context, theme nui.Theme) {
 }
 
 func containsString(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, value)
 }
 
 func (p *httpPane) requestPanel(c *ui.Context, theme nui.Theme) {

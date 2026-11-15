@@ -434,9 +434,9 @@ func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settings
 		}
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarPort(), Error: problem, Disabled: saving}, func(field nui.Theme) {
 			nui.InputNumber(c.Key("port-number"), field, &state.portValue, &state.portNumber, nui.InputNumberOptions{
-				InputOptions: nui.InputOptions{Label: locales.ToolbarPort(), Disabled: saving},
-				Orientation:  nui.Vertical,
-				Step:         1, AllowInvalid: true,
+				Label: locales.ToolbarPort(), Disabled: saving,
+				Orientation: nui.Vertical,
+				Step:        1, AllowInvalid: true,
 			})
 		})
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
@@ -495,9 +495,9 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 		nui.Switch(c.Key("dns-enabled"), palette, &state.dnsEnabled, nui.SwitchOptions{Label: locales.ToolbarDnsCacheEnabled(), Disabled: busy})
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarDnsCacheTtl(), Error: problem, Disabled: busy}, func(field nui.Theme) {
 			nui.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
-				InputOptions: nui.InputOptions{Label: locales.ToolbarDnsCacheTtl(), Disabled: busy},
-				Orientation:  nui.Vertical,
-				Step:         1, AllowInvalid: true,
+				Label: locales.ToolbarDnsCacheTtl(), Disabled: busy,
+				Orientation: nui.Vertical,
+				Step:        1, AllowInvalid: true,
 			})
 		})
 		if state.dnsError != "" {

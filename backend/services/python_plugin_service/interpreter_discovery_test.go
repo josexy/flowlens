@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -78,13 +79,7 @@ func TestPathEnvironmentInterpretersIncludesOlderPython3Versions(t *testing.T) {
 	t.Setenv("PATH", root)
 	paths := pathEnvironmentInterpreters()
 	for _, want := range names {
-		found := false
-		for _, path := range paths {
-			if path == want {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(paths, want)
 		if !found {
 			t.Fatalf("PATH candidates = %v, missing %s", paths, want)
 		}

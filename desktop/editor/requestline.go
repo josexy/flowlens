@@ -108,10 +108,10 @@ func methodSelect(c *ui.Context, theme nui.Theme, method *string) {
 		}
 		nui.Select(c, theme, method, options, nui.SelectOptions{
 			Label: "Method", Size: nui.MD, Variant: nui.None,
-			Decoration: nui.Decoration{UI: nui.Styles{
+			UI: nui.Styles{
 				nui.Root:     {Foreground: nui.Set(color), Weight: nui.Set(700), PaddingX: nui.Set[float32](12)},
 				nui.Trailing: {Foreground: nui.Set(color)},
-			}},
+			},
 		}).FillWidth()
 	})
 }

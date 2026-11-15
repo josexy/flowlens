@@ -45,7 +45,7 @@ func parsePathQueryHash(input string) ParsedHighlightedURL {
 		parsed.Path = before[:index]
 		parsed.HasQuery = true
 		if query := before[index+1:]; query != "" {
-			for _, item := range strings.Split(query, "&") {
+			for item := range strings.SplitSeq(query, "&") {
 				key, value, hasEquals := strings.Cut(item, "=")
 				parsed.QueryItems = append(parsed.QueryItems, QueryItem{Key: key, HasEquals: hasEquals, Value: value})
 			}
@@ -87,7 +87,7 @@ func ParseURLQuery(input string) ParsedURLQuery {
 // DecodeQuery decodes form-encoded text. Malformed escapes stay as written.
 func DecodeQuery(query string) []QueryParameterField {
 	var fields []QueryParameterField
-	for _, part := range strings.Split(query, "&") {
+	for part := range strings.SplitSeq(query, "&") {
 		if part == "" {
 			continue
 		}

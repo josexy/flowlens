@@ -277,12 +277,10 @@ func TestConcurrentPostsAndRuns(t *testing.T) {
 	var wg sync.WaitGroup
 	var ran atomic.Int64
 	for i := range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			dispatcher.Post(func() { ran.Add(1) })
 			runtime.Run(jobs, "shared", func(context.Context) (int, error) { return i, nil }, func(int, error) {})
-		}()
+		})
 	}
 	wg.Wait()
 	deliver(jobs, window)

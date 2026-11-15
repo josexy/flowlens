@@ -2,6 +2,7 @@ package store
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/josexy/flowlens/desktop/logic"
 )
@@ -40,14 +41,14 @@ func NewFilterStore(source TrafficSource) *FilterStore {
 }
 
 func filterKey(values ...[]string) string {
-	key := ""
+	var key strings.Builder
 	for _, list := range values {
 		for _, value := range list {
-			key += value + "\x00"
+			key.WriteString(value + "\x00")
 		}
-		key += "\x01"
+		key.WriteString("\x01")
 	}
-	return key
+	return key.String()
 }
 
 func reuseIfStable(current, next []*logic.TrafficEntry) ([]*logic.TrafficEntry, bool) {

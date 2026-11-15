@@ -39,7 +39,7 @@ func splitCookieField(raw string) (key, value string, hasEquals bool) {
 
 func parseRequestCookieValue(value string, enabled bool) []EditableRow {
 	var rows []EditableRow
-	for _, raw := range strings.Split(value, ";") {
+	for raw := range strings.SplitSeq(value, ";") {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}

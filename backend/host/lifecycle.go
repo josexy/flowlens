@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -86,13 +87,13 @@ func (l *Lifecycle) Stop() error {
 
 	l.cancel()
 	var errs []error
-	for index := len(started) - 1; index >= 0; index-- {
-		stoppable, ok := started[index].(Stoppable)
+	for _, s := range slices.Backward(started) {
+		stoppable, ok := s.(Stoppable)
 		if !ok {
 			continue
 		}
 		if err := stoppable.ServiceShutdown(); err != nil {
-			errs = append(errs, fmt.Errorf("stop service %T: %w", started[index], err))
+			errs = append(errs, fmt.Errorf("stop service %T: %w", s, err))
 		}
 	}
 	return errors.Join(errs...)
