@@ -93,23 +93,19 @@ func (f *ruleForm) build(c *ui.Context, theme nui.Theme, draft *store.RuleDraft)
 	disabled := rule.UnavailableReason != ""
 	errors := rewrite.FieldErrors(rewrite.SelectedID)
 	ui.Column(c.Key("rule-form")).FillWidth().MaxWidth(896).Gap(20).Padding(16).AlignSelf(ui.Center).Children(func() {
-		ui.Row(c.Key("identity")).FillWidth().Gap(12).Children(func() {
-			ui.Box(c.Key("name")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				nui.FormField(c, theme, nui.FormFieldOptions{Label: locales.RewriteRulesName(), Required: true, Error: fieldErrorMessage(errors.Name), Disabled: disabled}, func(field nui.Theme) {
-					nui.Input(c.Key("input"), field, &rule.Name, nui.InputOptions{Label: locales.RewriteRulesName(), Disabled: disabled, Invalid: errors.Name != ""}).FillWidth()
-				})
-			})
-			ui.Box(c.Key("method")).Width(128).Shrink(0).Children(func() {
-				nui.FormField(c, theme, nui.FormFieldOptions{Label: locales.RewriteRulesMethod(), Disabled: disabled}, func(field nui.Theme) {
-					nui.Select(c.Key("select"), field, &rule.Method, option(ruleMethods, func(value string) string { return value }), nui.SelectOptions{Label: locales.RewriteRulesMethod(), Disabled: disabled})
-				})
-			})
+		nui.FormField(c.Key("name"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesName(), Required: true, Error: fieldErrorMessage(errors.Name), Disabled: disabled}, func(field nui.Theme) {
+			nui.Input(c.Key("input"), field, &rule.Name, nui.InputOptions{Label: locales.RewriteRulesName(), Disabled: disabled, Invalid: errors.Name != ""}).FillWidth()
 		})
-		nui.FormField(c.Key("pattern"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesUrlPattern(), Required: true, Error: fieldErrorMessage(errors.URLPattern), Disabled: disabled}, func(field nui.Theme) {
-			nui.Input(c.Key("input"), field, &rule.URLPattern, nui.InputOptions{Label: locales.RewriteRulesUrlPattern(), Disabled: disabled, Invalid: errors.URLPattern != ""}).FillWidth()
-			if errors.URLPattern == "" {
-				ui.Text(c, locales.RewriteRulesPatternHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(field.Muted).FillWidth().Margin(6, 0, 0, 0)
-			}
+		ui.Row(c.Key("match-fields")).FillWidth().AlignItems(ui.Start).Gap(12).Children(func() {
+			nui.FormField(c.Key("method"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesMethod(), Disabled: disabled}, func(field nui.Theme) {
+				nui.Select(c.Key("select"), field, &rule.Method, option(ruleMethods, func(value string) string { return value }), nui.SelectOptions{Label: locales.RewriteRulesMethod(), Disabled: disabled})
+			}).Width(128).Shrink(0)
+			nui.FormField(c.Key("pattern"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesUrlPattern(), Required: true, Error: fieldErrorMessage(errors.URLPattern), Disabled: disabled}, func(field nui.Theme) {
+				nui.Input(c.Key("input"), field, &rule.URLPattern, nui.InputOptions{Label: locales.RewriteRulesUrlPattern(), Disabled: disabled, Invalid: errors.URLPattern != ""}).FillWidth()
+				if errors.URLPattern == "" {
+					ui.Text(c, locales.RewriteRulesPatternHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(field.Muted).FillWidth().Margin(6, 0, 0, 0)
+				}
+			}).Grow(1).Basis(0).MinWidth(0)
 		})
 		kinds := []string{rewriteservice.ActionRedirect, rewriteservice.ActionRequest, rewriteservice.ActionResponse}
 		selected := rule.Action.Type

@@ -7,6 +7,7 @@ import (
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/desktop/store"
 	"github.com/josexy/flowlens/desktop/theme"
+	"github.com/josexy/flowlens/locales"
 )
 
 func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
@@ -22,6 +23,12 @@ func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
 
 func TestRenderRewrite(t *testing.T) {
 	f := newFixture(t)
+	method, hasMethod := f.tester.AccessByRole(ui.RolePopUpButton, locales.RewriteRulesMethod())
+	pattern, hasPattern := f.tester.AccessByRole(ui.RoleTextField, locales.RewriteRulesUrlPattern())
+	menu, input := method.Bounds, pattern.Bounds
+	if !hasMethod || !hasPattern || menu.Y+menu.H/2 != input.Y+input.H/2 || menu.X+menu.W > input.X {
+		t.Fatalf("method and URL fields are not aligned: method %v, URL %v", menu, input)
+	}
 	rendertest.ShootThemes(t, f.tester, "rewrite", func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
 }
 
