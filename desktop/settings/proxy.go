@@ -85,22 +85,32 @@ func (s *proxyState) hasTrustEntry() bool {
 	return s.trust != nil && (s.trust.Present || s.trust.Installed)
 }
 
-func (s *proxyState) generationDisabled(builtin, dirty bool) bool {
-	return !builtin || dirty || s.generating || s.loading || s.trustFailed || s.changing ||
+// CA actions target the saved capture certificate configuration.
+func (v *View) caConfigDirty() bool {
+	settings := v.Data.Settings
+	if settings.Draft == nil || settings.Current == nil {
+		return false
+	}
+	draft, saved := settings.Draft.ProxyConfig, settings.Current.ProxyConfig
+	return draft.UseBuiltinCA != saved.UseBuiltinCA || draft.CACertPath != saved.CACertPath || draft.CAKeyPath != saved.CAKeyPath
+}
+
+func (s *proxyState) generationDisabled(builtin, caDirty bool) bool {
+	return !builtin || caDirty || s.generating || s.loading || s.trustFailed || s.changing ||
 		(s.trust != nil && s.trust.Supported && (s.hasTrustEntry() || (s.trust.Error != "" && s.trust.SHA256Fingerprint != "")))
 }
 
-func (s *proxyState) generationHint(builtin, dirty bool) string {
+func (s *proxyState) generationHint(builtin, caDirty bool) string {
 	switch {
 	case !builtin:
 		return locales.SettingsCaTrustErrorsCaCustomGenerationDisabled()
-	case dirty:
+	case caDirty:
 		return locales.SettingsCaSaveFirst()
 	case s.loading:
 		return locales.SettingsCaTrustLoading()
 	case s.trust != nil && s.trust.Supported && s.hasTrustEntry():
 		return locales.SettingsCaTrustUninstallFirst()
-	case s.generationDisabled(builtin, dirty) && s.trustUnknown():
+	case s.generationDisabled(builtin, caDirty) && s.trustUnknown():
 		return locales.SettingsCaTrustStatusUnavailable()
 	case s.hasExistingFiles():
 		return locales.SettingsRegenerateCa()
@@ -144,10 +154,10 @@ func (s *proxyState) statusSummary(builtin bool) string {
 
 func (v *View) changeTrust() {
 	state := &v.proxy
-	if state.changing || state.generating || state.loading {
+	if v.committing || state.changing || state.generating || state.loading {
 		return
 	}
-	if v.Data.Settings.Dirty() {
+	if v.caConfigDirty() {
 		v.Notifier.Warning(locales.SettingsCaTrustSaveFirst())
 		return
 	}
@@ -187,9 +197,9 @@ func (v *View) generateCA(overwrite bool) {
 	case !draft.ProxyConfig.UseBuiltinCA:
 		v.Notifier.Warning(locales.SettingsCaTrustErrorsCaCustomGenerationDisabled())
 		return
-	case state.generating || state.changing || state.loading:
+	case v.committing || state.generating || state.changing || state.loading:
 		return
-	case v.Data.Settings.Dirty():
+	case v.caConfigDirty():
 		v.Notifier.Warning(locales.SettingsCaSaveFirst())
 		return
 	case state.trust != nil && state.trust.Supported && state.hasTrustEntry():
@@ -278,9 +288,8 @@ func (v *View) upstream(c *ui.Context, palette nui.Theme, proxy *settingservice.
 	})
 }
 
-func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin bool) {
+func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin, caDirty bool) {
 	state := &v.proxy
-	dirty := v.Data.Settings.Dirty()
 	if state.trust != nil && state.trust.Supported {
 		hasEntry := state.hasTrustEntry()
 		label, icon := locales.SettingsCaTrustInstall(), lucide.ShieldPlus()
@@ -291,19 +300,19 @@ func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin bool
 		switch {
 		case state.loading:
 			hint = locales.SettingsCaTrustLoading()
-		case dirty:
+		case caDirty:
 			hint = locales.SettingsCaTrustSaveFirst()
 		case state.trustUnknown():
 			hint = locales.SettingsCaTrustStatusUnavailable()
 		}
-		disabled := state.trustUnknown() || state.generating || state.changing || dirty || state.trust.SHA256Fingerprint == "" || (!hasEntry && !state.ready())
+		disabled := v.committing || state.trustUnknown() || state.generating || state.changing || caDirty || state.trust.SHA256Fingerprint == "" || (!hasEntry && !state.ready())
 		button := nui.Button(c.Key("trust"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: icon, AccessibleLabel: label, Disabled: disabled, Loading: state.changing})
 		if !disabled {
 			button.OnClick(v.changeTrust)
 		}
 		nui.Tooltip(c, palette, button, hint, nui.TooltipOptions{})
 	}
-	disabled := state.generationDisabled(builtin, dirty)
+	disabled := v.committing || state.generationDisabled(builtin, caDirty)
 	label, icon := locales.SettingsGenerateCa(), lucide.FilePlus()
 	if state.hasExistingFiles() {
 		label, icon = locales.SettingsRegenerateCa(), lucide.RefreshCw()
@@ -319,7 +328,7 @@ func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin bool
 			v.generateCA(false)
 		})
 	}
-	nui.Tooltip(c, palette, button, state.generationHint(builtin, dirty), nui.TooltipOptions{})
+	nui.Tooltip(c, palette, button, state.generationHint(builtin, caDirty), nui.TooltipOptions{})
 }
 
 func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
@@ -332,7 +341,7 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 	if state.details {
 		icon, label = lucide.ChevronDown(), locales.SettingsCaHideDetails()
 	}
-	nui.Button(c.Key("details"), palette, label, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Leading: icon}).OnClick(func() { state.details = !state.details })
+	nui.Button(c.Key("details"), palette, label, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Leading: icon}).AlignSelf(ui.Start).OnClick(func() { state.details = !state.details })
 	if !state.details {
 		return
 	}
@@ -378,7 +387,9 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 
 func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *settingservice.ProxyConfig) {
 	state := &v.proxy
-	v.section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, proxy.UseBuiltinCA) }, func() {
+	caDirty := v.caConfigDirty()
+	v.section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, proxy.UseBuiltinCA, caDirty) }, func() {
+		hasTrustActions := state.trust != nil && state.trust.Supported
 		color := palette.Warning
 		icon := lucide.Info()
 		if state.ready() {
@@ -386,29 +397,39 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 		} else if state.info == nil {
 			color = palette.Muted
 		}
-		ui.Row(c.Key("summary")).FillWidth().Gap(8).Children(func() {
-			ui.Icon(c, icon).Size(16, 16).Shrink(0).TextColor(color)
-			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, state.statusSummary(proxy.UseBuiltinCA)).FontSize(apptheme.TextSize(c, 14)).TextColor(color).FillWidth()
-				if !proxy.UseBuiltinCA && state.info != nil && state.info.CertExists && state.info.KeyExists && state.info.Error != "" {
-					ui.Text(c, state.info.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).FillWidth()
+		ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).AlignItems(ui.Center).Children(func() {
+			status := func(key, text string, icon *ui.SVG, color ui.Color) {
+				ui.Row(c.Key(key)).Gap(6).MinWidth(0).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, icon).Size(16, 16).Shrink(0).TextColor(color)
+					ui.Text(c, text).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(color)
+				})
+			}
+			status("files", state.statusSummary(proxy.UseBuiltinCA), icon, color)
+			if hasTrustActions || state.trustFailed {
+				text, trustIcon, tone := state.trustSummary()
+				toneColor := palette.Muted
+				switch tone {
+				case nui.Warning:
+					toneColor = palette.Warning
+				case nui.Success:
+					toneColor = palette.Success
 				}
-				if (state.trust != nil && state.trust.Supported) || state.trustFailed {
-					text, trustIcon, tone := state.trustSummary()
-					toneColor := palette.Muted
-					switch tone {
-					case nui.Warning:
-						toneColor = palette.Warning
-					case nui.Success:
-						toneColor = palette.Success
-					}
-					ui.Row(c.Key("trust")).Gap(6).AlignItems(ui.Center).Children(func() {
-						ui.Icon(c, trustIcon).Size(14, 14).TextColor(toneColor)
-						ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextColor(toneColor)
-					})
-				}
-			})
+				status("trust", text, trustIcon, toneColor)
+			}
 		})
+		var hint string
+		switch {
+		case caDirty && (proxy.UseBuiltinCA || hasTrustActions):
+			hint = locales.SettingsCaActionsSaveFirst()
+		case proxy.UseBuiltinCA && hasTrustActions && state.hasTrustEntry() && !state.trustUnknown():
+			hint = locales.SettingsCaTrustUninstallFirst()
+		}
+		if hint != "" {
+			ui.Text(c.Key("action-hint"), hint).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
+		}
+		if !proxy.UseBuiltinCA && state.info != nil && state.info.CertExists && state.info.KeyExists && state.info.Error != "" {
+			ui.Text(c.Key("error"), state.info.Error).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).FillWidth()
+		}
 		if state.generatedAt {
 			nui.Alert(c.Key("generated"), palette, nui.AlertOptions{Title: locales.SettingsCaGeneratedRestartNotice(), Color: nui.Success, Variant: nui.Soft})
 		}
@@ -429,8 +450,8 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 
 func collapsibleHead(c *ui.Context, palette nui.Theme, key, title, summary string, summaryColor ui.Color, open *bool, actions func()) {
 	ui.Row(c.Key(key)).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-		toggle := ui.Row(c.Key("toggle")).AlignItems(ui.Center).Gap(6).Role(ui.RoleButton).Label(title)
-		toggle.OnClick(func() { *open = !*open })
+		toggle := ui.CollapsibleBase(c.Key("toggle"), open).Trigger
+		toggle.AlignItems(ui.Center).Gap(6).FocusRing(true).Label(title).Description(summary)
 		toggle.Children(func() {
 			icon := lucide.ChevronRight()
 			if *open {
@@ -446,25 +467,19 @@ func collapsibleHead(c *ui.Context, palette nui.Theme, key, title, summary strin
 
 func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.ProxyConfig) {
 	state := &v.proxy
-	for _, path := range proxy.RootCAPaths {
-		if strings.TrimSpace(path) == "" {
-			state.rootsOpen = true
-		}
-	}
 	summary := locales.SettingsNoRootCas()
 	if count := len(proxy.RootCAPaths); count > 0 {
 		summary = locales.SettingsRootCasCount(strconv.Itoa(count))
 	}
 	collapsibleHead(c, palette, "roots-head", locales.SettingsSectionRootCas(), summary, palette.Muted, &state.rootsOpen, func() {
 		anchor := nui.Button(c.Key("add"), palette, locales.SettingsAddRootCa(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Leading: lucide.Plus(), Trailing: lucide.ChevronDown(), AccessibleLabel: locales.SettingsAddRootCaAction()})
-		anchor.OnClick(func() { state.rootMenu.Open = !state.rootMenu.Open })
 		nui.DropdownMenu(c.Key("add-menu"), palette, anchor, &state.rootMenu, []nui.MenuItem{
 			{ID: "files", Label: locales.SettingsSelectFiles(), Icon: lucide.FolderOpen(), OnSelect: func() { v.pickRoots(proxy) }},
 			{ID: "manual", Label: locales.SettingsAddPathManually(), Icon: lucide.Pencil(), OnSelect: func() {
 				proxy.RootCAPaths = append(proxy.RootCAPaths, "")
 				state.rootsOpen = true
 			}},
-		}, nui.MenuOptions{Label: locales.SettingsAddRootCaAction()})
+		}, nui.MenuOptions{Label: locales.SettingsAddRootCaAction(), Placement: nui.Set(nui.BottomEnd)})
 	})
 	if !state.rootsOpen {
 		return
@@ -476,7 +491,6 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 	for index := range proxy.RootCAPaths {
 		number := strconv.Itoa(index + 1)
 		ui.Row(c.Key("root-" + number)).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, number).Width(20).Shrink(0).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			ui.Box(c.Key("input")).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				v.fileInput(c, palette, "file", locales.SettingsRootCaPathPlaceholder()+" "+number, locales.SettingsRootCaPathPlaceholder(), "", certificatePicker(locales.SettingsSelectRootCaFile(), locales.SettingsSelectRootCaFileMessage()), &proxy.RootCAPaths[index])
 			})
@@ -539,9 +553,6 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 	for index := range proxy.ClientCerts {
 		incomplete = incomplete || certificateWarning(&proxy.ClientCerts[index]) != ""
 	}
-	if incomplete {
-		state.certsOpen = true
-	}
 	summary, color := locales.SettingsNoClientCerts(), palette.Muted
 	if count := len(proxy.ClientCerts); count > 0 {
 		if incomplete {
@@ -587,14 +598,14 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 					proxy.ClientCerts = append(next, proxy.ClientCerts[position+1:]...)
 				})
 			})
-			row(c, palette, "host", locales.SettingsClientCertTargetHost(), locales.SettingsClientCertTargetHostHint(), func() {
-				nui.Input(c.Key("input"), palette, &cert.Hostname, nui.InputOptions{Label: locales.SettingsClientCertTargetHost() + " " + number, Placeholder: locales.SettingsClientCertTargetHostPlaceholder(), Size: nui.SM}).FillWidth()
+			nui.FormField(c.Key("host"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientCertTargetHost(), Help: locales.SettingsClientCertTargetHostHint()}, func(field nui.Theme) {
+				nui.Input(c.Key("input"), field, &cert.Hostname, nui.InputOptions{Label: locales.SettingsClientCertTargetHost() + " " + number, Placeholder: locales.SettingsClientCertTargetHostPlaceholder()}).FillWidth()
 			})
-			row(c, palette, "cert", locales.SettingsClientCertFile(), "", func() {
-				v.fileInput(c, palette, "file", locales.SettingsClientCertFile()+" "+number, locales.SettingsClientCertPathPlaceholder(), "", certificatePicker(locales.SettingsSelectClientCertFile(), locales.SettingsSelectClientCertFileMessage()), &cert.CertPath)
+			nui.FormField(c.Key("cert"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientCertFile()}, func(field nui.Theme) {
+				v.fileInput(c, field, "file", locales.SettingsClientCertFile()+" "+number, locales.SettingsClientCertPathPlaceholder(), "", certificatePicker(locales.SettingsSelectClientCertFile(), locales.SettingsSelectClientCertFileMessage()), &cert.CertPath)
 			})
-			row(c, palette, "key", locales.SettingsClientKeyFile(), "", func() {
-				v.fileInput(c, palette, "file", locales.SettingsClientKeyFile()+" "+number, locales.SettingsClientKeyPathPlaceholder(), "", keyPicker(locales.SettingsSelectClientKeyFile(), locales.SettingsSelectClientKeyFileMessage()), &cert.KeyPath)
+			nui.FormField(c.Key("key"), palette, nui.FormFieldOptions{Size: nui.SM, Label: locales.SettingsClientKeyFile()}, func(field nui.Theme) {
+				v.fileInput(c, field, "file", locales.SettingsClientKeyFile()+" "+number, locales.SettingsClientKeyPathPlaceholder(), "", keyPicker(locales.SettingsSelectClientKeyFile(), locales.SettingsSelectClientKeyFileMessage()), &cert.KeyPath)
 			})
 			if warning := certificateWarning(cert); warning != "" {
 				ui.Row(c.Key("warning")).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {

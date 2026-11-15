@@ -25,17 +25,22 @@ func TestRenderSettings(t *testing.T) {
 	f := newFixture(t)
 	for _, tab := range []string{locales.SettingsTabGeneral(), locales.SettingsTabProxy(), locales.SettingsTabShortcuts()} {
 		f.open(tab)
-		rendertest.ShootThemes(t, f.tester, "settings-"+tab, func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
+		if tab == locales.SettingsTabProxy() {
+			f.click(locales.SettingsAddClientCert())
+		}
+		rendertest.ShootThemes(t, f.tester, "settings-"+tab, func(dark bool) {
+			setRenderTheme(t, f.data, dark)
+			f.settle()
+			f.tester.Advance(time.Second)
+			f.settle()
+		})
 	}
 }
 
 func TestRenderRootCAAddMenu(t *testing.T) {
 	f := newFixture(t)
 	f.open(locales.SettingsTabProxy())
-	// The section's own name is "Add Root CA" too: open the menu as its
-	// button does.
-	f.view.proxy.rootMenu.Open = true
-	f.settle()
+	f.click(locales.SettingsAddRootCaAction())
 	for _, label := range []string{locales.SettingsSelectFiles(), locales.SettingsAddPathManually()} {
 		if !f.has(label) {
 			t.Fatalf("no %q in %v", label, f.tester.Texts())
@@ -43,9 +48,18 @@ func TestRenderRootCAAddMenu(t *testing.T) {
 	}
 	rendertest.ShootThemes(t, f.tester, "settings-root-ca-add", func(dark bool) {
 		setRenderTheme(t, f.data, dark)
-		f.view.proxy.rootMenu.Open = true
 		f.settle()
 		f.tester.Advance(time.Second)
 		f.settle()
 	})
+	f.click(locales.SettingsAddPathManually())
+	if paths := f.draft().ProxyConfig.RootCAPaths; len(paths) != 1 || paths[0] != "" || !f.has(locales.SettingsRootCaPathPlaceholder()) {
+		t.Fatalf("manual entry did not show an empty Root CA path: %q", paths)
+	}
+	f.click(locales.SettingsRootCaPathPlaceholder() + " 1")
+	f.tester.Type("/ca/manual.pem")
+	f.settle()
+	if path := f.draft().ProxyConfig.RootCAPaths[0]; path != "/ca/manual.pem" {
+		t.Fatalf("manual entry has path %q", path)
+	}
 }

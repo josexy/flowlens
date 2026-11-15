@@ -6436,6 +6436,16 @@ func (msgs Messages) SettingsAppFontSizeLabel() string {
 	return Catalog.Format(msgs.locale, "settingsAppFontSizeLabel", nil)
 }
 
+// SettingsCaActionsSaveFirst says "Save changes to the capture CA configuration first."
+// in the language the app shows.
+func SettingsCaActionsSaveFirst() string { return In(i18n.Locale()).SettingsCaActionsSaveFirst() }
+
+// SettingsCaActionsSaveFirst says "Save changes to the capture CA configuration first."
+// in the language of msgs.
+func (msgs Messages) SettingsCaActionsSaveFirst() string {
+	return Catalog.Format(msgs.locale, "settingsCaActionsSaveFirst", nil)
+}
+
 // SettingsCaCertExists says "Cert File"
 // in the language the app shows.
 func SettingsCaCertExists() string { return In(i18n.Locale()).SettingsCaCertExists() }
@@ -6528,11 +6538,11 @@ func (msgs Messages) SettingsCaNotCa() string {
 	return Catalog.Format(msgs.locale, "settingsCaNotCa", nil)
 }
 
-// SettingsCaSaveFirst says "Save settings before generating the CA certificate."
+// SettingsCaSaveFirst says "Save the capture CA configuration before generating the CA certificate."
 // in the language the app shows.
 func SettingsCaSaveFirst() string { return In(i18n.Locale()).SettingsCaSaveFirst() }
 
-// SettingsCaSaveFirst says "Save settings before generating the CA certificate."
+// SettingsCaSaveFirst says "Save the capture CA configuration before generating the CA certificate."
 // in the language of msgs.
 func (msgs Messages) SettingsCaSaveFirst() string {
 	return Catalog.Format(msgs.locale, "settingsCaSaveFirst", nil)
@@ -6804,11 +6814,11 @@ func (msgs Messages) SettingsCaTrustPartial() string {
 	return Catalog.Format(msgs.locale, "settingsCaTrustPartial", nil)
 }
 
-// SettingsCaTrustSaveFirst says "Save settings before installing or uninstalling the CA."
+// SettingsCaTrustSaveFirst says "Save the capture CA configuration before installing or uninstalling the CA."
 // in the language the app shows.
 func SettingsCaTrustSaveFirst() string { return In(i18n.Locale()).SettingsCaTrustSaveFirst() }
 
-// SettingsCaTrustSaveFirst says "Save settings before installing or uninstalling the CA."
+// SettingsCaTrustSaveFirst says "Save the capture CA configuration before installing or uninstalling the CA."
 // in the language of msgs.
 func (msgs Messages) SettingsCaTrustSaveFirst() string {
 	return Catalog.Format(msgs.locale, "settingsCaTrustSaveFirst", nil)

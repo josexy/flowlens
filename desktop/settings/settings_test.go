@@ -545,7 +545,31 @@ func TestTrustInstallUninstallAndCanceled(t *testing.T) {
 
 func TestRegenerateNeedsUninstallAndConfirmation(t *testing.T) {
 	f := newFixture(t)
+	f.trust = &settingservice.CACertificateTrustStatus{Supported: true, Present: true, Installed: true, SHA256Fingerprint: "ab:cd"}
 	f.open(locales.SettingsTabProxy())
+	f.draft().ProxyConfig.RootCAPaths = []string{"/ca/root.pem"}
+	f.draft().ProxyConfig.ClientCerts = []settingservice.ClientCertConfig{{Enabled: true, Hostname: "api.example.com"}}
+	f.settle()
+
+	uninstall, regenerate := locales.SettingsCaTrustUninstall(), locales.SettingsRegenerateCa()
+	checkDisabled := func(label string, disabled bool) {
+		t.Helper()
+		button, found := f.tester.AccessByRole(ui.RoleButton, label)
+		if !found || button.Disabled != disabled {
+			t.Fatalf("%q disabled = %t, want %t (found: %t)", label, button.Disabled, disabled, found)
+		}
+	}
+	checkDisabled(uninstall, false)
+	checkDisabled(regenerate, true)
+	if f.has(locales.SettingsCaActionsSaveFirst()) || !f.has(locales.SettingsCaTrustUninstallFirst()) {
+		t.Fatal("pending upstream TLS changes should not hide the guidance to uninstall the CA")
+	}
+	f.click(uninstall)
+	if !f.called("uninstall:ab:cd") || f.has(locales.SettingsCaTrustUninstallFirst()) {
+		t.Fatal("uninstall did not clear the regeneration block")
+	}
+	checkDisabled(regenerate, false)
+
 	f.click(locales.SettingsRegenerateCa())
 	if !f.confirm.Open() || !f.has(locales.SettingsRegenerateCaConfirm()) {
 		t.Fatalf("%v", f.tester.Texts())
@@ -555,11 +579,52 @@ func TestRegenerateNeedsUninstallAndConfirmation(t *testing.T) {
 	if !f.called("generate:overwrite") || !f.has(locales.SettingsCaGeneratedRestartNotice()) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
-	f.trust = &settingservice.CACertificateTrustStatus{Supported: true, Present: true, Installed: true, SHA256Fingerprint: "ab"}
-	f.view.loadCA()
-	f.settle()
-	if !f.view.proxy.generationDisabled(true, false) || f.view.proxy.generationHint(true, false) != locales.SettingsCaTrustUninstallFirst() {
-		t.Fatal("installed CA must be uninstalled first")
+	draft := f.draft().ProxyConfig
+	stored, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.view.Dirty() || !slices.Equal(draft.RootCAPaths, []string{"/ca/root.pem"}) || len(draft.ClientCerts) != 1 || len(stored.ProxyConfig.RootCAPaths)+len(stored.ProxyConfig.ClientCerts) != 0 {
+		t.Fatal("managing the capture CA changed or saved the upstream TLS draft")
+	}
+}
+
+func TestCaptureCAChangesRequireSaving(t *testing.T) {
+	f := newFixture(t)
+	f.open(locales.SettingsTabProxy())
+	proxy := f.draft().ProxyConfig
+	saved := *proxy
+	for _, test := range []struct {
+		name   string
+		change func(*settingservice.ProxyConfig)
+	}{
+		{"mode", func(p *settingservice.ProxyConfig) { p.UseBuiltinCA = !p.UseBuiltinCA }},
+		{"certificate path", func(p *settingservice.ProxyConfig) { p.CACertPath = "/ca/new.crt" }},
+		{"private key path", func(p *settingservice.ProxyConfig) { p.CAKeyPath = "/ca/new.key" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			test.change(proxy)
+			f.settle()
+			if !f.has(locales.SettingsCaActionsSaveFirst()) {
+				t.Fatal("no guidance to save the capture CA configuration")
+			}
+			for _, label := range []string{locales.SettingsCaTrustInstall(), locales.SettingsRegenerateCa()} {
+				if button, found := f.tester.AccessByRole(ui.RoleButton, label); !found || !button.Disabled {
+					t.Fatalf("%q should be disabled", label)
+				}
+			}
+
+			*proxy = saved
+			f.settle()
+			if f.has(locales.SettingsCaActionsSaveFirst()) {
+				t.Fatal("save guidance remained after restoring the saved CA configuration")
+			}
+			for _, label := range []string{locales.SettingsCaTrustInstall(), locales.SettingsRegenerateCa()} {
+				if button, found := f.tester.AccessByRole(ui.RoleButton, label); !found || button.Disabled {
+					t.Fatalf("%q should be enabled", label)
+				}
+			}
+		})
 	}
 }
 
@@ -579,8 +644,8 @@ func TestInvalidBuiltinCAStillOffersGeneration(t *testing.T) {
 func TestRootsAndClientCertificatesPersist(t *testing.T) {
 	f := newFixture(t)
 	f.open(locales.SettingsTabProxy())
-	f.view.pickRoots(f.draft().ProxyConfig)
-	f.settle()
+	f.click(locales.SettingsAddRootCaAction())
+	f.click(locales.SettingsSelectFiles())
 	if got := f.draft().ProxyConfig.RootCAPaths; !slices.Equal(got, []string{"/ca/a.pem", "/ca/b.pem"}) {
 		t.Fatal(got)
 	}
@@ -597,6 +662,49 @@ func TestRootsAndClientCertificatesPersist(t *testing.T) {
 	if len(stored.ProxyConfig.RootCAPaths) != 2 || len(stored.ProxyConfig.ClientCerts) != 1 || stored.ProxyConfig.ClientCerts[0].Hostname != "api.example.com" {
 		t.Fatalf("%+v", stored.ProxyConfig)
 	}
+}
+
+func TestIncompleteTLSSectionsCanCollapse(t *testing.T) {
+	t.Run("root CA with an empty path", func(t *testing.T) {
+		f := newFixture(t)
+		f.open(locales.SettingsTabProxy())
+		f.draft().ProxyConfig.RootCAPaths = []string{"/ca/draft.pem"}
+		f.settle()
+		f.click(locales.SettingsAddRootCaAction())
+		f.click(locales.SettingsAddPathManually())
+		pathField := locales.SettingsRootCaPathPlaceholder() + " 2"
+		if !f.has(pathField) {
+			t.Fatal("adding a path did not expand the Root CA list")
+		}
+		f.click(locales.SettingsSectionRootCas())
+		if f.has(pathField) {
+			t.Fatal("Root CA list stayed open with an empty path")
+		}
+		f.tester.Key(0, ui.KeySpace)
+		f.settle()
+		if paths := f.draft().ProxyConfig.RootCAPaths; !f.has(pathField) || !slices.Equal(paths, []string{"/ca/draft.pem", ""}) {
+			t.Fatalf("reopening the Root CA list did not restore draft paths: %q", paths)
+		}
+	})
+
+	t.Run("incomplete client certificate", func(t *testing.T) {
+		f := newFixture(t)
+		f.open(locales.SettingsTabProxy())
+		f.click(locales.SettingsAddClientCert())
+		hostField := locales.SettingsClientCertTargetHost() + " 1"
+		f.click(hostField)
+		f.tester.Type("api.example.com")
+		f.settle()
+		f.click(locales.SettingsSectionClientCerts())
+		if f.has(hostField) || !f.has(locales.SettingsClientCertsIncomplete("1")) {
+			t.Fatal("client certificate list did not collapse with the incomplete summary visible")
+		}
+		f.tester.Key(0, ui.KeyEnter)
+		f.settle()
+		if !f.has(hostField) || !f.has("api.example.com") {
+			t.Fatal("reopening the client certificate list did not restore the draft hostname")
+		}
+	})
 }
 
 func TestPythonTrustConfirmationDetectAndTest(t *testing.T) {
