@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/josexy/flowlens/backend/pkg/database"
-	settingservice "github.com/josexy/flowlens/backend/services/setting_service"
-	"github.com/josexy/flowlens/desktop/shell"
-	"github.com/josexy/flowlens/desktop/store"
+	"github.com/josexy/flowlens/internal/desktop/shell"
+	"github.com/josexy/flowlens/internal/desktop/store"
+	"github.com/josexy/flowlens/internal/pkg/database"
+	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
 
 // The workbench builds against real settings without a desktop session.

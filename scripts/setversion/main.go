@@ -16,7 +16,7 @@ import (
 
 const (
 	configFile    = "mygo.json"
-	appVersionGo  = "backend/services/app_service/app_service.go"
+	appVersionGo  = "internal/services/app_service/app_service.go"
 	changelogFile = "CHANGELOG.md"
 	signingKeyEnv = "MYGO_UPDATER_PRIVATE_KEY"
 )

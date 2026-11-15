@@ -1,7 +1,7 @@
 package main
 
 import (
-	desktopapp "github.com/josexy/flowlens/backend/app"
+	desktopapp "github.com/josexy/flowlens/internal/app"
 )
 
 func main() {

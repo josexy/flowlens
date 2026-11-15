@@ -41,7 +41,7 @@ tasks:
   fmt:check:
     desc: Fails if any Go file needs formatting
     cmds:
-      - test -z "$(gofmt -l main.go backend desktop scripts 2>/dev/null)"
+      - test -z "$(gofmt -l main.go internal scripts 2>/dev/null)"
 
   lint:go:
     desc: Checks Go code with golangci-lint

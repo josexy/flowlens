@@ -22,7 +22,7 @@ Source review and headless tests do not establish real-window IME, DPI, platform
 
 A real-window comparison against original commit `972cf41` and native baseline `38a23db` found four rendering defects: Hex columns kept a stale measured width, the first imported HAR tab used its internal key, the Formatted body label was squeezed, and the traffic context menu clipped its last item at the toolkit's default maximum height. Hex now requests the frames needed to finish width-dependent layout, import completion uses its returned metadata, body tabs keep their label widths and update the displayed body in the same build, and context menus use the available window height while retaining native scrolling and positioning.
 
-The comparison machine uses 150% monitor DPI and a separate 119% Windows accessibility text scale. MyGo already applies monitor DPI. `desktop/theme.Begin` applies the accessibility factor once to the whole window and consumes it before resolving the component theme, keeping fixed geometry, custom text, code editors, and base controls at the same scale. Main, settings, update, and startup-progress windows share this entry point. Shared form details now include vertical number steppers, consistent settings selectors, palette swatches, required-field markers, and grouped shortcut rows with resolved keycaps.
+The comparison machine uses 150% monitor DPI and a separate 119% Windows accessibility text scale. MyGo already applies monitor DPI. `internal/desktop/theme.Begin` applies the accessibility factor once to the whole window and consumes it before resolving the component theme, keeping fixed geometry, custom text, code editors, and base controls at the same scale. Main, settings, update, and startup-progress windows share this entry point. Shared form details now include vertical number steppers, consistent settings selectors, palette swatches, required-field markers, and grouped shortcut rows with resolved keycaps.
 
 Regression tests cover idle-frame Hex reflow at widths 320/525/900, complete body labels and immediate tab activation, imported tab naming, and the last traffic-menu action's visibility and hit target. Scale tests combine 100%/150%/200% rendering scales with 100%/119%/150% accessibility scales. `CGO_ENABLED=0 go test ./...` (with actual CPython 3 integration tests), `task vet:ui`, and a Windows GUI build passed. Windows lifecycle fixtures now isolate `APPDATA` as well as HOME/XDG paths.
 
@@ -78,12 +78,12 @@ The following replacements are accepted on code and headless-test evidence. Plat
 
 | Replacement | Original evidence | Native evidence |
 | --- | --- | --- |
-| Code editor | `common/MonacoBodyEditor.vue` | `desktop/widgets/code_view.go` (`ui/editor`) |
-| Virtual Hex | `common/HexDumpViewer.vue` | `desktop/inspect/hex.go`, `desktop/logic/hexdump.go` |
-| Menus | `menu/TrafficContextMenu.vue`, `traffic-workspace/WorkspaceTabBar.vue` | `desktop/widgets/context_menu.go`, `desktop/capture/menu.go`, `desktop/editor/tabbar.go` |
-| Help Slideover | `workbench/ContentHost.vue` | `desktop/plugins/help.go`, `desktop/shell/app.go` |
-| Sidebar collapse | `../views/MainView.vue`, `../stores/workbench.ts` | `desktop/shell/app.go`, `desktop/store/workbench.go` |
-| Memory chart | `memstats/MemStatsChart.vue` | `desktop/memstats/view.go`, pinned nuxt-ui-go `chart.go` |
+| Code editor | `common/MonacoBodyEditor.vue` | `internal/desktop/widgets/code_view.go` (`ui/editor`) |
+| Virtual Hex | `common/HexDumpViewer.vue` | `internal/desktop/inspect/hex.go`, `internal/desktop/logic/hexdump.go` |
+| Menus | `menu/TrafficContextMenu.vue`, `traffic-workspace/WorkspaceTabBar.vue` | `internal/desktop/widgets/context_menu.go`, `internal/desktop/capture/menu.go`, `internal/desktop/editor/tabbar.go` |
+| Help Slideover | `workbench/ContentHost.vue` | `internal/desktop/plugins/help.go`, `internal/desktop/shell/app.go` |
+| Sidebar collapse | `../views/MainView.vue`, `../stores/workbench.ts` | `internal/desktop/shell/app.go`, `internal/desktop/store/workbench.go` |
+| Memory chart | `memstats/MemStatsChart.vue` | `internal/desktop/memstats/view.go`, pinned nuxt-ui-go `chart.go` |
 
 ## Native interaction implementation, 2026-11-13
 
@@ -95,7 +95,7 @@ Memory Statistics now wraps its toolbar and summary cards and stacks metric card
 
 Component imports now use `github.com/josexy/nuxt-ui-go/ui`. Menu separators and the shared traffic/SSE/console table header divider use NuxtUI-Go's pixel-aligned rendering; FlowLens no longer overlays those components with its own divider drawing. The shared table still extends cell content across native padding, including vertical stretching, so row backgrounds, outlines, and hit targets cover the full cell.
 
-The custom title/status bars retain their one-device-pixel drawing: MyGo's ordinary borders use rounded DIP widths, and these bars are not NuxtUI-Go components. `desktop/theme.Begin` still applies Windows accessibility text scaling once to the whole window. Neither behavior is replaced by the upstream divider fixes.
+The custom title/status bars retain their one-device-pixel drawing: MyGo's ordinary borders use rounded DIP widths, and these bars are not NuxtUI-Go components. `internal/desktop/theme.Begin` still applies Windows accessibility text scaling once to the whole window. Neither behavior is replaced by the upstream divider fixes.
 
 The migration audit also checked table column-change notifications, programmatic focus scrolling, tab-panel names, and landmark roles. FlowLens does not use TableOptions.OnChange as a selection-only callback, its tab strips build their content separately, and it does not nest the new landmark components. Existing selection, column-layout persistence, menu, tab, and focus tests cover the affected interactions.
 
@@ -103,10 +103,10 @@ The full Go suite (with CPython 3.12), Go lint, MyGo UI vet, formatting/catalog 
 
 ## Historical render review
 
-Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`desktop/internal/rendertest`):
+Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`internal/desktop/internal/rendertest`):
 
 ```sh
-FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./desktop/... -run TestRender
+FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender
 ```
 
 The renders were compared with `assets/screenshots/flowlens-{light,dark}.png` of the 1.0.5 repository and the values in the `restore-ui-parity` design. Beyond the deliberate differences above, the remaining differences are:
@@ -150,7 +150,7 @@ A review of the change found that two of these still differed and restored them:
 
 Tooltips carried over from the 1.0.5 templates (`frontend/src`) and their locale keys. Rows marked *dynamic* show data.
 
-`TestTooltipInventoryKeysHaveTooltipCallSites` in `desktop/internal/parity` reads the keys in this table and fails unless each one's accessor is referenced from Go code that builds a tooltip. Keep the table in step when a tooltip is added or removed.
+`TestTooltipInventoryKeysHaveTooltipCallSites` in `internal/desktop/internal/parity` reads the keys in this table and fails unless each one's accessor is referenced from Go code that builds a tooltip. Keep the table in step when a tooltip is added or removed.
 
 | 1.0.5 template | Control | Keys |
 | --- | --- | --- |

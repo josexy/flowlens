@@ -6,7 +6,7 @@ For setup and examples, see the [user guide](../user-guide.md#live-https-rewrite
 
 Rules apply only to live HTTP/HTTPS proxy traffic. Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP bypass them, including with `ALL`. Python hooks remain specific to Request Editor.
 
-`rewrite_service` owns persistence, validation, compiled matchers, and snapshots. `proxy_service` applies actions and records final traffic. `backend/app` owns startup/shutdown and quit guards; the `rewriteRules` store owns drafts and revisions.
+`rewrite_service` owns persistence, validation, compiled matchers, and snapshots. `proxy_service` applies actions and records final traffic. `internal/app` owns startup/shutdown and quit guards; the `rewriteRules` store owns drafts and revisions.
 
 HTTPS interception may require connecting to the original target and completing TLS, so redirects from unreachable HTTPS endpoints may fail.
 
@@ -99,6 +99,6 @@ mitmproxy block overrides reconcile occurrences with sanitized values and regene
 
 ## Verification
 
-Follow [repository checks](../../AGENTS.md#verification), including rewrite/proxy/history/app tests, relevant race checks, and the `desktop/rewrite`, `desktop/store`, and `desktop/logic` tests.
+Follow [repository checks](../../AGENTS.md#verification), including rewrite/proxy/history/app tests, relevant race checks, and the `internal/desktop/rewrite`, `internal/desktop/store`, and `internal/desktop/logic` tests.
 
 Transport tests cover real HTTP/1 and HTTP/2 routing, ordered headers, stream isolation, partial writes, cancellation, and timeout cleanup. Lifecycle tests cover async readiness, first-request enforcement, failures, and shutdown. Desktop acceptance should cover editing, preview, ordering, conflicts, quit/update choices, persistence, and exports.
