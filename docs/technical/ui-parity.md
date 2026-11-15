@@ -179,8 +179,8 @@ Tooltips carried over from the 1.0.5 templates (`frontend/src`) and their locale
 | `rewrite-rules/RewriteFieldOperations.vue` | Operations help | `rewrite_rules.operations_hint` |
 | `rewrite-rules/RewriteRulesSidebar.vue` | Refresh, new rule | `rewrite_rules.refresh`, `rewrite_rules.new_rule` |
 | `rewrite-rules/RewriteRulesSurface.vue` | Save (with binding) | `rewrite_rules.save` |
-| `settings/CACertificateInfoPanel.vue` | Trust action | `settings.ca_trust_loading`, `settings.ca_trust_save_first`, `settings.ca_trust_status_unavailable` |
-| `settings/CACertificateInfoPanel.vue` | Generate | `settings.ca_save_first`, `settings.ca_trust_uninstall_first` |
+| `settings/CACertificateInfoPanel.vue` | Trust action | `settings.ca_trust_loading`, `settings.ca_actions_save_first`, `settings.ca_trust_status_unavailable` |
+| `settings/CACertificateInfoPanel.vue` | Generate | `settings.ca_actions_save_first`, `settings.ca_trust_uninstall_first` |
 | `settings/CertificateFileInput.vue` | Browse | `settings.select_file` |
 | `settings/ClientCertificateList.vue` | Remove | `settings.remove_client_cert` |
 | `settings/PythonPluginSettings.vue` | Browse interpreter | `settings.python_interpreter_browse` |

@@ -6538,16 +6538,6 @@ func (msgs Messages) SettingsCaNotCa() string {
 	return Catalog.Format(msgs.locale, "settingsCaNotCa", nil)
 }
 
-// SettingsCaSaveFirst says "Save the capture CA configuration before generating the CA certificate."
-// in the language the app shows.
-func SettingsCaSaveFirst() string { return In(i18n.Locale()).SettingsCaSaveFirst() }
-
-// SettingsCaSaveFirst says "Save the capture CA configuration before generating the CA certificate."
-// in the language of msgs.
-func (msgs Messages) SettingsCaSaveFirst() string {
-	return Catalog.Format(msgs.locale, "settingsCaSaveFirst", nil)
-}
-
 // SettingsCaShowDetails says "View Certificate Details"
 // in the language the app shows.
 func SettingsCaShowDetails() string { return In(i18n.Locale()).SettingsCaShowDetails() }
@@ -6812,16 +6802,6 @@ func SettingsCaTrustPartial() string { return In(i18n.Locale()).SettingsCaTrustP
 // in the language of msgs.
 func (msgs Messages) SettingsCaTrustPartial() string {
 	return Catalog.Format(msgs.locale, "settingsCaTrustPartial", nil)
-}
-
-// SettingsCaTrustSaveFirst says "Save the capture CA configuration before installing or uninstalling the CA."
-// in the language the app shows.
-func SettingsCaTrustSaveFirst() string { return In(i18n.Locale()).SettingsCaTrustSaveFirst() }
-
-// SettingsCaTrustSaveFirst says "Save the capture CA configuration before installing or uninstalling the CA."
-// in the language of msgs.
-func (msgs Messages) SettingsCaTrustSaveFirst() string {
-	return Catalog.Format(msgs.locale, "settingsCaTrustSaveFirst", nil)
 }
 
 // SettingsCaTrustStatusUnavailable says "Current user: installation status unavailable. Reopen Proxy settings to retry."

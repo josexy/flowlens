@@ -105,7 +105,7 @@ func (s *proxyState) generationHint(builtin, caDirty bool) string {
 	case !builtin:
 		return locales.SettingsCaTrustErrorsCaCustomGenerationDisabled()
 	case caDirty:
-		return locales.SettingsCaSaveFirst()
+		return locales.SettingsCaActionsSaveFirst()
 	case s.loading:
 		return locales.SettingsCaTrustLoading()
 	case s.trust != nil && s.trust.Supported && s.hasTrustEntry():
@@ -158,7 +158,7 @@ func (v *View) changeTrust() {
 		return
 	}
 	if v.caConfigDirty() {
-		v.Notifier.Warning(locales.SettingsCaTrustSaveFirst())
+		v.Notifier.Warning(locales.SettingsCaActionsSaveFirst())
 		return
 	}
 	status := state.trust
@@ -200,7 +200,7 @@ func (v *View) generateCA(overwrite bool) {
 	case v.committing || state.generating || state.changing || state.loading:
 		return
 	case v.caConfigDirty():
-		v.Notifier.Warning(locales.SettingsCaSaveFirst())
+		v.Notifier.Warning(locales.SettingsCaActionsSaveFirst())
 		return
 	case state.trust != nil && state.trust.Supported && state.hasTrustEntry():
 		v.Notifier.Warning(locales.SettingsCaTrustUninstallFirst())
@@ -301,7 +301,7 @@ func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin, caD
 		case state.loading:
 			hint = locales.SettingsCaTrustLoading()
 		case caDirty:
-			hint = locales.SettingsCaTrustSaveFirst()
+			hint = locales.SettingsCaActionsSaveFirst()
 		case state.trustUnknown():
 			hint = locales.SettingsCaTrustStatusUnavailable()
 		}
