@@ -22,33 +22,17 @@ const (
 	sectionHost      = "host"
 	sectionProcess   = "process"
 	sectionStructure = "structure"
-	structureIndent  = 26
 )
 
-type categoryRowKind int
-
-const (
-	categorySection categoryRowKind = iota
-	categoryHost
-	categoryProcess
-	categoryStructure
-)
-
-type categoryRow struct {
-	kind    categoryRowKind
-	key     string
-	label   string
-	count   int
-	section string
-	host    string
-	process logic.ProcessSummaryItem
-	node    *logic.StructureNode
+type categoryTreeItem struct {
+	node   *logic.StructureNode
+	anchor ui.Handle
 }
 
 // categoryView is the Categories sidebar.
 type categoryView struct {
 	search     string
-	collapsed  map[string]bool
+	sections   []string
 	expanded   map[string]bool
 	activeLeaf string
 
@@ -60,7 +44,17 @@ type categoryView struct {
 	entries             []*logic.TrafficEntry
 	roots               []*logic.StructureNode
 
-	list ui.ListState
+	scroll        ui.ScrollState
+	hostList      nui.ListboxState
+	processList   nui.ListboxState
+	hostView      categoryViewport
+	processView   categoryViewport
+	structureView categoryViewport
+	tree          nui.TreeState
+	treeDirty     bool
+	treeSearch    string
+	treeItems     map[string]*categoryTreeItem
+	visible       []*categoryTreeItem
 }
 
 // CategorySource is the traffic a category view summarizes.
@@ -116,6 +110,7 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 	}
 	v.context, v.version, v.computed = source.key, version, now
 	v.roots = logic.BuildStructureTree(filter.Filtered())
+	v.treeDirty = true
 }
 
 func toSet(values []string) map[string]bool {
@@ -126,49 +121,17 @@ func toSet(values []string) map[string]bool {
 	return set
 }
 
-func (v *categoryView) rows(filter *store.FilterStore) []categoryRow {
+func (v *categoryView) facets(filter *store.FilterStore) ([]logic.HostSummaryItem, []logic.ProcessSummaryItem) {
 	hosts, processes := logic.BuildCategoryFacets(v.entries, toSet(filter.SelectedHosts), toSet(filter.SelectedProcessKeys), locales.CategoryProcessUnidentified())
-	hosts = logic.FilterHostSummary(hosts, v.search)
-	processes = logic.FilterProcessSummary(processes, v.search)
-	roots := logic.FilterStructureByHost(v.roots, v.search)
-
-	var rows []categoryRow
-	section := func(id, label string, children func()) {
-		rows = append(rows, categoryRow{kind: categorySection, key: "section:" + id, label: label, section: id})
-		if !v.collapsed[id] {
-			children()
-		}
-	}
-	section(sectionHost, locales.CategoryHost(), func() {
-		for _, item := range hosts {
-			rows = append(rows, categoryRow{kind: categoryHost, key: "host:" + item.Host, label: item.Host, count: item.Count, host: item.Host})
-		}
-	})
-	section(sectionProcess, locales.CategoryProcess(), func() {
-		for _, item := range processes {
-			rows = append(rows, categoryRow{kind: categoryProcess, key: "process:" + item.ProcessKey, label: item.Label, count: item.Count, process: item})
-		}
-	})
-	section(sectionStructure, locales.CategoryStructure(), func() {
-		var walk func(nodes []*logic.StructureNode)
-		walk = func(nodes []*logic.StructureNode) {
-			for _, node := range nodes {
-				rows = append(rows, categoryRow{kind: categoryStructure, key: "node:" + node.Key, label: node.Label, count: len(node.EntryIDs), node: node})
-				if v.expanded[node.Key] {
-					walk(node.Children)
-				}
-			}
-		}
-		walk(roots)
-	})
-	return rows
+	return logic.FilterHostSummary(hosts, v.search), logic.FilterProcessSummary(processes, v.search)
 }
 
 // CategorySidebar builds the Categories section's sidebar.
 func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 	view := &w.category
-	if view.collapsed == nil {
-		view.collapsed, view.expanded = map[string]bool{}, map[string]bool{}
+	if view.expanded == nil {
+		view.sections = []string{sectionHost, sectionProcess, sectionStructure}
+		view.expanded = map[string]bool{}
 	}
 	source := w.categoryDataset()
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
@@ -207,13 +170,76 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 		status(locales.CategoryEmpty())
 		return
 	}
-	rows := view.rows(source.filter)
-	if strings.TrimSpace(view.search) != "" && len(rows) == 3 {
+	hosts, processes := view.facets(source.filter)
+	roots := logic.FilterStructureByHost(view.roots, view.search)
+	if strings.TrimSpace(view.search) != "" && len(hosts)+len(processes)+len(roots) == 0 {
 		status(locales.CategoryEmptyFiltered())
 		return
 	}
-	ui.List(c.Key("category-tree"), &view.list, len(rows), func(index int) { w.categoryRow(c, theme, rows[index], source) }).Grow(1).Basis(0).MinHeight(0).FillWidth().Label(locales.CategoryTitle())
+	ui.Scroll(c.Key("category-sections")).TrackScroll(&view.scroll).Fill().Label(locales.CategoryTitle()).Children(func() {
+		nui.Accordion(c.Key("groups"), theme, &view.sections, []nui.AccordionItem{
+			{ID: sectionHost, Label: locales.CategoryHost(), Content: func(c *ui.Context, theme nui.Theme) {
+				items := make([]nui.ListboxItem, len(hosts))
+				for i, host := range hosts {
+					items[i] = nui.ListboxItem{ID: host.Host, Label: host.Host, Icon: lucide.Globe()}
+				}
+				view.hostView.build(c.Key("hosts"), &view.scroll, categoryContentHeight(theme, len(items), 8), func(height float32) {
+					options := categoryListOptions(theme, locales.CategoryHost(), height, &view.hostView)
+					nui.Listbox(c, theme, &source.filter.SelectedHosts, &view.hostList, items, options).FillWidth()
+				})
+			}},
+			{ID: sectionProcess, Label: locales.CategoryProcess(), Content: func(c *ui.Context, theme nui.Theme) {
+				w.categoryProcesses(c, theme, source, processes)
+			}},
+			{ID: sectionStructure, Label: locales.CategoryStructure(), Content: func(c *ui.Context, theme nui.Theme) {
+				w.categoryStructure(c, theme, source, roots)
+			}},
+		}, nui.AccordionOptions{
+			Multiple: true, Collapsible: nui.Set(true),
+			Decoration: nui.Decoration{UI: nui.Styles{
+				nui.Trigger: {PaddingX: nui.Set(float32(12)), PaddingY: nui.Set(float32(6))},
+				nui.Body:    {PaddingY: nui.Set(float32(0))},
+			}},
+		}).FillWidth()
+	})
 	w.categoryMenus.Sweep()
+}
+
+func categoryListOptions(theme nui.Theme, label string, height float32, viewport *categoryViewport) nui.ListboxOptions {
+	return nui.ListboxOptions{
+		Label: locales.CategoryTitle() + ": " + label, Multiple: true, SelectionBehavior: nui.SelectionToggle,
+		Height: height, Size: nui.MD, EmptyText: locales.CategoryEmptyFiltered(),
+		Decoration: nui.Decoration{Style: viewport.style, UI: nui.Styles{
+			nui.Root:      {BorderWidth: nui.Set(float32(0)), Radius: nui.Set(float32(0))},
+			nui.Indicator: {Foreground: nui.Set(theme.Primary)},
+		}},
+	}
+}
+
+func (w *Workspace) categoryProcesses(c *ui.Context, theme nui.Theme, source *categorySource, processes []logic.ProcessSummaryItem) {
+	items := make([]nui.ListboxItem, len(processes))
+	byID := make(map[string]logic.ProcessSummaryItem, len(processes))
+	for i, process := range processes {
+		items[i] = nui.ListboxItem{ID: process.ProcessKey, Label: process.Label}
+		byID[process.ProcessKey] = process
+	}
+	view := &w.category
+	view.processView.build(c.Key("processes"), &view.scroll, categoryContentHeight(theme, len(items), 8), func(height float32) {
+		options := categoryListOptions(theme, locales.CategoryProcess(), height, &view.processView)
+		options.Build = func(c *ui.Context, theme nui.Theme, item nui.ListboxItem) {
+			process := byID[item.ID]
+			ui.Row(c).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+				size := apptheme.TextSize(c, 20)
+				if process.Kind == logic.ProcessResolved && w.Table.deps.Icons != nil {
+					widgets.ProcessIcon(c, w.Table.deps.Icons, process.IconKey, size, theme.Muted).Shrink(0)
+				} else {
+					ui.Icon(c, lucide.AppWindow()).Size(size, size).Shrink(0).TextColor(theme.Muted)
+				}
+				ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
+			})
+		}
+		nui.Listbox(c, theme, &source.filter.SelectedProcessKeys, &view.processList, items, options).FillWidth()
+	})
 }
 
 func leafIcon(node *logic.StructureNode) *ui.SVG {
@@ -250,110 +276,110 @@ func structureIcon(node *logic.StructureNode, expanded bool) *ui.SVG {
 	}
 }
 
-// categoryRow shows a row as 1.0.5's CategoryNavigationTree: section
-// headers are full-width bands with an end-aligned chevron; other rows are
-// rounded, with 20 px icons, an accent check mark on chosen hosts and
-// processes, and an end-aligned chevron on folders. Rows show no counts.
-func (w *Workspace) categoryRow(c *ui.Context, theme nui.Theme, row categoryRow, source *categorySource) {
-	if row.kind == categorySection {
-		w.categorySectionRow(c, theme, row)
+func (v *categoryView) updateTree(roots []*logic.StructureNode) {
+	if !v.treeDirty && v.treeSearch == v.search && v.treeItems != nil {
 		return
 	}
+	v.treeDirty, v.treeSearch = false, v.search
+	v.treeItems = map[string]*categoryTreeItem{}
+	var build func([]*logic.StructureNode) []nui.TreeNode
+	build = func(nodes []*logic.StructureNode) []nui.TreeNode {
+		var result []nui.TreeNode
+		for _, node := range nodes {
+			item := &categoryTreeItem{node: node}
+			v.treeItems[node.Key] = item
+			result = append(result, nui.TreeNode{
+				ID: node.Key, Label: node.Label, Children: build(node.Children),
+				DefaultExpanded: v.expanded[node.Key],
+				Decoration: nui.Decoration{Style: func(slot nui.Slot, element ui.Element) {
+					if slot == nui.Item && node.Type == logic.StructureLeaf {
+						element.Bind(&item.anchor)
+						v.visible = append(v.visible, item)
+					}
+				}},
+			})
+		}
+		return result
+	}
+	v.tree.SetNodes(build(roots))
+}
+
+func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *categorySource, roots []*logic.StructureNode) {
 	view := &w.category
-	checked, active := false, false
-	indent := float32(10)
-	switch row.kind {
-	case categoryHost:
-		checked = toSet(source.filter.SelectedHosts)[row.host]
-	case categoryProcess:
-		checked = toSet(source.filter.SelectedProcessKeys)[row.process.ProcessKey]
-	case categoryStructure:
-		active = row.node.Key == view.activeLeaf
-		indent += float32(row.node.Depth) * structureIndent
+	view.updateTree(roots)
+	view.tree.Selection.Clear()
+	if view.treeItems[view.activeLeaf] != nil {
+		view.tree.Selection.Add(view.activeLeaf)
 	}
-	element := ui.ButtonBase(c.Key(row.key)).FillWidth().MinHeight(32).Justify(ui.Start).Gap(6).Radius(6).Padding(0, 10, 0, indent).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
-	switch {
-	case active:
-		element.Background(theme.Accented)
-	case element.Hovered():
-		element.Background(theme.Elevated)
-	}
-	if row.kind == categoryHost || row.kind == categoryProcess {
-		// The check mark is drawn; assistive technology hears the choice.
-		element.Checked(checked)
-	}
-	element.OnClick(func() { w.activateCategoryRow(row, source) })
-	element.Children(func() {
-		switch {
-		case row.kind == categoryHost:
-			ui.Icon(c, lucide.Globe()).Size(20, 20).Shrink(0).TextColor(theme.Muted)
-		case row.kind == categoryProcess && row.process.Kind == logic.ProcessResolved && w.Table.deps.Icons != nil:
-			widgets.ProcessIcon(c, w.Table.deps.Icons, row.process.IconKey, 20, theme.Muted).Shrink(0)
-		case row.kind == categoryProcess:
-			ui.Icon(c, lucide.AppWindow()).Size(20, 20).Shrink(0).TextColor(theme.Muted)
-		default:
-			ui.Icon(c, structureIcon(row.node, view.expanded[row.node.Key])).Size(20, 20).Shrink(0).TextColor(theme.Muted)
-		}
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(20.0 / 14).TextColor(theme.Text)
-		switch {
-		case checked:
-			ui.Icon(c.Key("check"), lucide.Check()).Size(20, 20).Shrink(0).TextColor(theme.Primary)
-		case row.kind == categoryStructure && len(row.node.Children) > 0:
-			chevron := lucide.ChevronDown()
-			if view.expanded[row.node.Key] {
-				chevron = lucide.ChevronUp()
+	view.visible = view.visible[:0]
+	// The outer scroll area includes the full height of all expanded rows.
+	var count func([]*logic.StructureNode) int
+	count = func(nodes []*logic.StructureNode) int {
+		n := len(nodes)
+		for _, node := range nodes {
+			if view.expanded[node.Key] {
+				n += count(node.Children)
 			}
-			ui.Icon(c.Key("chevron"), chevron).Size(20, 20).Shrink(0).TextColor(theme.Muted)
 		}
+		return n
+	}
+	view.structureView.build(c.Key("structure"), &view.scroll, categoryContentHeight(theme, count(roots), 0), func(height float32) {
+		nui.Tree(c, theme, &view.tree, nui.TreeOptions{
+			Label:  locales.CategoryTitle() + ": " + locales.CategoryStructure(),
+			Height: height, Size: nui.MD, EmptyText: locales.CategoryEmptyFiltered(),
+			Decoration:        nui.Decoration{Style: view.structureView.style},
+			SelectionBehavior: nui.SelectionReplace, ExpandOnClick: nui.Set(false),
+			BuildLeading: func(c *ui.Context, theme nui.Theme, item nui.TreeItemState) {
+				size := apptheme.TextSize(c, 20)
+				ui.Icon(c, structureIcon(view.treeItems[item.ID].node, item.Expanded)).Size(size, size).TextColor(theme.Muted)
+			},
+			OnSelect: func(event *nui.TreeEvent) {
+				node := view.treeItems[event.ID].node
+				if node.Type != logic.StructureLeaf {
+					event.PreventDefault()
+					view.expanded[event.ID] = !event.Expanded
+					view.tree.SetExpanded(event.ID, !event.Expanded)
+					return
+				}
+				w.selectCategoryLeaf(node, source)
+			},
+			OnToggle: func(event *nui.TreeEvent) { view.expanded[event.ID] = !event.Expanded },
+		}).FillWidth()
 	})
-	if row.kind == categoryStructure && row.node.Type == logic.StructureLeaf && len(row.node.EntryIDs) > 0 {
-		node := row.node
-		widgets.ContextMenu(c.Key("leaf-menu"), theme, element, w.categoryMenus.For(row.key), func() []nui.MenuItem { return w.categoryLeafMenuItems(node) }, nui.MenuOptions{Label: row.label})
+	// Tree's synchronous style slot binds handles; resolve only this build's
+	// visible leaves to attach menus without retaining Elements or Contexts.
+	for _, item := range view.visible {
+		node := item.node
+		anchor := c.Resolve(item.anchor)
+		menu := w.categoryMenus.For(node.Key)
+		widgets.ContextMenu(c.Key("leaf-menu:"+node.Key), theme, anchor, menu, func() []nui.MenuItem {
+			return w.categoryLeafMenuItems(node)
+		}, nui.MenuOptions{Label: node.Label})
+		if !menu.Open && item.anchor.Focused(c) {
+			// Menus restore their trigger; Tree keeps focus on its list.
+			view.tree.Outline.List.Focus(c)
+		}
+		// ContextMenu makes the surface interactive. Forward its primary click
+		// to the same action as Tree, keeping keyboard navigation on the tree.
+		anchor.TabStop(false).KeepFocus().OnClick(func() {
+			w.selectCategoryLeaf(node, source)
+			view.tree.Outline.List.Focus(c)
+		})
+		if view.tree.Active == node.Key {
+			open := func() { menu.Open = true }
+			view.tree.Outline.List.Handle.OnShortcut(c, 0, ui.KeyContextMenu, open)
+			view.tree.Outline.List.Handle.OnShortcut(c, ui.Shift, ui.KeyF10, open)
+		}
 	}
 }
 
-// categorySectionRow is a section's header band.
-func (w *Workspace) categorySectionRow(c *ui.Context, theme nui.Theme, row categoryRow) {
+func (w *Workspace) selectCategoryLeaf(node *logic.StructureNode, source *categorySource) {
 	view := &w.category
-	band := theme.Elevated.Alpha(0.88).Over(theme.Background)
-	element := ui.ButtonBase(c.Key(row.key)).FillWidth().MinHeight(32).Justify(ui.Start).Gap(6).PaddingX(12).Background(band).FocusRing(true).Label(locales.CategoryTitle() + ": " + row.label)
-	top := float32(0)
-	if row.section != sectionHost {
-		top = 1
-	}
-	element.BorderWidth(top, 0, 1, 0).BorderColor(theme.Border)
-	if element.Hovered() {
-		element.Background(ui.RGBA(128, 128, 128, 0.06).Over(band))
-	}
-	element.OnClick(func() { view.collapsed[row.section] = !view.collapsed[row.section] })
-	element.Children(func() {
-		ui.Text(c, row.label).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
-		chevron := lucide.ChevronDown()
-		if view.collapsed[row.section] {
-			chevron = lucide.ChevronRight()
-		}
-		ui.Icon(c.Key("chevron"), chevron).Size(12, 12).Shrink(0).TextColor(theme.Muted).Label("section-chevron")
-	})
-}
-
-func (w *Workspace) activateCategoryRow(row categoryRow, source *categorySource) {
-	view := &w.category
-	switch row.kind {
-	case categorySection:
-		view.collapsed[row.section] = !view.collapsed[row.section]
-	case categoryHost:
-		source.filter.ToggleHost(row.host)
-	case categoryProcess:
-		source.filter.ToggleProcess(row.process.ProcessKey)
-	case categoryStructure:
-		if row.node.Type == logic.StructureLeaf {
-			view.activeLeaf = row.node.Key
-			if len(row.node.EntryIDs) > 0 {
-				source.focus(row.node.EntryIDs[0])
-			}
-			return
-		}
-		view.expanded[row.node.Key] = !view.expanded[row.node.Key]
+	view.activeLeaf, view.tree.Active = node.Key, node.Key
+	view.tree.Selection.Clear()
+	view.tree.Selection.Add(node.Key)
+	if len(node.EntryIDs) > 0 {
+		source.focus(node.EntryIDs[0])
 	}
 }
 

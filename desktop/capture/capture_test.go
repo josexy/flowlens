@@ -1850,6 +1850,7 @@ func categoryFixture(t *testing.T) *fixture {
 	cdn := entry(2, "cdn.test")
 	cdn.URL, cdn.Path = "http://cdn.test/assets/app.js", "/assets/app.js"
 	f := newFixture(t, api, cdn)
+	f.tester.SetPreferences(ui.Preferences{ReduceMotion: true})
 	f.showCategories = true
 	f.settle()
 	return f
@@ -1878,10 +1879,9 @@ func TestCategorySearchAndSections(t *testing.T) {
 	f.workspace.category.search = "cdn"
 	f.settle()
 	labels := []string{}
-	for _, row := range f.workspace.category.rows(f.data.Filter) {
-		if row.kind == categoryHost {
-			labels = append(labels, row.label)
-		}
+	hosts, _ := f.workspace.category.facets(f.data.Filter)
+	for _, host := range hosts {
+		labels = append(labels, host.Host)
 	}
 	if !slices.Equal(labels, []string{"cdn.test"}) {
 		t.Fatal(labels)
@@ -1892,7 +1892,7 @@ func TestCategorySearchAndSections(t *testing.T) {
 	f.workspace.category.search = ""
 	f.settle()
 	f.click(locales.CategoryHost())
-	if !f.workspace.category.collapsed[sectionHost] {
+	if slices.Contains(f.workspace.category.sections, sectionHost) {
 		t.Fatal("collapse")
 	}
 }
@@ -1943,7 +1943,7 @@ func TestCategoryStructureFollowsSelections(t *testing.T) {
 				{"other.test", []uint64{1, 3}},
 				{"Browser", []uint64{1, 2, 3, 4}},
 			} {
-				f.click(locales.CategoryTitle() + ": " + step.label)
+				f.click(step.label)
 				var ids []uint64
 				for _, root := range f.workspace.category.roots {
 					for _, leaf := range root.Children {

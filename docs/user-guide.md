@@ -61,6 +61,8 @@ Open `Settings > Shortcuts` to search commands, record or clear a binding, and r
 
 Tab and Shift+Tab move between sidebar entries, settings sections, and their controls. Enter or Space activates the focused entry: open a history or request, expand a collection folder, select a category, rule, plugin, or file. Row checkboxes and enable switches have their own focus and operate independently. Hidden sidebars and inactive pages do not handle these keys. Code editors retain Tab for indentation.
 
+In Categories, the domain, process, and structure groups share the sidebar's scrollbar. Tab reaches each collapsible group and its list. Up/Down moves between domains or processes; Enter or Space toggles the highlighted filter. Multiple filters can remain selected, including while hidden by the sidebar search. In the structure tree, Left/Right collapses or expands branches; Enter or Space toggles a branch or selects a request. Right-click a request, or press the Menu key or Shift+F10 on the highlighted request, to open its context menu.
+
 In request key/value grids, Tab reaches editable cells; Enter or Space opens a cell with its text selected. Enter (including Shift+Enter) commits without inserting a line break. Tab or Shift+Tab commits and moves to the next or previous control. Escape restores the value from when editing began. Enter and Escape return focus to the cell; confirming Chinese or other input-method composition keeps the editor open. Clicking elsewhere also commits. Enable checkboxes, file pickers, and row actions remain separate controls.
 
 | Command | Default binding |

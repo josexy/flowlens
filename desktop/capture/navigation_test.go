@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -27,36 +28,53 @@ func TestCaptureAndHistoryKeyboardNavigation(t *testing.T) {
 
 func TestCategoryKeyboardNavigationAndHiddenEntries(t *testing.T) {
 	f := categoryFixture(t)
-	keytest.TabTo(t, f.tester, locales.CategoryTitle()+": api.test")
+	f.tabToCategory(ui.RoleListItem, "api.test")
 	f.tester.Key(0, ui.KeySpace)
 	f.settle()
 	if len(f.data.Filter.SelectedHosts) != 1 || f.data.Filter.SelectedHosts[0] != "api.test" {
 		t.Fatal("keyboard category activation did not filter")
 	}
-	keytest.TabTo(t, f.tester, locales.CategoryTitle()+": "+locales.CategoryHost())
+	f.tabToCategory(ui.RoleDisclosure, locales.CategoryHost())
 	f.tester.Key(0, ui.KeyEnter)
 	f.settle()
-	if !f.workspace.category.collapsed[sectionHost] {
+	if slices.Contains(f.workspace.category.sections, sectionHost) {
 		t.Fatal("keyboard did not collapse the host group")
 	}
 	f.showCategories = false
 	f.settle()
 	f.tester.Key(0, ui.KeySpace)
 	f.settle()
-	if !f.workspace.category.collapsed[sectionHost] || len(f.data.Filter.SelectedHosts) != 1 {
+	if slices.Contains(f.workspace.category.sections, sectionHost) || len(f.data.Filter.SelectedHosts) != 1 {
 		t.Fatal("hidden category handled a key")
 	}
 }
 
-func TestFilteredCategoryLosesKeyboardActivation(t *testing.T) {
+func TestCategoryListboxKeyboardFollowsVisibleItems(t *testing.T) {
 	f := categoryFixture(t)
-	keytest.TabTo(t, f.tester, locales.CategoryTitle()+": api.test")
+	f.tabToCategory(ui.RoleListItem, "api.test")
 	f.workspace.category.search = "cdn.test"
 	f.settle()
 	f.tester.Key(0, ui.KeyEnter)
+	f.settle()
+	if !slices.Equal(f.data.Filter.SelectedHosts, []string{"cdn.test"}) {
+		t.Fatalf("keyboard selected a filtered-out host: %v", f.data.Filter.SelectedHosts)
+	}
 	f.tester.Key(0, ui.KeySpace)
 	f.settle()
 	if len(f.data.Filter.SelectedHosts) != 0 {
-		t.Fatal("filtered-out host handled a key")
+		t.Fatal("Space did not clear the selected host")
 	}
+}
+
+func (f *fixture) tabToCategory(role ui.Role, label string) {
+	f.t.Helper()
+	for range 64 {
+		for _, item := range f.tester.AccessAll() {
+			if item.Role == role && item.Name == label && item.Focused {
+				return
+			}
+		}
+		f.tester.Key(0, ui.KeyTab)
+	}
+	f.t.Fatalf("keyboard focus cannot reach %q", label)
 }

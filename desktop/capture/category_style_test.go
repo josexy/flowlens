@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/locales"
 )
@@ -37,10 +38,11 @@ func TestSelectingTwoHostsChecksBoth(t *testing.T) {
 // mark at its end.
 func (f *fixture) checkMark(label string) bool {
 	f.t.Helper()
-	row, ok := f.tester.Find(locales.CategoryTitle() + ": " + label)
+	item, ok := f.tester.AccessByRole(ui.RoleListItem, label)
 	if !ok {
 		f.t.Fatalf("no row %q", label)
 	}
+	row := item.Bounds
 	theme := f.theme()
 	accent, text, background := rgba(theme.Primary), rgba(theme.Text), rgba(theme.Background)
 	for x := row.X + row.W - 32; x < row.X+row.W-8; x++ {
@@ -60,39 +62,21 @@ func TestCategoryRowsShowNoCounts(t *testing.T) {
 	if one, ok := f.tester.Find(strconv.Itoa(1)); ok && one.X < 240 {
 		t.Fatalf("a count is shown at %v", one)
 	}
-	row, _ := f.tester.Find(locales.CategoryTitle() + ": api.test")
+	item, _ := f.tester.AccessByRole(ui.RoleListItem, "api.test")
+	row := item.Bounds
 	if row.H != 32 {
 		t.Fatalf("row %v", row)
 	}
 }
 
-func TestSectionHeaderCollapsesWithEndChevron(t *testing.T) {
+func TestCategoryAccordionCollapsesAndRestoresItems(t *testing.T) {
 	f := categoryFixture(t)
-	header, _ := f.tester.Find(locales.CategoryTitle() + ": " + locales.CategoryHost())
-	chevron, ok := f.tester.Find("section-chevron")
-	if !ok || chevron.X < header.X+header.W-40 {
-		t.Fatalf("chevron %v not at the end of %v", chevron, header)
-	}
-	if header.H != 32 {
-		t.Fatalf("header %v", header)
-	}
-	count := func() int {
-		n := 0
-		for _, text := range f.tester.Texts() {
-			if text == "api.test" {
-				n++
-			}
-		}
-		return n
-	}
-	// The host is listed under Hosts and Structure and in the table.
-	before := count()
 	f.click(locales.CategoryHost())
-	if count() != before-1 {
-		t.Fatalf("%d api.test texts after collapsing, %d before", count(), before)
+	if _, ok := f.tester.Find(locales.CategoryTitle() + ": " + locales.CategoryHost()); ok {
+		t.Fatal("collapsed host list is still mounted")
 	}
 	f.click(locales.CategoryHost())
-	if count() != before {
+	if _, ok := f.tester.Find(locales.CategoryTitle() + ": " + locales.CategoryHost()); !ok {
 		t.Fatal("expanding did not bring the hosts back")
 	}
 }
@@ -101,6 +85,6 @@ func TestRenderCategoryTree(t *testing.T) {
 	f := newFixtureSized(t, rendertest.Traffic(), rendertest.Width, rendertest.Height)
 	f.showCategories = true
 	f.settle()
-	f.click("www.bilibili.com")
+	f.click("api.example.com")
 	rendertest.ShootThemes(t, f.tester, "category-tree", f.setDark)
 }
