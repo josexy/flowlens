@@ -368,6 +368,7 @@ type runtimeManager struct {
 	mu         sync.RWMutex
 	sink       *managedSink
 	rolling    *rollingFileWriter
+	stdout     io.Writer
 	atomic     *logx.AtomicLevel
 	console    bool
 	slogOn     atomic.Bool
@@ -387,6 +388,7 @@ func newRuntimeManager(debugMode bool) *runtimeManager {
 	manager := &runtimeManager{
 		sink:    sink,
 		rolling: newRollingFileWriter(),
+		stdout:  os.Stdout,
 		atomic:  logx.NewAtomicLevel(logx.LevelInfo),
 		console: debugMode,
 		status: LogStatus{
@@ -425,9 +427,23 @@ func (m *runtimeManager) buildOutputWriter(enabled bool, console bool) io.Writer
 		return nil
 	}
 	if console {
-		return io.MultiWriter(os.Stdout, m.rolling)
+		return consoleMirror{file: m.rolling, console: m.stdout}
 	}
 	return m.rolling
+}
+
+// consoleMirror writes to the log file and copies each write to the console.
+// Only the file's result counts: a process can lack a usable console, as a
+// Windows GUI build does, and io.MultiWriter would then stop before the file.
+type consoleMirror struct {
+	file    io.Writer
+	console io.Writer
+}
+
+func (w consoleMirror) Write(data []byte) (int, error) {
+	n, err := w.file.Write(data)
+	_, _ = w.console.Write(data)
+	return n, err
 }
 
 func (m *runtimeManager) Configure(cfg Config) (LogStatus, error) {

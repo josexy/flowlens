@@ -2,6 +2,8 @@ package logger
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -110,6 +112,49 @@ func TestEnabledDefaultWritesToCurrentLogFile(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "hello logger") {
 		t.Fatalf("expected log file to contain message, got %q", string(content))
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("console unavailable") }
+
+func TestConsoleOutputDoesNotBlockLogFile(t *testing.T) {
+	var working bytes.Buffer
+	for name, console := range map[string]io.Writer{"unusable": failingWriter{}, "working": &working} {
+		t.Run(name, func(t *testing.T) {
+			manager := newRuntimeManager(true)
+			manager.stdout = console
+			t.Cleanup(func() { _ = manager.Close() })
+			status, err := manager.Configure(Config{
+				Enabled:      true,
+				Level:        LogLevelInfo,
+				LogDir:       t.TempDir(),
+				MaxSizeBytes: DefaultLogMaxSizeBytes,
+				MaxBackups:   DefaultLogMaxBackups,
+				Console:      true,
+				DebugMode:    true,
+			})
+			if err != nil {
+				t.Fatalf("Configure: %v", err)
+			}
+
+			manager.Logger().Info("logx message")
+			manager.SlogLogger().Info("slog message")
+
+			content, err := os.ReadFile(status.CurrentFile)
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			for _, message := range []string{"logx message", "slog message"} {
+				if !strings.Contains(string(content), message) {
+					t.Fatalf("log file is missing %q: %q", message, content)
+				}
+			}
+		})
+	}
+	if !strings.Contains(working.String(), "logx message") || !strings.Contains(working.String(), "slog message") {
+		t.Fatalf("console did not receive the log: %q", working.String())
 	}
 }
 
