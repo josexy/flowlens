@@ -2138,27 +2138,14 @@ func writeAndActivatePlugin(t *testing.T, manager *packageManager, pluginID, sou
 
 func requirePython3(t *testing.T) string {
 	t.Helper()
-	path, err := exec.LookPath("python")
-	if err != nil {
-		t.Skip("Python is unavailable")
-	}
-	path, err = filepath.Abs(path)
-	if err != nil {
-		t.Fatalf("resolve Python path: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), interpreterDiscoveryTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, path, "-I", "-c", "import sys; print(sys.version_info[0])")
-	configureWorkerCommand(command)
-	output, err := command.Output()
-	if err != nil {
-		t.Skipf("query Python version: %v", err)
+	paths := enumerateInterpreterPathCandidates(ctx, "")
+	candidates := probeInterpreterPathCandidates(ctx, paths, probeInterpreter)
+	if len(candidates) == 0 {
+		t.Skip("an available CPython 3 interpreter is required")
 	}
-	var major int
-	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &major); err != nil || major < 3 {
-		t.Skipf("Python 3 or newer is required; got %s", output)
-	}
-	return path
+	return candidates[0].InterpreterPath
 }
 
 func documentedExampleSource(t *testing.T, name string) string {

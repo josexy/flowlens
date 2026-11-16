@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"errors"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -119,14 +118,18 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	python, err := exec.LookPath("python3")
+	t.Cleanup(func() { _ = service.Shutdown() })
+	candidates, err := service.DiscoverInterpreters("")
 	if err != nil {
-		t.Skip("saving plugin files validates them with python3")
+		t.Fatalf("discover Python interpreters: %v", err)
 	}
+	if len(candidates) == 0 {
+		t.Skip("saving plugin files requires an available CPython 3 interpreter")
+	}
+	python := candidates[0].InterpreterPath
 	if _, err := service.ConfigureRuntime(settingservice.PythonPluginConfig{Enabled: true, InterpreterPath: python, HookTimeoutMs: 5000}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = service.Shutdown() })
 	backend := &serviceBackend{PythonPluginService: service}
 	rt := store.NewRuntime()
 	window := &runtimetest.Window{}
