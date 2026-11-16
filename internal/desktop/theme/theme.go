@@ -94,6 +94,11 @@ func Resolve(appearance Appearance) Resolved {
 
 	apply := func(dark bool) nui.Theme {
 		theme := nui.NewTheme(dark, palettes)
+		if dark {
+			// The default dark border matches muted and elevated surfaces.
+			// Keep card outlines and separators visible on those surfaces too.
+			theme.Border = theme.BorderMuted
+		}
 		theme.Font = resolved.AppFont
 		theme.MonoFont = resolved.CodeFont
 		theme.FontSize = float32(resolved.AppFontSize) * interfaceTextRatio

@@ -176,10 +176,18 @@ func helpBullets(c *ui.Context, theme nui.Theme, items []string) {
 }
 
 func (h *Help) template(c *ui.Context, theme nui.Theme, messages *pythonapi.Messages) {
-	ui.Column(c.Key("template")).FillWidth().MinWidth(0).Border(1, theme.BorderMuted).Radius(theme.Radius).Background(theme.Elevated).Clip().Children(func() {
-		ui.Row(c.Key("toolbar")).FillWidth().Justify(ui.End).Padding(4, 8).BorderWidth(0, 0, 1, 0).BorderColor(theme.BorderMuted).Children(func() {
-			nui.Button(c.Key("copy"), theme, messages.CopyTemplate, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Copy()}).OnClick(func() { h.copy(pythonapi.MinimalScript(), messages.CopiedTemplate) })
-		})
+	nui.Card(c.Key("template"), theme, nui.CardOptions{
+		Variant: nui.Subtle,
+		Header: func() {
+			ui.Row(c.Key("toolbar")).FillWidth().Justify(ui.End).Children(func() {
+				nui.Button(c.Key("copy"), theme, messages.CopyTemplate, nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Leading: lucide.Copy()}).OnClick(func() { h.copy(pythonapi.MinimalScript(), messages.CopiedTemplate) })
+			})
+		},
+		Decoration: nui.Decoration{UI: nui.Styles{
+			nui.Header: {PaddingX: nui.Set(float32(8)), PaddingY: nui.Set(float32(4))},
+			nui.Body:   {PaddingX: nui.Set(float32(0)), PaddingY: nui.Set(float32(0))},
+		}},
+	}, func() {
 		// Preserve Python indentation and blank lines without wrapping code.
 		script := strings.TrimRight(pythonapi.MinimalScript(), "\n")
 		size := apptheme.TextSize(c, 12)
@@ -187,7 +195,7 @@ func (h *Help) template(c *ui.Context, theme nui.Theme, messages *pythonapi.Mess
 		ui.ScrollHorizontal(c.Key("code-scroll")).FillWidth().Height(height).Children(func() {
 			ui.Text(c.Key("script"), script).NoWrap().Shrink(0).Padding(12).FontSize(size).LineHeight(1.5).Font(theme.MonoFont).TextColor(theme.Text).Selectable()
 		})
-	})
+	}).FillWidth()
 }
 
 func (h *Help) reference(c *ui.Context, theme nui.Theme, locale string, messages *pythonapi.Messages) {

@@ -422,16 +422,24 @@ func (v *View) dangerRow(c *ui.Context, palette nui.Theme, key, title, descripti
 	if color == nui.Error {
 		border = palette.Error.Alpha(0.35).Over(palette.Border)
 	}
-	ui.Row(c.Key(key)).FillWidth().Gap(16).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(12).Border(1, border).Radius(6).Background(palette.Elevated.Alpha(0.44)).Children(func() {
-		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
-			ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(palette.Text)
-			ui.Text(c, description).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.5).TextColor(palette.Muted).FillWidth()
+	nui.Card(c.Key(key), palette, nui.CardOptions{
+		Variant: nui.Subtle,
+		Decoration: nui.Decoration{UI: nui.Styles{
+			nui.Root: {BorderColor: nui.Set(border)},
+			nui.Body: {PaddingX: nui.Set(float32(12)), PaddingY: nui.Set(float32(12))},
+		}},
+	}, func() {
+		ui.Row(c).FillWidth().Gap(16).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, title).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(palette.Text)
+				ui.Text(c, description).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.5).TextColor(palette.Muted).FillWidth()
+			})
+			button := nui.Button(c.Key("action"), palette, label, nui.ButtonOptions{Color: color, Variant: variant, Leading: lucide.Trash(), Disabled: disabled, Loading: loading, AccessibleLabel: title}).Shrink(0)
+			if !disabled {
+				button.OnClick(run)
+			}
 		})
-		button := nui.Button(c.Key("action"), palette, label, nui.ButtonOptions{Color: color, Variant: variant, Leading: lucide.Trash(), Disabled: disabled, Loading: loading, AccessibleLabel: title}).Shrink(0)
-		if !disabled {
-			button.OnClick(run)
-		}
-	})
+	}).FillWidth()
 }
 
 func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservice.Settings) {
@@ -477,11 +485,15 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 				label string
 				value int64
 			}{{locales.SettingsDiskUsageCache(), state.size.CacheBytes}, {locales.SettingsDiskUsageHistory(), state.size.HistoryBytes}, {locales.SettingsDiskUsageTotal(), state.size.CacheBytes + state.size.HistoryBytes}} {
-				tile := ui.Column(c.Key(index)).MinWidth(118).Gap(4).Padding(9, 10).Radius(6).Border(1, palette.Border).Background(palette.Elevated.Alpha(0.72))
-				tile.Children(func() {
+				nui.Card(c.Key(index), palette, nui.CardOptions{
+					Variant: nui.Subtle,
+					Decoration: nui.Decoration{UI: nui.Styles{
+						nui.Body: {PaddingX: nui.Set(float32(10)), PaddingY: nui.Set(float32(9)), Gap: nui.Set(float32(4))},
+					}},
+				}, func() {
 					ui.Text(c, item.label).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(1.4).FontWeight(600).TextColor(palette.Muted)
 					ui.Text(c, formatSize(item.value)).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.35).FontWeight(600).TextColor(palette.Toned)
-				})
+				}).MinWidth(118)
 			}
 		})
 	})

@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"image/color"
 	"math"
 	"testing"
 	"time"
@@ -8,6 +9,56 @@ import (
 	"github.com/egoist/mygo/ui"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
+
+func TestWindowBordersRemainVisibleAcrossThemeChanges(t *testing.T) {
+	for _, name := range neutralColors {
+		t.Run(name, func(t *testing.T) {
+			config := Resolve(Appearance{Mode: ModeAuto, NeutralColor: name}).Config
+			var applied nui.Theme
+			tester := ui.NewTester(func(c *ui.Context) {
+				applied = Begin(c, config)
+				ui.Column(c).Fill().Padding(10).Gap(10).Background(applied.Background).Children(func() {
+					for _, surface := range []struct {
+						name  string
+						color ui.Color
+					}{
+						{"background", applied.Background},
+						{"muted", applied.MutedBackground},
+						{"elevated", applied.Elevated},
+					} {
+						ui.Box(c.Key(surface.name)).Size(120, 40).Border(1, applied.Border).Background(surface.color).Label(surface.name)
+					}
+				})
+			}, 160, 180)
+			for _, dark := range []bool{false, true, false} {
+				tester.SetDark(dark)
+				tester.Frame()
+				if applied.Dark != dark {
+					t.Fatalf("theme did not switch: dark=%v, want %v", applied.Dark, dark)
+				}
+				if !dark && applied.Border != nui.NewTheme(false, applied.Palettes).Border {
+					t.Fatal("light border changed")
+				}
+				frame := tester.Image()
+				border := applied.Border
+				want := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
+				for _, surface := range []string{"background", "muted", "elevated"} {
+					rect, ok := tester.Find(surface)
+					if !ok {
+						t.Fatalf("missing %s surface", surface)
+					}
+					x, y := int(rect.X), int(rect.Y+rect.H/2)
+					if got := frame.RGBAAt(x, y); got != want {
+						t.Errorf("dark=%v %s border is %v, want %v", dark, surface, got, want)
+					}
+					if frame.RGBAAt(x, y) == frame.RGBAAt(x+2, y) {
+						t.Errorf("dark=%v: border disappears into %s surface", dark, surface)
+					}
+				}
+			}
+		})
+	}
+}
 
 func TestWindowAnimationPreference(t *testing.T) {
 	for _, mode := range []string{ModeLight, ModeDark} {

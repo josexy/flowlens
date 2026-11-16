@@ -578,7 +578,11 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 		cert := &proxy.ClientCerts[index]
 		position := index
 		number := strconv.Itoa(index + 1)
-		ui.Column(c.Key("cert-"+number)).FillWidth().Gap(8).Padding(10).Border(1, palette.Border).Radius(palette.Radius).Children(func() {
+		nui.Card(c.Key("cert-"+number), palette, nui.CardOptions{
+			Decoration: nui.Decoration{UI: nui.Styles{
+				nui.Body: {PaddingX: nui.Set(float32(10)), PaddingY: nui.Set(float32(10)), Gap: nui.Set(float32(8))},
+			}},
+		}, func() {
 			title := strings.TrimSpace(cert.Hostname)
 			if title == "" {
 				title = locales.SettingsClientCertNewTitle(number)
@@ -613,7 +617,7 @@ func (v *View) clientCerts(c *ui.Context, palette nui.Theme, proxy *settingservi
 					ui.Text(c, warning).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Warning).FillWidth()
 				})
 			}
-		})
+		}).FillWidth()
 	}
 }
 

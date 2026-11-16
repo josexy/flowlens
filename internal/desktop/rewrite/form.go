@@ -319,11 +319,11 @@ func (m *matchTest) build(c *ui.Context, theme nui.Theme, v *View, draft *store.
 		}
 		m.seen, m.seenMethod, m.seenURL = store.CloneRule(*rule), m.method, m.url
 	}
-	ui.Column(c).FillWidth().Gap(12).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Background(theme.MutedBackground).Children(func() {
-		ui.Column(c).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, locales.RewriteRulesPreview()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
-			ui.Text(c, locales.RewriteRulesPreviewHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
-		})
+	nui.Card(c, theme, nui.CardOptions{
+		Title:       locales.RewriteRulesPreview(),
+		Description: locales.RewriteRulesPreviewHint(),
+		Decoration:  nui.Decoration{UI: nui.Styles{nui.Body: {Gap: nui.Set(float32(12))}}},
+	}, func() {
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c.Key("method")).Width(96).Shrink(0).Children(func() {
 				nui.Input(c, theme, &m.method, nui.InputOptions{Label: locales.RewriteRulesMethod() + " test"}).FillWidth()
@@ -339,7 +339,7 @@ func (m *matchTest) build(c *ui.Context, theme nui.Theme, v *View, draft *store.
 		if m.result != nil {
 			m.resultPane(c, theme)
 		}
-	})
+	}).FillWidth()
 }
 
 func (m *matchTest) resultPane(c *ui.Context, theme nui.Theme) {
@@ -522,11 +522,11 @@ func (p *bodyPreview) preparePreviewPane(theme nui.Theme) {
 func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice.BodyAction) {
 	p.syncInputs(c, body)
 	p.preparePreviewPane(theme)
-	ui.Column(c).FillWidth().Gap(12).Padding(12).Border(1, theme.Border).Radius(theme.Radius).Background(theme.MutedBackground).Children(func() {
-		ui.Column(c).FillWidth().Gap(4).Children(func() {
-			ui.Text(c, locales.RewriteRulesRegexTest()).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
-			ui.Text(c, locales.RewriteRulesRegexTestHint()).FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted).FillWidth()
-		})
+	nui.Card(c, theme, nui.CardOptions{
+		Title:       locales.RewriteRulesRegexTest(),
+		Description: locales.RewriteRulesRegexTestHint(),
+		Decoration:  nui.Decoration{UI: nui.Styles{nui.Body: {Gap: nui.Set(float32(12))}}},
+	}, func() {
 		ui.Column(c.Key("pane")).FillWidth().Border(1, theme.Border).Clip().Children(func() {
 			p.toolbar(c, theme, body)
 			ui.Box(c.Key("content")).FillWidth().Height(288).Background(theme.Background).Children(func() { p.content(c, theme) })
@@ -546,7 +546,7 @@ func (p *bodyPreview) build(c *ui.Context, theme nui.Theme, body *rewriteservice
 		if p.err != "" {
 			nui.Alert(c.Key("error"), theme, nui.AlertOptions{Description: p.err, Color: nui.Error, Variant: nui.Soft})
 		}
-	})
+	}).FillWidth()
 }
 
 func (p *bodyPreview) toolbar(c *ui.Context, theme nui.Theme, body *rewriteservice.BodyAction) {

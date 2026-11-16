@@ -37,6 +37,14 @@ func TestRenderRequestEditor(t *testing.T) {
 	tab.HTTP.RequestBodyText = `{"sample":true}`
 	f.click(locales.WorkspaceHttpRequestRequestBody())
 	rendertest.ShootThemes(t, f.tester, "request-editor-body", f.setDark)
+	tab.HTTP.Response = &logic.HTTPResponseView{
+		Kind:         logic.ResponseKindError,
+		StreamState:  logic.StreamStateError,
+		ErrorMessage: "dial tcp 127.0.0.1:443: connect: connection refused",
+	}
+	tab.HTTP.ActiveResponseTab = logic.ResponseTabError
+	f.settle()
+	rendertest.ShootThemes(t, f.tester, "request-editor-error", f.setDark)
 }
 
 func TestRenderPythonConsole(t *testing.T) {

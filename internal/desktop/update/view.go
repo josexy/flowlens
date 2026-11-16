@@ -305,8 +305,12 @@ func detail(c *ui.Context, theme nui.Theme, key, label, value string, strong boo
 func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 	updater := v.Data.Updater
 	status := v.status(theme)
-	ui.Column(c.Key("status")).FillWidth().Margin(10, 0, 0, 0).Radius(12).Border(1, theme.BorderAccented).Background(theme.Background).Clip().
-		Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35)).Children(func() {
+	nui.Card(c.Key("status"), theme, nui.CardOptions{
+		Decoration: nui.Decoration{UI: nui.Styles{
+			nui.Root: {Radius: nui.Set(float32(12)), BorderColor: nui.Set(theme.BorderAccented)},
+			nui.Body: {PaddingX: nui.Set(float32(0)), PaddingY: nui.Set(float32(0)), Gap: nui.Set(float32(0))},
+		}},
+	}, func() {
 		ui.Row(c.Key("line")).FillWidth().Gap(16).Padding(20).Children(func() {
 			ui.Box(c.Key("icon")).Size(44, 44).Shrink(0).Radius(8).Background(status.color.Alpha(0.1)).Center().Children(func() {
 				ui.Icon(c, status.icon).Size(24, 24).TextColor(status.color)
@@ -336,7 +340,7 @@ func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 				detail(c, theme, "artifact", locales.UpdaterArtifact(), value, false)
 			}
 		})
-	})
+	}).FillWidth().Margin(10, 0, 0, 0).Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35))
 }
 
 func publishedAt(value string) string {

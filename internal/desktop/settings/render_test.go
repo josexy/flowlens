@@ -64,7 +64,7 @@ func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
 
 func TestRenderSettings(t *testing.T) {
 	f := newFixture(t)
-	for _, tab := range []string{locales.SettingsTabGeneral(), locales.SettingsTabProxy(), locales.SettingsTabShortcuts(), locales.SettingsTabLogs()} {
+	for _, tab := range []string{locales.SettingsTabGeneral(), locales.SettingsTabProxy(), locales.SettingsTabStorage(), locales.SettingsTabShortcuts(), locales.SettingsTabLogs()} {
 		f.open(tab)
 		switch tab {
 		case locales.SettingsTabProxy():

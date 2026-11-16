@@ -32,6 +32,20 @@ func TestRenderRewrite(t *testing.T) {
 	rendertest.ShootThemes(t, f.tester, "rewrite", func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
 }
 
+func TestRenderRewritePreview(t *testing.T) {
+	if !rendertest.Enabled() {
+		return
+	}
+	f, rule := regexFixture(t)
+	rule.Action.Body.Pattern, rule.Action.Body.Replacement = "POST", "X-POST-Y"
+	f.form().preview.sample = `"method":"POST"`
+	f.pump()
+	f.click(locales.RewriteRulesRegexTestPreview())
+	f.preview(0).respond(1, `"method":"X-POST-Y"`)
+	f.waitIdle()
+	rendertest.ShootThemes(t, f.tester, "rewrite-preview", func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
+}
+
 func TestRenderRewriteDrag(t *testing.T) {
 	if !rendertest.Enabled() {
 		return
