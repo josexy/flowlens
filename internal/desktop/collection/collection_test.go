@@ -3,6 +3,7 @@ package collection
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
+	"github.com/josexy/flowlens/internal/pkg/fs"
 	apicollectionservice "github.com/josexy/flowlens/internal/services/api_collection_service"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
@@ -88,6 +90,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir())
 	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +212,33 @@ func (f *fixture) request(parent, name, url string) string {
 func (f *fixture) reload() {
 	f.data.Collection.Load(nil)
 	f.settle()
+}
+
+func TestFixturePreservesUserCollectionFiles(t *testing.T) {
+	userConfig := t.TempDir()
+	t.Setenv("APPDATA", userConfig)
+	t.Setenv("XDG_CONFIG_HOME", userConfig)
+	t.Setenv("HOME", userConfig)
+	userStorage, err := fs.GetBaseStorageDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	filesDir := filepath.Join(userStorage, "api_collections", "files")
+	if err := os.MkdirAll(filesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(filesDir, "saved-request-body")
+	const body = "user request body"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	newFixture(t)
+
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != body {
+		t.Fatalf("fixture changed user collection file: body=%q err=%v", got, err)
+	}
 }
 
 func TestEmptyAndLoadFailure(t *testing.T) {

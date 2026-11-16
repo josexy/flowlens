@@ -100,6 +100,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { i18n.SetLocaleFunc(nil) })
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir())
 	db, err := database.OpenAt(filepath.Join(t.TempDir(), "flowlens.db"))
 	if err != nil {
 		t.Fatal(err)

@@ -27,6 +27,7 @@ func newServiceFixture(t *testing.T) *fixture {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir())
 	db, err := database.OpenAt(filepath.Join(t.TempDir(), "proxy.db"))
 	if err != nil {
 		t.Fatal(err)
