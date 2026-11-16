@@ -31,7 +31,23 @@ type serviceBackend struct {
 	reorder    func([]string) error
 	createFile func(string, string) (*store.Plugin, error)
 	deleteFile func(string, string) (*store.Plugin, error)
+	enable     func(string, bool) (*store.Plugin, error)
+	updateRule func(string, string, pythonpluginservice.UpdateRuleInput) (*store.PluginRule, error)
 	opened     []string
+}
+
+func (b *serviceBackend) SetPluginEnabled(id string, enabled bool) (*store.Plugin, error) {
+	if b.enable != nil {
+		return b.enable(id, enabled)
+	}
+	return b.PythonPluginService.SetPluginEnabled(id, enabled)
+}
+
+func (b *serviceBackend) UpdateRule(id, ruleID string, input pythonpluginservice.UpdateRuleInput) (*store.PluginRule, error) {
+	if b.updateRule != nil {
+		return b.updateRule(id, ruleID, input)
+	}
+	return b.PythonPluginService.UpdateRule(id, ruleID, input)
 }
 
 func (b *serviceBackend) CreatePluginFile(id, path string) (*store.Plugin, error) {
@@ -433,13 +449,23 @@ func TestValidateSavesFirstAndFailureKeepsRevision(t *testing.T) {
 	plugins.EditorContent = "changed = True\n"
 	f.settle()
 	f.backend.validate = func(id string) (*store.Plugin, error) {
-		current, _ := f.backend.GetPlugin(id)
-		copied := *current
-		copied.ValidationStatus, copied.ActiveRevision = "valid", "abcdef1234567890"
-		return &copied, nil
+		saved, err := f.backend.ReadPluginFile(id, "helpers.py")
+		if err != nil {
+			return nil, err
+		}
+		if saved.Content != "changed = True\n" {
+			return nil, errors.New("validation ran before the draft was saved")
+		}
+		// Saving already validates the fixture's files. Return that persisted
+		// revision so registry refreshes and the mutation agree on its value.
+		return f.backend.GetPlugin(id)
 	}
 	f.click(locales.PythonPluginsValidate())
-	if plugins.EditorDirty() || !f.has(locales.PythonPluginsValidationSuccess()) || !f.has(locales.PythonPluginsValidationValid()) || !f.has(locales.PythonPluginsRevision("abcdef123456")) {
+	validated, err := f.backend.GetPlugin(plugin.ID)
+	if err != nil || validated == nil || len(validated.ActiveRevision) < 12 || validated.ActiveRevision == plugin.ActiveRevision {
+		t.Fatal("validation did not use the newly saved revision", err)
+	}
+	if plugins.EditorDirty() || !f.has(locales.PythonPluginsValidationSuccess()) || !f.has(locales.PythonPluginsValidationValid()) || !f.has(locales.PythonPluginsRevision(validated.ActiveRevision[:12])) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
 	saved, _ := f.backend.ReadPluginFile(plugin.ID, "helpers.py")
@@ -448,7 +474,7 @@ func TestValidateSavesFirstAndFailureKeepsRevision(t *testing.T) {
 	}
 	f.backend.validate = func(string) (*store.Plugin, error) { return nil, errors.New("syntax error on line 1") }
 	f.click(locales.PythonPluginsValidate())
-	if !f.has(locales.PythonPluginsValidationFailed("syntax error on line 1")) {
+	if !f.has(locales.PythonPluginsValidationFailed("syntax error on line 1")) || plugins.SelectedPlugin().ActiveRevision != validated.ActiveRevision {
 		t.Fatalf("%v", f.tester.Texts())
 	}
 	f.backend.reload = func(string) (*store.Plugin, error) { return nil, errors.New("reload boom") }

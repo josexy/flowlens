@@ -541,12 +541,12 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 			ui.Text(c, locales.SettingsOtherUnsavedNotice()).Grow(1).Basis(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Muted)
 		}
 		busy := v.committing || settings.Resetting
-		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: busy}).MinWidth(88).Shrink(0)
+		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: busy}).DimDisabled(settings.Resetting).MinWidth(88).Shrink(0)
 		if !busy {
 			reset.OnClick(v.reset)
 		}
 		disabled := !settings.Dirty() || settings.Resetting
-		save := nui.Button(c.Key("save"), theme, locales.SettingsSave(), nui.ButtonOptions{Leading: lucide.Save(), Disabled: disabled, Loading: settings.Saving || v.committing}).MinWidth(88).Shrink(0)
+		save := nui.Button(c.Key("save"), theme, locales.SettingsSave(), nui.ButtonOptions{Leading: lucide.Save(), Disabled: disabled, Loading: settings.Saving || v.committing}).DimDisabled(disabled).MinWidth(88).Shrink(0)
 		if !disabled {
 			save.OnClick(v.save)
 		}

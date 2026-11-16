@@ -155,8 +155,10 @@ func (v *View) treeLeading(c *ui.Context, theme nui.Theme, state nui.TreeItemSta
 			nui.Checkbox(c.Key("check"), theme, &checked, nui.CheckboxOptions{}).
 				Label(locales.ApiCollectionSelectItem(row.Name)).IgnoreInput(true).TabStop(false).AccessHidden(true)
 		}
-		if !v.dragDisabled() {
-			widgets.ReorderGrip(c.Key("grip"), theme, "drag "+row.Name, true)
+		if !v.multi {
+			ui.Box(c.Key("grip")).Shrink(0).Disabled(v.dragDisabled()).DimDisabled(false).Children(func() {
+				widgets.ReorderGrip(c, theme, "drag "+row.Name, true)
+			})
 		}
 		size := apptheme.TextSize(c, 20)
 		ui.Icon(c, rowIcon(row)).Size(size, size).TextColor(theme.Muted)

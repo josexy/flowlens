@@ -116,14 +116,14 @@ func (r *rulesPane) row(c *ui.Context, theme nui.Theme, v *View, plugin *store.P
 		widgets.ReorderGrip(c.Key("grip"), theme, "drag rule "+number, reorderable)
 		method := draft.method
 		methodBox := ui.Box(c.Key("method")).Width(100).Shrink(0).Children(func() {
-			nui.Input(c, theme, &draft.method, nui.InputOptions{Label: "Method " + number, Size: nui.SM, Disabled: busy, OnSubmit: func(string) { r.save(v, plugin, draft) }}).FillWidth()
+			nui.Input(c, theme, &draft.method, nui.InputOptions{Label: "Method " + number, Size: nui.SM, Disabled: busy, OnSubmit: func(string) { r.save(v, plugin, draft) }}).DimDisabled(false).FillWidth()
 		})
 		if upper := strings.ToUpper(draft.method); upper != draft.method {
 			draft.method = upper
 		}
 		pattern := draft.pattern
 		patternBox := ui.Box(c.Key("pattern")).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			nui.Input(c, theme, &draft.pattern, nui.InputOptions{Label: "URL pattern " + number, Placeholder: locales.PythonPluginsRulePatternPlaceholder(), Size: nui.SM, Disabled: busy, OnSubmit: func(string) { r.save(v, plugin, draft) }}).FillWidth()
+			nui.Input(c, theme, &draft.pattern, nui.InputOptions{Label: "URL pattern " + number, Placeholder: locales.PythonPluginsRulePatternPlaceholder(), Size: nui.SM, Disabled: busy, OnSubmit: func(string) { r.save(v, plugin, draft) }}).DimDisabled(false).FillWidth()
 		})
 		if method != draft.method || pattern != draft.pattern {
 			draft.dirty = true
@@ -134,7 +134,7 @@ func (r *rulesPane) row(c *ui.Context, theme nui.Theme, v *View, plugin *store.P
 		}
 		draft.focused = focused
 		enabled := draft.enabled
-		nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: busy}).Label(locales.PythonPluginsEnabled() + " rule " + number)
+		nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: busy, Loading: busy}).DimDisabled(false).Label(locales.PythonPluginsEnabled() + " rule " + number)
 		if enabled != draft.enabled {
 			draft.enabled = enabled
 			r.save(v, plugin, draft)

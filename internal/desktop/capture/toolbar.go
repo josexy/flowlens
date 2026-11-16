@@ -42,6 +42,7 @@ type toolbarState struct {
 	dnsLoaded   bool
 	dnsLoading  bool
 	dnsApplying bool
+	dnsClearing bool
 	dnsEnabled  bool
 	dnsTTL      nui.Optional[float64]
 	dnsNumber   nui.NumberState
@@ -437,10 +438,10 @@ func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settings
 				Label: locales.ToolbarPort(), Disabled: saving,
 				Orientation: nui.Vertical,
 				Step:        1, AllowInvalid: true,
-			})
-		})
+			}).DimDisabled(false)
+		}).DimDisabled(false)
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			cancel := nui.Button(c.Key("port-cancel"), palette, locales.ToolbarCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving})
+			cancel := nui.Button(c.Key("port-cancel"), palette, locales.ToolbarCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving}).DimDisabled(false)
 			if !saving {
 				cancel.OnClick(func() { state.portOpen = false })
 			}
@@ -464,7 +465,7 @@ func (w *Workspace) savePort(config *settingservice.ProxyConfig, port int) {
 func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 	state := &w.toolbar
 	proxy := w.Data.Proxy
-	busy := state.dnsApplying || state.dnsLoading || w.Data.Settings.Saving
+	busy := state.dnsApplying || state.dnsClearing || state.dnsLoading || w.Data.Settings.Saving
 	tooltip := locales.ToolbarDnsCacheOff()
 	if proxy.DNSCache.Enabled {
 		tooltip = locales.ToolbarDnsCacheOn()
@@ -472,7 +473,7 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 	anchor := toolbarButton(c, theme, toolButton{
 		key: "dns", icon: lucide.Globe(), tooltip: tooltip, label: locales.ToolbarDnsCache(), active: proxy.DNSCache.Enabled, quick: true,
 		run: func() {
-			if !state.dnsApplying {
+			if !state.dnsApplying && !state.dnsClearing {
 				state.dnsOpen = !state.dnsOpen
 			}
 		},
@@ -486,30 +487,30 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 		})
 	}
 	state.dnsWasOpen = state.dnsOpen
-	nui.Popover(c.Key("dns-popover"), theme, anchor, &state.dnsOpen, nui.PopoverOptions{Label: locales.ToolbarDnsCache(), Width: nui.Set[float32](280), Dismissible: nui.Set(!state.dnsApplying)}, func(palette nui.Theme) {
+	nui.Popover(c.Key("dns-popover"), theme, anchor, &state.dnsOpen, nui.PopoverOptions{Label: locales.ToolbarDnsCache(), Width: nui.Set[float32](280), Dismissible: nui.Set(!state.dnsApplying && !state.dnsClearing)}, func(palette nui.Theme) {
 		valid := validTTL(state.dnsTTL)
 		problem := ""
 		if !valid {
 			problem = locales.ToolbarDnsCacheInvalidTtl()
 		}
-		nui.Switch(c.Key("dns-enabled"), palette, &state.dnsEnabled, nui.SwitchOptions{Label: locales.ToolbarDnsCacheEnabled(), Disabled: busy})
+		nui.Switch(c.Key("dns-enabled"), palette, &state.dnsEnabled, nui.SwitchOptions{Label: locales.ToolbarDnsCacheEnabled(), Disabled: busy}).DimDisabled(!state.dnsLoaded)
 		nui.FormField(c, palette, nui.FormFieldOptions{Label: locales.ToolbarDnsCacheTtl(), Error: problem, Disabled: busy}, func(field nui.Theme) {
 			nui.InputNumber(c.Key("dns-ttl"), field, &state.dnsTTL, &state.dnsNumber, nui.InputNumberOptions{
 				Label: locales.ToolbarDnsCacheTtl(), Disabled: busy,
 				Orientation: nui.Vertical,
 				Step:        1, AllowInvalid: true,
-			})
-		})
+			}).DimDisabled(!state.dnsLoaded)
+		}).DimDisabled(!state.dnsLoaded)
 		if state.dnsError != "" {
 			ui.Text(c, state.dnsError).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Error)
 		}
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			clear := nui.Button(c.Key("dns-clear"), palette, locales.ToolbarDnsCacheClear(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: busy})
+			clear := nui.Button(c.Key("dns-clear"), palette, locales.ToolbarDnsCacheClear(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: busy}).DimDisabled(state.dnsClearing || !state.dnsLoaded)
 			if !busy {
 				clear.OnClick(w.clearDNS)
 			}
 			canApply := !busy && state.dnsLoaded && valid
-			apply := nui.Button(c.Key("dns-apply"), palette, locales.ToolbarDnsCacheApply(), nui.ButtonOptions{Disabled: !canApply})
+			apply := nui.Button(c.Key("dns-apply"), palette, locales.ToolbarDnsCacheApply(), nui.ButtonOptions{Disabled: !canApply}).DimDisabled(state.dnsApplying || !state.dnsLoaded || !valid)
 			if canApply {
 				apply.OnClick(w.applyDNS)
 			}
@@ -519,9 +520,9 @@ func (w *Workspace) dnsPopover(c *ui.Context, theme nui.Theme) {
 
 func (w *Workspace) clearDNS() {
 	state := &w.toolbar
-	state.dnsApplying, state.dnsError = true, ""
+	state.dnsClearing, state.dnsError = true, ""
 	w.Data.Proxy.ClearDNSCache(func() {
-		state.dnsApplying = false
+		state.dnsClearing = false
 		w.Notifier.Success(locales.ToolbarDnsCacheCleared())
 	})
 }

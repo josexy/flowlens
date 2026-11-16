@@ -115,11 +115,11 @@ func paletteOptions(names []string) []nui.ListboxItem {
 
 func (v *View) sizeRow(c *ui.Context, palette nui.Theme, key, label string, field *integerField, value *int, minimum, maximum, fallback int) {
 	row(c, palette, key, label, "", func() {
-		ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Children(func() {
-			field.build(c, palette, "number", label, value, float64(minimum), float64(maximum), 1, v.committing)
+		ui.Row(c.Key("line")).Gap(6).AlignItems(ui.Center).Disabled(v.committing).DimDisabled(false).Children(func() {
+			field.build(c, palette, "number", label, value, float64(minimum), float64(maximum), 1, false)
 			ui.Text(c, locales.SettingsUnitPixels()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted)
 			blocked := v.committing || *value == fallback
-			reset := nui.Button(c.Key("reset"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.RotateCcw(), Disabled: blocked, AccessibleLabel: locales.SettingsFontSizeReset() + " " + label})
+			reset := nui.Button(c.Key("reset"), palette, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.RotateCcw(), Disabled: *value == fallback, AccessibleLabel: locales.SettingsFontSizeReset() + " " + label})
 			if !blocked {
 				reset.OnClick(func() { *value = fallback })
 			}
@@ -154,7 +154,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 								element.AlignItems(ui.Center).Gap(swatchGap)
 							}
 						},
-					})
+					}).DimDisabled(false)
 					select_.Children(func() {
 						colors, _ := nui.PaletteByName(*target)
 						ui.Box(c.Key("swatch")).Absolute().Left(10).Top(0).Bottom(0).Width(swatchSize).Center().IgnoreInput(true).AccessHidden(true).Children(func() {
@@ -168,7 +168,7 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 		colorRow("neutral", locales.SettingsThemeColorsNeutral(), nui.NeutralPaletteNames(), &common.ThemeNeutralColor)
 		row(c, palette, "animations", locales.SettingsAnimationsLabel(), locales.SettingsAnimationsHint(), func() {
 			enabled := !common.DisableAnimations
-			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: v.committing}).
+			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: v.committing}).DimDisabled(false).
 				Label(locales.SettingsAnimationsLabel()).OnClick(func() { common.DisableAnimations = !enabled })
 		})
 		items := v.fontItems(common)

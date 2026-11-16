@@ -81,11 +81,12 @@ type PluginsStore struct {
 	Error            string
 	Version          uint64
 
-	active        map[string]bool
-	waiters       map[string][]func(any, error)
-	selectedFiles map[string]string
-	editorDrafts  map[string]pluginDraft
-	paramsDrafts  map[string]pluginDraft
+	active         map[string]bool
+	enabledTargets map[string]bool
+	waiters        map[string][]func(any, error)
+	selectedFiles  map[string]string
+	editorDrafts   map[string]pluginDraft
+	paramsDrafts   map[string]pluginDraft
 
 	listSequence, pluginSequence, filesSequence, fileSequence, statusSequence int
 	readSequence                                                              uint64
@@ -98,7 +99,7 @@ type PluginsStore struct {
 
 // NewPluginsStore returns an unloaded store.
 func NewPluginsStore(rt Runtime, backend PluginBackend, connect PluginEvents) *PluginsStore {
-	return &PluginsStore{rt: rt, backend: backend, connect: connect, ParamsDraft: "{}", SavedParams: "{}", active: map[string]bool{}, waiters: map[string][]func(any, error){},
+	return &PluginsStore{rt: rt, backend: backend, connect: connect, ParamsDraft: "{}", SavedParams: "{}", active: map[string]bool{}, enabledTargets: map[string]bool{}, waiters: map[string][]func(any, error){},
 		selectedFiles: map[string]string{}, editorDrafts: map[string]pluginDraft{}, paramsDrafts: map[string]pluginDraft{}}
 }
 
@@ -661,9 +662,28 @@ func (s *PluginsStore) changePlugin(key, message string, work func() (*Plugin, e
 
 // SetPluginEnabled turns a plugin on or off.
 func (s *PluginsStore) SetPluginEnabled(id string, enabled bool, done func(*Plugin, error)) {
-	s.changePlugin(pluginMutationKey("plugin:enabled", id), "update plugin state returned no plugin", func() (*Plugin, error) {
+	key := pluginMutationKey("plugin:enabled", id)
+	finish := done
+	if !s.IsMutating(key) {
+		s.enabledTargets[id] = enabled
+		finish = func(plugin *Plugin, err error) {
+			delete(s.enabledTargets, id)
+			done(plugin, err)
+		}
+	}
+	s.changePlugin(key, "update plugin state returned no plugin", func() (*Plugin, error) {
 		return s.backend.SetPluginEnabled(id, enabled)
-	}, done)
+	}, finish)
+}
+
+// PluginEnabled displays the requested switch value until persistence finishes.
+// The plugin snapshot remains authoritative for execution and failure recovery.
+func (s *PluginsStore) PluginEnabled(id string) bool {
+	if enabled, pending := s.enabledTargets[id]; pending {
+		return enabled
+	}
+	plugin := s.plugin(id)
+	return plugin != nil && plugin.Enabled
 }
 
 // ValidatePlugin checks a plugin's saved files.

@@ -83,6 +83,7 @@ func (d *RuleDraft) Dirty() bool { return d.Baseline == nil || !SameRuleContent(
 type RewriteMutation struct {
 	Kind, ID  string
 	Candidate *RewriteRule
+	Enabled   bool
 }
 
 // RewriteRow is one row of the rule list.
@@ -610,14 +611,14 @@ func (s *RewriteStore) Remove(id string, done func(bool)) {
 
 // SetEnabled turns all rewrites on or off.
 func (s *RewriteStore) SetEnabled(enabled bool, done func(bool)) {
-	s.mutate(RewriteMutation{Kind: RewriteMutationEnabled}, func(revision int64) (RewriteState, error) {
+	s.mutate(RewriteMutation{Kind: RewriteMutationEnabled, Enabled: enabled}, func(revision int64) (RewriteState, error) {
 		return s.backend.SetEnabled(enabled, revision)
 	}, nil, done)
 }
 
 // SetRuleEnabled turns one rule on or off.
 func (s *RewriteStore) SetRuleEnabled(id string, enabled bool, done func(bool)) {
-	s.mutate(RewriteMutation{Kind: RewriteMutationRuleEnabled, ID: id}, func(revision int64) (RewriteState, error) {
+	s.mutate(RewriteMutation{Kind: RewriteMutationRuleEnabled, ID: id, Enabled: enabled}, func(revision int64) (RewriteState, error) {
 		return s.backend.SetRuleEnabled(id, enabled, revision)
 	}, nil, done)
 }

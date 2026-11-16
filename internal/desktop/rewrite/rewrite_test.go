@@ -35,14 +35,15 @@ func testRule(id string, name ...string) store.RewriteRule {
 }
 
 type fakeBackend struct {
-	mu      sync.Mutex
-	server  store.RewriteState
-	nextID  int
-	calls   []string
-	reads   int
-	save    func(store.RewriteRule, int64) (store.RewriteState, error)
-	reorder func([]string, int64) (store.RewriteState, error)
-	enable  func(string, bool, int64) (store.RewriteState, error)
+	mu        sync.Mutex
+	server    store.RewriteState
+	nextID    int
+	calls     []string
+	reads     int
+	save      func(store.RewriteRule, int64) (store.RewriteState, error)
+	reorder   func([]string, int64) (store.RewriteState, error)
+	enable    func(string, bool, int64) (store.RewriteState, error)
+	enableAll func(bool, int64) (store.RewriteState, error)
 }
 
 func cloneState(state store.RewriteState) store.RewriteState {
@@ -146,7 +147,10 @@ func (b *fakeBackend) applyEnable(id string, enabled bool) (store.RewriteState, 
 	})
 }
 
-func (b *fakeBackend) SetEnabled(enabled bool, _ int64) (store.RewriteState, error) {
+func (b *fakeBackend) SetEnabled(enabled bool, revision int64) (store.RewriteState, error) {
+	if b.enableAll != nil {
+		return b.enableAll(enabled, revision)
+	}
 	return b.apply("enabled", func(next *store.RewriteState) { next.Enabled = enabled })
 }
 

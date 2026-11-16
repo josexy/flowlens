@@ -6,6 +6,53 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 )
 
+type pluginEnabledBackend struct{ PluginBackend }
+
+func (pluginEnabledBackend) SetPluginEnabled(id string, enabled bool) (*Plugin, error) {
+	return &Plugin{ID: id, Enabled: enabled}, nil
+}
+
+func TestPluginEnabledPendingValueSurvivesJoinedCompletion(t *testing.T) {
+	rt := NewRuntime()
+	window := &runtimetest.Window{}
+	rt.Dispatcher.SetMain(window)
+	t.Cleanup(rt.Close)
+	s := NewPluginsStore(rt, pluginEnabledBackend{}, nil)
+	s.Plugins = []*Plugin{{ID: "first"}}
+	finished := 0
+	s.SetPluginEnabled("first", true, func(_ *Plugin, err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		finished++
+		s.SetPluginEnabled("first", false, func(_ *Plugin, err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			finished++
+		})
+	})
+	s.SetPluginEnabled("first", false, func(_ *Plugin, err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		finished++
+		if s.PluginEnabled("first") || !s.plugin("first").Enabled {
+			t.Error("joined completion cleared the next write's pending value")
+		}
+	})
+	if !s.PluginEnabled("first") || s.plugin("first").Enabled {
+		t.Fatal("pending value replaced the saved snapshot or a duplicate replaced the target")
+	}
+	for range 3 {
+		rt.Jobs.Wait()
+		window.Drain()
+	}
+	if finished != 3 || s.PluginEnabled("first") || len(s.enabledTargets) != 0 {
+		t.Fatal("enable writes did not settle", finished)
+	}
+}
+
 type pluginFilesBackend struct {
 	PluginBackend
 	files []string

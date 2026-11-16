@@ -251,11 +251,12 @@ func (v *View) pluginRow(c *ui.Context, theme nui.Theme, plugin *store.Plugin, r
 				ui.Text(c, plugin.Description).SingleLine().FontSize(apptheme.TextSize(c, 12)).TextColor(theme.Muted)
 			}
 		})
-		enabled := plugin.Enabled
+		enabled := plugins.PluginEnabled(plugin.ID)
+		before := enabled
 		key := "plugin:enabled:" + plugin.ID
 		busy := plugins.IsMutating(key)
-		nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: busy, Loading: busy}).Label(locales.PythonPluginsEnabled() + " " + plugin.Name)
-		if enabled != plugin.Enabled {
+		nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: busy, Loading: busy}).DimDisabled(false).Label(locales.PythonPluginsEnabled() + " " + plugin.Name)
+		if enabled != before {
 			plugins.SetPluginEnabled(plugin.ID, enabled, func(_ *store.Plugin, err error) {
 				if err != nil {
 					v.Notifier.Error(locales.PythonPluginsEnableFailed(err.Error()))
@@ -418,7 +419,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 			}
 		})
 		saving := plugins.IsMutating("file:save:" + plugins.SelectedPluginID + ":" + plugins.SelectedFilePath)
-		save := nui.Button(c.Key("save"), theme, locales.PythonPluginsSave(), nui.ButtonOptions{Size: nui.SM, Leading: lucide.Save(), Disabled: !plugins.EditorDirty(), Loading: saving})
+		save := nui.Button(c.Key("save"), theme, locales.PythonPluginsSave(), nui.ButtonOptions{Size: nui.SM, Leading: lucide.Save(), Disabled: !plugins.EditorDirty(), Loading: saving}).DimDisabled(!plugins.EditorDirty())
 		if plugins.EditorDirty() {
 			save.OnClick(func() { v.saveFile(true, nil) })
 		}
@@ -612,7 +613,7 @@ func (v *View) paramsPane(c *ui.Context, theme nui.Theme) {
 		ui.Row(c).Gap(4).Children(func() {
 			nui.Button(c.Key("format"), theme, locales.PythonPluginsFormat(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Leading: lucide.TextAlignStart()}).OnClick(v.formatParams)
 			saving := plugins.IsMutating("params:save:" + plugins.SelectedPluginID)
-			save := nui.Button(c.Key("save"), theme, locales.PythonPluginsSaveParams(), nui.ButtonOptions{Size: nui.XS, Leading: lucide.Save(), Disabled: !plugins.ParamsDirty(), Loading: saving})
+			save := nui.Button(c.Key("save"), theme, locales.PythonPluginsSaveParams(), nui.ButtonOptions{Size: nui.XS, Leading: lucide.Save(), Disabled: !plugins.ParamsDirty(), Loading: saving}).DimDisabled(!plugins.ParamsDirty())
 			if plugins.ParamsDirty() {
 				save.OnClick(v.saveParams)
 			}
@@ -688,16 +689,16 @@ func (d *pluginDialog) build(c *ui.Context, theme nui.Theme, v *View, title, con
 	busy := v.Data.Plugins.IsMutating(key)
 	nui.ModalWithOptions(c.Key(title), theme, &d.open, nui.ModalOptions{Title: title, Dismissible: nui.Set(!busy), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { d.open = false })
-			nui.Button(c.Key("submit"), palette, confirm, nui.ButtonOptions{Loading: busy, AccessibleLabel: confirm + " " + title}).OnClick(func() { submit(d) })
+			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).DimDisabled(false).OnClick(func() { d.open = false })
+			nui.Button(c.Key("submit"), palette, confirm, nui.ButtonOptions{Leading: lucide.Check(), Loading: busy, AccessibleLabel: confirm + " " + title}).DimDisabled(false).OnClick(func() { submit(d) })
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(16).Children(func() {
 			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsName(), Required: true}, func(field nui.Theme) {
-				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }, Style: widgets.AutoFocus()}).FillWidth()
+				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.PythonPluginsName(), Disabled: busy, OnSubmit: func(string) { submit(d) }, Style: widgets.AutoFocus()}).DimDisabled(false).FillWidth()
 			})
 			nui.FormField(c.Key("description"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsDescription()}, func(field nui.Theme) {
-				nui.Textarea(c, field, &d.description, nui.TextareaOptions{Label: locales.PythonPluginsDescription(), Disabled: busy, Rows: 3, MaxRows: 8, AutoResize: true}).FillWidth()
+				nui.Textarea(c, field, &d.description, nui.TextareaOptions{Label: locales.PythonPluginsDescription(), Disabled: busy, Rows: 3, MaxRows: 8, AutoResize: true}).DimDisabled(false).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})
@@ -755,13 +756,13 @@ func (d *fileDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	}
 	nui.ModalWithOptions(c.Key("file-dialog"), theme, &d.open, nui.ModalOptions{Title: title, Dismissible: nui.Set(!d.busy), Close: &nui.ButtonOptions{Disabled: d.busy}, Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.busy}).OnClick(func() { d.open = false })
-			nui.Button(c.Key("submit"), palette, locales.PythonPluginsConfirm(), nui.ButtonOptions{Loading: d.busy}).OnClick(func() { d.submit(v) })
+			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.busy}).DimDisabled(false).OnClick(func() { d.open = false })
+			nui.Button(c.Key("submit"), palette, locales.PythonPluginsConfirm(), nui.ButtonOptions{Leading: lucide.Check(), Loading: d.busy}).DimDisabled(false).OnClick(func() { d.submit(v) })
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("path"), palette, nui.FormFieldOptions{Label: locales.PythonPluginsFilePath(), Hint: locales.PythonPluginsFilePathHint()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
+				nui.Input(c, field, &d.path, nui.InputOptions{Label: locales.PythonPluginsFilePath(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).DimDisabled(false).FillWidth()
 			})
 			if d.err != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: d.err, Color: nui.Error, Variant: nui.Soft})
@@ -823,8 +824,8 @@ func (v *View) confirmModal(c *ui.Context, theme nui.Theme, key, title, message 
 	busy := *pending
 	nui.ModalWithOptions(c.Key(key), theme, open, nui.ModalOptions{Title: title, Width: nui.Set[float32](440), Dismissible: nui.Set(!busy), Close: &nui.ButtonOptions{Disabled: busy}, Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { *open = false })
-			nui.Button(c.Key("confirm"), palette, locales.PythonPluginsDelete(), nui.ButtonOptions{Color: nui.Error, Loading: busy}).OnClick(func() {
+			nui.Button(c.Key("cancel"), palette, locales.PythonPluginsCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).DimDisabled(false).OnClick(func() { *open = false })
+			nui.Button(c.Key("confirm"), palette, locales.PythonPluginsDelete(), nui.ButtonOptions{Color: nui.Error, Leading: lucide.Trash(), Loading: busy}).DimDisabled(false).OnClick(func() {
 				if !*pending {
 					*pending = true
 					run()

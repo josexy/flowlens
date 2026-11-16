@@ -96,18 +96,20 @@ func (v *View) rows() []store.RewriteRow {
 func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	v.ensureInitialized()
 	rewrite := v.Data.Rewrite
+	// Pending writes block further mutations without dimming every control.
+	// Only the active control shows loading; unavailable controls still dim.
 	ui.Column(c.Key("rewrite-sidebar")).Fill().MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 				ui.Text(c, locales.RewriteRulesTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Highlighted)
 				ui.Row(c).Gap(2).Children(func() {
-					refresh := nui.Button(c.Key("refresh"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.RefreshCw(), AccessibleLabel: locales.RewriteRulesRefresh(), Loading: rewrite.Loading, Disabled: rewrite.Busy()})
+					refresh := nui.Button(c.Key("refresh"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true, Leading: lucide.RefreshCw(), AccessibleLabel: locales.RewriteRulesRefresh(), Loading: rewrite.Loading, Disabled: rewrite.Busy()}).DimDisabled(false)
 					if !rewrite.Busy() {
 						refresh.OnClick(func() { rewrite.Refresh(true, nil) })
 					}
 					nui.Tooltip(c, theme, refresh, locales.RewriteRulesRefresh(), nui.TooltipOptions{})
 					disabled := rewrite.Busy() || !rewrite.Ready()
-					create := nui.Button(c.Key("new"), theme, "", nui.ButtonOptions{Variant: nui.Soft, Color: nui.Primary, Size: nui.XS, Square: true, Leading: lucide.Plus(), AccessibleLabel: locales.RewriteRulesNewRule(), Disabled: disabled})
+					create := nui.Button(c.Key("new"), theme, "", nui.ButtonOptions{Variant: nui.Soft, Color: nui.Primary, Size: nui.XS, Square: true, Leading: lucide.Plus(), AccessibleLabel: locales.RewriteRulesNewRule(), Disabled: disabled}).DimDisabled(!rewrite.Ready())
 					if !disabled {
 						create.OnClick(v.create)
 					}
@@ -116,8 +118,12 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 			})
 			enabled := rewrite.State.Enabled
 			loading := rewrite.Pending != nil && rewrite.Pending.Kind == store.RewriteMutationEnabled
-			nui.Switch(c.Key("enable-all"), theme, &enabled, nui.SwitchOptions{Label: locales.RewriteRulesEnableAll(), Disabled: rewrite.Busy() || !rewrite.Ready(), Loading: loading})
-			if enabled != rewrite.State.Enabled {
+			if loading {
+				enabled = rewrite.Pending.Enabled
+			}
+			before := enabled
+			nui.Switch(c.Key("enable-all"), theme, &enabled, nui.SwitchOptions{Label: locales.RewriteRulesEnableAll(), Disabled: rewrite.Busy() || !rewrite.Ready(), Loading: loading}).DimDisabled(!rewrite.Ready())
+			if enabled != before {
 				rewrite.SetEnabled(enabled, func(bool) {})
 			}
 			nui.Input(c.Key("search"), theme, &v.search, nui.InputOptions{Label: locales.RewriteRulesSearch(), Placeholder: locales.RewriteRulesSearch(), Leading: lucide.Search(), Size: nui.SM}).FillWidth()
@@ -126,13 +132,14 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 		if len(rows) == 0 {
 			v.emptyList(c, theme)
 		}
-		usable := strings.TrimSpace(v.search) == "" && !rewrite.Busy() && rewrite.Ready()
+		reorderable := strings.TrimSpace(v.search) == "" && rewrite.Ready()
+		usable := reorderable && !rewrite.Busy()
 		v.list.Build(c.Key("rules"), savedIDs(rows), strconv.FormatInt(rewrite.State.Revision, 10), usable, len(rows), func(ids []string) {
 			v.localOrder = ids
 			rewrite.Reorder(ids, func(bool) { v.localOrder = nil })
 		}).FillWidth().Grow(1).Basis(0).MinHeight(0).PaddingY(6).
 			ItemKey(func(index int) any { return rows[index].Key }).Rows(func(item ui.ListRow) {
-			v.row(item.Context, theme, rows[item.Index], usable)
+			v.row(item.Context, theme, rows[item.Index], reorderable)
 		})
 	})
 }
@@ -203,7 +210,9 @@ func (v *View) row(c *ui.Context, theme nui.Theme, row store.RewriteRow, reorder
 	box.OnClick(func() { v.selectRule(row.Key) })
 	box.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
-			widgets.ReorderGrip(c.Key("grip"), theme, "drag "+row.Rule.Name, reorderable && row.Saved != nil)
+			ui.Box(c.Key("grip")).Shrink(0).Disabled(rewrite.Busy()).DimDisabled(false).Children(func() {
+				widgets.ReorderGrip(c, theme, "drag "+row.Rule.Name, reorderable && row.Saved != nil)
+			})
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, name).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Highlighted).MinWidth(0)
 				if rewrite.IsDirty(row.Key) {
@@ -230,10 +239,13 @@ func (v *View) row(c *ui.Context, theme nui.Theme, row store.RewriteRow, reorder
 func (v *View) ruleSwitch(c *ui.Context, theme nui.Theme, row store.RewriteRow) {
 	rewrite := v.Data.Rewrite
 	enabled := row.Saved != nil && row.Saved.Enabled
-	before := enabled
 	loading := rewrite.Pending != nil && rewrite.Pending.Kind == store.RewriteMutationRuleEnabled && rewrite.Pending.ID == row.Key
-	disabled := row.Saved == nil || row.Saved.UnavailableReason != "" || rewrite.Busy()
-	nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: disabled, Loading: loading}).Label(locales.RewriteRulesEnableRule(row.Rule.Name))
+	if loading {
+		enabled = rewrite.Pending.Enabled
+	}
+	before := enabled
+	unavailable := row.Saved == nil || row.Saved.UnavailableReason != ""
+	nui.Switch(c.Key("enabled"), theme, &enabled, nui.SwitchOptions{Size: nui.SM, Disabled: unavailable || rewrite.Busy(), Loading: loading}).DimDisabled(unavailable).Label(locales.RewriteRulesEnableRule(row.Rule.Name))
 	if enabled != before {
 		rewrite.SetRuleEnabled(row.Key, enabled, func(bool) {})
 	}
@@ -382,13 +394,13 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 			nui.Badge(c.Key("unsaved"), theme, locales.RewriteRulesUnsaved(), nui.BadgeOptions{Color: nui.Warning, Variant: nui.Soft})
 		}
 		canRevert := rewrite.SelectedID != "" && (rewrite.IsDirty(rewrite.SelectedID) || (draft != nil && draft.Conflict))
-		revert := nui.Button(c.Key("revert"), theme, locales.RewriteRulesRevert(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Disabled: rewrite.Busy() || !canRevert})
+		revert := nui.Button(c.Key("revert"), theme, locales.RewriteRulesRevert(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Disabled: rewrite.Busy() || !canRevert}).DimDisabled(!canRevert)
 		if !rewrite.Busy() && canRevert {
 			revert.OnClick(func() { rewrite.Revert("") })
 		}
 		saving := rewrite.Pending != nil && rewrite.Pending.Kind == store.RewriteMutationSave && rewrite.Pending.ID == rewrite.SelectedID
 		canSave := v.canSave()
-		save := nui.Button(c.Key("save"), theme, locales.RewriteRulesSave(), nui.ButtonOptions{Leading: lucide.Save(), Loading: saving, Disabled: rewrite.Busy() || !canSave})
+		save := nui.Button(c.Key("save"), theme, locales.RewriteRulesSave(), nui.ButtonOptions{Leading: lucide.Save(), Loading: saving, Disabled: rewrite.Busy() || !canSave}).DimDisabled(!canSave)
 		if !rewrite.Busy() && canSave {
 			save.OnClick(v.save)
 		}
@@ -398,7 +410,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 		}
 		nui.Tooltip(c, theme, save, locales.RewriteRulesSave(), nui.TooltipOptions{Kbds: kbds})
 		disabled := rewrite.Busy() || draft == nil
-		trash := nui.Button(c.Key("delete"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Error, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.RewriteRulesDelete(), Disabled: disabled})
+		trash := nui.Button(c.Key("delete"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Error, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.RewriteRulesDelete(), Disabled: disabled}).DimDisabled(draft == nil)
 		if !disabled {
 			trash.OnClick(func() { v.remove.show(v) })
 		}
@@ -410,8 +422,8 @@ func (v *View) conflictBanner(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("conflict")).FillWidth().Shrink(0).Gap(8).Padding(12).Background(theme.Warning.Alpha(0.1)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Warning.Alpha(0.3)).Children(func() {
 		ui.Text(c, locales.RewriteRulesConflict()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Warning).FillWidth()
 		ui.Row(c).Gap(8).Children(func() {
-			keep := nui.Button(c.Key("keep"), theme, locales.RewriteRulesKeepDraft(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.XS, Disabled: rewrite.Busy()})
-			load := nui.Button(c.Key("load"), theme, locales.RewriteRulesLoadSaved(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.XS, Disabled: rewrite.Busy()})
+			keep := nui.Button(c.Key("keep"), theme, locales.RewriteRulesKeepDraft(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Warning, Size: nui.XS, Disabled: rewrite.Busy()}).DimDisabled(false)
+			load := nui.Button(c.Key("load"), theme, locales.RewriteRulesLoadSaved(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.XS, Disabled: rewrite.Busy()}).DimDisabled(false)
 			if !rewrite.Busy() {
 				keep.OnClick(func() { rewrite.AcceptConflict("") })
 				load.OnClick(func() { rewrite.Revert("") })
@@ -591,9 +603,9 @@ func (v *View) Overlay(c *ui.Context, theme nui.Theme) {
 	v.Dispatcher.NoteModal()
 	nui.ModalWithOptions(c.Key("rewrite-quit"), theme, &open, nui.ModalOptions{Title: locales.RewriteRulesQuitTitle(), Width: nui.Set[float32](480), Dismissible: nui.Set(false), CloseButton: nui.Set(false), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.RewriteRulesCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { v.reply(DecisionCancel) })
-			nui.Button(c.Key("discard"), palette, locales.RewriteRulesDiscardContinue(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Error, Disabled: busy}).OnClick(func() { v.reply(DecisionDiscard) })
-			nui.Button(c.Key("save"), palette, locales.RewriteRulesSaveContinue(), nui.ButtonOptions{Loading: busy}).OnClick(func() { v.reply(DecisionSave) })
+			nui.Button(c.Key("cancel"), palette, locales.RewriteRulesCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).DimDisabled(false).OnClick(func() { v.reply(DecisionCancel) })
+			nui.Button(c.Key("discard"), palette, locales.RewriteRulesDiscardContinue(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Error, Disabled: busy}).DimDisabled(false).OnClick(func() { v.reply(DecisionDiscard) })
+			nui.Button(c.Key("save"), palette, locales.RewriteRulesSaveContinue(), nui.ButtonOptions{Leading: lucide.Save(), Loading: busy}).DimDisabled(false).OnClick(func() { v.reply(DecisionSave) })
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(10).Children(func() {

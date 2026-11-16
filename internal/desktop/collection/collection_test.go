@@ -46,6 +46,7 @@ type failingList struct {
 	moveCalls   int
 	createErr   error
 	createCalls int
+	list        func() (*store.CollectionTree, error)
 }
 
 func (f *failingList) CreateFolder(parent, name string) (*store.CollectionFolder, error) {
@@ -65,6 +66,9 @@ func (f *failingList) MoveNode(id, parent string) error {
 }
 
 func (f *failingList) ListCollection() (*store.CollectionTree, error) {
+	if f.list != nil {
+		return f.list()
+	}
 	if f.err != nil {
 		return nil, f.err
 	}

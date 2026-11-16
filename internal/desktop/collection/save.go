@@ -9,6 +9,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
+	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
@@ -112,13 +113,14 @@ func (v *View) Dialogs(c *ui.Context, theme nui.Theme) {
 	}
 	nui.ModalWithOptions(c.Key("save-api"), theme, &d.open, nui.ModalOptions{Title: locales.ApiCollectionSaveModalTitle(), Width: nui.Set[float32](460), Dismissible: nui.Set(!d.saving), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.ApiCollectionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.saving}).OnClick(func() { d.open = false })
-			nui.Button(c.Key("save"), palette, locales.ApiCollectionSave(), nui.ButtonOptions{Color: nui.Primary, Disabled: strings.TrimSpace(d.name) == "" || d.parent == "" || d.saving, Loading: d.saving}).OnClick(v.submitSave)
+			nui.Button(c.Key("cancel"), palette, locales.ApiCollectionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.saving}).DimDisabled(false).OnClick(func() { d.open = false })
+			invalid := strings.TrimSpace(d.name) == "" || d.parent == ""
+			nui.Button(c.Key("save"), palette, locales.ApiCollectionSave(), nui.ButtonOptions{Color: nui.Primary, Leading: lucide.Save(), Disabled: invalid || d.saving, Loading: d.saving}).DimDisabled(invalid).OnClick(v.submitSave)
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
 			nui.FormField(c.Key("name"), palette, nui.FormFieldOptions{Label: locales.ApiCollectionRequestName()}, func(field nui.Theme) {
-				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.ApiCollectionRequestName(), Placeholder: locales.ApiCollectionRequestNamePlaceholder(), Disabled: d.saving, OnSubmit: func(string) { v.submitSave() }, Style: widgets.AutoFocus()}).FillWidth()
+				nui.Input(c, field, &d.name, nui.InputOptions{Label: locales.ApiCollectionRequestName(), Placeholder: locales.ApiCollectionRequestNamePlaceholder(), Disabled: d.saving, OnSubmit: func(string) { v.submitSave() }, Style: widgets.AutoFocus()}).DimDisabled(false).FillWidth()
 			})
 			nui.FormField(c.Key("folder"), palette, nui.FormFieldOptions{Label: locales.ApiCollectionDestinationFolder()}, func(field nui.Theme) {
 				options := v.Data.Collection.FolderOptions()
@@ -126,7 +128,7 @@ func (v *View) Dialogs(c *ui.Context, theme nui.Theme) {
 				for index, option := range options {
 					items[index] = nui.Option[string]{Value: option.ID, Label: option.Path}
 				}
-				nui.Select(c, field, &d.parent, items, nui.SelectOptions{Label: locales.ApiCollectionDestinationFolder(), Placeholder: locales.ApiCollectionDestinationFolder(), Disabled: d.saving})
+				nui.Select(c, field, &d.parent, items, nui.SelectOptions{Label: locales.ApiCollectionDestinationFolder(), Placeholder: locales.ApiCollectionDestinationFolder(), Disabled: d.saving}).DimDisabled(false)
 			})
 		})
 	})

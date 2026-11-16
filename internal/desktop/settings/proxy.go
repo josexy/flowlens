@@ -434,7 +434,7 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 			nui.Alert(c.Key("generated"), palette, nui.AlertOptions{Title: locales.SettingsCaGeneratedRestartNotice(), Color: nui.Success, Variant: nui.Soft})
 		}
 		row(c, palette, "builtin", locales.SettingsCaUseBuiltin(), "", func() {
-			nui.Switch(c.Key("switch"), palette, &proxy.UseBuiltinCA, nui.SwitchOptions{Disabled: state.generating || state.changing || state.loading}).Label(locales.SettingsCaUseBuiltin())
+			nui.Switch(c.Key("switch"), palette, &proxy.UseBuiltinCA, nui.SwitchOptions{Disabled: state.generating || state.changing || state.loading}).DimDisabled(false).Label(locales.SettingsCaUseBuiltin())
 		})
 		if !proxy.UseBuiltinCA {
 			row(c, palette, "ca-cert", locales.ToolbarCaCertPath(), "", func() {

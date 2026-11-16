@@ -73,7 +73,7 @@ func (d *hostFilterDialog) section(c *ui.Context, theme nui.Theme, key, title st
 			ui.Text(c, title).Bold().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Highlighted)
 			ui.Text(c, strconv.Itoa(len(*rows))).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Muted).Background(theme.Elevated).PaddingX(6).MinWidth(18).MinHeight(18).Radius(9)
 			ui.Box(c).Grow(1)
-			add := nui.Button(c.Key(key+"-add"), theme, locales.SettingsAddDomainFilter(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Leading: lucide.Plus(), Disabled: saving})
+			add := nui.Button(c.Key(key+"-add"), theme, locales.SettingsAddDomainFilter(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Leading: lucide.Plus(), Disabled: saving}).DimDisabled(false)
 			if !saving {
 				add.OnClick(func() { d.add(rows) })
 			}
@@ -95,9 +95,9 @@ func (d *hostFilterDialog) section(c *ui.Context, theme nui.Theme, key, title st
 							if id == d.focusID {
 								options.Style = widgets.AutoFocus()
 							}
-							nui.Input(c, theme, &row.value, options)
+							nui.Input(c, theme, &row.value, options).DimDisabled(false)
 						})
-						remove := nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveDomainFilter(), Disabled: saving})
+						remove := nui.Button(c.Key("remove"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Square: true, Leading: lucide.Trash(), AccessibleLabel: locales.SettingsRemoveDomainFilter(), Disabled: saving}).DimDisabled(false)
 						if !saving {
 							remove.OnClick(func() { removeHostRow(rows, id) })
 						}
@@ -125,14 +125,14 @@ func (d *hostFilterDialog) build(c *ui.Context, theme nui.Theme, w *Workspace, _
 	w.Dispatcher.NoteModal()
 	saving := w.toolbar.applying
 	nui.ModalWithOptions(c.Key("host-filter-modal"), theme, &d.open, nui.ModalOptions{
-		Title: locales.ToolbarHostFilterTitle(), Dismissible: nui.Set(!saving), CloseButton: nui.Set(!saving),
+		Title: locales.ToolbarHostFilterTitle(), Dismissible: nui.Set(!saving), Close: &nui.ButtonOptions{Disabled: saving},
 		Footer: func(c *ui.Context, palette nui.Theme) {
 			ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-				cancel := nui.Button(c.Key("host-cancel"), palette, locales.ToolbarCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving})
+				cancel := nui.Button(c.Key("host-cancel"), palette, locales.ToolbarCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving}).DimDisabled(false)
 				if !saving {
 					cancel.OnClick(func() { d.open = false })
 				}
-				save := nui.Button(c.Key("host-save"), palette, locales.ToolbarSave(), nui.ButtonOptions{Loading: saving, Disabled: saving})
+				save := nui.Button(c.Key("host-save"), palette, locales.ToolbarSave(), nui.ButtonOptions{Leading: lucide.Save(), Loading: saving, Disabled: saving}).DimDisabled(false)
 				if !saving {
 					save.OnClick(func() {
 						include, exclude := normalizeHostRows(d.include), normalizeHostRows(d.exclude)
@@ -190,14 +190,14 @@ func (d *aliasDialog) build(c *ui.Context, theme nui.Theme, w *Workspace) {
 	w.Dispatcher.NoteModal()
 	saving := d.saving
 	nui.ModalWithOptions(c.Key("alias-modal"), theme, &d.open, nui.ModalOptions{
-		Title: locales.CaptureSetAlias(), Dismissible: nui.Set(!saving), CloseButton: nui.Set(!saving),
+		Title: locales.CaptureSetAlias(), Dismissible: nui.Set(!saving), Close: &nui.ButtonOptions{Disabled: saving},
 		Footer: func(c *ui.Context, palette nui.Theme) {
 			ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-				cancel := nui.Button(c.Key("alias-cancel"), palette, locales.HistoryCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving})
+				cancel := nui.Button(c.Key("alias-cancel"), palette, locales.HistoryCancel(), nui.ButtonOptions{Color: nui.Neutral, Variant: nui.Outline, Disabled: saving}).DimDisabled(false)
 				if !saving {
 					cancel.OnClick(func() { d.open = false })
 				}
-				save := nui.Button(c.Key("alias-save"), palette, locales.CaptureSaveAlias(), nui.ButtonOptions{Loading: saving, Disabled: saving})
+				save := nui.Button(c.Key("alias-save"), palette, locales.CaptureSaveAlias(), nui.ButtonOptions{Leading: lucide.Save(), Loading: saving, Disabled: saving}).DimDisabled(false)
 				if !saving {
 					save.OnClick(func() { d.save(w) })
 				}
@@ -207,7 +207,7 @@ func (d *aliasDialog) build(c *ui.Context, theme nui.Theme, w *Workspace) {
 		nui.Input(c.Key("alias-input"), palette, &d.draft, nui.InputOptions{
 			Label: locales.CaptureSetAlias(), Placeholder: locales.CaptureAliasPlaceholder(), MaxLength: maxAliasLength, Disabled: saving,
 			OnSubmit: func(string) { d.save(w) }, Style: widgets.AutoFocus(),
-		})
+		}).DimDisabled(false)
 	})
 }
 

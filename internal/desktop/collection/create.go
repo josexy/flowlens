@@ -6,6 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
+	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
@@ -24,17 +25,17 @@ func (v *View) createDialog(c *ui.Context, theme nui.Theme) {
 			ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 				nui.Button(c.Key("cancel"), palette, locales.ApiCollectionCancel(), nui.ButtonOptions{
 					Variant: nui.Outline, Color: nui.Neutral, Disabled: v.createBusy,
-				}).OnClick(v.cancelCreate)
+				}).DimDisabled(false).OnClick(v.cancelCreate)
 				nui.Button(c.Key("create"), palette, locales.ApiCollectionCreate(), nui.ButtonOptions{
 					Color: nui.Primary, Disabled: strings.TrimSpace(v.folderName) == "" || v.createBusy || v.Data.Collection.Mutating,
-					Loading: v.createBusy,
-				}).OnClick(v.submitCreate)
+					Loading: v.createBusy, Leading: lucide.FolderPlus(),
+				}).DimDisabled(strings.TrimSpace(v.folderName) == "").OnClick(v.submitCreate)
 			})
 		},
 	}, func(palette nui.Theme) {
 		nui.Input(c.Key("name"), palette, &v.folderName, nui.InputOptions{
 			Label: locales.ApiCollectionFolderNamePlaceholder(), Placeholder: locales.ApiCollectionFolderNamePlaceholder(),
 			Disabled: v.createBusy, OnSubmit: func(string) { v.submitCreate() }, Style: widgets.AutoFocus(),
-		}).FillWidth()
+		}).DimDisabled(false).FillWidth()
 	})
 }

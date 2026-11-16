@@ -272,12 +272,13 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 
 func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRow) {
 	collection := v.Data.Collection
-	action := func(key string, icon *ui.SVG, label string, disabled bool, active bool, run func()) {
+	action := func(key string, icon *ui.SVG, label string, unavailable, busy, active bool, run func()) {
 		variant, color := nui.Ghost, nui.Neutral
 		if active {
 			variant, color = nui.Soft, nui.Primary
 		}
-		button := nui.Button(c.Key(key), theme, "", nui.ButtonOptions{Variant: variant, Color: color, Size: nui.SM, Square: true, Leading: icon, AccessibleLabel: label, Disabled: disabled})
+		disabled := unavailable || busy
+		button := nui.Button(c.Key(key), theme, "", nui.ButtonOptions{Variant: variant, Color: color, Size: nui.SM, Square: true, Leading: icon, AccessibleLabel: label, Disabled: disabled, Loading: key == "refresh" && collection.Loading}).DimDisabled(unavailable)
 		if !disabled {
 			button.OnClick(run)
 		}
@@ -287,21 +288,21 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme, rows []store.CollectionRo
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Text(c, locales.ApiCollectionTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted).SingleLine().Shrink(1)
 		ui.Row(c).Gap(6).Shrink(0).Children(func() {
-			action("refresh", lucide.RefreshCw(), locales.ApiCollectionRefresh(), collection.Loading, false, v.refresh)
-			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), collection.Mutating, false, func() { v.beginCreate("") })
+			action("refresh", lucide.RefreshCw(), locales.ApiCollectionRefresh(), false, collection.Loading, false, v.refresh)
+			action("new-folder", lucide.Plus(), locales.ApiCollectionNewFolder(), false, collection.Mutating, false, func() { v.beginCreate("") })
 			label, icon := locales.ApiCollectionExpandAll(), lucide.ListChevronsUpDown()
 			if collection.AllExpanded() {
 				label, icon = locales.ApiCollectionCollapseAll(), lucide.ListChevronsDownUp()
 			}
-			action("expand", icon, label, collection.Loading || !collection.HasExpandableFolders(), false, collection.ToggleAllExpanded)
+			action("expand", icon, label, !collection.HasExpandableFolders(), collection.Loading, false, collection.ToggleAllExpanded)
 			multi := locales.ApiCollectionMultiSelect()
 			if v.multi {
 				multi = locales.ApiCollectionExitMultiSelect()
 			}
-			action("multi", lucide.ListChecks(), multi, !v.multi && collection.Empty(), v.multi, v.toggleMulti)
+			action("multi", lucide.ListChecks(), multi, !v.multi && collection.Empty(), false, v.multi, v.toggleMulti)
 			roots := v.deleteRoots(rows)
-			disabled := collection.Mutating || (v.multi && len(roots) == 0) || (!v.multi && collection.SelectedNodeID == "")
-			action("delete", lucide.Trash(), locales.ApiCollectionDelete(), disabled, false, func() {
+			unavailable := (v.multi && len(roots) == 0) || (!v.multi && collection.SelectedNodeID == "")
+			action("delete", lucide.Trash(), locales.ApiCollectionDelete(), unavailable, collection.Mutating, false, func() {
 				if v.multi {
 					v.askDelete(roots, true)
 				} else {
@@ -319,16 +320,23 @@ func (v *View) area(c *ui.Context, theme nui.Theme) {
 			ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 		})
 	}
-	switch {
-	case collection.Loading:
-		ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme) })
-	case collection.Error != "":
-		status(collection.Error)
-	case collection.Empty():
-		status(locales.ApiCollectionEmpty())
-	default:
-		v.tree(c, theme)
-	}
+	ui.Column(c.Key("collection-content")).Fill().MinHeight(0).Children(func() {
+		if collection.Loaded && collection.Error != "" {
+			nui.Alert(c.Key("refresh-error"), theme, nui.AlertOptions{Description: collection.Error, Color: nui.Error, Variant: nui.Soft}).FillWidth().Shrink(0)
+		}
+		ui.Box(c.Key("tree-content")).FillWidth().Grow(1).Basis(0).MinHeight(0).Disabled(collection.Loading).DimDisabled(false).Children(func() {
+			switch {
+			case collection.Loading && !collection.Loaded:
+				ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme) })
+			case collection.Error != "" && !collection.Loaded:
+				status(collection.Error)
+			case collection.Empty():
+				status(locales.ApiCollectionEmpty())
+			default:
+				v.tree(c, theme)
+			}
+		})
+	})
 }
 
 func (v *View) dragDisabled() bool {
@@ -488,10 +496,10 @@ func (d *renameDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	}
 	nui.ModalWithOptions(c.Key("rename"), theme, &d.open, nui.ModalOptions{Title: locales.ApiCollectionRenameTitle(), Width: nui.Set[float32](420), Dismissible: nui.Set(!d.busy), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			nui.Button(c.Key("cancel"), palette, locales.ApiCollectionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.busy}).OnClick(func() { d.open = false })
-			nui.Button(c.Key("rename"), palette, locales.ApiCollectionRename(), nui.ButtonOptions{Color: nui.Primary, Disabled: strings.TrimSpace(d.name) == "" || d.busy, Loading: d.busy}).OnClick(func() { d.submit(v) })
+			nui.Button(c.Key("cancel"), palette, locales.ApiCollectionCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: d.busy}).DimDisabled(false).OnClick(func() { d.open = false })
+			nui.Button(c.Key("rename"), palette, locales.ApiCollectionRename(), nui.ButtonOptions{Color: nui.Primary, Leading: lucide.Pencil(), Disabled: strings.TrimSpace(d.name) == "" || d.busy, Loading: d.busy}).DimDisabled(strings.TrimSpace(d.name) == "").OnClick(func() { d.submit(v) })
 		})
 	}}, func(palette nui.Theme) {
-		nui.Input(c.Key("name"), palette, &d.name, nui.InputOptions{Label: locales.ApiCollectionRenameNamePlaceholder(), Placeholder: locales.ApiCollectionRenameNamePlaceholder(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).FillWidth()
+		nui.Input(c.Key("name"), palette, &d.name, nui.InputOptions{Label: locales.ApiCollectionRenameNamePlaceholder(), Placeholder: locales.ApiCollectionRenameNamePlaceholder(), Disabled: d.busy, OnSubmit: func(string) { d.submit(v) }, Style: widgets.AutoFocus()}).DimDisabled(false).FillWidth()
 	})
 }

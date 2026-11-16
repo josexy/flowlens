@@ -258,6 +258,7 @@ func (v *View) discoveryDialog(c *ui.Context, palette nui.Theme, config *setting
 type logState struct {
 	status                            *logger.LogStatus
 	loaded, updatingEnabled, updating bool
+	enabledTarget                     bool
 	level                             string
 	opening, clearing                 bool
 }
@@ -296,8 +297,13 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 	v.section(c, palette, "logging", "", false, nil, func() {
 		row(c, palette, "enabled", locales.SettingsLogEnabledLabel(), "", func() {
 			enabled := state.status.Enabled
-			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: state.updatingEnabled}).Label(locales.SettingsLogEnabledLabel())
-			if enabled != state.status.Enabled {
+			if state.updatingEnabled {
+				enabled = state.enabledTarget
+			}
+			before := enabled
+			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: state.updatingEnabled, Loading: state.updatingEnabled}).DimDisabled(false).Label(locales.SettingsLogEnabledLabel())
+			if enabled != before {
+				state.enabledTarget = enabled
 				state.updatingEnabled = true
 				run(v, "log-enabled", func() (*logger.LogStatus, error) { return v.Host.SetLog(enabled) }, func(status *logger.LogStatus, err error) {
 					state.updatingEnabled = false
@@ -311,7 +317,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 		})
 		row(c, palette, "level", locales.SettingsLogLevelLabel(), "", func() {
 			ui.Box(c.Key("menu")).Width(240).Children(func() {
-				nui.Select(c.Key("select"), palette, &state.level, logLevelOptions(), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Disabled: state.updating})
+				nui.Select(c.Key("select"), palette, &state.level, logLevelOptions(), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Disabled: state.updating}).DimDisabled(false)
 			})
 			if state.level != string(state.status.Level) && !state.updating {
 				level := logger.LogLevel(state.level)
