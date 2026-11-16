@@ -123,13 +123,15 @@ func TestConsoleOutputDoesNotBlockLogFile(t *testing.T) {
 	var working bytes.Buffer
 	for name, console := range map[string]io.Writer{"unusable": failingWriter{}, "working": &working} {
 		t.Run(name, func(t *testing.T) {
+			// Register TempDir first so cleanup closes the log before deleting it.
+			dir := t.TempDir()
 			manager := newRuntimeManager()
 			manager.stdout = console
 			t.Cleanup(func() { _ = manager.Close() })
 			status, err := manager.Configure(Config{
 				Enabled:      true,
 				Level:        LogLevelInfo,
-				LogDir:       t.TempDir(),
+				LogDir:       dir,
 				MaxSizeBytes: DefaultLogMaxSizeBytes,
 				MaxBackups:   DefaultLogMaxBackups,
 				Console:      true,
