@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/egoist/mygo"
 	"github.com/josexy/flowlens/internal/desktop/startupfailure"
 	"github.com/josexy/flowlens/internal/pkg/logger"
 	appservice "github.com/josexy/flowlens/internal/services/app_service"
@@ -64,17 +65,17 @@ func reportStartupFailure(failure *startupError) {
 		LogDir:       logger.DefaultLogDir(),
 		MaxSizeBytes: logger.DefaultLogMaxSizeBytes,
 		MaxBackups:   logger.DefaultLogMaxBackups,
-		Console:      logger.DebugMode(),
-		DebugMode:    logger.DebugMode(),
+		Console:      mygo.IsDev(),
+		DebugMode:    mygo.IsDev(),
 	}); err == nil {
 		logger.G().Error(message)
 	}
 }
 
 // applicationName also keys the single-instance lock, so a development build
-// can run beside an installed copy.
+// can run beside an installed copy. Only `mygo build` makes a production build.
 func applicationName() string {
-	if logger.DebugMode() {
+	if mygo.IsDev() {
 		return appservice.APP_NAME + " Dev"
 	}
 	return appservice.APP_NAME

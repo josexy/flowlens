@@ -30,7 +30,7 @@ func TestConfigureTightensExistingLogStorage(t *testing.T) {
 		t.Fatalf("Chmod file setup: %v", err)
 	}
 
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() { _ = manager.Close() })
 	status, err := manager.Configure(Config{
 		Enabled:      true,
@@ -58,7 +58,7 @@ func TestConfigureTightensExistingLogStorage(t *testing.T) {
 }
 
 func TestBootstrapOutputUsesExistingSlogLoggerUntilConfigured(t *testing.T) {
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -88,7 +88,7 @@ func TestBootstrapOutputUsesExistingSlogLoggerUntilConfigured(t *testing.T) {
 
 func TestEnabledDefaultWritesToCurrentLogFile(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -123,7 +123,7 @@ func TestConsoleOutputDoesNotBlockLogFile(t *testing.T) {
 	var working bytes.Buffer
 	for name, console := range map[string]io.Writer{"unusable": failingWriter{}, "working": &working} {
 		t.Run(name, func(t *testing.T) {
-			manager := newRuntimeManager(true)
+			manager := newRuntimeManager()
 			manager.stdout = console
 			t.Cleanup(func() { _ = manager.Close() })
 			status, err := manager.Configure(Config{
@@ -160,7 +160,7 @@ func TestConsoleOutputDoesNotBlockLogFile(t *testing.T) {
 
 func TestDisabledModeDropsLogsAndDoesNotCreateFile(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -184,7 +184,7 @@ func TestDisabledModeDropsLogsAndDoesNotCreateFile(t *testing.T) {
 
 func TestSetEnabledDynamicallyUpdatesExistingLogger(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -231,7 +231,7 @@ func TestSetEnabledDynamicallyUpdatesExistingLogger(t *testing.T) {
 
 func TestLevelFilteringSuppressesLowerLevels(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -265,7 +265,7 @@ func TestLevelFilteringSuppressesLowerLevels(t *testing.T) {
 
 func TestSetLevelDynamicallyUpdatesExistingLogger(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -305,7 +305,7 @@ func TestSetLevelDynamicallyUpdatesExistingLogger(t *testing.T) {
 
 func TestSlogLoggerHonorsDynamicEnabledAndLevel(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -359,7 +359,7 @@ func TestSlogLoggerHonorsDynamicEnabledAndLevel(t *testing.T) {
 
 func TestRotationKeepsConfiguredBackups(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -405,7 +405,7 @@ func TestRotationKeepsConfiguredBackups(t *testing.T) {
 
 func TestClearCurrentLogFileAllowsFutureWrites(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -442,7 +442,7 @@ func TestClearCurrentLogFileAllowsFutureWrites(t *testing.T) {
 
 func TestDeleteOldFilesRemovesRotatedLogs(t *testing.T) {
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -483,7 +483,7 @@ func TestOpenDirUsesInjectedOpener(t *testing.T) {
 	// Cleanup runs in reverse registration order: close the log before
 	// TempDir removes its directory, especially on Windows.
 	dir := t.TempDir()
-	manager := newRuntimeManager(false)
+	manager := newRuntimeManager()
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})

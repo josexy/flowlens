@@ -359,3 +359,16 @@ func TestFirstStartIsStoppedAtExit(t *testing.T) {
 		t.Fatal("first start is not stopped at exit")
 	}
 }
+
+// A build counts as production exactly when MyGo says so, as `mygo build` and
+// MYGO_ENV=production do.
+func TestApplicationNameFollowsMyGoProductionBuild(t *testing.T) {
+	t.Setenv("MYGO_ENV", "")
+	if got := applicationName(); got != "FlowLens Dev" {
+		t.Fatalf("development name = %q", got)
+	}
+	t.Setenv("MYGO_ENV", "production")
+	if got := applicationName(); got != "FlowLens" {
+		t.Fatalf("production name = %q", got)
+	}
+}

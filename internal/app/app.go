@@ -247,8 +247,8 @@ func configureLogging(settingSvc *settingservice.SettingService) {
 		LogDir:       logger.DefaultLogDir(),
 		MaxSizeBytes: logger.DefaultLogMaxSizeBytes,
 		MaxBackups:   logger.DefaultLogMaxBackups,
-		Console:      logger.DebugMode(),
-		DebugMode:    logger.DebugMode(),
+		Console:      mygo.IsDev(),
+		DebugMode:    mygo.IsDev(),
 	}); err != nil {
 		logger.G().Errorf("Configure logger failed: %v", err)
 	}

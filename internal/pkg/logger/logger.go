@@ -60,7 +60,7 @@ type LogStatus struct {
 }
 
 var (
-	globalManager = newRuntimeManager(detectDebugBuild())
+	globalManager = newRuntimeManager()
 
 	G = GetLoggerX
 )
@@ -379,18 +379,14 @@ type runtimeManager struct {
 	configured bool
 }
 
-func newRuntimeManager(debugMode bool) *runtimeManager {
-	sink := &managedSink{}
-	if debugMode {
-		sink.SetWriter(os.Stdout)
-	}
-
+// newRuntimeManager discards output until Configure or EnableBootstrapOutput
+// chooses where it goes.
+func newRuntimeManager() *runtimeManager {
 	manager := &runtimeManager{
-		sink:    sink,
+		sink:    &managedSink{},
 		rolling: newRollingFileWriter(),
 		stdout:  os.Stdout,
 		atomic:  logx.NewAtomicLevel(logx.LevelInfo),
-		console: debugMode,
 		status: LogStatus{
 			Enabled:      false,
 			Level:        LogLevelInfo,
@@ -398,12 +394,9 @@ func newRuntimeManager(debugMode bool) *runtimeManager {
 			CurrentFile:  filepath.Join(DefaultLogDir(), currentLogFileName),
 			MaxSizeBytes: DefaultLogMaxSizeBytes,
 			MaxBackups:   DefaultLogMaxBackups,
-			Console:      debugMode,
-			DebugMode:    debugMode,
 		},
 	}
 	manager.levelVar.Set(toSlogLevel(LogLevelInfo))
-	manager.slogOn.Store(debugMode)
 	manager.slogger = slog.New(managedSlogHandler{
 		enabled: &manager.slogOn,
 		handler: slog.NewTextHandler(manager.sink, &slog.HandlerOptions{
@@ -663,10 +656,6 @@ func DefaultLogDir() string {
 
 func DefaultLogLevel() LogLevel {
 	return LogLevelInfo
-}
-
-func DebugMode() bool {
-	return detectDebugBuild()
 }
 
 func ParseLogLevel(value string) (LogLevel, error) {
