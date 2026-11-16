@@ -63,7 +63,7 @@ The interface loads rules on first opening. Drafts share immutable strings, cach
 
 Writes serialize while forms remain editable. A save captures the submitted draft; later edits remain unsaved against the returned baseline. Metadata-only snapshots preserve rule objects, editor state, and previews. Show progress on the active save button/switch and initial/manual loads; event refreshes stay silent.
 
-Deleting dirty rules, quitting, and update restart offer save/discard/cancel. Failed saves retain drafts and block continuation. Backend quit confirmation validates the main-window sender and request identity. Drafts are not crash recovery data; event subscriptions use returned disposers.
+Rule deletion offers cancel/delete and removes the confirmed rule and its draft without saving or validating the draft first. Unsaved new rules are discarded locally; failed deletion retains the draft and keeps the dialog open for retry. Quitting and update restart offer save/discard/cancel. Failed saves retain drafts and block continuation. Backend quit confirmation validates the main-window sender and request identity. Drafts are not crash recovery data; event subscriptions use returned disposers.
 
 ## Regex Replacement Preview
 

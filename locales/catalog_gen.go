@@ -5538,6 +5538,16 @@ func (msgs Messages) RewriteRulesDelete() string {
 	return Catalog.Format(msgs.locale, "rewriteRulesDelete", nil)
 }
 
+// RewriteRulesDeleteAction says "Delete"
+// in the language the app shows.
+func RewriteRulesDeleteAction() string { return In(i18n.Locale()).RewriteRulesDeleteAction() }
+
+// RewriteRulesDeleteAction says "Delete"
+// in the language of msgs.
+func (msgs Messages) RewriteRulesDeleteAction() string {
+	return Catalog.Format(msgs.locale, "rewriteRulesDeleteAction", nil)
+}
+
 // RewriteRulesDeleteConfirm says "Delete “{name}”? This cannot be undone."
 // in the language the app shows.
 func RewriteRulesDeleteConfirm(name string) string {
@@ -5550,13 +5560,13 @@ func (msgs Messages) RewriteRulesDeleteConfirm(name string) string {
 	return Catalog.Format(msgs.locale, "rewriteRulesDeleteConfirm", map[string]any{"name": name})
 }
 
-// RewriteRulesDeleteDirty says "“{name}” has unsaved changes. Deletion cannot be undone."
+// RewriteRulesDeleteDirty says "“{name}” has unsaved changes. Deleting it permanently removes the rule and its unsaved changes."
 // in the language the app shows.
 func RewriteRulesDeleteDirty(name string) string {
 	return In(i18n.Locale()).RewriteRulesDeleteDirty(name)
 }
 
-// RewriteRulesDeleteDirty says "“{name}” has unsaved changes. Deletion cannot be undone."
+// RewriteRulesDeleteDirty says "“{name}” has unsaved changes. Deleting it permanently removes the rule and its unsaved changes."
 // in the language of msgs.
 func (msgs Messages) RewriteRulesDeleteDirty(name string) string {
 	return Catalog.Format(msgs.locale, "rewriteRulesDeleteDirty", map[string]any{"name": name})
@@ -5570,16 +5580,6 @@ func RewriteRulesDiscardContinue() string { return In(i18n.Locale()).RewriteRule
 // in the language of msgs.
 func (msgs Messages) RewriteRulesDiscardContinue() string {
 	return Catalog.Format(msgs.locale, "rewriteRulesDiscardContinue", nil)
-}
-
-// RewriteRulesDiscardDelete says "Discard and delete"
-// in the language the app shows.
-func RewriteRulesDiscardDelete() string { return In(i18n.Locale()).RewriteRulesDiscardDelete() }
-
-// RewriteRulesDiscardDelete says "Discard and delete"
-// in the language of msgs.
-func (msgs Messages) RewriteRulesDiscardDelete() string {
-	return Catalog.Format(msgs.locale, "rewriteRulesDiscardDelete", nil)
 }
 
 // RewriteRulesDraft says "Draft"
@@ -6180,16 +6180,6 @@ func RewriteRulesSaveContinue() string { return In(i18n.Locale()).RewriteRulesSa
 // in the language of msgs.
 func (msgs Messages) RewriteRulesSaveContinue() string {
 	return Catalog.Format(msgs.locale, "rewriteRulesSaveContinue", nil)
-}
-
-// RewriteRulesSaveDelete says "Save and delete"
-// in the language the app shows.
-func RewriteRulesSaveDelete() string { return In(i18n.Locale()).RewriteRulesSaveDelete() }
-
-// RewriteRulesSaveDelete says "Save and delete"
-// in the language of msgs.
-func (msgs Messages) RewriteRulesSaveDelete() string {
-	return Catalog.Format(msgs.locale, "rewriteRulesSaveDelete", nil)
 }
 
 // RewriteRulesSearch says "Search rules"

@@ -41,6 +41,7 @@ type fakeBackend struct {
 	calls     []string
 	reads     int
 	save      func(store.RewriteRule, int64) (store.RewriteState, error)
+	remove    func(string, int64) (store.RewriteState, error)
 	reorder   func([]string, int64) (store.RewriteState, error)
 	enable    func(string, bool, int64) (store.RewriteState, error)
 	enableAll func(bool, int64) (store.RewriteState, error)
@@ -128,7 +129,10 @@ func (b *fakeBackend) SaveRule(rule store.RewriteRule, revision int64) (store.Re
 	return b.defaultSave(rule, revision)
 }
 
-func (b *fakeBackend) DeleteRule(id string, _ int64) (store.RewriteState, error) {
+func (b *fakeBackend) DeleteRule(id string, revision int64) (store.RewriteState, error) {
+	if b.remove != nil {
+		return b.remove(id, revision)
+	}
 	return b.apply("delete:"+id, func(next *store.RewriteState) {
 		next.Rules = slices.DeleteFunc(next.Rules, func(rule store.RewriteRule) bool { return rule.ID == id })
 	})
@@ -634,21 +638,21 @@ func TestConflictBannerResolves(t *testing.T) {
 	}
 }
 
-func TestDeleteDirtyOffersSaveDiscardCancel(t *testing.T) {
+func TestDeleteDirtyOffersCancelDelete(t *testing.T) {
 	f := newFixture(t)
 	f.edit("edited")
 	f.click(locales.RewriteRulesDelete())
-	if !f.view.remove.open || !f.has(locales.RewriteRulesDeleteDirty("edited")) || !f.has(locales.RewriteRulesDiscardDelete()) || !f.has(locales.RewriteRulesSaveDelete()) {
+	if !f.view.remove.open || !f.has(locales.RewriteRulesDeleteDirty("edited")) || !f.has(locales.RewriteRulesDeleteAction()) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
 	f.click(locales.RewriteRulesCancel())
-	if f.view.remove.open || f.backend.count("delete") != 0 {
-		t.Fatal("cancel")
+	if f.view.remove.open || len(f.backend.log()) != 0 || !f.data.Rewrite.IsDirty("a") || f.data.Rewrite.SelectedRule().Name != "edited" {
+		t.Fatal("cancel must keep the draft without writing")
 	}
 	f.click(locales.RewriteRulesDelete())
-	f.click(locales.RewriteRulesDiscardDelete())
+	f.click(locales.RewriteRulesDeleteAction())
 	f.idle()
-	if f.backend.count("delete:a") != 1 || f.view.remove.open {
+	if !slices.Equal(f.backend.log(), []string{"delete:a"}) || f.view.remove.open || f.data.Rewrite.HasDirtyDrafts() {
 		t.Fatal(f.backend.log())
 	}
 	f.settle()
@@ -657,56 +661,84 @@ func TestDeleteDirtyOffersSaveDiscardCancel(t *testing.T) {
 	}
 }
 
-func TestSaveAndDeleteKeepsInvalidDraft(t *testing.T) {
+func TestDeleteDoesNotRequireValidDraft(t *testing.T) {
 	f := newFixture(t)
 	f.edit("")
-	f.view.remove.show(f.view)
-	f.view.remove.run(f.view, true)
-	f.settle()
-	if !f.view.remove.open || !f.has(locales.RewriteRulesValidationNameRequired()) || f.backend.count("save") != 0 || !f.data.Rewrite.HasDirtyDrafts() {
-		t.Fatalf("%v", f.tester.Texts())
+	f.click(locales.RewriteRulesSave())
+	if f.data.Rewrite.FieldErrors("a").First() == "" {
+		t.Fatal("missing validation error before deletion")
+	}
+	f.click(locales.RewriteRulesDelete())
+	if _, ok := f.tester.AccessByRole(ui.RoleAlert, locales.RewriteRulesValidationNameRequired()); ok {
+		t.Fatal("delete dialog must not require fixing the draft")
+	}
+	f.click(locales.RewriteRulesDeleteAction())
+	f.idle()
+	if f.view.remove.open || !slices.Equal(f.backend.log(), []string{"delete:a"}) || f.ids() != "b" || f.data.Rewrite.HasDirtyDrafts() {
+		t.Fatal(f.backend.log(), f.ids())
 	}
 }
 
-func TestSaveAndDeleteNeverDeletesFallbackAfterConcurrentRemoval(t *testing.T) {
+func TestDeleteNeverDeletesFallbackAfterConcurrentRemoval(t *testing.T) {
 	f := newFixture(t)
-	f.edit("saved by us")
-	f.view.remove.show(f.view)
-	release := make(chan struct{})
-	f.backend.save = func(store.RewriteRule, int64) (store.RewriteState, error) {
-		<-release
-		return store.RewriteState{Revision: 2, Rules: []store.RewriteRule{testRule("a", "saved by us"), testRule("b")}}, nil
-	}
-	f.view.remove.run(f.view, true)
-	f.backend.setServer(store.RewriteState{Revision: 3, Rules: []store.RewriteRule{testRule("b")}})
-	f.emit(3)
-	f.await("snapshot", func() bool { return f.data.Rewrite.State.Revision == 3 })
-	close(release)
+	f.click(locales.RewriteRulesDelete())
+	f.backend.setServer(store.RewriteState{Revision: 2, Rules: []store.RewriteRule{testRule("b")}})
+	f.emit(2)
+	f.await("snapshot", func() bool { return f.data.Rewrite.State.Revision == 2 })
+	f.click(locales.RewriteRulesDeleteAction())
 	f.idle()
 	f.settle()
-	if f.backend.count("delete") != 0 {
+	if len(f.backend.log()) != 0 || f.ids() != "b" || f.data.Rewrite.SelectedID != "b" || f.view.remove.open {
 		t.Fatal("rule a was already deleted; b must survive", f.backend.log())
 	}
 }
 
-func TestSaveAndDeleteUsesNewDraftsAssignedID(t *testing.T) {
+func TestDeleteNewDraftDoesNotWrite(t *testing.T) {
 	f := newFixture(t)
 	f.data.Rewrite.Create("new draft")
 	f.pump()
-	f.view.remove.show(f.view)
-	release := make(chan struct{})
-	f.backend.save = func(rule store.RewriteRule, revision int64) (store.RewriteState, error) {
-		<-release
-		return f.backend.defaultSave(rule, revision)
-	}
-	f.view.remove.run(f.view, true)
+	f.click(locales.RewriteRulesDelete())
 	f.data.Rewrite.Select("b")
-	close(release)
-	f.await("deleted", func() bool { return f.backend.count("delete") == 1 })
+	f.click(locales.RewriteRulesDeleteAction())
 	f.idle()
 	f.settle()
-	if !slices.Contains(f.backend.log(), "delete:new-1") || f.data.Rewrite.SelectedID != "b" || f.ids() != "a,b" || f.view.remove.open {
+	if len(f.backend.log()) != 0 || f.data.Rewrite.HasDirtyDrafts() || f.data.Rewrite.SelectedID != "b" || f.ids() != "a,b" || f.view.remove.open {
 		t.Fatal(f.backend.log(), f.data.Rewrite.SelectedID, f.ids())
+	}
+}
+
+func TestDeleteFailureKeepsDraftAndAllowsRetry(t *testing.T) {
+	f := newFixture(t)
+	f.edit("edited")
+	release := make(chan struct{})
+	finish := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(finish)
+	f.backend.remove = func(string, int64) (store.RewriteState, error) {
+		<-release
+		return store.RewriteState{}, errors.New("disk full")
+	}
+	f.click(locales.RewriteRulesDelete())
+	f.click(locales.RewriteRulesDeleteAction())
+	for range 3 {
+		f.pump()
+		for _, label := range []string{locales.RewriteRulesCancel(), locales.RewriteRulesDeleteAction()} {
+			button, ok := f.tester.AccessByRole(ui.RoleButton, label)
+			if !ok || !button.Disabled {
+				t.Fatalf("pending deletion must disable %q: %+v", label, button)
+			}
+		}
+	}
+	finish()
+	f.idle()
+	f.settle()
+	if !f.view.remove.open || !f.has("disk full") || !f.data.Rewrite.IsDirty("a") || f.data.Rewrite.SelectedRule().Name != "edited" || f.ids() != "a,b" {
+		t.Fatal("failed deletion must keep the draft and dialog", f.tester.Texts())
+	}
+	f.backend.remove = nil
+	f.click(locales.RewriteRulesDeleteAction())
+	f.idle()
+	if f.view.remove.open || !slices.Equal(f.backend.log(), []string{"delete:a"}) || f.data.Rewrite.HasDirtyDrafts() || f.ids() != "b" {
+		t.Fatal("retry must delete without saving", f.backend.log(), f.ids())
 	}
 }
 

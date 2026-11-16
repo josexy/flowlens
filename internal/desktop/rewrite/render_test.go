@@ -1,8 +1,12 @@
 package rewrite
 
 import (
+	"fmt"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/store"
@@ -30,6 +34,49 @@ func TestRenderRewrite(t *testing.T) {
 		t.Fatalf("method and URL fields are not aligned: method %v, URL %v", menu, input)
 	}
 	rendertest.ShootThemes(t, f.tester, "rewrite", func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
+}
+
+func TestRenderDeleteRuleDialog(t *testing.T) {
+	for _, language := range []string{"en", "zh-Hans"} {
+		for _, dirty := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/dirty=%v", language, dirty), func(t *testing.T) {
+				f := newFixture(t)
+				i18n.SetLocaleFunc(func() string { return language })
+				f.tester.SetLocale(language)
+				if dirty {
+					f.edit(locales.RewriteRulesNewName())
+				}
+				f.pump()
+				f.click(locales.RewriteRulesDelete())
+				f.tester.Advance(time.Second)
+				cancel, ok := f.tester.AccessByRole(ui.RoleButton, locales.RewriteRulesCancel())
+				if !ok {
+					t.Fatal("missing cancel button")
+				}
+				var buttons []string
+				for _, node := range f.tester.AccessAll() {
+					if node.Role == ui.RoleButton && node.Bounds.Y == cancel.Bounds.Y {
+						buttons = append(buttons, node.Name)
+					}
+				}
+				if !slices.Equal(buttons, []string{locales.RewriteRulesCancel(), locales.RewriteRulesDeleteAction()}) {
+					t.Fatalf("delete footer buttons: %v", buttons)
+				}
+				message := locales.RewriteRulesDeleteConfirm(f.view.remove.name)
+				if dirty {
+					message = locales.RewriteRulesDeleteDirty(f.view.remove.name)
+				}
+				if !f.has(message) {
+					t.Fatal("missing deletion warning", f.tester.Texts())
+				}
+				rendertest.ShootThemes(t, f.tester, fmt.Sprintf("rewrite-delete-%s-dirty-%v", language, dirty), func(dark bool) {
+					setRenderTheme(t, f.data, dark)
+					f.settle()
+					f.tester.Advance(time.Second)
+				})
+			})
+		}
+	}
 }
 
 func TestRenderRewritePreview(t *testing.T) {

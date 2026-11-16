@@ -448,22 +448,10 @@ func (d *deleteDialog) show(v *View) {
 	*d = deleteDialog{open: true, id: rewrite.SelectedID, name: rule.Name, dirty: rewrite.IsDirty(rewrite.SelectedID)}
 }
 
-func (d *deleteDialog) run(v *View, saveFirst bool) {
-	rewrite := v.Data.Rewrite
-	finish := func(id string) {
-		rewrite.Remove(id, func(removed bool) {
-			if removed {
-				d.open = false
-			}
-		})
-	}
-	if !saveFirst {
-		finish(d.id)
-		return
-	}
-	rewrite.Save(d.id, func(result store.RuleSaveResult) {
-		if result.Saved {
-			finish(result.RuleID)
+func (d *deleteDialog) run(v *View) {
+	v.Data.Rewrite.Remove(d.id, func(removed bool) {
+		if removed {
+			d.open = false
 		}
 	})
 }
@@ -493,19 +481,7 @@ func (d *deleteDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 	nui.ModalWithOptions(c.Key("delete-rule"), theme, &d.open, nui.ModalOptions{Title: locales.RewriteRulesDelete(), Width: nui.Set[float32](460), Dismissible: nui.Set(!busy), Footer: func(c *ui.Context, palette nui.Theme) {
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
 			nui.Button(c.Key("cancel"), palette, locales.RewriteRulesCancel(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Disabled: busy}).OnClick(func() { d.open = false })
-			label := locales.RewriteRulesDelete()
-			if d.dirty {
-				label = locales.RewriteRulesDiscardDelete()
-			}
-			nui.Button(c.Key("confirm"), palette, label, nui.ButtonOptions{Variant: nui.Outline, Color: nui.Error, Disabled: busy}).OnClick(func() { d.run(v, false) })
-			if d.dirty {
-				draft := rewrite.SelectedDraft()
-				blocked := busy || (draft != nil && draft.Conflict)
-				button := nui.Button(c.Key("save-delete"), palette, locales.RewriteRulesSaveDelete(), nui.ButtonOptions{Disabled: blocked})
-				if !blocked {
-					button.OnClick(func() { d.run(v, true) })
-				}
-			}
+			nui.Button(c.Key("confirm"), palette, locales.RewriteRulesDeleteAction(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Error, Disabled: busy}).OnClick(func() { d.run(v) })
 		})
 	}}, func(palette nui.Theme) {
 		ui.Column(c).FillWidth().Gap(10).Children(func() {
@@ -514,9 +490,6 @@ func (d *deleteDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 				message = locales.RewriteRulesDeleteDirty(d.name)
 			}
 			ui.Text(c, message).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Text).FillWidth()
-			if field := fieldErrorMessage(rewrite.FieldErrors(d.id).First()); field != "" {
-				nui.Alert(c.Key("field"), palette, nui.AlertOptions{Description: field, Color: nui.Error, Variant: nui.Soft})
-			}
 			if rewrite.Error != "" {
 				nui.Alert(c.Key("error"), palette, nui.AlertOptions{Description: rewrite.Error, Color: nui.Error, Variant: nui.Soft})
 			}
