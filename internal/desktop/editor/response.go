@@ -264,6 +264,7 @@ func errorCard(c *ui.Context, theme nui.Theme, e *Editor, title, description, he
 		ui.Scroll(c.Key("error")).Fill().MinHeight(0).Children(func() {
 			nui.Card(c, theme, nui.CardOptions{
 				Decoration: nui.Decoration{UI: nui.Styles{
+					nui.Root: {Radius: nui.Set(float32(0))},
 					nui.Body: {PaddingX: nui.Set(float32(10)), PaddingY: nui.Set(float32(10)), Gap: nui.Set(float32(6))},
 				}},
 			}, func() {
