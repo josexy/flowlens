@@ -114,7 +114,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 			if data.Monitoring {
 				label, icon, color = locales.MemstatsStop(), lucide.Pause(), nui.Warning
 			}
-			nui.Button(c.Key("toggle"), theme, label, nui.ButtonOptions{Color: color, Size: nui.SM, Leading: icon}).OnClick(func() {
+			nui.Button(c.Key("toggle"), theme, label, nui.ButtonOptions{Color: color, Size: nui.MD, Leading: icon}).OnClick(func() {
 				if data.Monitoring {
 					data.Stop()
 				} else {
@@ -123,11 +123,11 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 			})
 			v.interval = data.IntervalMs
 			ui.Box(c.Key("interval")).Width(110).Children(func() {
-				nui.Select(c.Key("select"), theme, &v.interval, intervals, nui.SelectOptions{Label: locales.MemstatsInterval(), Size: nui.SM})
+				nui.Select(c.Key("select"), theme, &v.interval, intervals, nui.SelectOptions{Label: locales.MemstatsInterval(), Size: nui.MD})
 			})
 			data.SetInterval(v.interval)
-			nui.Button(c.Key("refresh"), theme, locales.MemstatsRefresh(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Leading: lucide.RefreshCw()}).OnClick(data.FetchOnce)
-			nui.Button(c.Key("clear"), theme, locales.MemstatsClear(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Leading: lucide.Trash()}).OnClick(data.Clear)
+			nui.Button(c.Key("refresh"), theme, locales.MemstatsRefresh(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.MD, Leading: lucide.RefreshCw()}).OnClick(data.FetchOnce)
+			nui.Button(c.Key("clear"), theme, locales.MemstatsClear(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.MD, Leading: lucide.Trash()}).OnClick(data.Clear)
 		})
 	})
 }
