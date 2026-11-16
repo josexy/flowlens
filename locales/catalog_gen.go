@@ -8530,16 +8530,6 @@ func (msgs Messages) SettingsResetStartupStorage() string {
 	return Catalog.Format(msgs.locale, "settingsResetStartupStorage", nil)
 }
 
-// SettingsResetStartupTemporary says "Clear temporary files"
-// in the language the app shows.
-func SettingsResetStartupTemporary() string { return In(i18n.Locale()).SettingsResetStartupTemporary() }
-
-// SettingsResetStartupTemporary says "Clear temporary files"
-// in the language of msgs.
-func (msgs Messages) SettingsResetStartupTemporary() string {
-	return Catalog.Format(msgs.locale, "settingsResetStartupTemporary", nil)
-}
-
 // SettingsResetStartupTitle says "Restoring Initial State"
 // in the language the app shows.
 func SettingsResetStartupTitle() string { return In(i18n.Locale()).SettingsResetStartupTitle() }

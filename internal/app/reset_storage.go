@@ -26,11 +26,10 @@ const (
 // The marker lives outside the data directory so partial deletion cannot erase
 // the user's confirmed intent. It contains no arbitrary data-directory override.
 type resetManifest struct {
-	Version       int      `json:"version"`
-	Phase         string   `json:"phase"`
-	Token         string   `json:"token"`
-	Language      string   `json:"language"`
-	UpdateStaging []string `json:"updateStaging,omitempty"`
+	Version  int    `json:"version"`
+	Phase    string `json:"phase"`
+	Token    string `json:"token"`
+	Language string `json:"language"`
 }
 
 func resetDirectory() (string, error) {
@@ -51,41 +50,7 @@ func validateResetManifest(manifest *resetManifest) error {
 	if manifest.Language != "zh" && manifest.Language != "en" {
 		return errors.New("invalid application reset language")
 	}
-	for _, path := range manifest.UpdateStaging {
-		if !isOwnedUpdateStaging(path) {
-			return errors.New("invalid application reset staging directory")
-		}
-	}
 	return nil
-}
-
-func isOwnedUpdateStaging(path string) bool {
-	if !filepath.IsAbs(path) || !strings.HasPrefix(filepath.Base(path), "wails-update-") {
-		return false
-	}
-	parent, err := filepath.Abs(os.TempDir())
-	return err == nil && sameResetPath(filepath.Dir(path), parent)
-}
-
-// downloaded paths may point inside an extracted .app bundle. Only retain the
-// exact immediate temp child containing this updater's known staged artifact.
-func resetUpdateStaging(downloaded string) []string {
-	if downloaded == "" {
-		return nil
-	}
-	parent, err := filepath.Abs(os.TempDir())
-	if err != nil {
-		return nil
-	}
-	relative, err := filepath.Rel(parent, downloaded)
-	if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return nil
-	}
-	path := filepath.Join(parent, strings.Split(relative, string(filepath.Separator))[0])
-	if !isOwnedUpdateStaging(path) {
-		return nil
-	}
-	return []string{path}
 }
 
 func sameResetPath(left, right string) bool {
@@ -184,21 +149,19 @@ func clearResetMarker() error {
 	return removeResetPath(context.Background(), directory, os.RemoveAll, 50, 100*time.Millisecond)
 }
 
-func resetCleanupPaths(manifest *resetManifest) ([]string, error) {
+func resetStoragePath(manifest *resetManifest) (string, error) {
 	if err := validateResetManifest(manifest); err != nil {
-		return nil, err
+		return "", err
 	}
 	base, err := appfs.BaseStoragePath()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	base, err = filepath.Abs(base)
 	if err != nil || filepath.Dir(base) == base {
-		return nil, errors.New("invalid application reset storage root")
+		return "", errors.New("invalid application reset storage root")
 	}
-	paths := []string{base}
-	paths = append(paths, manifest.UpdateStaging...)
-	return paths, nil
+	return base, nil
 }
 
 func cleanResetData(manifest *resetManifest, remove func(string) error, attempts int, retryDelay time.Duration) error {
@@ -218,26 +181,18 @@ func cleanResetDataWithProgress(ctx context.Context, manifest *resetManifest, re
 	if manifest.Phase != resetPending {
 		return errors.New("application reset has not been committed")
 	}
-	paths, err := resetCleanupPaths(manifest)
+	path, err := resetStoragePath(manifest)
 	if err != nil {
 		return err
 	}
-	for _, path := range paths {
-		if err := rejectResetLink(path); err != nil {
-			return err
-		}
+	if err := rejectResetLink(path); err != nil {
+		return err
 	}
-	for index, path := range paths {
-		if progress != nil {
-			stage := "temporary"
-			if index == 0 {
-				stage = "storage"
-			}
-			progress(stage)
-		}
-		if err := removeResetPath(ctx, path, remove, attempts, retryDelay); err != nil {
-			return fmt.Errorf("remove application data %q: %w", path, err)
-		}
+	if progress != nil {
+		progress("storage")
+	}
+	if err := removeResetPath(ctx, path, remove, attempts, retryDelay); err != nil {
+		return fmt.Errorf("remove application data %q: %w", path, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err

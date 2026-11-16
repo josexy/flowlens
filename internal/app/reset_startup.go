@@ -237,11 +237,7 @@ func resetStartupStages(manifest *resetManifest) []string {
 	if manifest == nil {
 		return nil
 	}
-	stages := []string{"storage"}
-	if len(manifest.UpdateStaging) > 0 {
-		stages = append(stages, "temporary")
-	}
-	return append(stages, "initializing")
+	return []string{"storage", "initializing"}
 }
 
 func (c *resetStartupClient) publish() error {

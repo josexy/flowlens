@@ -1783,7 +1783,6 @@
   "settingsResetRecoveryTitle": "Reset Incomplete",
   "settingsResetStartupInitializing": "Initialise app",
   "settingsResetStartupStorage": "Clear app data",
-  "settingsResetStartupTemporary": "Clear temporary files",
   "settingsResetStartupTitle": "Restoring Initial State",
   "settingsRestartReasonListenAddressChanged": "listen address",
   "settingsRestartReasonMitmCaChanged": "MITM CA",

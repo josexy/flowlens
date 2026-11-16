@@ -187,15 +187,12 @@ func TestResetStartupRevalidatesMarkerAfterUIStartup(t *testing.T) {
 	}
 }
 
-func TestResetStartupStagesIncludeOnlyApplicableCleanup(t *testing.T) {
-	manifest := resetTestManifest()
-	expected := []string{"storage"}
-	if got := resetStartupStages(manifest); !reflect.DeepEqual(got, append(append([]string{}, expected...), "initializing")) {
-		t.Fatalf("stages without temporary files: %v", got)
+func TestResetStartupStages(t *testing.T) {
+	if got := resetStartupStages(resetTestManifest()); !reflect.DeepEqual(got, []string{"storage", "initializing"}) {
+		t.Fatalf("stages: %v", got)
 	}
-	manifest.UpdateStaging = []string{"first", "second"}
-	if got := resetStartupStages(manifest); !reflect.DeepEqual(got, append(expected, "temporary", "initializing")) {
-		t.Fatalf("temporary directories must share a single progress step: %v", got)
+	if got := resetStartupStages(nil); got != nil {
+		t.Fatalf("stages without a marker: %v", got)
 	}
 }
 
@@ -274,8 +271,7 @@ func TestResetCancellationInterruptsBackoff(t *testing.T) {
 func TestResetProgressStagesBeforeRemoval(t *testing.T) {
 	resetTestStorage(t)
 	manifest := resetTestManifest()
-	manifest.UpdateStaging = []string{filepath.Join(os.TempDir(), "wails-update-progress")}
-	paths, err := resetCleanupPaths(manifest)
+	path, err := resetStoragePath(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +284,7 @@ func TestResetProgressStagesBeforeRemoval(t *testing.T) {
 		removed = append(removed, path)
 		return nil
 	}, 1, 0, func(stage string) { stages = append(stages, stage) })
-	if err != nil || !reflect.DeepEqual(removed, paths) || !reflect.DeepEqual(stages, []string{"storage", "temporary"}) {
+	if err != nil || !reflect.DeepEqual(removed, []string{path}) || !reflect.DeepEqual(stages, []string{"storage"}) {
 		t.Fatalf("progress cleanup: %v %v %v", removed, stages, err)
 	}
 }

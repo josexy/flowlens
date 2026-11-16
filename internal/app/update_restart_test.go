@@ -239,7 +239,7 @@ func TestResetCommitsForTheNextLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest, err := loadResetManifest()
-	if err != nil || manifest == nil || manifest.Phase != resetPending || manifest.Language != "en" || len(manifest.UpdateStaging) != 0 {
+	if err != nil || manifest == nil || manifest.Phase != resetPending || manifest.Language != "en" {
 		t.Fatalf("%+v %v", manifest, err)
 	}
 	if guard.committed != 1 || *committed != 1 || !f.lifecycle.resetReady.Load() || !f.lifecycle.resetting.Load() {

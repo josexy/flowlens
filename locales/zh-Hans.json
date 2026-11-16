@@ -809,7 +809,6 @@
   "settingsResetRecoveryTitle": "重置未完成",
   "settingsResetStartupInitializing": "初始化应用",
   "settingsResetStartupStorage": "清理应用数据",
-  "settingsResetStartupTemporary": "清理临时文件",
   "settingsResetStartupTitle": "正在恢复初始状态",
   "settingsRestartReasonListenAddressChanged": "监听地址",
   "settingsRestartReasonMitmCaChanged": "MITM CA",

@@ -249,8 +249,6 @@ func TestResetIgnoresUnusedMarkerMetadata(t *testing.T) {
 func TestResetRejectsUnsafeMarkerPaths(t *testing.T) {
 	resetTestStorage(t)
 	for _, mutate := range []func(*resetManifest){
-		func(m *resetManifest) { m.UpdateStaging = []string{os.TempDir()} },
-		func(m *resetManifest) { m.UpdateStaging = []string{filepath.Join(t.TempDir(), "wails-update-fake")} },
 		func(m *resetManifest) { m.Token = "../../external" },
 		func(m *resetManifest) { m.Version = 2 },
 	} {
@@ -259,17 +257,6 @@ func TestResetRejectsUnsafeMarkerPaths(t *testing.T) {
 		if err := saveResetManifest(manifest); err == nil {
 			t.Fatalf("unsafe marker accepted: %+v", manifest)
 		}
-	}
-}
-
-func TestResetTracksOnlyKnownUpdateStaging(t *testing.T) {
-	root := filepath.Join(os.TempDir(), "wails-update-known")
-	want := []string{root}
-	if got := resetUpdateStaging(filepath.Join(root, "FlowLens.app", "Contents", "MacOS", "flowlens")); !reflect.DeepEqual(got, want) {
-		t.Fatalf("staged app: %v", got)
-	}
-	if got := resetUpdateStaging(filepath.Join(t.TempDir(), "external", "flowlens.exe")); got != nil {
-		t.Fatalf("external artifact retained as cleanup target: %v", got)
 	}
 }
 

@@ -73,12 +73,6 @@ type SettingService struct {
 	themeSavedColors        themeColors
 	dnsCacheSavedEnabled    bool
 	dnsCacheSavedTTLSeconds int
-	themePreviewColors      *themeColors
-	themePreviewSession     uint64
-	themeSessionCounter     uint64
-	themePreviewSequence    uint64
-	themeColorRevision      uint64
-	themeColorsChanged      func(ThemeColorState)
 
 	processAttributionEnabled atomic.Bool
 	processAttributionReady   atomic.Bool
@@ -756,15 +750,7 @@ func (s *SettingService) Save() error {
 	s.savedCAConfig = &caConfig
 	s.dnsCacheSavedEnabled = snapshot.ProxyConfig.DNSCacheEnabled
 	s.dnsCacheSavedTTLSeconds = snapshot.ProxyConfig.DNSCacheTTLSeconds
-	if s.themePreviewColors != nil && *s.themePreviewColors == colors {
-		s.themePreviewColors = nil
-	}
-	s.themeColorRevision++
-	state, changed := s.themeColorStateLocked(), s.themeColorsChanged
 	s.mu.Unlock()
-	if changed != nil {
-		changed(state)
-	}
 	return nil
 }
 
