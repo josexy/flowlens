@@ -26,6 +26,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/settings"
 	"github.com/josexy/flowlens/internal/desktop/shell"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
+	"github.com/josexy/flowlens/internal/desktop/startupfailure"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
@@ -54,39 +55,91 @@ const (
 )
 
 // startupSteps are the stages that must happen in this order: a second instance
-// has to exit before it can touch the database.
+// has to exit before it can touch the database, and nothing may open SQLite
+// before a pending Restore Initial State has been cleaned.
 type startupSteps struct {
 	enableBootstrapLogging func()
 	acquireInstanceLock    func() bool
 	prepareReset           func() (*resetManifest, *resetStartupClient, error)
 	openDatabase           func() (*sql.DB, error)
-	launch                 func(*sql.DB, *resetManifest, *resetStartupClient)
-	reportFailure          func(stage string, err error)
+	// startServices returns a *startupError naming the failed step, or another
+	// error for one of the services.
+	startServices func(*sql.DB) (*launched, error)
+	reportFailure func(*startupError)
+	// serve runs the event loop: the main window when first started, or the
+	// startup failure window, which uses retry to start again.
+	serve func(first *launched, failure *startupError, retry startupAttempt)
 }
+
+// startupAttempt runs the steps that can fail. canceled means the user chose to
+// exit from the reset progress window.
+type startupAttempt func() (started *launched, failure *startupError, canceled bool)
 
 func (s startupSteps) run() {
 	s.enableBootstrapLogging()
 	if !s.acquireInstanceLock() {
 		return
 	}
-	reset, progress, err := s.prepareReset()
-	if progress != nil {
-		defer func() { _ = progress.Close() }()
-	}
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			// Without the progress window, keep the reset marker and exit
-			// before opening SQLite or any service.
-			s.reportFailure("restore initial state", err)
-		}
+	started, failure, canceled := s.attempt()
+	if canceled {
 		return
+	}
+	s.serve(started, failure, s.attempt)
+}
+
+// attempt starts the application once. A failed attempt releases what it
+// opened, so the next one starts again from the reset marker.
+func (s startupSteps) attempt() (*launched, *startupError, bool) {
+	reset, progress, err := s.prepareReset()
+	if err != nil {
+		closeResetProgress(progress)
+		if errors.Is(err, context.Canceled) {
+			return nil, nil, true
+		}
+		// The reset marker stays, and SQLite remains closed until a later
+		// attempt has cleaned up.
+		return nil, s.failed(startupFailed(startupfailure.StageReset, err)), false
 	}
 	db, err := s.openDatabase()
 	if err != nil {
-		s.reportFailure("open application database", err)
+		closeResetProgress(progress)
+		return nil, s.failed(startupFailed(startupfailure.StageDatabase, err)), false
+	}
+	started, err := s.startServices(db)
+	if err != nil {
+		closeResetProgress(progress)
+		closeDatabase(db)
+		var failure *startupError
+		if !errors.As(err, &failure) {
+			failure = startupFailed(startupfailure.StageServices, err)
+		}
+		return nil, s.failed(failure), false
+	}
+	started.reset, started.progress = reset, progress
+	return started, nil, false
+}
+
+func (s startupSteps) failed(failure *startupError) *startupError {
+	s.reportFailure(failure)
+	return failure
+}
+
+func closeResetProgress(progress *resetStartupClient) {
+	if progress == nil {
 		return
 	}
-	s.launch(db, reset, progress)
+	if err := progress.Close(); err != nil {
+		logger.G().Warnf("Close reset startup window: %v", err)
+	}
+}
+
+func closeDatabase(db *sql.DB) {
+	if db == nil {
+		return
+	}
+	if err := db.Close(); err != nil {
+		logger.G().Warnf("Close application database failed: %v", err)
+	}
 }
 
 // Run starts the application and returns when it exits.
@@ -101,8 +154,9 @@ func Run() {
 		acquireInstanceLock:    mygo.App.RequestSingleInstanceLock,
 		prepareReset:           prepareResetStartup,
 		openDatabase:           appdatabase.Open,
-		launch:                 launch,
+		startServices:          startServices,
 		reportFailure:          reportStartupFailure,
+		serve:                  serve,
 	}.run()
 }
 
@@ -128,7 +182,7 @@ func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(
 	configureUpdates(appSvc)
 	settingSvc := settingservice.New(db)
 	if err := settingSvc.Load(); err != nil {
-		return nil, fmt.Errorf("load application settings: %w", err)
+		return nil, startupFailed(startupfailure.StageSettings, err)
 	}
 	configureLogging(settingSvc)
 	logger.G().Info("FlowLens startup initialized")
@@ -190,36 +244,54 @@ func configureLogging(settingSvc *settingservice.SettingService) {
 	}
 }
 
-func launch(db *sql.DB, startupReset *resetManifest, startupProgress *resetStartupClient) {
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.G().Warnf("Close application database failed: %v", err)
-		}
-	}()
-	defer logger.Close()
+// launched is a started application whose main window is yet to open.
+type launched struct {
+	db       *sql.DB
+	all      *services
+	rt       store.Runtime
+	data     *store.Store
+	window   *settingservice.WindowConfig
+	reset    *resetManifest
+	progress *resetStartupClient
 
-	var showMain atomic.Pointer[func()]
-	var application *shell.App
+	showMain    atomic.Pointer[func()]
+	application *shell.App
+}
+
+// startServices builds and starts the services and the interface state. When
+// it fails, it stops what it started; the caller still owns db.
+func startServices(db *sql.DB) (_ *launched, startErr error) {
+	started := &launched{db: db}
 	invoker := &shortcutInvoker{
 		onMain: mygo.RunOnMain,
 		show: func() {
-			if show := showMain.Load(); show != nil {
+			if show := started.showMain.Load(); show != nil {
 				(*show)()
 			}
 		},
-		toggleProxy:   func() { application.Dispatcher.Invoke(shortcuts.CaptureToggleProxy) },
+		toggleProxy:   func() { started.application.Dispatcher.Invoke(shortcuts.CaptureToggleProxy) },
 		debounce:      globalShortcutDebounce,
 		afterDebounce: func(delay time.Duration, run func()) { time.AfterFunc(delay, run) },
 	}
 	invokeShortcut := invoker.invoke
 	rt := store.NewRuntime()
+	defer func() {
+		if startErr != nil {
+			rt.Close()
+		}
+	}()
 	var data *store.Store
 	all, err := newServices(db, invokeShortcut, func(result shortcutservice.ShortcutApplyResult) {
 		rt.Dispatcher.Post(func() { data.Settings.ShortcutsChanged(result) })
 	})
 	if err != nil {
-		reportStartupFailure("start services", err)
-		return
+		return nil, err
+	}
+	// Later failures can be shown in the language the user chose.
+	failed := func(stage startupfailure.Stage, err error) error {
+		failure := startupFailed(stage, err)
+		failure.language = currentLanguage(all.setting)
+		return failure
 	}
 	data = store.New(rt, store.Dependencies{
 		Settings: store.SettingsDependencies{
@@ -258,41 +330,56 @@ func launch(db *sql.DB, startupReset *resetManifest, startupProgress *resetStart
 		},
 	})
 	if err := data.Settings.Load(); err != nil {
-		reportStartupFailure("load application settings", err)
-		return
+		return nil, failed(startupfailure.StageSettings, err)
 	}
 	initialWindowConfig := currentWindowConfig(all.setting)
 	settingservice.SetActiveWindowFrameMode(all.setting, windowFrameModeFromConfig(initialWindowConfig))
 	data.Settings.ActiveFrameMode = all.setting.GetActiveWindowFrameMode()
 	if err := all.lifecycle.Start(); err != nil {
-		reportStartupFailure("start services", err)
-		return
+		return nil, failed(startupfailure.StageServices, err)
 	}
-	logger.SetDirectoryOpener(mygo.Shell.OpenPath)
+	started.all, started.rt, started.data, started.window = all, rt, data, initialWindowConfig
+	return started, nil
+}
 
+// stop releases a started application once the event loop has ended.
+func (l *launched) stop() {
+	logger.G().Info("Application shutdown started")
+	if err := l.all.lifecycle.Stop(); err != nil {
+		logger.G().Warnf("Stop services: %v", err)
+	}
+	l.rt.Close()
+	closeResetProgress(l.progress)
+	closeDatabase(l.db)
+	logger.G().Info("Application shutdown completed")
+}
+
+// serve runs the event loop. When startup failed, it shows why instead of
+// exiting, and opens the main window once a retry succeeds.
+func serve(first *launched, failure *startupError, retry startupAttempt) {
+	defer logger.Close()
+	logger.SetDirectoryOpener(mygo.Shell.OpenPath)
+	recovery := newStartupRecovery(first, retry)
 	mygo.App.WhenReady(func() {
-		openMainWindow(all, data, initialWindowConfig, startupReset, startupProgress, &showMain, &application)
+		if first != nil {
+			openMainWindow(first, nil)
+			return
+		}
+		recovery.fail(failure)
 	})
 	if err := mygo.App.Run(); err != nil {
 		logger.G().Errorf("Application run failed: %v", err)
 	}
-	logger.G().Info("Application shutdown started")
-	if err := all.lifecycle.Stop(); err != nil {
-		logger.G().Warnf("Stop services: %v", err)
+	if started := recovery.finish(); started != nil {
+		started.stop()
 	}
-	rt.Close()
-	logger.G().Info("Application shutdown completed")
 }
 
-func openMainWindow(
-	all *services,
-	data *store.Store,
-	windowConfig *settingservice.WindowConfig,
-	startupReset *resetManifest,
-	startupProgress *resetStartupClient,
-	showMain *atomic.Pointer[func()],
-	application **shell.App,
-) {
+// openMainWindow builds the main window. shown, when set, runs once the window
+// is visible.
+func openMainWindow(started *launched, shown func()) {
+	all, data, windowConfig := started.all, started.data, started.window
+	startupReset, startupProgress := started.reset, started.progress
 	locale.Apply(data.Settings.Language())
 	if err := theme.RegisterFonts(); err != nil {
 		logger.G().Warnf("Register fonts: %v", err)
@@ -318,7 +405,7 @@ func openMainWindow(
 		OpenURL:           mygo.Shell.OpenExternal,
 		Environment:       all.app.GetEnvironmentInfo,
 	})
-	*application = app
+	started.application = app
 	icons := widgets.NewProcessIcons(data.Runtime.Jobs, all.proxy.GetProcessIcon)
 	captureWorkspace := capture.New(data, capture.Host{
 		ListLocalIPs: all.setting.ListLocalIPv4Addresses,
@@ -478,7 +565,7 @@ func openMainWindow(
 		window.Show()
 		window.Focus()
 	}
-	showMain.Store(&show)
+	started.showMain.Store(&show)
 	mygo.App.OnSecondInstance(func([]string, string) {
 		logger.G().Info("Second FlowLens instance launch requested, showing main window")
 		mygo.RunOnMain(show)
@@ -572,10 +659,9 @@ func openMainWindow(
 	window.OnReadyToShow(func() {
 		restoreSavedWindowState(windowConfig, window, screenRects())
 		show()
-		if startupProgress != nil {
-			if err := startupProgress.Close(); err != nil {
-				logger.G().Warnf("Close reset startup window: %v", err)
-			}
+		closeResetProgress(startupProgress)
+		if shown != nil {
+			shown()
 		}
 		ready.Store(true)
 		if startupReset != nil && startupReset.Phase == resetCleaned {

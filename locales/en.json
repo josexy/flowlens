@@ -661,6 +661,13 @@
       }
     }
   },
+  "@startupFailureOpenLogsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "@statusEnvironmentLoadFailed": {
     "placeholders": {
       "error": {
@@ -1927,6 +1934,16 @@
   "shortcutsTitle": "Keyboard Shortcuts",
   "shortcutsWarningsMacNonANSICompatibility": "Displayed keys may differ on non-ANSI macOS keyboards.",
   "shortcutsWarningsWaylandPortalControlsBinding": "The Wayland portal may reject or change global shortcut bindings.",
+  "startupFailureDescription": "FlowLens is still open. Resolve the problem and retry, or open the log folder for details.",
+  "startupFailureOpenLogs": "Open Log Folder",
+  "startupFailureOpenLogsFailed": "Failed to open the log folder: {error}",
+  "startupFailureQuit": "Quit",
+  "startupFailureRetry": "Retry",
+  "startupFailureStageDatabase": "Open app data",
+  "startupFailureStageReset": "Restore initial state",
+  "startupFailureStageServices": "Start services",
+  "startupFailureStageSettings": "Load settings",
+  "startupFailureTitle": "Startup Failed",
   "statusActionEnvironment": "Environment information",
   "statusActionGithub": "GitHub project",
   "statusActionUpdate": "Check for updates",

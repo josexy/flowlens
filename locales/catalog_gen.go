@@ -10180,6 +10180,108 @@ func (msgs Messages) ShortcutsWarningsWaylandPortalControlsBinding() string {
 	return Catalog.Format(msgs.locale, "shortcutsWarningsWaylandPortalControlsBinding", nil)
 }
 
+// StartupFailureDescription says "FlowLens is still open. Resolve the problem and retry, or open the log folder for details."
+// in the language the app shows.
+func StartupFailureDescription() string { return In(i18n.Locale()).StartupFailureDescription() }
+
+// StartupFailureDescription says "FlowLens is still open. Resolve the problem and retry, or open the log folder for details."
+// in the language of msgs.
+func (msgs Messages) StartupFailureDescription() string {
+	return Catalog.Format(msgs.locale, "startupFailureDescription", nil)
+}
+
+// StartupFailureOpenLogs says "Open Log Folder"
+// in the language the app shows.
+func StartupFailureOpenLogs() string { return In(i18n.Locale()).StartupFailureOpenLogs() }
+
+// StartupFailureOpenLogs says "Open Log Folder"
+// in the language of msgs.
+func (msgs Messages) StartupFailureOpenLogs() string {
+	return Catalog.Format(msgs.locale, "startupFailureOpenLogs", nil)
+}
+
+// StartupFailureOpenLogsFailed says "Failed to open the log folder: {error}"
+// in the language the app shows.
+func StartupFailureOpenLogsFailed(error string) string {
+	return In(i18n.Locale()).StartupFailureOpenLogsFailed(error)
+}
+
+// StartupFailureOpenLogsFailed says "Failed to open the log folder: {error}"
+// in the language of msgs.
+func (msgs Messages) StartupFailureOpenLogsFailed(error string) string {
+	return Catalog.Format(msgs.locale, "startupFailureOpenLogsFailed", map[string]any{"error": error})
+}
+
+// StartupFailureQuit says "Quit"
+// in the language the app shows.
+func StartupFailureQuit() string { return In(i18n.Locale()).StartupFailureQuit() }
+
+// StartupFailureQuit says "Quit"
+// in the language of msgs.
+func (msgs Messages) StartupFailureQuit() string {
+	return Catalog.Format(msgs.locale, "startupFailureQuit", nil)
+}
+
+// StartupFailureRetry says "Retry"
+// in the language the app shows.
+func StartupFailureRetry() string { return In(i18n.Locale()).StartupFailureRetry() }
+
+// StartupFailureRetry says "Retry"
+// in the language of msgs.
+func (msgs Messages) StartupFailureRetry() string {
+	return Catalog.Format(msgs.locale, "startupFailureRetry", nil)
+}
+
+// StartupFailureStageDatabase says "Open app data"
+// in the language the app shows.
+func StartupFailureStageDatabase() string { return In(i18n.Locale()).StartupFailureStageDatabase() }
+
+// StartupFailureStageDatabase says "Open app data"
+// in the language of msgs.
+func (msgs Messages) StartupFailureStageDatabase() string {
+	return Catalog.Format(msgs.locale, "startupFailureStageDatabase", nil)
+}
+
+// StartupFailureStageReset says "Restore initial state"
+// in the language the app shows.
+func StartupFailureStageReset() string { return In(i18n.Locale()).StartupFailureStageReset() }
+
+// StartupFailureStageReset says "Restore initial state"
+// in the language of msgs.
+func (msgs Messages) StartupFailureStageReset() string {
+	return Catalog.Format(msgs.locale, "startupFailureStageReset", nil)
+}
+
+// StartupFailureStageServices says "Start services"
+// in the language the app shows.
+func StartupFailureStageServices() string { return In(i18n.Locale()).StartupFailureStageServices() }
+
+// StartupFailureStageServices says "Start services"
+// in the language of msgs.
+func (msgs Messages) StartupFailureStageServices() string {
+	return Catalog.Format(msgs.locale, "startupFailureStageServices", nil)
+}
+
+// StartupFailureStageSettings says "Load settings"
+// in the language the app shows.
+func StartupFailureStageSettings() string { return In(i18n.Locale()).StartupFailureStageSettings() }
+
+// StartupFailureStageSettings says "Load settings"
+// in the language of msgs.
+func (msgs Messages) StartupFailureStageSettings() string {
+	return Catalog.Format(msgs.locale, "startupFailureStageSettings", nil)
+}
+
+// StartupFailureTitle says "Startup Failed"
+// in the language the app shows.
+func StartupFailureTitle() string { return In(i18n.Locale()).StartupFailureTitle() }
+
+// StartupFailureTitle says "Startup Failed"
+// in the language of msgs.
+func (msgs Messages) StartupFailureTitle() string {
+	return Catalog.Format(msgs.locale, "startupFailureTitle", nil)
+}
+
 // StatusActionEnvironment says "Environment information"
 // in the language the app shows.
 func StatusActionEnvironment() string { return In(i18n.Locale()).StatusActionEnvironment() }
