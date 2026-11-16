@@ -128,12 +128,20 @@ func TestTrafficRowsAlternateInCaptureAndHistory(t *testing.T) {
 				f.setDark(dark)
 				var colors [2]color.RGBA
 				for index, id := range source.ids {
+					f.tester.Move(1, 1)
+					f.settle()
 					row, ok := f.tester.AccessByRole(ui.RoleRow, id)
 					if !ok {
 						t.Fatalf("no row %s", id)
 					}
 					firstCell := headerRect(t, f, locales.TrafficId())
-					colors[index] = pixel(f.tester, firstCell.X+firstCell.W-6, row.Bounds.Y+row.Bounds.H/2)
+					x, y := firstCell.X+firstCell.W-6, row.Bounds.Y+row.Bounds.H/2
+					colors[index] = pixel(f.tester, x, y)
+					f.tester.Move(x, y)
+					f.settle()
+					if hovered := pixel(f.tester, x, y); hovered != colors[index] {
+						t.Fatalf("dark=%v: hovering row %s changed its background from %v to %v", dark, id, colors[index], hovered)
+					}
 				}
 				base := rgba(f.theme().Background)
 				stripe := rgba(trafficStripeColor(f.theme()).Over(f.theme().Background))
@@ -143,6 +151,11 @@ func TestTrafficRowsAlternateInCaptureAndHistory(t *testing.T) {
 				if colors[0] != base || near(colors[1], base) || !near(colors[1], stripe) {
 					t.Fatalf("dark=%v: row colors %v, want %v and %v", dark, colors, base, stripe)
 				}
+				suffix := "light"
+				if dark {
+					suffix = "dark"
+				}
+				rendertest.Shoot(t, f.tester, "traffic-row-hover-"+source.name+"-"+suffix)
 			}
 		})
 	}

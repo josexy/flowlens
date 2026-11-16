@@ -38,6 +38,57 @@ func requireHistoryLoadingMask(t *testing.T, f *historyFixture) ui.Rect {
 	return mask.Bounds
 }
 
+func TestHistoryOpensAtTop(t *testing.T) {
+	for _, descending := range []bool{false, true} {
+		t.Run(fmt.Sprintf("descending=%v", descending), func(t *testing.T) {
+			f := newHistoryFixture(t)
+			for _, key := range []string{"k1", "k2"} {
+				entries := make([]*logic.TrafficEntry, 200)
+				for index := range entries {
+					entries[index] = entry(uint64(index+1), fmt.Sprintf("%s-%d.test", key, index+1))
+				}
+				f.history.entries[key] = entries
+			}
+			table := f.workspace.HistoryTable
+			if descending {
+				table.state.Sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
+			}
+			requireTop := func() {
+				t.Helper()
+				if first, _ := table.state.List.Visible(); first != 0 {
+					t.Fatalf("opened history starts at row %d, want 0", first)
+				}
+				f.requireText(table.Rows()[0].Host)
+			}
+			for _, key := range []string{"k1", "k2", "k1"} {
+				before, _ := table.state.List.Visible()
+				beginHistoryLoad(f, key)
+				if first, _ := table.state.List.Visible(); f.data.History.Traffic.Key != "" && first != before {
+					t.Fatalf("loading moved the previous history from row %d to %d", before, first)
+				}
+				f.settle()
+				requireTop()
+				table.state.List.ScrollTo(100, ui.Start)
+				f.settle()
+				if first, _ := table.state.List.Visible(); first != 100 {
+					t.Fatalf("reading history starts at row %d, want 100", first)
+				}
+			}
+			// Reopening the loaded session also starts at the top.
+			f.data.Workspace.CloseTab(logic.HistoryTabKey)
+			f.settle()
+			f.click("session one")
+			requireTop()
+			// Explicit navigation can still reveal an entry away from the top.
+			f.data.History.Traffic.PendingFocusID = table.Rows()[150].ID
+			f.settle()
+			if first, _ := table.state.List.Visible(); first != 150 {
+				t.Fatalf("focused history starts at row %d, want 150", first)
+			}
+		})
+	}
+}
+
 func TestHistoryInitialLoadingKeepsFiltersAndHeader(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dark=%v", dark), func(t *testing.T) {

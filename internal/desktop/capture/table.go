@@ -258,9 +258,9 @@ func (t *Table) pruneSelection() {
 	}
 }
 
-// followHistory clears the selection, focus and context-menu target when the
-// table shows another saved session, as 1.0.5 did: sessions number their
-// entries alike, so the rows chosen in one are not the same rows in another.
+// followHistory starts another saved session at the top and clears its
+// selection, focus and context-menu target. Sessions number their entries
+// alike, so the rows chosen in one are not the same rows in another.
 func (t *Table) followHistory() {
 	if t.HistoryKey == nil {
 		return
@@ -275,6 +275,7 @@ func (t *Table) followHistory() {
 	t.menuPress, t.menuTarget = nil, tableMenuTarget{}
 	t.menu.Open = false
 	t.focusEntry(nil)
+	t.state.List.ScrollTo(0, ui.Start)
 }
 
 func (t *Table) replaceSelection(index int) {
@@ -305,9 +306,10 @@ func (t *Table) atLatestEdge(first, last int) bool {
 
 // followNewest keeps the newest requests in view while the user is at them.
 func (t *Table) followNewest(rowsChanged bool) {
+	live := t.source.Live()
 	edge := logic.TrafficLatestEdge(t.rowsSort)
-	t.state.List.FollowEnd = edge == logic.EdgeEnd
-	if edge == logic.EdgeStart && rowsChanged && t.wasAtEdge && (t.source.Live() == nil || t.source.Live().PendingLiveEntryCount() == 0) {
+	t.state.List.FollowEnd = live != nil && edge == logic.EdgeEnd
+	if live != nil && edge == logic.EdgeStart && rowsChanged && t.wasAtEdge && live.PendingLiveEntryCount() == 0 {
 		t.state.List.ScrollTo(0, ui.Start)
 	}
 }
@@ -480,18 +482,21 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 	entry := t.rows[row]
 	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
 	highlight := t.source.Highlight(entry.ID)
+	// Opaque cell backgrounds cover the native table's hover tint.
+	background := theme.Background
 	switch {
 	case chosen:
-		cellFill(c, "selected").Background(selectedRowColor(theme))
+		background = selectedRowColor(theme)
 	case highlight != "":
 		alpha := float32(0.15)
 		if theme.Dark {
 			alpha = 0.35
 		}
-		cellFill(c, "highlight").Background(ui.Hex(highlight).Alpha(alpha))
+		background = ui.Hex(highlight).Alpha(alpha).Over(background)
 	case row%2 == 0:
-		cellFill(c, "stripe").Background(trafficStripeColor(theme))
+		background = trafficStripeColor(theme).Over(background)
 	}
+	cellFill(c, "background").Background(background)
 	var bar, outline ui.Color
 	switch {
 	case t.source.SelectedEntry() != nil && t.source.SelectedEntry().ID == entry.ID:

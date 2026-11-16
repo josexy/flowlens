@@ -85,6 +85,9 @@ func (w *Workspace) selectedHistory() (string, bool) {
 func (w *Workspace) openHistory(key string) {
 	w.selectItem(historyItemPrefix + key)
 	w.Data.History.Select(key)
+	if w.Data.History.Traffic.Key == key {
+		w.HistoryTable.state.List.ScrollTo(0, ui.Start)
+	}
 }
 
 func historyLabel(metadata *proxyservice.HistoryMetadata) string {
