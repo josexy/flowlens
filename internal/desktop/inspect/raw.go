@@ -97,7 +97,7 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 			nui.Tooltip(c, theme, button, locales.DetailWrapBody(), nui.TooltipOptions{})
 			iconButton(c, theme, "copy", lucide.Copy(), locales.DetailCopyRawHttp(), pane.text == "" || unavailable || copyDisabled, func() { p.copyText(pane.text, locales.DetailRawHttpCopied()) })
 		})
-		widgets.PaneContent(c, func() { pane.view.Build(c, p.deps.Settings.CodeFont()) })
+		widgets.PaneContent(c, func() { pane.view.Build(c, theme, p.deps.Settings.CodeFont()) })
 		if unavailable {
 			widgets.PaneWarning(c, theme, locales.DetailBodyUnavailable())
 		}

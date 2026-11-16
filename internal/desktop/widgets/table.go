@@ -12,6 +12,9 @@ import (
 // Nuxt's layout root, so input notices, focus and context menus target the table.
 // Like any Element, the returned panel is valid only during this build.
 func Table[T any](c *ui.Context, theme nui.Theme, state *nui.TableState[T], columns []nui.TableColumn[T], options nui.TableOptions) ui.Element {
+	// Nuxt's header rule and MyGo's column dividers both use BorderAccented.
+	// Match the page border within this table's theme snapshot.
+	theme.BorderAccented = theme.Border
 	// Nuxt draws its root border as an inset shadow. Disable it in the
 	// recipe so it does not add an extra line beside a pane's divider.
 	styles := make(nui.Styles, len(options.UI)+1)

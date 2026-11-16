@@ -103,14 +103,6 @@ func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)})
 }
 
-// tabDividerColor separates the tabs.
-func tabDividerColor(theme nui.Theme) ui.Color {
-	if theme.Dark {
-		return theme.Border
-	}
-	return ui.RGBA(0, 0, 0, 0.16)
-}
-
 func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.WorkspaceTab) {
 	workspace := e.Data.Workspace
 	active := workspace.ActiveKey == tab.Key
@@ -118,7 +110,7 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	// A dropped tab takes a new key, so it shows in its new place at once
 	// rather than gliding from where it was let go.
 	box := ui.Row(c.Key(tab.Key + "#" + strconv.Itoa(e.dropped[tab.Key]))).MinWidth(tabMinWidth).MaxWidth(tabMaxWidth).FillHeight().Shrink(0).AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
-	box.BorderWidth(0, 1, 0, 0).BorderColor(tabDividerColor(theme))
+	box.BorderWidth(0, 1, 0, 0).BorderColor(theme.Border)
 	hovered := box.Hovered()
 	switch {
 	case active:

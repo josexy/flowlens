@@ -15,7 +15,7 @@ func TestSSEHeaderDividerIsOnePixel(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		f.setDark(dark)
 		palette := f.settings.Theme().Config.Resolve(dark, ui.Preferences{})
-		border, background := palette.BorderAccented, palette.Background
+		border, background := palette.Border, palette.Background
 		line := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
 		blank := color.RGBA{R: background.R, G: background.G, B: background.B, A: background.A}
 		for _, scale := range []float32{1, 1.25, 1.5, 2} {

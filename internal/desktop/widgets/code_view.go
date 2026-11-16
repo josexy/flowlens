@@ -6,6 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/josexy/flowlens/internal/desktop/theme"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // Above these sizes, read-only text is shown plain: wrapped capture payloads
@@ -138,10 +139,10 @@ func (v *CodeView) State() *editor.State { return &v.state }
 
 // Build fills its parent with the framed view and reports edits to OnChange.
 // It returns the editor itself so focus and accessibility stay on the input.
-func (v *CodeView) Build(c *ui.Context, font ui.Font) ui.Element {
+func (v *CodeView) Build(c *ui.Context, palette nui.Theme, font ui.Font) ui.Element {
 	var element ui.Element
 	// The native editor paints its background over its own box.
-	ui.Box(c).Fill().MinWidth(0).MinHeight(0).Border(1, c.Theme().Border).Clip().Children(func() {
+	ui.Box(c).Fill().MinWidth(0).MinHeight(0).Border(1, palette.Border).Clip().Children(func() {
 		element = v.BuildUnframed(c, font)
 	})
 	return element

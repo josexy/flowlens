@@ -274,7 +274,7 @@ func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 		switch {
 		case text:
 			widgets.PaneContent(c, func() {
-				p.body.Build(c, p.editor.Data.Settings.CodeFont())
+				p.body.Build(c, theme, p.editor.Data.Settings.CodeFont())
 			})
 		case state.RequestBodyType == logic.BodyTypeFile:
 			widgets.PaneContent(c, func() {
@@ -301,7 +301,7 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 		wordWrapButton(c, theme, p.script)
 	})
 	widgets.PaneContent(c.Key("script-editor"), func() {
-		p.script.Build(c, p.editor.Data.Settings.CodeFont())
+		p.script.Build(c, theme, p.editor.Data.Settings.CodeFont())
 	})
 	if !p.editor.pythonEnabled() {
 		widgets.PaneWarning(c.Key("script-warning"), theme, locales.WorkspaceHttpRequestInlineScriptRuntimeDisabled())

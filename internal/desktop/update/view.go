@@ -307,7 +307,7 @@ func (v *View) statusCard(c *ui.Context, theme nui.Theme) {
 	status := v.status(theme)
 	nui.Card(c.Key("status"), theme, nui.CardOptions{
 		Decoration: nui.Decoration{UI: nui.Styles{
-			nui.Root: {Radius: nui.Set(float32(12)), BorderColor: nui.Set(theme.BorderAccented)},
+			nui.Root: {Radius: nui.Set(float32(12)), BorderColor: nui.Set(theme.Border)},
 			nui.Body: {PaddingX: nui.Set(float32(0)), PaddingY: nui.Set(float32(0)), Gap: nui.Set(float32(0))},
 		}},
 	}, func() {
@@ -462,7 +462,7 @@ func (v *View) Build(c *ui.Context) {
 		ui.Scroll(c.Key("scroll")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			ui.Column(c.Key("content")).FillWidth().MaxWidth(768+2*28).Margin(0, ui.Auto, 0, ui.Auto).Gap(16).Padding(24, 28).Children(func() {
 				ui.Row(c.Key("header")).FillWidth().Gap(16).AlignItems(ui.Start).Children(func() {
-					tile := ui.Box(c.Key("icon")).Size(52, 52).Shrink(0).Radius(12).Center().Background(theme.Elevated).Border(1, theme.BorderAccented).
+					tile := ui.Box(c.Key("icon")).Size(52, 52).Shrink(0).Radius(12).Center().Background(theme.Elevated).Border(1, theme.Border).
 						Shadow(0, 14, 30, -26, ui.RGBA(15, 23, 42, 0.35)).Clip()
 					tile.Children(func() {
 						ui.Box(c.Key("glow")).Absolute().Left(6).Right(6).Bottom(4).Height(4).Radius(2).Background(theme.Primary.Alpha(0.08))

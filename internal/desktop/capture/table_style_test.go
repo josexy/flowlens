@@ -70,7 +70,7 @@ func TestHeaderShowsNativeDividersAtRest(t *testing.T) {
 		for x := boundary - 4; x <= boundary+4; x++ {
 			want := rgba(theme.Elevated)
 			if x == boundary-1 {
-				want = rgba(theme.BorderAccented)
+				want = rgba(theme.Border)
 			}
 			if got := pixel(f.tester, x, y); !near(got, want) {
 				t.Fatalf("dark=%v: header pixel at x=%v is %v, want %v", dark, x, got, want)
@@ -90,7 +90,7 @@ func TestTrafficTableHeaderDividerIsOnePixel(t *testing.T) {
 			f.tester.Move(1, 1)
 			for _, dark := range []bool{false, true} {
 				f.setDark(dark)
-				line := rgba(f.theme().BorderAccented)
+				line := rgba(f.theme().Border)
 				for _, scale := range []float32{1, 1.25, 1.5, 2} {
 					f.tester.SetScale(scale)
 					for _, zoom := range []float32{1, 1.19} {

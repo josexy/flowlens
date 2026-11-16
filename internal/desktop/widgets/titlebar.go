@@ -55,7 +55,7 @@ func (f WindowFrame) Build(c *ui.Context, theme nui.Theme) {
 	row.Background(theme.Background).Draw(func(p *ui.Painter, bounds ui.Rect) {
 		// Paint a single device pixel under the controls so their hover fills reach the edge.
 		pixel := 1 / p.Scale()
-		p.Fill(ui.Rect{X: bounds.X, Y: bounds.Y + bounds.H - pixel, W: bounds.W, H: pixel}, theme.BorderAccented, 0)
+		p.Fill(ui.Rect{X: bounds.X, Y: bounds.Y + bounds.H - pixel, W: bounds.W, H: pixel}, theme.Border, 0)
 	})
 	row.Children(func() {
 		title := ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(10)

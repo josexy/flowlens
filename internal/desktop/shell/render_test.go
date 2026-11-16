@@ -42,7 +42,7 @@ func TestStatusBarDividerUsesOneDevicePixel(t *testing.T) {
 				f.tester.Frame()
 				y := int(math.Round(float64((height - statusBarHeight*zoom) * scale)))
 				frame := f.tester.Image()
-				for offset, want := range []ui.Color{palette.Elevated, palette.BorderAccented, palette.Background} {
+				for offset, want := range []ui.Color{palette.Elevated, palette.Border, palette.Background} {
 					pixel := color.RGBA{R: want.R, G: want.G, B: want.B, A: want.A}
 					if got := frame.RGBAAt(4, y+offset-1); got != pixel {
 						t.Fatalf("dark=%v scale=%v zoom=%v pixel %d: got %v, want %v", dark, scale, zoom, y+offset-1, got, pixel)

@@ -97,6 +97,8 @@ Component imports now use `github.com/josexy/nuxt-ui-go/ui`. Menu separators and
 
 The custom title/status bars retain their one-device-pixel drawing: MyGo's ordinary borders use rounded DIP widths, and these bars are not NuxtUI-Go components. `internal/desktop/theme.Begin` still applies Windows accessibility text scaling once to the whole window. Neither behavior is replaced by the upstream divider fixes.
 
+Ordinary pane, grid, code-view, card, tab, and window-frame borders use the page's `nui.Theme.Border`. MyGo's native `Theme.Border` maps to Nuxt's stronger `BorderAccented`; do not use it for page borders. The shared table adapts its local theme snapshot so both native column dividers and Nuxt's header rule match the page border. Control outlines and selection, focus, error, and drop indicators keep their semantic colors.
+
 The migration audit also checked table column-change notifications, programmatic focus scrolling, tab-panel names, and landmark roles. FlowLens does not use TableOptions.OnChange as a selection-only callback, its tab strips build their content separately, and it does not nest the new landmark components. Existing selection, column-layout persistence, menu, tab, and focus tests cover the affected interactions.
 
 The full Go suite (with CPython 3.12), Go lint, MyGo UI vet, formatting/catalog checks, and Windows build passed. Existing pixel tests cover light/dark themes, 100%/125%/150%/200% display scales, and 100%/119% zoom. Traffic/menu/SSE/console renders were inspected under `bin/ui-upgrade-v090/`; cross-monitor transitions and macOS/Linux real windows remain unverified.

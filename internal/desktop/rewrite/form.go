@@ -264,7 +264,7 @@ func (f *ruleForm) body(c *ui.Context, theme nui.Theme, rule *store.RewriteRule,
 		}
 		ui.Text(c.Key("label"), label).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		ui.Box(c.Key("editor")).FillWidth().Height(224).Children(func() {
-			f.replacement.Build(c, f.view.Data.Settings.CodeFont())
+			f.replacement.Build(c, theme, f.view.Data.Settings.CodeFont())
 		})
 	})
 }

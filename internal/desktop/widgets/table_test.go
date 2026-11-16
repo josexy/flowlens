@@ -34,7 +34,7 @@ func TestTableDividerFollowsNativeHeaderAtDifferentTextSizes(t *testing.T) {
 						x := int((header.Bounds.X + header.Bounds.W/2) * scale)
 						y := int(math.Round(float64((header.Bounds.Y + header.Bounds.H) * scale)))
 						frame := tester.Image()
-						border := palette.BorderAccented
+						border := palette.Border
 						line := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
 						if frame.RGBAAt(x, y) != line || frame.RGBAAt(x, y-1) == line || frame.RGBAAt(x, y+1) == line {
 							t.Fatalf("scale=%v zoom=%v: divider is not exactly one physical pixel at y=%d", scale, zoom, y)

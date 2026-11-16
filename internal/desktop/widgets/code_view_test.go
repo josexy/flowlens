@@ -42,7 +42,8 @@ func TestChineseTextCountsCharacters(t *testing.T) {
 
 func codeViewTester(view *CodeView) *ui.Tester {
 	return ui.NewTester(func(c *ui.Context) {
-		view.Build(c, ui.Font{Size: 13}).Fill().AutoFocus()
+		palette := nui.App(c, nui.DefaultApp())
+		view.Build(c, palette, ui.Font{Size: 13}).Fill().AutoFocus()
 	}, 400, 300)
 }
 
@@ -51,15 +52,14 @@ func TestCodeViewFrameSurroundsTheNativeEditor(t *testing.T) {
 		for _, readOnly := range []bool{false, true} {
 			view := NewCodeView("json", readOnly)
 			view.SetText(`{"sample":true}`)
-			palette := theme.Native()
 			tester := ui.NewTester(func(c *ui.Context) {
-				c.SetTheme(palette)
+				nui.Window(c, theme)
 				ui.Box(c).Fill().Padding(10).Children(func() {
-					view.Build(c, ui.Font{Size: 13})
+					view.Build(c, theme, ui.Font{Size: 13})
 				})
 			}, 400, 300)
 			frame := tester.Image()
-			border := palette.Border
+			border := theme.Border
 			want := color.RGBA{R: border.R, G: border.G, B: border.B, A: border.A}
 			for _, point := range [][2]int{
 				{10, 150}, {389, 150}, {200, 10}, {200, 289},

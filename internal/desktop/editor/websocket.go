@@ -254,7 +254,7 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 			if binary {
 				p.editor.fileControl(c, theme, p.key+":draft", &state.DraftFile, &p.fileGuard)
 			} else {
-				p.draft.Build(c, p.editor.Data.Settings.CodeFont())
+				p.draft.Build(c, theme, p.editor.Data.Settings.CodeFont())
 			}
 			ui.Box(c.Key("send-position")).Absolute().Right(20).Bottom(12).Children(func() {
 				button := nui.Button(c.Key("send-message"), theme, "", nui.ButtonOptions{Size: nui.XL, Square: true, Leading: lucide.Send(), AccessibleLabel: locales.WorkspaceWebsocketClientSendMessage(), Disabled: !p.canSend() || state.IsSendingMessage, Loading: state.IsSendingMessage}).Radius(100)

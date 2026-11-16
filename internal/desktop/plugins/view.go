@@ -577,7 +577,7 @@ func (v *View) editorPane(c *ui.Context, theme nui.Theme) {
 			})
 		} else {
 			ui.Box(c.Key(fileLanguage(plugins.SelectedFilePath) == "python")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(8, 10).Children(func() {
-				v.activeEditor().Build(c, v.Data.Settings.CodeFont())
+				v.activeEditor().Build(c, theme, v.Data.Settings.CodeFont())
 			})
 		}
 		if plugins.EditorError != "" {
@@ -624,7 +624,7 @@ func (v *View) paramsPane(c *ui.Context, theme nui.Theme) {
 		})
 	}
 	ui.Box(c.Key("params-editor")).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(8, 10).Children(func() {
-		v.params.Build(c, v.Data.Settings.CodeFont())
+		v.params.Build(c, theme, v.Data.Settings.CodeFont())
 	})
 }
 

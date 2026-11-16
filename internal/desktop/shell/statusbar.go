@@ -31,7 +31,7 @@ type environmentDialog struct {
 func (a *App) statusBar(c *ui.Context, theme nui.Theme) {
 	row := ui.Row(c).FillWidth().MinHeight(statusBarHeight).Shrink(0).AlignItems(ui.Center).Justify(ui.End).PaddingX(16).Background(theme.Background)
 	row.Draw(func(p *ui.Painter, bounds ui.Rect) {
-		p.Fill(ui.Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: 1 / p.Scale()}, theme.BorderAccented, 0)
+		p.Fill(ui.Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: 1 / p.Scale()}, theme.Border, 0)
 	})
 	row.Children(func() {
 		total, selected := 0, 0

@@ -181,7 +181,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 				if b.active == logic.BodyTabFormatted {
 					view = b.formatted
 				}
-				view.Build(c, b.deps.Settings.CodeFont())
+				view.Build(c, theme, b.deps.Settings.CodeFont())
 			}
 		})
 	})

@@ -28,8 +28,8 @@ func TestWindowControlHoverReachesTitleBarBottom(t *testing.T) {
 			}
 			y := int(math.Round(float64(content.Y*scale))) - 1
 			frame := tester.Image()
-			if got := frame.RGBAAt(4, y); !sameColor(got, theme.BorderAccented) {
-				t.Fatalf("scale %v, zoom %v: bottom pixel %v, want divider %v", scale, zoom, got, theme.BorderAccented)
+			if got := frame.RGBAAt(4, y); !sameColor(got, theme.Border) {
+				t.Fatalf("scale %v, zoom %v: bottom pixel %v, want divider %v", scale, zoom, got, theme.Border)
 			}
 			if got := frame.RGBAAt(4, y-1); !sameColor(got, theme.Background) {
 				t.Fatalf("scale %v, zoom %v: pixel above divider %v, want background %v", scale, zoom, got, theme.Background)

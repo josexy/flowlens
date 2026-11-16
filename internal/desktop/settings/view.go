@@ -445,7 +445,7 @@ func (v *View) Build(c *ui.Context) {
 }
 
 func (v *View) nav(c *ui.Context, theme nui.Theme) {
-	ui.Column(c.Key("settings-nav")).Width(160).Shrink(0).FillHeight().Gap(2).Padding(16, 8).Background(theme.Background).BorderWidth(0, 1, 0, 0).BorderColor(theme.BorderAccented).Children(func() {
+	ui.Column(c.Key("settings-nav")).Width(160).Shrink(0).FillHeight().Gap(2).Padding(16, 8).Background(theme.Background).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
 		ui.Text(c, strings.ToUpper(locales.MenuSettings())).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).LetterSpacing(0.84).TextColor(theme.Muted).Padding(0, 8, 10, 8)
 		for _, item := range navItems() {
 			active := v.tab == item.key

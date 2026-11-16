@@ -63,7 +63,7 @@ func themeModeIcon(mode string) *ui.SVG {
 
 func (a *App) primarySidebar(c *ui.Context, palette nui.Theme) {
 	column := ui.Column(c).Width(primarySidebarWidth).Shrink(0).FillHeight().Padding(10, 6, 8, 6).Background(palette.Elevated)
-	column.BorderWidth(0, 1, 0, 0).BorderColor(palette.BorderAccented).Shadow(8, 0, 20, -18, ui.RGBA(15, 23, 42, 0.32))
+	column.BorderWidth(0, 1, 0, 0).BorderColor(palette.Border).Shadow(8, 0, 20, -18, ui.RGBA(15, 23, 42, 0.32))
 	column.Children(func() {
 		ui.Column(c).FillWidth().Grow(1).Basis(0).Gap(2).Children(func() {
 			for _, item := range sidebarItems {
