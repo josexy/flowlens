@@ -60,6 +60,7 @@ func TestContentLayoutLocalesThemesAndMaximumFont(t *testing.T) {
 				}
 				f.tester.SetSize(558, 768)
 				f.settle()
+				rendertest.SettleTheme(f.tester)
 				rendertest.Shoot(t, f.tester, "memstats-narrow-"+language+"-"+mode)
 			})
 		}

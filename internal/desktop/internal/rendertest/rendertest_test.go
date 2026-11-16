@@ -1,11 +1,14 @@
 package rendertest
 
 import (
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 func view(c *ui.Context) {
@@ -26,15 +29,35 @@ func TestShootIsOffWithoutDirectory(t *testing.T) {
 func TestShootThemesWritesTwoImages(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(EnvDir, dir)
-	tester := ui.NewTester(view, 200, 100)
+	config := nui.DefaultApp()
+	interval := "2s"
+	tester := ui.NewTester(func(c *ui.Context) {
+		palette := nui.App(c, config)
+		nui.Select(c, palette, &interval, []nui.Option[string]{{Value: "2s", Label: "2s"}}, nui.SelectOptions{Label: "Interval"}).Width(140)
+	}, 200, 100)
 	var modes []bool
-	paths := ShootThemes(t, tester, "probe/view", func(dark bool) { modes = append(modes, dark) })
+	paths := ShootThemes(t, tester, "probe/view", func(dark bool) {
+		modes = append(modes, dark)
+		tester.SetDark(dark)
+	})
 	if len(paths) != 2 || filepath.Base(paths[0]) != "probe-view-light.png" || filepath.Base(paths[1]) != "probe-view-dark.png" {
 		t.Fatalf("paths = %v", paths)
 	}
-	for _, path := range paths {
-		if info, err := os.Stat(path); err != nil || info.Size() == 0 {
-			t.Fatalf("%s: %v", path, err)
+	for index, palette := range []nui.Theme{config.Light, config.Dark} {
+		img, err := os.Open(paths[index])
+		if err != nil {
+			t.Fatal(err)
+		}
+		frame, err := png.Decode(img)
+		_ = img.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		background := palette.Background
+		want := color.RGBA{R: background.R, G: background.G, B: background.B, A: background.A}
+		// The middle of the Select falls between its label and chevron.
+		if got := color.RGBAModel.Convert(frame.At(70, 16)); got != want {
+			t.Errorf("%s: Select background %v, want %v", paths[index], got, want)
 		}
 	}
 	if len(modes) != 3 || modes[0] || !modes[1] || modes[2] {

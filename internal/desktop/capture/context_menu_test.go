@@ -195,6 +195,7 @@ func TestRenderDecoratedMenus(t *testing.T) {
 	f.settle()
 	for _, dark := range []bool{false, true} {
 		f.setDark(dark)
+		rendertest.SettleTheme(f.tester)
 		suffix := "-light"
 		if dark {
 			suffix = "-dark"

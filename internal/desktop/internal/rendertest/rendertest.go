@@ -18,6 +18,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
+	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 // EnvDir names the environment variable that enables writing renders.
@@ -58,9 +59,16 @@ func Shoot(t testing.TB, tester *ui.Tester, name string) string {
 	return path
 }
 
-// ShootThemes renders name-light and name-dark. setDark switches the view's
-// theme; Shoot runs after a few settled frames in each theme. When rendering
-// is off it does nothing, and setDark is not called.
+// SettleTheme builds the new theme and completes the default Nui color
+// transition on the Tester's clock. Rebuilding frames alone leaves time frozen.
+func SettleTheme(tester *ui.Tester) {
+	tester.Frame()
+	tester.Advance(nui.Light().Motion.Transition)
+	tester.Frame()
+}
+
+// ShootThemes renders name-light and name-dark after each theme settles.
+// When rendering is off it does nothing, and setDark is not called.
 func ShootThemes(t testing.TB, tester *ui.Tester, name string, setDark func(dark bool)) []string {
 	t.Helper()
 	if !Enabled() {
@@ -69,9 +77,7 @@ func ShootThemes(t testing.TB, tester *ui.Tester, name string, setDark func(dark
 	var paths []string
 	for _, dark := range []bool{false, true} {
 		setDark(dark)
-		for range 3 {
-			tester.Frame()
-		}
+		SettleTheme(tester)
 		suffix := "light"
 		if dark {
 			suffix = "dark"
@@ -79,7 +85,7 @@ func ShootThemes(t testing.TB, tester *ui.Tester, name string, setDark func(dark
 		paths = append(paths, Shoot(t, tester, name+"-"+suffix))
 	}
 	setDark(false)
-	tester.Frame()
+	SettleTheme(tester)
 	return paths
 }
 

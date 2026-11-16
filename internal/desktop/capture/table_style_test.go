@@ -126,6 +126,7 @@ func TestTrafficRowsAlternateInCaptureAndHistory(t *testing.T) {
 			f.tester.Move(1, 1)
 			for _, dark := range []bool{false, true} {
 				f.setDark(dark)
+				rendertest.SettleTheme(f.tester)
 				var colors [2]color.RGBA
 				for index, id := range source.ids {
 					f.tester.Move(1, 1)
@@ -165,6 +166,7 @@ func TestHoveredResizeEdgeUsesOnlyNativeGrip(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		f := newRenderFixture(t)
 		f.setDark(dark)
+		rendertest.SettleTheme(f.tester)
 		theme := f.theme()
 		host := headerRect(t, f, locales.TrafficHost())
 		edge := host.X + host.W

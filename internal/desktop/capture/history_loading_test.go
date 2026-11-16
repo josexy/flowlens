@@ -94,6 +94,7 @@ func TestHistoryInitialLoadingKeepsFiltersAndHeader(t *testing.T) {
 		t.Run(fmt.Sprintf("dark=%v", dark), func(t *testing.T) {
 			f := newHistoryFixture(t)
 			f.setDark(dark)
+			rendertest.SettleTheme(f.tester)
 			beginHistoryLoad(f, "k1")
 			bounds := requireHistoryLoadingMask(t, f)
 			f.requireText(locales.TrafficHost())
@@ -134,6 +135,7 @@ func TestHistoryLoadingKeepsRowsAndDetail(t *testing.T) {
 				f.data.Settings.ToggleTrafficDetailLayout(nil)
 			}
 			f.setDark(horizontal)
+			rendertest.SettleTheme(f.tester)
 			detailClicks := 0
 			f.workspace.HistoryDetail = func(c *ui.Context, theme nui.Theme) {
 				nui.Button(c, theme, "history-detail", nui.ButtonOptions{}).OnClick(func() { detailClicks++ })

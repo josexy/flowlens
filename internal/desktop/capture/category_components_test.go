@@ -179,6 +179,7 @@ func TestCategoryGroupsShareOuterScroll(t *testing.T) {
 	}
 	for _, dark := range []bool{false, true} {
 		f.setDark(dark)
+		rendertest.SettleTheme(f.tester)
 		rendertest.Shoot(t, f.tester, fmt.Sprintf("category-large-dark-%v", dark))
 	}
 	for _, height := range []int{500, 950} {
