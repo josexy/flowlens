@@ -45,7 +45,7 @@ func (s *HistoryService) ExportHAR(request HARExportRequest) (proxyservice.HARWr
 	}
 	defer hbinFile.Close()
 
-	writer, err := proxyservice.NewHARFileWriter(request.Path, appservice.APP_VERSION)
+	writer, err := proxyservice.NewHARFileWriter(request.Path, appservice.Version())
 	if err != nil {
 		return proxyservice.HARWriteResult{}, err
 	}

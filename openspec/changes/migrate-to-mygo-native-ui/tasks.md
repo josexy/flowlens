@@ -151,7 +151,7 @@ Unless a task says otherwise, builds and tests run with `CGO_ENABLED=0` on Windo
 
 ## 16. Release and documentation
 
-- [x] 16.1 Create `CHANGELOG.md` with a section for the first MyGo release and implement `task version` in Go, including `CHECK=true`; verify the task sets and detects inconsistent metadata in a test
+- [x] 16.1 Create `CHANGELOG.md` with a section for the first MyGo release, keep the application version only in `mygo.json`, and read MyGo's embedded version for application metadata, updates, and HAR exports; verify runtime version use and reject mismatched release versions before building
 - [x] 16.2 Rewrite `.github/workflows/ci.yml` to run `task verify` on Linux and macOS runners and cross-compile Windows; verify with `actionlint` or a local dry run of each command
 - [ ] 16.3 Add `updates` to `mygo.json` with a public key from `mygo keygen`, supplied by the maintainer, and rewrite `.github/workflows/release.yml` for the specified artifacts, building macOS targets on macOS with `CGO_ENABLED=1` in a separate `mygo build` from Windows and Linux, and failing when `MYGO_UPDATER_PRIVATE_KEY` is absent; verify with a local unsigned `mygo build` and a check of the missing-key failure
 - [x] 16.4 Rewrite `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, and `build/` guidance for the new stack, and remove Wails, Node, Monaco, and server-mode references; verify with `grep -ril 'wails\|npm \|monaco'` over docs and by running each documented command

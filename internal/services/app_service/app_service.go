@@ -8,13 +8,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/egoist/mygo"
 	"github.com/josexy/flowlens/internal/serviceruntime"
 )
 
 const (
 	APP_NAME       = "FlowLens"
 	APP_IDENTIFIER = "com.josexy.flowlens"
-	APP_VERSION    = "1.0.5"
 
 	DEFAULT_WINDOW_WIDTH  = 1024
 	DEFAULT_WINDOW_HEIGHT = 768
@@ -35,6 +35,15 @@ type EnvironmentInfo struct {
 }
 
 var injectedBuildCommit string
+
+// Version returns the version MyGo embeds from mygo.json. Plain Go builds
+// without MyGo metadata use a development version.
+func Version() string {
+	if version := mygo.App.Version(); version != "" {
+		return version
+	}
+	return "0.0.0-dev"
+}
 
 type AppService struct {
 	events          serviceruntime.EventBus
@@ -93,7 +102,7 @@ func (a *AppService) ServiceStartup(ctx context.Context) error {
 	if a.events != nil {
 		emit = a.events.Emit
 	}
-	a.updates = newUpdateController(a.updateEngine, APP_VERSION, a.updateApplyMode, emit)
+	a.updates = newUpdateController(a.updateEngine, Version(), a.updateApplyMode, emit)
 	if a.events != nil {
 		a.updateEventOffs = []func(){
 			a.events.On(UpdateRestartFailedEventName, func(event serviceruntime.Event) {
@@ -145,7 +154,7 @@ func (a *AppService) GetUpdateSnapshot() UpdateSnapshot {
 	if a.updates == nil {
 		return UpdateSnapshot{
 			Phase:          UpdatePhaseIdle,
-			CurrentVersion: APP_VERSION,
+			CurrentVersion: Version(),
 			ApplyMode:      UpdateApplyModeManual,
 		}
 	}
@@ -223,7 +232,7 @@ func buildEnvironmentInfo(buildInfo *debug.BuildInfo) EnvironmentInfo {
 	}
 
 	return EnvironmentInfo{
-		AppVersion:  "v" + APP_VERSION,
+		AppVersion:  "v" + Version(),
 		GoVersion:   goVersion,
 		MyGoVersion: moduleVersion(buildInfo, myGoModulePath),
 		BuildCommit: resolveBuildCommit(buildInfo),

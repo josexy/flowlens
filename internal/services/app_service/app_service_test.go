@@ -5,15 +5,37 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egoist/mygo"
 	"github.com/josexy/flowlens/internal/serviceruntime"
 	"github.com/josexy/flowlens/internal/serviceruntime/bustest"
 )
 
-func TestBuildEnvironmentInfoIncludesApplicationVersion(t *testing.T) {
-	info := buildEnvironmentInfo(nil)
-	want := "v" + APP_VERSION
-	if info.AppVersion != want {
-		t.Fatalf("AppVersion = %q, want %q", info.AppVersion, want)
+func TestApplicationVersionUsesMyGoMetadata(t *testing.T) {
+	original := mygo.App.Version()
+	t.Cleanup(func() { mygo.App.SetVersion(original) })
+	for _, tt := range []struct {
+		name, version, want string
+	}{
+		{"release", "2.3.4", "2.3.4"},
+		{"prerelease", "2.4.0-beta.1", "2.4.0-beta.1"},
+		{"plain Go build", "", "0.0.0-dev"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mygo.App.SetVersion(tt.version)
+			if got := Version(); got != tt.want {
+				t.Fatalf("Version() = %q, want %q", got, tt.want)
+			}
+			if got := buildEnvironmentInfo(nil).AppVersion; got != "v"+tt.want {
+				t.Fatalf("AppVersion = %q, want %q", got, "v"+tt.want)
+			}
+			if got := New().GetUpdateSnapshot().CurrentVersion; got != tt.want {
+				t.Fatalf("unstarted updater version = %q, want %q", got, tt.want)
+			}
+			service, _ := startedAppService(t)
+			if got := service.GetUpdateSnapshot().CurrentVersion; got != tt.want {
+				t.Fatalf("started updater version = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

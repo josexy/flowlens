@@ -41,7 +41,7 @@ tasks:
   fmt:check:
     desc: Fails if any Go file needs formatting
     cmds:
-      - test -z "$(gofmt -l main.go internal scripts 2>/dev/null)"
+      - test -z "$(gofmt -l main.go internal 2>/dev/null)"
 
   lint:go:
     desc: Checks Go code with golangci-lint
@@ -78,21 +78,6 @@ tasks:
     desc: Checks the message catalogs
     cmds:
       - go tool mygo i18n check
-
-  version:
-    desc: 'Sets or checks release version metadata (VERSION=1.2.3 [CHECK=true])'
-    cmds:
-      - go run ./scripts/setversion --version "{{.VERSION}}" {{if eq .CHECK "true"}}--check{{end}}
-    vars:
-      VERSION: '{{.VERSION | default ""}}'
-      CHECK: '{{.CHECK | default "false"}}'
-
-  release:check:
-    desc: 'Checks that a version can be signed and published (VERSION=1.2.3)'
-    cmds:
-      - go run ./scripts/setversion --version "{{.VERSION}}" --release
-    vars:
-      VERSION: '{{.VERSION | default ""}}'
 
   verify:
     desc: Runs formatting, lint, UI lifecycle, catalog, and test checks

@@ -39,7 +39,7 @@ func configureUpdates(service *appservice.AppService) {
 		service.SetUpdateEngine(newMygoEngine(service), appservice.UpdateApplyModeSelf)
 		return
 	}
-	service.SetUpdateEngine(newManualEngine(appservice.APP_VERSION), appservice.UpdateApplyModeManual)
+	service.SetUpdateEngine(newManualEngine(appservice.Version()), appservice.UpdateApplyModeManual)
 }
 
 // updateReporter hears the phases and progress of a download.

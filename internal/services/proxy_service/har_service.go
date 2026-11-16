@@ -22,7 +22,7 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 		return HARWriteResult{}, err
 	}
 
-	writer, err := NewHARFileWriter(request.Path, appservice.APP_VERSION)
+	writer, err := NewHARFileWriter(request.Path, appservice.Version())
 	if err != nil {
 		return HARWriteResult{}, err
 	}

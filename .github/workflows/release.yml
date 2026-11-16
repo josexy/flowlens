@@ -36,12 +36,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Resolve release version
         id: version
         env:
@@ -57,13 +51,15 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag_name=v${version}" >> "$GITHUB_OUTPUT"
 
-      # Before any build or upload: installed applications could not verify a
-      # release made without the update key.
-      - name: Check signing key, version metadata, and release notes
+      - name: Check release version
         env:
-          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: go run ./scripts/setversion --version "$VERSION" --release
+        run: |
+          set -euo pipefail
+          if ! jq -e --arg version "$VERSION" '.version == $version' mygo.json > /dev/null; then
+            echo "mygo.json version must match the release version ${VERSION}." >&2
+            exit 1
+          fi
 
       - name: Create the draft release
         env:
@@ -86,7 +82,7 @@ jobs:
 
           Use \`SHA256SUMS\` to verify downloads. Versions 1.0.x must install this release once by hand.
 
-          Installers are unsigned unless signing secrets are configured for the release. Update archives are always signed.
+          Windows executables and installers are unsigned. macOS applications use ad-hoc signing and are not notarized. Update archives are always signed.
           BODY
           gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
             --title "FlowLens ${TAG_NAME}" --notes-file "${RUNNER_TEMP}/release-body.md" --generate-notes
@@ -143,39 +139,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install NSIS and osslsigncode
-        run: sudo apt-get update && sudo apt-get install -y nsis osslsigncode
-
-      - name: Configure Windows signing
-        env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          WINDOWS_TIMESTAMP_SERVER: ${{ secrets.WINDOWS_TIMESTAMP_SERVER }}
-        run: |
-          set -euo pipefail
-          if [ -z "${WINDOWS_CERTIFICATE_BASE64}" ] && [ -z "${WINDOWS_CERTIFICATE_PASSWORD}" ]; then
-            echo "Windows signing is not configured; the Windows files will be unsigned."
-            exit 0
-          fi
-          if [ -z "${WINDOWS_CERTIFICATE_BASE64}" ] || [ -z "${WINDOWS_CERTIFICATE_PASSWORD}" ]; then
-            echo "Windows signing configuration is incomplete: configure both the certificate and its password." >&2
-            exit 1
-          fi
-          umask 077
-          certificate="${RUNNER_TEMP}/code-signing.pfx"
-          printf '%s' "${WINDOWS_CERTIFICATE_BASE64}" | base64 --decode > "${certificate}"
-          filter='.windows.certificate = $certificate'
-          if [ -n "${WINDOWS_TIMESTAMP_SERVER}" ]; then
-            filter="${filter} | .windows.timestampUrl = \$timestamp"
-          fi
-          jq --arg certificate "${certificate}" --arg timestamp "${WINDOWS_TIMESTAMP_SERVER}" "${filter}" mygo.json > "${RUNNER_TEMP}/mygo.json"
-          cp "${RUNNER_TEMP}/mygo.json" mygo.json
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
 
       - name: Build and upload
         env:
           GH_TOKEN: ${{ github.token }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-          MYGO_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: go tool mygo build -platform windows/amd64,linux/amd64 -upload
 
   macos:
@@ -202,62 +172,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Configure macOS signing and notarization
-        env:
-          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          count() {
-            local total=0
-            for value in "$@"; do
-              if [ -n "$value" ]; then total=$((total + 1)); fi
-            done
-            echo "$total"
-          }
-          signing="$(count "${MACOS_CERTIFICATE_P12_BASE64}" "${MACOS_CERTIFICATE_PASSWORD}" "${MACOS_SIGN_IDENTITY}")"
-          notary="$(count "${MACOS_NOTARY_APPLE_ID}" "${MACOS_NOTARY_TEAM_ID}" "${MACOS_NOTARY_PASSWORD}")"
-          if [ "$signing" -ne 0 ] && [ "$signing" -ne 3 ]; then
-            echo "macOS signing configuration is incomplete: configure the certificate, password, and identity." >&2
-            exit 1
-          fi
-          if [ "$notary" -ne 0 ] && [ "$notary" -ne 3 ]; then
-            echo "macOS notarization configuration is incomplete: configure the Apple ID, team ID, and password." >&2
-            exit 1
-          fi
-          if [ "$notary" -eq 3 ] && [ "$signing" -ne 3 ]; then
-            echo "macOS notarization requires a complete macOS signing configuration." >&2
-            exit 1
-          fi
-          if [ "$signing" -eq 0 ]; then
-            echo "macOS signing is not configured; the applications will be signed ad hoc."
-            exit 0
-          fi
-          umask 077
-          certificate="${RUNNER_TEMP}/macos-signing.p12"
-          keychain="${RUNNER_TEMP}/app-signing.keychain-db"
-          keychain_password="$(openssl rand -base64 24)"
-          printf '%s' "${MACOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "${certificate}"
-          security create-keychain -p "${keychain_password}" "${keychain}"
-          security set-keychain-settings -lut 21600 "${keychain}"
-          security unlock-keychain -p "${keychain_password}" "${keychain}"
-          security import "${certificate}" -k "${keychain}" -P "${MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
-          rm -f "${certificate}"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "${keychain_password}" "${keychain}"
-          security list-keychains -d user -s "${keychain}" login.keychain
-          filter='.macos.signingIdentity = $identity'
-          if [ "$notary" -eq 3 ]; then
-            xcrun notarytool store-credentials notary --keychain "${keychain}" \
-              --apple-id "${MACOS_NOTARY_APPLE_ID}" --team-id "${MACOS_NOTARY_TEAM_ID}" --password "${MACOS_NOTARY_PASSWORD}"
-            filter="${filter} | .macos.notarize = {keychainProfile: \"notary\", keychain: \$keychain}"
-          fi
-          jq --arg identity "${MACOS_SIGN_IDENTITY}" --arg keychain "${keychain}" "${filter}" mygo.json > "${RUNNER_TEMP}/mygo.json"
-          cp "${RUNNER_TEMP}/mygo.json" mygo.json
 
       - name: Build and upload
         env:

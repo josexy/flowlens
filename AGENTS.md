@@ -121,6 +121,6 @@ View changes run under `ui.NewTester` with no display. After changing views, run
 
 - Python entry-point/scope/hook/order/limit/security/console changes update both technical guides, examples, README, and `internal/desktop/pythonapi/data`.
 - Use English Conventional Commits: `<type>(<scope>): <summary>`, one class of change per commit. Include only verified in-scope files and consistent bilingual copy.
-- Release metadata uses `task version VERSION=1.2.3`; add `CHECK=true` to verify without writing. Each release needs a `## <version>` section in `CHANGELOG.md`, which becomes its update notes. See [Building and Packaging](docs/technical/building.md).
+- Keep the application version only in `mygo.json`; MyGo embeds it and `appservice.Version()` reads it through `mygo.App.Version()`. Release tags must match this version. Each release needs a `## <version>` section in `CHANGELOG.md`, which becomes its update notes. See [Building and Packaging](docs/technical/building.md).
 - macOS must keep `CGO_ENABLED=1`; `cgo_guard_darwin.go` fails a production build without it. MyGo upgrades go through `go.mod`, which pins the CLI.
 - Report the completed result, checks run, and unresolved risks. If verification is unavailable, state why; feasibility alone is not completion.

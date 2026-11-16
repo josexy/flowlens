@@ -14,11 +14,11 @@ Building and testing FlowLens SHALL require only Go, Task, and the pinned MyGo C
 - **THEN** the application builds without installing a JavaScript toolchain
 
 ### Requirement: Task entry points
-The Taskfile SHALL provide tasks for development run, build, packaging, tests, UI lifecycle checks, Go lint and fixes, modernization checks, catalog generation and checking, and version metadata.
+The Taskfile SHALL provide tasks for development run, build, packaging, tests, UI lifecycle checks, Go lint and fixes, modernization checks, and catalog generation and checking.
 
 #### Scenario: Listing tasks
 - **WHEN** a developer runs `task --list`
-- **THEN** `dev`, `build`, `package`, `run`, `test`, `lint:go`, `lint:go:fix`, `modernize`, `modernize:fix`, `vet:ui`, `i18n:generate`, `i18n:check`, and `version` are listed with descriptions
+- **THEN** `dev`, `build`, `package`, `run`, `test`, `lint:go`, `lint:go:fix`, `modernize`, `modernize:fix`, `vet:ui`, `i18n:generate`, and `i18n:check` are listed with descriptions
 
 #### Scenario: Full verification
 - **WHEN** a developer runs the verification task on a machine with no display
@@ -65,15 +65,15 @@ Release builds SHALL publish update archives and per-platform manifests signed w
 - **THEN** the release fails before uploading rather than publishing a release that installed applications cannot verify
 
 ### Requirement: Version metadata
-A single task SHALL set the application version across project metadata and verify that metadata is consistent.
+The application version SHALL be maintained only in `mygo.json`, embedded by MyGo, and read at runtime through `mygo.App.Version()`. Release preparation SHALL verify that the requested version matches this configuration before building or uploading.
 
 #### Scenario: Setting the version
-- **WHEN** a developer runs `task version VERSION=1.2.3`
-- **THEN** all version metadata shows `1.2.3`
+- **WHEN** a developer sets `version` in `mygo.json` to `1.2.3` and builds with MyGo
+- **THEN** the application environment details, updater, HAR creator metadata, and packaged artifacts use `1.2.3`
 
 #### Scenario: Checking the version
-- **WHEN** a developer runs `task version VERSION=1.2.3 CHECK=true` with inconsistent metadata
-- **THEN** the task fails without changing files
+- **WHEN** a release tag or manually supplied version differs from `mygo.json`
+- **THEN** release preparation fails without changing files, building, or uploading
 
 ### Requirement: Continuous integration
 CI SHALL run the verification task on every push and pull request and SHALL build for all supported platforms.

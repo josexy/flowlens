@@ -93,8 +93,8 @@ Run commands from the repository root.
 | `task lint:go` / `task lint:go:fix` | Check Go lint and formatting, or apply safe fixes |
 | `task vet:ui` | Check native UI lifecycle rules |
 | `task i18n:generate` / `task i18n:check` | Regenerate or check the message catalogs |
-| `task version VERSION=1.2.3` | Synchronize release version metadata |
-| `task version VERSION=1.2.3 CHECK=true` | Check release version metadata without writing |
+
+Set the application version in `mygo.json`; MyGo embeds it during development and packaging. See [Building and Packaging](docs/technical/building.md#releasing) for release checks and tags.
 
 ## Data and Security
 

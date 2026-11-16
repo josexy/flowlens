@@ -51,19 +51,12 @@ An installation updates itself when MyGo can write to where it is installed. Pac
 
 ## Releasing
 
+`mygo.json` is the single source of the application version. `go tool mygo dev` and `go tool mygo build` embed it, and FlowLens reads it through `mygo.App.Version()` for environment details, update checks, and HAR exports. Plain `go run` or `go build` without MyGo metadata uses `0.0.0-dev`. `go tool mygo version` prints the framework CLI version; it does not change the application version.
+
 1. Add a `## <version>` section to `CHANGELOG.md`. Its text becomes the release notes.
-2. Run `task version VERSION=1.2.3`, then commit.
-3. Run `task release:check VERSION=1.2.3` with `MYGO_UPDATER_PRIVATE_KEY` set to check the signing key, metadata, and notes.
-4. Push the tag `v1.2.3`.
+2. Set `version` in `mygo.json` to the same version, such as `1.2.3`, then commit.
+3. Push the matching tag `v1.2.3`.
 
-`.github/workflows/release.yml` fails before building anything if the signing key, the public key, the metadata, or the release notes are missing. It then builds Windows and Linux with cgo disabled, builds macOS with cgo enabled, and uploads everything to a draft GitHub Release to review and publish.
+`.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows and Linux with cgo disabled, builds macOS with cgo enabled, and uploads everything to a draft GitHub Release to review and publish. The draft is created before these build checks.
 
-### Optional Signing Secrets
-
-Installers and applications are signed only when these are configured. A partial configuration fails the release.
-
-| Platform | Secrets |
-| --- | --- |
-| Windows | `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`, optionally `WINDOWS_TIMESTAMP_SERVER` |
-| macOS signing | `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_IDENTITY` |
-| macOS notarization | `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID`, `MACOS_NOTARY_PASSWORD` |
+Windows executables and installers are unsigned. macOS applications use MyGo's default ad-hoc signing and are not notarized. No platform-signing certificates or secrets are required. `MYGO_UPDATER_PRIVATE_KEY` is still required to sign update archives.
