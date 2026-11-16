@@ -41,6 +41,17 @@ func (e *startupError) failure() startupfailure.Failure {
 	return startupfailure.Failure{Stage: e.stage, Error: e.err.Error()}
 }
 
+// enableBootstrapLogging releases the previous attempt's log file before a
+// pending reset can remove it. File logging resumes when settings are loaded
+// or another startup failure is reported.
+func enableBootstrapLogging() {
+	err := logger.Close()
+	logger.EnableBootstrapOutput(os.Stderr)
+	if err != nil {
+		logger.G().Warnf("Close startup log: %v", err)
+	}
+}
+
 // reportStartupFailure writes the failure to standard error and to the log
 // file, which the startup failure window offers to open. Logging is enabled
 // for it even when the settings turn it off, since they may be unreadable.

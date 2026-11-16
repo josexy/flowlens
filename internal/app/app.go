@@ -84,7 +84,10 @@ func (s startupSteps) run() {
 	if canceled {
 		return
 	}
-	s.serve(started, failure, s.attempt)
+	s.serve(started, failure, func() (*launched, *startupError, bool) {
+		s.enableBootstrapLogging()
+		return s.attempt()
+	})
 }
 
 // attempt starts the application once. A failed attempt releases what it
@@ -150,7 +153,7 @@ func Run() {
 	}
 	mygo.App.SetName(applicationName())
 	startupSteps{
-		enableBootstrapLogging: func() { logger.EnableBootstrapOutput(os.Stderr) },
+		enableBootstrapLogging: enableBootstrapLogging,
 		acquireInstanceLock:    mygo.App.RequestSingleInstanceLock,
 		prepareReset:           prepareResetStartup,
 		openDatabase:           appdatabase.Open,
@@ -175,7 +178,7 @@ type services struct {
 	lifecycle     *serviceruntime.Lifecycle
 }
 
-func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(shortcutservice.ShortcutApplyResult)) (*services, error) {
+func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(shortcutservice.ShortcutApplyResult)) (_ *services, startErr error) {
 	bus := serviceruntime.NewBus()
 	appSvc := appservice.New()
 	appSvc.SetEventBus(bus)
@@ -184,6 +187,13 @@ func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(
 	if err := settingSvc.Load(); err != nil {
 		return nil, startupFailed(startupfailure.StageSettings, err)
 	}
+	defer func() {
+		if startErr != nil {
+			failure := startupFailed(startupfailure.StageServices, startErr)
+			failure.language = currentLanguage(settingSvc)
+			startErr = failure
+		}
+	}()
 	configureLogging(settingSvc)
 	logger.G().Info("FlowLens startup initialized")
 
