@@ -103,6 +103,19 @@ The migration audit also checked table column-change notifications, programmatic
 
 The full Go suite (with CPython 3.12), Go lint, MyGo UI vet, formatting/catalog checks, and Windows build passed. Existing pixel tests cover light/dark themes, 100%/125%/150%/200% display scales, and 100%/119% zoom. Traffic/menu/SSE/console renders were inspected under `bin/ui-upgrade-v090/`; cross-monitor transitions and macOS/Linux real windows remain unverified.
 
+## MyGo 0.9.2 and NuxtUI-Go 0.1.1, 2026-11-16
+
+FlowLens needs no source change; NuxtUI-Go 0.1.1 only moves to MyGo 0.9.2 and documents it. The audit checked each MyGo change its migration notes name:
+
+- `ui.SVG` is no longer comparable. FlowLens holds icons only as `*ui.SVG` and never compares SVG values or uses them as map keys.
+- `Element.PopoverMenu` takes variadic options. FlowLens does not call it; its context menus are `nui.ContextMenu`.
+- `ui.Tester` gives keys pressed without Ctrl or Super during `Compose` to the input method, as each platform's filter does. FlowLens has no `Composing()` guards of its own and relies on that filter, as NuxtUI-Go does; `TestEditableGridCompositionStaysInEditor` now exercises it.
+- `RequestSingleInstanceLock` holds the lock until the process exits, so the update restart's `Relaunch` waits for the old process instead of starting beside it. Startup still takes the lock before opening SQLite, and the reset progress process does not take it.
+
+`ListState.MoveAnimation` is not adopted, because NuxtUI-Go's motion levels and `AppConfig.DisableAnimations` do not govern it. Windows builds do not use the `mygo_nowebview` tag, because no build with that tag has been run on Windows yet.
+
+On Linux, formatting, Go lint, MyGo UI vet, catalog checks, the Go suite, and the Windows and Linux builds passed. The exception is `TestCustomTextMatchesControlsAcrossSizesAndDPI`, which fails the same way under MyGo 0.9.0 on hosts without Arial. The race detector passed for `internal/app`, process attribution, the proxy service, and the desktop packages except `capture`, which exceeds the default test timeout under `-race`. Its non-race run takes the same time under both MyGo versions. Real windows remain unverified.
+
 ## Historical render review
 
 Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`internal/desktop/internal/rendertest`):
