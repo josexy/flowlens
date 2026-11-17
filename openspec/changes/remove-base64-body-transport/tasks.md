@@ -118,7 +118,7 @@
 
 ## 4. Integration verification
 
-- [ ] 4.1 Audit the remaining Base64 uses. Run `grep -rn "base64" internal --include='*.go' | grep -v _test.go`. It must list only the format sites in the design's Context table:
+- [x] 4.1 Audit the remaining Base64 uses. Run `grep -rn "base64" internal --include='*.go' | grep -v _test.go`. It must list only the format sites in the design's Context table:
   - HAR,
   - the Python Worker wire and the plugin binary body,
   - `Proxy-Authorization`,
