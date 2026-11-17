@@ -128,7 +128,7 @@
   - the legacy WebSocket decode in the HBIN reader.
 
   Record the result in the apply notes.
-- [ ] 4.2 Run the full checks:
+- [x] 4.2 Run the full checks:
   - `task verify`.
   - `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service`, because live chunk ownership is concurrency-sensitive.
   - `go test ./internal/services/python_plugin_service` with Python 3 available, so the binary response-hook integration tests in `worker_integration_test.go` run without skips.
