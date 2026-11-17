@@ -38,9 +38,9 @@ Download the latest build from [GitHub Releases](https://github.com/josexy/flowl
 
 | Platform | Packages |
 | --- | --- |
-| Windows x64 | NSIS installer |
+| Windows x64 / ARM64 | NSIS installer |
 | macOS | Apple Silicon DMG or universal DMG |
-| Linux x64 | Debian package, or a tar archive with `install.sh` |
+| Linux x64 / ARM64 | Debian package, or a tar archive with `install.sh` |
 
 Verify downloads with `SHA256SUMS`. Unsigned Windows/macOS packages may trigger operating-system warnings.
 

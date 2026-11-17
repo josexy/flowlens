@@ -15,18 +15,27 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify (ubuntu-24.04)
-    runs-on: ubuntu-24.04
+    name: Verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, cgo: "1" }
+          - { os: ubuntu-latest, cgo: "0" }
+    runs-on: ${{ matrix.os }}
     env:
-      CGO_ENABLED: "0"
+      CGO_ENABLED: ${{ matrix.cgo }}
+      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true

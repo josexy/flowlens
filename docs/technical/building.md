@@ -13,7 +13,7 @@ The Taskfile sets this from the host system. A production `mygo build` for macOS
 
 ## CI Verification
 
-CI and release verification run only on Ubuntu 24.04 with `CGO_ENABLED=0`. They invoke `gofmt`, `go tool mygo vet .`, `go tool mygo i18n check`, and `go test ./...` directly, without installing Task or golangci-lint. CI also checks that `go mod tidy` leaves `go.mod` and `go.sum` unchanged. Verification uses a separate Go cache from release packaging.
+CI and release verification run on `ubuntu-latest` with `CGO_ENABLED=0` and `macos-latest` with `CGO_ENABLED=1`. macOS keeps the deployment target at 12.0. They invoke `gofmt`, `go tool mygo vet .`, `go tool mygo i18n check`, and `go test ./...` directly, without installing Task or golangci-lint. CI also checks that `go mod tidy` leaves `go.mod` and `go.sum` unchanged on both platforms. Verification uses a separate Go cache from release packaging.
 
 Local `task verify` still includes golangci-lint. Run platform-specific tests locally when changing Windows or macOS behavior. Pull requests and main-branch pushes do not cross-compile release targets; the release workflow builds Windows, Linux, and macOS packages.
 
@@ -31,9 +31,9 @@ task package -- -platform windows/amd64,linux/amd64,linux/arm64 -skip-installer
 
 | Target | Output |
 | --- | --- |
-| `windows/amd64` | Executable and `flowlens-setup-<version>-amd64.exe`, made with NSIS. On Linux, install `nsis` or pass `-skip-installer`. |
+| `windows/amd64`, `windows/arm64` | Executable and `flowlens-setup-<version>-<arch>.exe`, made with NSIS. MyGo downloads NSIS on Windows if needed. On Linux, install `nsis` or pass `-skip-installer`. |
 | `darwin/arm64`, `darwin/universal` | Application bundle and disk image. These need macOS. |
-| `linux/amd64` | Executable, Debian package, `flowlens-<version>-linux-amd64.tar.gz` with `install.sh`, and a `PKGBUILD` |
+| `linux/amd64`, `linux/arm64` | Executable, Debian package, `flowlens-<version>-linux-<arch>.tar.gz` with `install.sh`, and a `PKGBUILD` |
 
 ## Updates
 
@@ -63,6 +63,8 @@ An installation updates itself when MyGo can write to where it is installed. Pac
 2. Set `version` in `mygo.json` to the same version, such as `1.2.3`, then commit.
 3. Push the matching tag `v1.2.3`.
 
-`.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows and Linux with cgo disabled, builds macOS with cgo enabled, and uploads everything to a draft GitHub Release to review and publish. The draft is created before these build checks.
+`.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows amd64/arm64 on `windows-latest`, Linux amd64/arm64 on `ubuntu-latest`, and macOS arm64/universal on `macos-latest`, with cgo enabled only on macOS. `darwin/universal` combines arm64 and amd64 in one application; listing `darwin/arm64,darwin/amd64` would produce two separate applications.
+
+Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, both Linux archives, both Debian architectures, and their checksum entries. The draft is created before the build checks.
 
 Windows executables and installers are unsigned. macOS applications use MyGo's default ad-hoc signing and are not notarized. No platform-signing certificates or secrets are required. `MYGO_UPDATER_PRIVATE_KEY` is still required to sign update archives.

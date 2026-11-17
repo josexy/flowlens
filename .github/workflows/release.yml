@@ -21,7 +21,7 @@ concurrency:
 jobs:
   prepare:
     name: Prepare Draft Release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
@@ -29,7 +29,7 @@ jobs:
       tag_name: ${{ steps.version.outputs.tag_name }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -73,31 +73,41 @@ jobs:
           | Platform | Asset |
           | --- | --- |
           | Windows x64 | \`flowlens-setup-*-amd64.exe\` (installer) |
+          | Windows ARM64 | \`flowlens-setup-*-arm64.exe\` (installer) |
           | macOS Apple Silicon | \`flowlens-*-arm64.dmg\` |
           | macOS universal | the \`.dmg\` without an architecture in its name |
           | Linux x64 | \`.deb\` for Debian and Ubuntu, or \`flowlens-*-linux-amd64.tar.gz\` with \`install.sh\` |
+          | Linux ARM64 | \`*_arm64.deb\` for Debian and Ubuntu, or \`flowlens-*-linux-arm64.tar.gz\` with \`install.sh\` |
 
-          Use \`SHA256SUMS\` to verify downloads. Versions 1.0.x must install this release once by hand.
+          Use \`SHA256SUMS\` to verify downloads.
 
-          Windows executables and installers are unsigned. macOS applications use ad-hoc signing and are not notarized. Update archives are always signed.
           BODY
           gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
             --title "FlowLens ${TAG_NAME}" --notes-file "${RUNNER_TEMP}/release-body.md" --generate-notes
 
   verify:
-    name: Verify (ubuntu-24.04)
+    name: Verify (${{ matrix.os }})
     needs: prepare
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, cgo: "1" }
+          - { os: ubuntu-latest, cgo: "0" }
+    runs-on: ${{ matrix.os }}
     env:
-      CGO_ENABLED: "0"
+      CGO_ENABLED: ${{ matrix.cgo }}
+      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -124,75 +134,53 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
-  windows-linux:
-    name: Windows and Linux
+  build:
+    name: Build (${{ matrix.name }})
     needs:
       - prepare
       - verify
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      # MyGo merges and replaces the release's shared SHA256SUMS on upload.
+      max-parallel: 1
+      matrix:
+        include:
+          - { name: macOS, os: macos-latest, platform: "darwin/arm64,darwin/universal", cgo: "1" }
+          - { name: Windows, os: windows-latest, platform: "windows/amd64,windows/arm64", cgo: "0" }
+          - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64", cgo: "0" }
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     env:
-      CGO_ENABLED: "0"
+      CGO_ENABLED: ${{ matrix.cgo }}
+      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install NSIS
-        run: sudo apt-get update && sudo apt-get install -y nsis
-
+      # MyGo downloads NSIS on Windows when it is not already installed.
       - name: Build and upload
         env:
           GH_TOKEN: ${{ github.token }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: go tool mygo build -platform windows/amd64,linux/amd64 -upload
-
-  macos:
-    name: macOS arm64 and universal
-    needs:
-      - prepare
-      - verify
-    runs-on: macos-15
-    permissions:
-      contents: write
-    env:
-      CGO_ENABLED: "1"
-      CGO_CFLAGS: -mmacosx-version-min=12.0
-      CGO_LDFLAGS: -mmacosx-version-min=12.0
-      MACOSX_DEPLOYMENT_TARGET: "12.0"
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Build and upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: go tool mygo build -platform darwin/arm64,darwin/universal -upload
+        run: go tool mygo build -platform "${{ matrix.platform }}" -upload
 
   check-assets:
     name: Check Release Assets
     needs:
       - prepare
-      - windows-linux
-      - macos
-    runs-on: ubuntu-24.04
+      - build
+    runs-on: ubuntu-latest
     steps:
       - name: Confirm every artifact reached the draft
         env:
@@ -203,19 +191,32 @@ jobs:
           set -euo pipefail
           gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > names.txt
           cat names.txt
+          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS
+          awk '{print $2}' SHA256SUMS > checksum-names.txt
           for name in \
             "flowlens-setup-${VERSION}-amd64.exe" \
+            "flowlens-setup-${VERSION}-arm64.exe" \
             "flowlens-${VERSION}-arm64.dmg" \
             "flowlens-${VERSION}.dmg" \
             "flowlens-${VERSION}-linux-amd64.tar.gz" \
-            "SHA256SUMS"; do
+            "flowlens-${VERSION}-linux-arm64.tar.gz"; do
             if ! grep -Fxq "$name" names.txt; then
               echo "Missing release asset: $name" >&2
               exit 1
             fi
+            if ! grep -Fxq "$name" checksum-names.txt; then
+              echo "Missing release checksum: $name" >&2
+              exit 1
+            fi
           done
           # The version in a Debian package's name may be rewritten for prereleases.
-          if ! grep -Eq '^flowlens_.*_amd64\.deb$' names.txt; then
-            echo "Missing release asset: the Debian package" >&2
-            exit 1
-          fi
+          for arch in amd64 arm64; do
+            if ! name="$(grep -E "^flowlens_.*_${arch}\.deb$" names.txt)"; then
+              echo "Missing release asset: the ${arch} Debian package" >&2
+              exit 1
+            fi
+            if ! grep -Fxq "$name" checksum-names.txt; then
+              echo "Missing release checksum: $name" >&2
+              exit 1
+            fi
+          done
