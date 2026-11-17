@@ -33,6 +33,11 @@ tasks:
     cmds:
       - go tool mygo build {{.CLI_ARGS}}
 
+  icons:generate:
+    desc: Exports application and tray icons from their SVG sources
+    cmds:
+      - go run ./assets/icons/generate.go
+
   test:
     desc: Runs all Go tests
     cmds:

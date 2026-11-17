@@ -37,6 +37,30 @@ task package -- -platform windows/amd64,linux/amd64,linux/arm64 -skip-installer
 
 With `MYGO_UPDATER_PRIVATE_KEY` set, every target also gets a signed update archive, `flowlens-<version>-<target>.tar.gz`, and its `update-<target>.json` manifest. Windows targets are `windows-amd64` and `windows-arm64`; macOS targets are `darwin-arm64` and `darwin-universal`. `mygo build -upload` uploads these alongside the installers and disk images. Linux uses its existing tar archive for updates too. Without the signing key, Windows and macOS builds do not produce these archives or manifests.
 
+## Application and Tray Icons
+
+All platforms use the same shield-and-nodes artwork from
+`assets/icons/app-icon.svg`. Windows and Linux use its `resources/icon.png`
+export. macOS packages use `assets/macos/app-icon.icns`, selected by `macos.icon`
+in `mygo.json`. The ICNS contains multiple resolutions rendered directly from
+SVG and works with the existing macOS 12.0 deployment target; it does not require
+Icon Composer or a newer Xcode.
+
+Run `task icons:generate` (or `go run ./assets/icons/generate.go`) after editing
+the SVG sources. This exports the shared PNG, macOS ICNS, and tray template with
+supersampled anti-aliasing.
+
+The macOS menu bar uses the separate embedded `resources/trayicon-template.png`
+with `IconIsTemplate`, so AppKit colors the shield and nodes for the menu bar's
+appearance and selection state. The 72-pixel source is displayed at 18 points
+by MyGo. Windows and Linux continue using the common application icon for
+their tray icons.
+
+MyGo's `mygo dev` uses the common PNG for the macOS Dock icon, now showing
+the same artwork. Check the packaged ICNS with `task run` or `task package` on
+macOS, including Finder/Dock at small sizes and the tray in light, dark, and
+selected states on 1× and Retina displays.
+
 ## Updates
 
 `mygo.json` sets the update source (`updates.github`) and verification key (`updates.publicKey`). Applications accept only updates signed with the matching private key.
