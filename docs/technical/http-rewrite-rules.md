@@ -79,7 +79,7 @@ Capture records final fields, bodies, URL, Host, and protocol. Request metrics u
 
 Use the shared [size and timing conventions](../user-guide.md#timing-sizes-and-har-importexport). `BodySize` counts encoded entity bytes actually sent; failures and incomplete sends retain unknown/incomplete metrics.
 
-Live summaries retain the latest **64 actions**, cap reasons at **512 characters**, and follow traffic retention. HBIN writes v2/reads v1/v2, storing final content/errors without live summaries or the metrics-source label. Shared exports preserve final fields/metrics and missing-body counts; sensitive data is not automatically redacted.
+Live summaries retain the latest **64 actions**, cap reasons at **512 characters**, and follow traffic retention. HBIN writes v3/reads v1/v2/v3, storing final content/errors without live summaries or the metrics-source label. Shared exports preserve final fields/metrics and missing-body counts; sensitive data is not automatically redacted.
 
 ## Transport Dependencies
 

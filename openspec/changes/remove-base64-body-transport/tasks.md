@@ -108,7 +108,7 @@
 
 ## 3. History format documentation
 
-- [ ] 3.1 Update the HBIN references:
+- [x] 3.1 Update the HBIN references:
   - The `AGENTS.md` networking bullet: write HBIN v3, and read v1, v2, and v3.
   - `docs/user-guide.md` lines on HAR import ("HBIN v2 history") and on history versions: v3 is written, and v1 and v2 stay readable.
   - The `docs/technical/http-rewrite-rules.md` HBIN sentence.
