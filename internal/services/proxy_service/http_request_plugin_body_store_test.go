@@ -102,24 +102,22 @@ func TestHTTPRequestPluginResponseBodyKindFromFileHonorsCancellation(t *testing.
 }
 
 func TestMaterializeHTTPRequestPluginResponseReader(t *testing.T) {
-	value := "hello €"
 	for _, test := range []struct {
-		name       string
-		base64Body bool
-		want       string
+		name  string
+		value string
 	}{
-		{name: "text", want: value},
-		{name: "base64", base64Body: true, want: "aGVsbG8g4oKs"},
+		{name: "text", value: "hello €"},
+		{name: "binary", value: "\x00\xff\x80hello\xc3"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got, size, err := materializeHTTPRequestPluginResponseReader(
-				context.Background(), strings.NewReader(value), test.base64Body,
+				context.Background(), strings.NewReader(test.value),
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != test.want || size != int64(len(value)) {
-				t.Fatalf("result = %q size=%d, want %q size=%d", got, size, test.want, len(value))
+			if got != test.value || size != int64(len(test.value)) {
+				t.Fatalf("result = %q size=%d, want %q size=%d", got, size, test.value, len(test.value))
 			}
 		})
 	}
@@ -127,7 +125,7 @@ func TestMaterializeHTTPRequestPluginResponseReader(t *testing.T) {
 
 func TestMaterializeHTTPRequestPluginResponseReaderPropagatesFailure(t *testing.T) {
 	reader := &failingHTTPResponseReader{remaining: []byte("partial")}
-	_, _, err := materializeHTTPRequestPluginResponseReader(context.Background(), reader, false)
+	_, _, err := materializeHTTPRequestPluginResponseReader(context.Background(), reader)
 	if err == nil || !strings.Contains(err.Error(), "materialize response body") {
 		t.Fatalf("error = %v", err)
 	}

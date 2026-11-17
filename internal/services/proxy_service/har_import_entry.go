@@ -118,7 +118,7 @@ func convertHARImportEntry(raw []byte, id uint64) (*TrafficEntry, trafficBodyVie
 		RequestBodyReader:  io.NopCloser(bytes.NewReader(requestBody.Data)),
 		ResponseBodyReader: io.NopCloser(bytes.NewReader(responseBody.Data)),
 		RequestBodySize:    int64(len(requestBody.Data)), ResponseBodySize: int64(len(responseBody.Data)),
-		RequestBodyEncoding: requestBody.Encoding, ResponseBodyEncoding: responseBody.Encoding,
+		RequestBodyBinary: requestBody.Encoding == "base64", ResponseBodyBinary: responseBody.Encoding == "base64",
 		RequestBodyUnavailable: !requestBody.Available, ResponseBodyUnavailable: !responseBody.Available,
 	}
 	if !requestBody.Available {

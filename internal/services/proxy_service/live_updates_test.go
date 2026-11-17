@@ -2,7 +2,6 @@ package proxyservice
 
 import (
 	"bytes"
-	"encoding/base64"
 	"io"
 	"sync"
 	"testing"
@@ -130,15 +129,7 @@ func TestObservedResponseStreamEmitsDecodedChunksWithContinuousOffsets(t *testin
 		12,
 		"gzip",
 		false,
-		func(offset int64, data []byte) {
-			chunkOffset := offset
-			svc.emitTrafficLiveUpdate(TrafficLiveUpdate{
-				TrafficID:   12,
-				Kind:        TrafficLiveUpdateSSEChunk,
-				Offset:      &chunkOffset,
-				ChunkBase64: base64.StdEncoding.EncodeToString(data),
-			})
-		},
+		svc.capturedSSEChunkPublisher(&TrafficEntry{ID: 12, captureGeneration: svc.captureGeneration}),
 		func() { close(done) },
 	)
 	if _, err := io.Copy(io.Discard, reader); err != nil {
@@ -164,15 +155,72 @@ func TestObservedResponseStreamEmitsDecodedChunksWithContinuousOffsets(t *testin
 		if update.Offset == nil || *update.Offset != nextOffset {
 			t.Fatalf("offset = %v, want %d", update.Offset, nextOffset)
 		}
-		chunk, err := base64.StdEncoding.DecodeString(update.ChunkBase64)
-		if err != nil {
-			t.Fatalf("decode chunk: %v", err)
-		}
-		decoded = append(decoded, chunk...)
-		nextOffset += int64(len(chunk))
+		decoded = append(decoded, update.Chunk...)
+		nextOffset += int64(len(update.Chunk))
 	}
 	if !bytes.Equal(decoded, payload) {
 		t.Fatalf("decoded updates = %q, want %q", decoded, payload)
+	}
+}
+
+func TestCapturedSSEChunkPublisherOwnsChunk(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	svc.SetLiveTrafficDetail(14)
+	var updates []TrafficLiveUpdate
+	svc.emitTrafficLiveUpdateHook = func(update TrafficLiveUpdate) {
+		updates = append(updates, update)
+	}
+	publish := svc.capturedSSEChunkPublisher(&TrafficEntry{ID: 14, captureGeneration: svc.captureGeneration})
+
+	buffer := []byte("data: one\n\n")
+	publish(0, buffer)
+	copy(buffer, "XXXXXXXXXXX")
+
+	if len(updates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(updates))
+	}
+	if string(updates[0].Chunk) != "data: one\n\n" {
+		t.Fatalf("delivered chunk = %q after the source buffer changed", updates[0].Chunk)
+	}
+}
+
+// reusedBufferReader returns each chunk through the caller's buffer, so a
+// publisher that keeps p[:n] would see the next chunk overwrite it.
+type reusedBufferReader struct {
+	chunks []string
+}
+
+func (r *reusedBufferReader) Read(p []byte) (int, error) {
+	if len(r.chunks) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.chunks[0])
+	r.chunks = r.chunks[1:]
+	return n, nil
+}
+
+func TestHTTPRequestStreamReadLoopOwnsChunks(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	var events []HTTPRequestStreamEvent
+	svc.emitHTTPRequestEventHook = func(event HTTPRequestStreamEvent) {
+		events = append(events, event)
+	}
+	session := &httpRequestStreamSession{
+		id:     "owned-chunks",
+		cancel: func() {},
+		body:   io.NopCloser(&reusedBufferReader{chunks: []string{"AAAA", "BBBB", "CCCC"}}),
+	}
+
+	svc.runHTTPRequestStreamReadLoop(session)
+
+	var chunks []string
+	for _, event := range events {
+		if event.EventType == "chunk" {
+			chunks = append(chunks, string(event.Chunk))
+		}
+	}
+	if len(chunks) != 3 || chunks[0] != "AAAA" || chunks[1] != "BBBB" || chunks[2] != "CCCC" {
+		t.Fatalf("delivered chunks = %q, want [AAAA BBBB CCCC]", chunks)
 	}
 }
 

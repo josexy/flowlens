@@ -3,7 +3,6 @@ package proxyservice
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"io"
 	"os"
@@ -115,8 +114,8 @@ func TestSendHTTPRequestTextBodies(t *testing.T) {
 			if resp.Body != tt.responseBody {
 				t.Fatalf("response body = %q, want %q", resp.Body, tt.responseBody)
 			}
-			if resp.BodyEncoding != "" {
-				t.Fatalf("response body encoding = %q, want empty", resp.BodyEncoding)
+			if resp.BodyBinary {
+				t.Fatal("response body binary = true, want false")
 			}
 		})
 	}
@@ -219,8 +218,8 @@ func TestSendHTTPRequestBodylessResponsesSkipContentDecodingAndStreaming(t *test
 			if response.StatusCode != tt.statusCode {
 				t.Fatalf("status code = %d, want %d", response.StatusCode, tt.statusCode)
 			}
-			if response.Body != "" || response.BodyEncoding != "" {
-				t.Fatalf("body = %q with encoding %q, want empty", response.Body, response.BodyEncoding)
+			if response.Body != "" || response.BodyBinary {
+				t.Fatalf("body = %q binary=%t, want empty text", response.Body, response.BodyBinary)
 			}
 			if response.Streaming || response.StreamSessionID != "" {
 				t.Fatalf("bodyless response started stream session %q", response.StreamSessionID)
@@ -304,12 +303,8 @@ func TestSendHTTPRequestSSEReturnsAfterResponseHeaders(t *testing.T) {
 		if event.EventType != "chunk" || event.SessionID != result.response.StreamSessionID {
 			t.Fatalf("stream event = %#v", event)
 		}
-		chunk, err := base64.StdEncoding.DecodeString(event.ChunkBase64)
-		if err != nil {
-			t.Fatalf("decode chunk: %v", err)
-		}
-		if string(chunk) != "data: first\n\n" {
-			t.Fatalf("chunk = %q", chunk)
+		if string(event.Chunk) != "data: first\n\n" {
+			t.Fatalf("chunk = %q", event.Chunk)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SSE chunk event")
@@ -831,12 +826,11 @@ func TestSendHTTPRequestFileBodyStreamsFile(t *testing.T) {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
 	}
 
-	wantEncoded := base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03})
-	if resp.Body != wantEncoded {
-		t.Fatalf("response body = %q, want %q", resp.Body, wantEncoded)
+	if resp.Body != "\x01\x02\x03" {
+		t.Fatalf("response body = %q, want raw bytes 01 02 03", resp.Body)
 	}
-	if resp.BodyEncoding != "base64" {
-		t.Fatalf("response body encoding = %q, want base64", resp.BodyEncoding)
+	if !resp.BodyBinary {
+		t.Fatal("response body binary = false, want true")
 	}
 }
 

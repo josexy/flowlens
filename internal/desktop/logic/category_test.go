@@ -150,7 +150,7 @@ func TestHostSummaryFilter(t *testing.T) {
 }
 
 func TestHARExportableFormats(t *testing.T) {
-	for version, want := range map[int]bool{1: true, 2: true, 0: false, 3: false} {
+	for version, want := range map[int]bool{1: true, 2: true, 3: true, 0: false, 4: false} {
 		if IsHARExportableHistoryFormat(version) != want {
 			t.Errorf("%d", version)
 		}

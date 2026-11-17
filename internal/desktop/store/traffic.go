@@ -3,7 +3,6 @@ package store
 import (
 	"cmp"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -403,7 +402,7 @@ func (s *TrafficStore) resetLiveReconciliation() {
 func (s *TrafficStore) initLiveCursors(entryID uint64, view *proxyservice.TrafficBodyView) {
 	s.liveCursorEntry = entryID
 	s.liveSSEDecoder = &utf8StreamDecoder{}
-	s.liveSSEReady = view.ResponseBodyEncoding != "base64"
+	s.liveSSEReady = !view.ResponseBodyBinary
 	s.liveSSEOffset = 0
 	if s.liveSSEReady {
 		s.liveSSEOffset = int64(len(view.ResponseBody))
@@ -411,22 +410,20 @@ func (s *TrafficStore) initLiveCursors(entryID uint64, view *proxyservice.Traffi
 	s.liveWSCount = len(view.WebSocketMessages)
 }
 
-func (s *TrafficStore) prepareBase64SSESnapshot(view *proxyservice.TrafficBodyView) (*proxyservice.TrafficBodyView, error) {
-	if s.liveSSEReady || view.ResponseBodyEncoding != "base64" {
-		return view, nil
-	}
-	data, err := base64.StdEncoding.DecodeString(view.ResponseBody)
-	if err != nil {
-		return nil, err
+// prepareBinarySSESnapshot switches a snapshot first loaded as binary to
+// text once SSE data arrives, decoding its bytes as the stream's start.
+func (s *TrafficStore) prepareBinarySSESnapshot(view *proxyservice.TrafficBodyView) *proxyservice.TrafficBodyView {
+	if s.liveSSEReady || !view.ResponseBodyBinary {
+		return view
 	}
 	s.liveSSEDecoder = &utf8StreamDecoder{}
-	decoded := s.liveSSEDecoder.decode(data)
-	s.liveSSEOffset = int64(len(data))
+	decoded := s.liveSSEDecoder.decode([]byte(view.ResponseBody))
+	s.liveSSEOffset = int64(len(view.ResponseBody))
 	s.liveSSEReady = true
 	copied := *view
 	copied.ResponseBody = decoded
-	copied.ResponseBodyEncoding = ""
-	return &copied, nil
+	copied.ResponseBodyBinary = false
+	return &copied
 }
 
 func (s *TrafficStore) scheduleLiveFlush(delay time.Duration) {
@@ -492,22 +489,15 @@ func (s *TrafficStore) applyLive(view *proxyservice.TrafficBodyView, sse, ws []p
 	next := *view
 	changed := false
 	if len(sse) > 0 {
-		wasBase64 := next.ResponseBodyEncoding == "base64"
-		prepared, err := s.prepareBase64SSESnapshot(&next)
-		if err != nil {
-			return nil, false, err
-		}
-		next = *prepared
-		if wasBase64 && next.ResponseBodyEncoding != "base64" {
+		wasBinary := next.ResponseBodyBinary
+		next = *s.prepareBinarySSESnapshot(&next)
+		if wasBinary && !next.ResponseBodyBinary {
 			changed = true
 		}
 		var body strings.Builder
 		body.WriteString(next.ResponseBody)
 		for _, update := range sse {
-			chunk, err := base64.StdEncoding.DecodeString(update.ChunkBase64)
-			if err != nil {
-				return nil, false, err
-			}
+			chunk := update.Chunk
 			start := *update.Offset
 			end := start + int64(len(chunk))
 			if end <= s.liveSSEOffset {
@@ -521,7 +511,7 @@ func (s *TrafficStore) applyLive(view *proxyservice.TrafficBodyView, sse, ws []p
 			changed = true
 		}
 		next.ResponseBody = body.String()
-		next.ResponseBodyEncoding = ""
+		next.ResponseBodyBinary = false
 	}
 	if len(ws) > 0 {
 		messages := next.WebSocketMessages

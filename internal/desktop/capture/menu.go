@@ -347,7 +347,7 @@ func (t *Table) copyCurl(entries []*logic.TrafficEntry) {
 		}
 		commands := make([]string, len(http))
 		for index, entry := range http {
-			commands[index] = logic.BuildCurl(entry, bodies[index].RequestBody, bodies[index].RequestBodyEncoding)
+			commands[index] = logic.BuildCurl(entry, bodies[index].RequestBody, bodies[index].RequestBodyBinary)
 		}
 		text := strings.Join(commands, "\n\n")
 		t.clipboard = &text

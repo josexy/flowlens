@@ -61,8 +61,8 @@ type ProcessInfo struct {
 }
 
 type ProcessIconData struct {
-	MIMEType   string `json:"mimeType"`
-	DataBase64 string `json:"dataBase64"`
+	MIMEType string `json:"mimeType"`
+	Data     []byte `json:"data"`
 }
 
 type Metadata struct {
@@ -279,7 +279,7 @@ type TrafficLiveUpdate struct {
 	TrafficID    uint64                `json:"trafficId"`
 	Kind         TrafficLiveUpdateKind `json:"kind"`
 	Offset       *int64                `json:"offset,omitempty"`
-	ChunkBase64  string                `json:"chunkBase64,omitempty"`
+	Chunk        []byte                `json:"chunk,omitempty"` // owned by the update; read-only
 	MessageIndex *int                  `json:"messageIndex,omitempty"`
 	Message      *WebSocketMessage     `json:"message,omitempty"`
 }
@@ -289,8 +289,8 @@ type TrafficBodyView struct {
 	ResponseBodyUnavailable bool                `json:"rspBodyUnavailable,omitempty"`
 	RequestBody             string              `json:"reqBody"`
 	ResponseBody            string              `json:"rspBody"`
-	RequestBodyEncoding     string              `json:"reqBodyEnc,omitempty"` // "" or "base64"
-	ResponseBodyEncoding    string              `json:"rspBodyEnc,omitempty"` // "" or "base64"
+	RequestBodyBinary       bool                `json:"reqBodyBinary,omitempty"`
+	ResponseBodyBinary      bool                `json:"rspBodyBinary,omitempty"`
 	WebSocketMessages       []*WebSocketMessage `json:"wsMsgs,omitempty"`
 	WsMsgsTruncated         bool                `json:"wsMsgsTruncated,omitempty"`
 }
@@ -300,8 +300,8 @@ type trafficBodyViewInner struct {
 	ResponseBodyReader      io.ReadCloser
 	RequestBodySize         int64
 	ResponseBodySize        int64
-	RequestBodyEncoding     string
-	ResponseBodyEncoding    string
+	RequestBodyBinary       bool
+	ResponseBodyBinary      bool
 	RequestBodyUnavailable  bool
 	ResponseBodyUnavailable bool
 	WebSocketMessages       []*WebSocketMessage
@@ -390,10 +390,9 @@ type RequestDraftFile struct {
 }
 
 type SaveBodyToFileRequest struct {
-	Path         string `json:"path"`
-	Body         string `json:"body"`
-	BodyEncoding string `json:"bodyEncoding"`
-	ContentType  string `json:"contentType"`
+	Path        string `json:"path"`
+	Body        string `json:"body"` // raw bytes
+	ContentType string `json:"contentType"`
 }
 
 type HARExportRequest struct {
@@ -473,8 +472,8 @@ type SendRequestResponse struct {
 	TrailerFields           []HTTPHeaderField           `json:"trailerFields"`
 	TrailersTruncated       bool                        `json:"trailersTruncated,omitempty"`
 	TrailerOrderUnavailable bool                        `json:"trailerOrderUnavailable,omitempty"`
-	Body                    string                      `json:"body"`
-	BodyEncoding            string                      `json:"bodyEncoding"` // "" or "base64"
+	Body                    string                      `json:"body"` // raw bytes
+	BodyBinary              bool                        `json:"bodyBinary,omitempty"`
 	Streaming               bool                        `json:"streaming,omitempty"`
 	StreamSessionID         string                      `json:"streamSessionId,omitempty"`
 }
@@ -483,7 +482,7 @@ type HTTPRequestStreamEvent struct {
 	SessionID               string            `json:"sessionId"`
 	EventType               string            `json:"eventType"` // "chunk", "complete", "closed", or "error"
 	Offset                  *int64            `json:"offset,omitempty"`
-	ChunkBase64             string            `json:"chunkBase64,omitempty"`
+	Chunk                   []byte            `json:"chunk,omitempty"` // owned by the event; read-only
 	TrailerFields           []HTTPHeaderField `json:"trailerFields"`
 	TrailersTruncated       bool              `json:"trailersTruncated,omitempty"`
 	TrailerOrderUnavailable bool              `json:"trailerOrderUnavailable,omitempty"`

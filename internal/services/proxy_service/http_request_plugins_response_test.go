@@ -3,7 +3,6 @@ package proxyservice
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"os"
 	"sync/atomic"
@@ -70,8 +69,8 @@ func TestSendHTTPRequestSpillsOnlyMatchedPluginResponsesAboveInlineLimit(t *test
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
 			}
-			if response.Body != string(body) || response.BodyEncoding != "" {
-				t.Fatalf("response body bytes=%d encoding=%q", len(response.Body), response.BodyEncoding)
+			if response.Body != string(body) || response.BodyBinary {
+				t.Fatalf("response body bytes=%d binary=%t", len(response.Body), response.BodyBinary)
 			}
 			if bodyFilePath != "" {
 				if _, err := os.Stat(bodyFilePath); !errors.Is(err, os.ErrNotExist) {
@@ -119,37 +118,53 @@ func TestSendHTTPRequestInvalidPluginResponseFileFailsOpen(t *testing.T) {
 }
 
 func TestSendHTTPRequestMaterializesPluginResponseFileAtServiceBoundary(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("origin"))
-	}))
-	defer server.Close()
-	replacement := []byte{0x00, 0xff, 0x10, 0x20, 0x7f}
-	replacementPath := t.TempDir() + string(os.PathSeparator) + "replacement.bin"
-	if err := os.WriteFile(replacementPath, replacement, 0o600); err != nil {
-		t.Fatal(err)
+	large := make([]byte, bodySpoolInlineLimitForTest()+1)
+	for index := range large {
+		large[index] = byte(index * 7)
 	}
-	session := &fakeHTTPRequestPluginSession{
-		execution: &HTTPRequestPluginExecution{ResponseTransformed: true},
-		responseHook: func(response HTTPRequestPluginResponse) HTTPRequestPluginResponseResult {
-			response.Body = nil
-			response.BodyFile = &HTTPRequestPluginBodyFile{
-				Path: replacementPath, Name: "replacement.bin", Size: int64(len(replacement)), ReadOnly: true,
+	for _, test := range []struct {
+		name        string
+		replacement []byte
+	}{
+		{name: "small", replacement: []byte{0x00, 0xff, 0x10, 0x20, 0x7f}},
+		{name: "above inline limit", replacement: large},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("origin"))
+			}))
+			defer server.Close()
+			replacementPath := t.TempDir() + string(os.PathSeparator) + "replacement.bin"
+			if err := os.WriteFile(replacementPath, test.replacement, 0o600); err != nil {
+				t.Fatal(err)
 			}
-			response.BodyKind = "binary"
-			return HTTPRequestPluginResponseResult{Response: response}
-		},
-	}
-	service := newTestProxyService(t, &settingservice.ProxyConfig{})
-	service.SetHTTPRequestPluginRunner(&fakeHTTPRequestPluginRunner{session: session})
-	response, err := service.SendHTTPRequest(
-		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
-		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
-	)
-	if err != nil {
-		t.Fatalf("SendHTTPRequest: %v", err)
-	}
-	if response.Outcome != RequestOutcomeCompleted || response.BodyEncoding != "base64" || response.Body != base64.StdEncoding.EncodeToString(replacement) {
-		t.Fatalf("response = %+v", response)
+			session := &fakeHTTPRequestPluginSession{
+				execution: &HTTPRequestPluginExecution{ResponseTransformed: true},
+				responseHook: func(response HTTPRequestPluginResponse) HTTPRequestPluginResponseResult {
+					response.Body = nil
+					response.BodyFile = &HTTPRequestPluginBodyFile{
+						Path: replacementPath, Name: "replacement.bin", Size: int64(len(test.replacement)), ReadOnly: true,
+					}
+					response.BodyKind = "binary"
+					return HTTPRequestPluginResponseResult{Response: response}
+				},
+			}
+			service := newTestProxyService(t, &settingservice.ProxyConfig{})
+			service.SetHTTPRequestPluginRunner(&fakeHTTPRequestPluginRunner{session: session})
+			response, err := service.SendHTTPRequest(
+				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
+				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			)
+			if err != nil {
+				t.Fatalf("SendHTTPRequest: %v", err)
+			}
+			if response.Outcome != RequestOutcomeCompleted || !response.BodyBinary {
+				t.Fatalf("outcome=%q binary=%t", response.Outcome, response.BodyBinary)
+			}
+			if !bytes.Equal([]byte(response.Body), test.replacement) {
+				t.Fatalf("response body bytes=%d, want %d identical bytes", len(response.Body), len(test.replacement))
+			}
+		})
 	}
 }
 
@@ -256,8 +271,8 @@ func TestSendHTTPRequestAppliesPluginResponsePresentation(t *testing.T) {
 	if response.Outcome != RequestOutcomeCompleted || response.StatusCode != 299 || response.StatusText != "299" {
 		t.Fatalf("response status/outcome = %+v", response)
 	}
-	if response.BodyEncoding != "base64" || response.Body != base64.StdEncoding.EncodeToString([]byte{0, 1, 2}) {
-		t.Fatalf("response body = %q encoding=%q", response.Body, response.BodyEncoding)
+	if !response.BodyBinary || response.Body != "\x00\x01\x02" {
+		t.Fatalf("response body = %q binary=%t", response.Body, response.BodyBinary)
 	}
 	if len(response.HeaderFields) != 2 || response.HeaderFields[0].Value != "one" || response.HeaderFields[1].Value != "two" {
 		t.Fatalf("response headers = %#v", response.HeaderFields)
@@ -300,7 +315,7 @@ func TestSendHTTPRequestClassifiesXMLPluginResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
 	}
-	if response.Outcome != RequestOutcomeCompleted || response.Body != replacementBody || response.BodyEncoding != "" {
+	if response.Outcome != RequestOutcomeCompleted || response.Body != replacementBody || response.BodyBinary {
 		t.Fatalf("response = %+v", response)
 	}
 	if session.responseCount.Load() != 1 {
@@ -411,9 +426,8 @@ func TestSendHTTPRequestRunsSSEPluginBeforeStreamingAndKeepsChunks(t *testing.T)
 		if event.EventType != "chunk" {
 			t.Fatalf("first event = %+v", event)
 		}
-		decoded, decodeErr := base64.StdEncoding.DecodeString(event.ChunkBase64)
-		if decodeErr != nil || string(decoded) != "data: untouched\n\n" {
-			t.Fatalf("chunk = %q decodeErr=%v", decoded, decodeErr)
+		if string(event.Chunk) != "data: untouched\n\n" {
+			t.Fatalf("chunk = %q", event.Chunk)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SSE chunk")

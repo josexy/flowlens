@@ -282,7 +282,7 @@ func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*prox
 	if _, err := hbinFile.Seek(int64(idx.bodyIndex), io.SeekStart); err != nil {
 		return nil, err
 	}
-	return proxyservice.DecodeTrafficBody(hbinFile)
+	return proxyservice.DecodeTrafficBodyWithVersion(hbinFile, fileIndex.formatVersion)
 }
 
 func (s *HistoryService) getSingleHistoryEntryAndBodyReader(key string, id uint64) (*proxyservice.TrafficEntry, []byte, error) {
@@ -319,7 +319,7 @@ func (s *HistoryService) getSingleHistoryEntryAndBodyReader(key string, id uint6
 	if _, err := hbinFile.Seek(int64(idx.bodyIndex), io.SeekStart); err != nil {
 		return nil, nil, err
 	}
-	reqBodyBytes, _, err := proxyservice.DecodeTrafficRequestBody(hbinFile)
+	reqBodyBytes, _, err := proxyservice.DecodeTrafficRequestBody(hbinFile, fileIndex.formatVersion)
 	if err != nil {
 		return nil, nil, err
 	}

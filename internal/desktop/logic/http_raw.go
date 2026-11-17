@@ -16,7 +16,7 @@ type RawHTTPRequestInput struct {
 	Method, URL, Host, Protocol string
 	HeaderFields                []HeaderField
 	Body                        *string
-	BodyEncoding                string
+	BodyBinary                  bool
 }
 
 // RawHTTPResponseInput describes a response to show as raw HTTP.
@@ -26,7 +26,7 @@ type RawHTTPResponseInput struct {
 	Protocol     string
 	HeaderFields []HeaderField
 	Body         *string
-	BodyEncoding string
+	BodyBinary   bool
 }
 
 var (
@@ -111,7 +111,7 @@ func transformHTTP2Headers(fields []HeaderField, consumed ...string) []HeaderFie
 	return append(authority, remaining...)
 }
 
-func formatRawMessage(startLine string, fields []HeaderField, body *string, encoding string) string {
+func formatRawMessage(startLine string, fields []HeaderField, body *string, binary bool) string {
 	var builder strings.Builder
 	builder.WriteString(startLine)
 	builder.WriteString("\r\n")
@@ -123,7 +123,7 @@ func formatRawMessage(startLine string, fields []HeaderField, body *string, enco
 	}
 	builder.WriteString("\r\n")
 	if body != nil {
-		if encoding == "base64" {
+		if binary {
 			builder.WriteString(RawHTTPBinaryBody)
 		} else {
 			builder.WriteString(*body)
@@ -153,7 +153,7 @@ func FormatRawHTTPRequest(input RawHTTPRequestInput) string {
 		}
 		fields = transformHTTP2Headers(fields, ":method", ":path")
 	}
-	return formatRawMessage(strings.TrimSpace(method+" "+target+" "+protocol), fields, input.Body, input.BodyEncoding)
+	return formatRawMessage(strings.TrimSpace(method+" "+target+" "+protocol), fields, input.Body, input.BodyBinary)
 }
 
 // FormatRawHTTPResponse renders a response as the Raw view shows it.
@@ -182,5 +182,5 @@ func FormatRawHTTPResponse(input RawHTTPResponseInput) string {
 		}
 		fields = transformHTTP2Headers(fields, ":status")
 	}
-	return formatRawMessage(strings.TrimSpace(protocol+" "+status), fields, input.Body, input.BodyEncoding)
+	return formatRawMessage(strings.TrimSpace(protocol+" "+status), fields, input.Body, input.BodyBinary)
 }

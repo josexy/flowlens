@@ -51,7 +51,7 @@ type SSEView struct {
 
 	identity uint64
 	body     string
-	encoding string
+	binary   bool
 	parsed   int
 	parser   *logic.SSEParser
 	events   []*logic.SSEEvent
@@ -96,13 +96,13 @@ func (s *SSEView) closeDetail() { s.open, s.selected = false, nil }
 
 // update parses what arrived since the last call.
 func (s *SSEView) update(content BodyContent) {
-	identityChanged := content.Identity != s.identity || content.Encoding != s.encoding
+	identityChanged := content.Identity != s.identity || content.Binary != s.binary
 	grew := !identityChanged && len(content.Body) >= s.parsed && strings.HasPrefix(content.Body, s.body)
 	if !grew {
 		s.reset()
 	}
-	s.identity, s.body, s.encoding = content.Identity, content.Body, content.Encoding
-	if content.Encoding == "base64" || s.parsing || len(content.Body) == s.parsed {
+	s.identity, s.body, s.binary = content.Identity, content.Body, content.Binary
+	if content.Binary || s.parsing || len(content.Body) == s.parsed {
 		return
 	}
 	chunk := content.Body[s.parsed:]
@@ -136,7 +136,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 		s.table.SetRows(s.events, func(event *logic.SSEEvent) string { return strconv.Itoa(event.Sequence) })
 	}
 	s.detail(c, theme)
-	if content.Encoding == "base64" {
+	if content.Binary {
 		emptyState(c, theme, lucide.Binary(), locales.DetailSseUnavailable())
 		return
 	}

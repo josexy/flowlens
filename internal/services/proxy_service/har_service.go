@@ -79,13 +79,13 @@ func (s *ProxyService) currentHARExportEntry(entry *TrafficEntry) HARExportEntry
 	input.RequestBody = HARBody{
 		Reader:    bvi.RequestBodyReader,
 		Size:      bvi.RequestBodySize,
-		Encoding:  bvi.RequestBodyEncoding,
+		Encoding:  harEncodingForBinary(bvi.RequestBodyBinary),
 		Available: !bvi.RequestBodyUnavailable && harCurrentBodyAvailable(entry.Request, bvi.RequestBodyReader != nil),
 	}
 	input.ResponseBody = HARBody{
 		Reader:    bvi.ResponseBodyReader,
 		Size:      bvi.ResponseBodySize,
-		Encoding:  bvi.ResponseBodyEncoding,
+		Encoding:  harEncodingForBinary(bvi.ResponseBodyBinary),
 		Available: !bvi.ResponseBodyUnavailable && harCurrentBodyAvailable(entry.Response, bvi.ResponseBodyReader != nil),
 	}
 	return input

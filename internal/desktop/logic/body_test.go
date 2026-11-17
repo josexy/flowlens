@@ -8,33 +8,36 @@ import (
 
 func TestClassifyBody(t *testing.T) {
 	for _, test := range []struct {
-		contentType, encoding string
-		want                  BodyCategory
+		contentType string
+		binary      bool
+		want        BodyCategory
 	}{
-		{"application/json; charset=utf-8", "", BodyJSON}, {"application/problem+json", "", BodyJSON},
-		{"image/svg+xml", "", BodySVG}, {"image/png", "base64", BodyImage}, {"application/xml", "", BodyXML},
-		{"TEXT/HTML", "", BodyHTML}, {"application/javascript", "", BodyJS}, {"text/css", "", BodyCSS},
-		{"text/plain", "", BodyText}, {"application/octet-stream", "base64", BodyBinary}, {"", "", BodyText},
+		{"application/json; charset=utf-8", false, BodyJSON}, {"application/problem+json", false, BodyJSON},
+		{"image/svg+xml", false, BodySVG}, {"image/png", true, BodyImage}, {"application/xml", false, BodyXML},
+		{"TEXT/HTML", false, BodyHTML}, {"application/javascript", false, BodyJS}, {"text/css", false, BodyCSS},
+		{"text/plain", false, BodyText}, {"application/octet-stream", true, BodyBinary}, {"", false, BodyText},
+		{"", true, BodyBinary},
 	} {
-		if got := ClassifyBody(test.contentType, test.encoding); got != test.want {
+		if got := ClassifyBody(test.contentType, test.binary); got != test.want {
 			t.Errorf("%q: %s", test.contentType, got)
 		}
 	}
 }
 
 func TestBodyTabs(t *testing.T) {
-	check := func(contentType, encoding, body string, sse bool, want ...BodyTab) {
+	check := func(contentType string, binary bool, body string, sse bool, want ...BodyTab) {
 		t.Helper()
-		if got := BodyTabs(contentType, encoding, body, sse); !slices.Equal(got, want) {
+		if got := BodyTabs(contentType, binary, body, sse); !slices.Equal(got, want) {
 			t.Fatalf("%q: %v", contentType, got)
 		}
 	}
-	check("application/json", "", "{}", false, BodyTabFormatted, BodyTabRaw, BodyTabHex)
-	check("image/png", "base64", "AA==", false, BodyTabImage, BodyTabRaw, BodyTabHex)
-	check("image/svg+xml", "", "<svg/>", false, BodyTabFormatted, BodyTabImage, BodyTabRaw, BodyTabHex)
-	check("text/event-stream", "", "", true, BodyTabRaw, BodyTabSSE, BodyTabHex)
-	check("text/event-stream", "", "", false, BodyTabRaw, BodyTabHex)
-	check("application/json", "", strings.Repeat("x", LargeTextThreshold), false, BodyTabRaw, BodyTabHex)
+	check("application/json", false, "{}", false, BodyTabFormatted, BodyTabRaw, BodyTabHex)
+	check("image/png", true, "\x89PNG", false, BodyTabImage, BodyTabRaw, BodyTabHex)
+	check("image/svg+xml", false, "<svg/>", false, BodyTabFormatted, BodyTabImage, BodyTabRaw, BodyTabHex)
+	check("text/event-stream", false, "", true, BodyTabRaw, BodyTabSSE, BodyTabHex)
+	check("text/event-stream", false, "", false, BodyTabRaw, BodyTabHex)
+	check("application/json", false, strings.Repeat("x", LargeTextThreshold-1), false, BodyTabFormatted, BodyTabRaw, BodyTabHex)
+	check("application/json", false, strings.Repeat("x", LargeTextThreshold), false, BodyTabRaw, BodyTabHex)
 }
 
 func TestNextBodyTab(t *testing.T) {

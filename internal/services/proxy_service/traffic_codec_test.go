@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -24,17 +25,17 @@ func TestHistoryCodecRoundTripPreservesWsMsgsTruncated(t *testing.T) {
 
 	reqData := "req"
 	rspData := "rsp_test"
-	encodedBinary := base64.StdEncoding.EncodeToString([]byte{0x00, 0x41, 0xff})
+	rawBinary := "\x00\x41\xff"
 	original := &trafficBodyViewInner{
-		RequestBodyReader:    io.NopCloser(strings.NewReader(reqData)),
-		ResponseBodyReader:   io.NopCloser(strings.NewReader(rspData)),
-		RequestBodySize:      int64(len(reqData)),
-		ResponseBodySize:     int64(len(rspData)),
-		RequestBodyEncoding:  "base64",
-		ResponseBodyEncoding: "",
+		RequestBodyReader:  io.NopCloser(strings.NewReader(reqData)),
+		ResponseBodyReader: io.NopCloser(strings.NewReader(rspData)),
+		RequestBodySize:    int64(len(reqData)),
+		ResponseBodySize:   int64(len(rspData)),
+		RequestBodyBinary:  true,
+		ResponseBodyBinary: false,
 		WebSocketMessages: []*WebSocketMessage{
 			{Direction: "send", MsgType: "text", Data: "hello", DataSize: 5},
-			{Direction: "receive", MsgType: "binary", Data: encodedBinary, DataSize: 3},
+			{Direction: "receive", MsgType: "binary", Data: rawBinary, DataSize: 3},
 		},
 		WsMsgsTruncated: true,
 	}
@@ -53,15 +54,15 @@ func TestHistoryCodecRoundTripPreservesWsMsgsTruncated(t *testing.T) {
 		t.Fatalf("write compressed body: %v", err)
 	}
 
-	decoded, err := hbinReadEntryBody(bytes.NewReader(outer.Bytes()))
+	decoded, err := hbinReadEntryBody(bytes.NewReader(outer.Bytes()), hbinVersionCurrent)
 	if err != nil {
 		t.Fatalf("hbinReadEntryBody: %v", err)
 	}
-	if decoded.RequestBodyEncoding != "base64" {
-		t.Fatalf("RequestBodyEncoding should survive round-trip, got %q", decoded.RequestBodyEncoding)
+	if !decoded.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary should survive round-trip")
 	}
-	if decoded.ResponseBodyEncoding != "" {
-		t.Fatalf("ResponseBodyEncoding should survive round-trip, got %q", decoded.ResponseBodyEncoding)
+	if decoded.ResponseBodyBinary {
+		t.Fatal("ResponseBodyBinary should survive round-trip")
 	}
 	if decoded.RequestBodySize != 3 {
 		t.Fatalf("RequestBodySize should survive round-trip, got %d", decoded.RequestBodySize)
@@ -79,26 +80,20 @@ func TestHistoryCodecRoundTripPreservesWsMsgsTruncated(t *testing.T) {
 	if binaryMsg.MsgType != "binary" {
 		t.Fatalf("binary websocket msgType = %q, want binary", binaryMsg.MsgType)
 	}
-	if binaryMsg.Data != encodedBinary {
-		t.Fatalf("binary websocket data = %q, want %q", binaryMsg.Data, encodedBinary)
+	if binaryMsg.Data != rawBinary {
+		t.Fatalf("binary websocket data = %q, want %q", binaryMsg.Data, rawBinary)
 	}
 	if binaryMsg.DataSize != 3 {
 		t.Fatalf("binary websocket data size = %d, want 3", binaryMsg.DataSize)
 	}
 }
 
-func TestHistoryCodecRoundTripPreservesBinaryWsBase64Data(t *testing.T) {
-	t.Parallel()
-
-	encodedBinary := base64.StdEncoding.EncodeToString([]byte{0x00, 0x41, 0xff})
-	original := &trafficBodyViewInner{
-		WebSocketMessages: []*WebSocketMessage{
-			{Direction: "receive", MsgType: "binary", Data: encodedBinary, DataSize: 3},
-		},
-	}
-
+// hbinEntryBodyRecord compresses an entry body the way hbinWriteEntry stores
+// it, so the read paths can be exercised without a full history file.
+func hbinEntryBodyRecord(t *testing.T, body *trafficBodyViewInner) []byte {
+	t.Helper()
 	var inner bytes.Buffer
-	if err := hbinWriteEntryBody(&inner, original); err != nil {
+	if err := hbinWriteEntryBody(&inner, body); err != nil {
 		t.Fatalf("hbinWriteEntryBody: %v", err)
 	}
 	compressed := zstdEncoder.EncodeAll(inner.Bytes(), nil)
@@ -106,23 +101,91 @@ func TestHistoryCodecRoundTripPreservesBinaryWsBase64Data(t *testing.T) {
 	if err := binary.Write(&outer, binary.BigEndian, uint32(len(compressed))); err != nil {
 		t.Fatalf("write size: %v", err)
 	}
-	if _, err := outer.Write(compressed); err != nil {
-		t.Fatalf("write compressed body: %v", err)
-	}
+	outer.Write(compressed)
+	return outer.Bytes()
+}
 
-	decoded, err := hbinReadEntryBody(bytes.NewReader(outer.Bytes()))
+func allByteValues() string {
+	value := make([]byte, 256)
+	for index := range value {
+		value[index] = byte(index)
+	}
+	return string(value)
+}
+
+func TestHistoryCodecV3RoundTripsRawBinaryWebSocketPayload(t *testing.T) {
+	t.Parallel()
+
+	payload := allByteValues()
+	record := hbinEntryBodyRecord(t, &trafficBodyViewInner{
+		WebSocketMessages: []*WebSocketMessage{
+			{Direction: "receive", MsgType: "binary", Data: payload, DataSize: len(payload)},
+		},
+	})
+
+	view, err := DecodeTrafficBodyWithVersion(bytes.NewReader(record), 3)
 	if err != nil {
-		t.Fatalf("hbinReadEntryBody: %v", err)
+		t.Fatalf("DecodeTrafficBodyWithVersion: %v", err)
 	}
-	if len(decoded.WebSocketMessages) != 1 {
-		t.Fatalf("decoded websocket messages = %+v", decoded.WebSocketMessages)
+	if len(view.WebSocketMessages) != 1 {
+		t.Fatalf("decoded websocket messages = %+v", view.WebSocketMessages)
 	}
-	msg := decoded.WebSocketMessages[0]
-	if msg.MsgType != "binary" {
-		t.Fatalf("msgType = %q, want binary", msg.MsgType)
+	msg := view.WebSocketMessages[0]
+	if msg.MsgType != "binary" || msg.Data != payload || msg.DataSize != 256 {
+		t.Fatalf("binary websocket message = type %q size %d data %x", msg.MsgType, msg.DataSize, msg.Data)
 	}
-	if msg.Data != encodedBinary {
-		t.Fatalf("binary websocket data = %q, want %q", msg.Data, encodedBinary)
+}
+
+func TestHistoryCodecLegacyBinaryWebSocketPayload(t *testing.T) {
+	t.Parallel()
+
+	payload := allByteValues()
+	for _, test := range []struct {
+		name   string
+		stored string
+		want   string
+	}{
+		// v1 and v2 wrote binary payloads as standard Base64 text.
+		{name: "base64 is decoded", stored: base64.StdEncoding.EncodeToString([]byte(payload)), want: payload},
+		{name: "damaged base64 keeps stored bytes", stored: "%%not base64%%", want: "%%not base64%%"},
+	} {
+		for _, version := range []uint16{1, 2} {
+			t.Run(fmt.Sprintf("%s v%d", test.name, version), func(t *testing.T) {
+				t.Parallel()
+				record := hbinEntryBodyRecord(t, &trafficBodyViewInner{
+					WebSocketMessages: []*WebSocketMessage{
+						{Direction: "send", MsgType: "text", Data: "aGVsbG8=", DataSize: 8},
+						{Direction: "receive", MsgType: "binary", Data: test.stored, DataSize: len(test.want)},
+					},
+				})
+				view, err := DecodeTrafficBodyWithVersion(bytes.NewReader(record), version)
+				if err != nil {
+					t.Fatalf("DecodeTrafficBodyWithVersion: %v", err)
+				}
+				if len(view.WebSocketMessages) != 2 {
+					t.Fatalf("decoded websocket messages = %+v", view.WebSocketMessages)
+				}
+				if text := view.WebSocketMessages[0].Data; text != "aGVsbG8=" {
+					t.Fatalf("text message = %q, want it unchanged", text)
+				}
+				if got := view.WebSocketMessages[1].Data; got != test.want {
+					t.Fatalf("binary message = %x, want %x", got, test.want)
+				}
+			})
+		}
+	}
+}
+
+func TestHistoryFormatVersionSupport(t *testing.T) {
+	t.Parallel()
+
+	for version, want := range map[uint16]bool{0: false, 1: true, 2: true, 3: true, 4: false} {
+		if got := isSupportedHistoryFormatVersion(version); got != want {
+			t.Errorf("isSupportedHistoryFormatVersion(%d) = %t, want %t", version, got, want)
+		}
+	}
+	if _, err := DecodeTrafficBodyWithVersion(bytes.NewReader(hbinEntryBodyRecord(t, &trafficBodyViewInner{})), 4); err == nil {
+		t.Fatal("DecodeTrafficBodyWithVersion accepted version 4")
 	}
 }
 
@@ -238,26 +301,26 @@ func TestHbinWriteEntryRoundTripWithDecodeFunctions(t *testing.T) {
 				},
 			},
 			body: &trafficBodyViewInner{
-				RequestBodyReader:    io.NopCloser(bytes.NewReader([]byte{0x00, 0x01, 0x02, 0xff})),
-				ResponseBodyReader:   io.NopCloser(strings.NewReader(`{"ok":true}`)),
-				RequestBodySize:      4,
-				ResponseBodySize:     int64(len(`{"ok":true}`)),
-				RequestBodyEncoding:  "base64",
-				ResponseBodyEncoding: "",
+				RequestBodyReader:  io.NopCloser(bytes.NewReader([]byte{0x00, 0x01, 0x02, 0xff})),
+				ResponseBodyReader: io.NopCloser(strings.NewReader(`{"ok":true}`)),
+				RequestBodySize:    4,
+				ResponseBodySize:   int64(len(`{"ok":true}`)),
+				RequestBodyBinary:  true,
+				ResponseBodyBinary: false,
 				WebSocketMessages: []*WebSocketMessage{
 					{Direction: "send", MsgType: "text", Data: "hello", DataSize: 5},
-					{Direction: "receive", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{0xde, 0xad, 0xbe, 0xef}), DataSize: 4},
+					{Direction: "receive", MsgType: "binary", Data: "\xde\xad\xbe\xef", DataSize: 4},
 				},
 				WsMsgsTruncated: true,
 			},
 			wantBody: &TrafficBodyView{
-				RequestBody:          base64.StdEncoding.EncodeToString([]byte{0x00, 0x01, 0x02, 0xff}),
-				ResponseBody:         `{"ok":true}`,
-				RequestBodyEncoding:  "base64",
-				ResponseBodyEncoding: "",
+				RequestBody:        "\x00\x01\x02\xff",
+				ResponseBody:       `{"ok":true}`,
+				RequestBodyBinary:  true,
+				ResponseBodyBinary: false,
 				WebSocketMessages: []*WebSocketMessage{
 					{Direction: "send", MsgType: "text", Data: "hello", DataSize: 5},
-					{Direction: "receive", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{0xde, 0xad, 0xbe, 0xef}), DataSize: 4},
+					{Direction: "receive", MsgType: "binary", Data: "\xde\xad\xbe\xef", DataSize: 4},
 				},
 				WsMsgsTruncated: true,
 			},
@@ -275,18 +338,14 @@ func TestHbinWriteEntryRoundTripWithDecodeFunctions(t *testing.T) {
 				Status:     "204 No Content",
 			},
 			body: &trafficBodyViewInner{
-				RequestBodyReader:    io.NopCloser(strings.NewReader("")),
-				ResponseBodyReader:   io.NopCloser(strings.NewReader("")),
-				RequestBodySize:      0,
-				ResponseBodySize:     0,
-				RequestBodyEncoding:  "",
-				ResponseBodyEncoding: "",
+				RequestBodyReader:  io.NopCloser(strings.NewReader("")),
+				ResponseBodyReader: io.NopCloser(strings.NewReader("")),
+				RequestBodySize:    0,
+				ResponseBodySize:   0,
 			},
 			wantBody: &TrafficBodyView{
-				RequestBody:          "",
-				ResponseBody:         "",
-				RequestBodyEncoding:  "",
-				ResponseBodyEncoding: "",
+				RequestBody:  "",
+				ResponseBody: "",
 			},
 		},
 		{
@@ -384,9 +443,9 @@ func TestHbinWriteEntryRoundTripWithDecodeFunctions(t *testing.T) {
 			t.Fatalf("decoded entry mismatch for id %d:\n got: %#v\nwant: %#v", want.entry.ID, decodedEntry, want.entry)
 		}
 
-		decodedBody, err := DecodeTrafficBody(bytes.NewReader(hbinBytes[idx.bodyIndex:]))
+		decodedBody, err := DecodeTrafficBodyWithVersion(bytes.NewReader(hbinBytes[idx.bodyIndex:]), hbinVersionCurrent)
 		if err != nil {
-			t.Fatalf("DecodeTrafficBody(%d): %v", want.entry.ID, err)
+			t.Fatalf("DecodeTrafficBodyWithVersion(%d): %v", want.entry.ID, err)
 		}
 		if !reflect.DeepEqual(decodedBody, want.wantBody) {
 			t.Fatalf("decoded body mismatch for id %d:\n got: %#v\nwant: %#v", want.entry.ID, decodedBody, want.wantBody)
@@ -400,9 +459,9 @@ func TestDecodeTrafficRequestBodyReturnsRawBytes(t *testing.T) {
 	payload := []byte{0x00, 0x01, 0x02, 0xff}
 	entry := &TrafficEntry{ID: 303, Type: "http", Method: "POST"}
 	body := &trafficBodyViewInner{
-		RequestBodyReader:   io.NopCloser(bytes.NewReader(payload)),
-		RequestBodySize:     int64(len(payload)),
-		RequestBodyEncoding: "base64",
+		RequestBodyReader: io.NopCloser(bytes.NewReader(payload)),
+		RequestBodySize:   int64(len(payload)),
+		RequestBodyBinary: true,
 	}
 
 	tmpFile, err := os.CreateTemp(t.TempDir(), "history-*.hbin")
@@ -439,24 +498,24 @@ func TestDecodeTrafficRequestBodyReturnsRawBytes(t *testing.T) {
 	if _, err := tmpFile.Seek(int64(bodyIndex), io.SeekStart); err != nil {
 		t.Fatalf("seek body: %v", err)
 	}
-	got, encoding, err := DecodeTrafficRequestBody(tmpFile)
+	got, binaryBody, err := DecodeTrafficRequestBody(tmpFile, hbinVersionCurrent)
 	if err != nil {
 		t.Fatalf("DecodeTrafficRequestBody: %v", err)
 	}
-	if encoding != "base64" {
-		t.Fatalf("encoding = %q, want base64", encoding)
+	if !binaryBody {
+		t.Fatal("binary marker = false, want true")
 	}
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("request body = %v, want %v", got, payload)
 	}
 }
 
-func TestHistoryMetadataUsesCurrentV2(t *testing.T) {
+func TestHistoryMetadataUsesCurrentV3(t *testing.T) {
 	want := HistoryMetadata{
-		Key:           "current-v2",
-		Alias:         "Current V2",
+		Key:           "current-v3",
+		Alias:         "Current V3",
 		CreatedAt:     1_785_000_000_000,
-		FormatVersion: 2,
+		FormatVersion: 3,
 	}
 	var encoded bytes.Buffer
 	if err := encodeHistoryMetadata(&encoded, want); err != nil {
@@ -465,8 +524,8 @@ func TestHistoryMetadataUsesCurrentV2(t *testing.T) {
 	if err := binary.Write(&encoded, binary.BigEndian, uint32(0)); err != nil {
 		t.Fatalf("write entry count: %v", err)
 	}
-	if got := binary.BigEndian.Uint16(encoded.Bytes()[len(hbinMagic):]); got != 2 {
-		t.Fatalf("encoded version = %d, want 2", got)
+	if got := binary.BigEndian.Uint16(encoded.Bytes()[len(hbinMagic):]); got != 3 {
+		t.Fatalf("encoded version = %d, want 3", got)
 	}
 	if got := binary.BigEndian.Uint32(encoded.Bytes()[len(hbinMagic)+2:]); got != uint32(len(want.Key)) {
 		t.Fatalf("encoded key length = %d, want %d", got, len(want.Key))
@@ -524,14 +583,14 @@ func TestCurrentProcessInfoRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDecodeHistoryRejectsUnknownV3(t *testing.T) {
+func TestDecodeHistoryRejectsUnknownV4(t *testing.T) {
 	var encoded bytes.Buffer
 	encoded.WriteString(hbinMagic)
-	if err := binary.Write(&encoded, binary.BigEndian, uint16(3)); err != nil {
+	if err := binary.Write(&encoded, binary.BigEndian, uint16(4)); err != nil {
 		t.Fatalf("write version: %v", err)
 	}
 	metadata, err := DecodeHistoryMetadata(bytes.NewReader(encoded.Bytes()))
-	if err == nil || !strings.Contains(err.Error(), "unsupported version 3") {
+	if err == nil || !strings.Contains(err.Error(), "unsupported version 4") {
 		t.Fatalf("DecodeHistoryMetadata error = %v", err)
 	}
 	if metadata != nil {
@@ -539,9 +598,9 @@ func TestDecodeHistoryRejectsUnknownV3(t *testing.T) {
 	}
 }
 
-func TestDecodeTrafficEntryRejectsUnknownV3(t *testing.T) {
-	entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(nil), 3)
-	if err == nil || !strings.Contains(err.Error(), "unsupported version 3") {
+func TestDecodeTrafficEntryRejectsUnknownV4(t *testing.T) {
+	entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(nil), 4)
+	if err == nil || !strings.Contains(err.Error(), "unsupported version 4") {
 		t.Fatalf("DecodeTrafficEntryWithVersion error = %v", err)
 	}
 	if entry != nil {
@@ -586,7 +645,7 @@ func TestHbinBodyMarkerPreservesUnavailableCapturedPayload(t *testing.T) {
 	if _, err := file.Seek(int64(bodyOffset), io.SeekStart); err != nil {
 		t.Fatal(err)
 	}
-	requestBody, responseBody, err := DecodeTrafficHARBodies(file)
+	requestBody, responseBody, err := DecodeTrafficHARBodies(file, hbinVersionCurrent)
 	if err != nil {
 		t.Fatalf("DecodeTrafficHARBodies: %v", err)
 	}

@@ -2,7 +2,6 @@ package widgets
 
 import (
 	"context"
-	"encoding/base64"
 	"regexp"
 
 	"github.com/egoist/mygo/ui"
@@ -38,14 +37,10 @@ func NewProcessIcons(jobs *runtime.Jobs, source ProcessIconSource) *ProcessIcons
 
 func decodeProcessIcon(source ProcessIconSource, key string) (*ui.Bitmap, error) {
 	data, err := source(key)
-	if err != nil || data == nil || data.MIMEType != "image/png" || data.DataBase64 == "" {
+	if err != nil || data == nil || data.MIMEType != "image/png" || len(data.Data) == 0 {
 		return nil, err
 	}
-	raw, err := base64.StdEncoding.DecodeString(data.DataBase64)
-	if err != nil {
-		return nil, err
-	}
-	return ui.DecodeBitmap(raw)
+	return ui.DecodeBitmap(data.Data)
 }
 
 // Bitmap returns the icon for key, loading it if needed.

@@ -109,7 +109,7 @@ func TestRawHTTPBodiesAppendOnlyWhenAvailable(t *testing.T) {
 		t.Fatalf("text %q", got)
 	}
 	binary := input
-	binary.Body, binary.BodyEncoding = new("AAEC"), "base64"
+	binary.Body, binary.BodyBinary = new("\x00\x01\x02"), true
 	if got := FormatRawHTTPRequest(binary); got != head+RawHTTPBinaryBody {
 		t.Fatalf("binary %q", got)
 	}

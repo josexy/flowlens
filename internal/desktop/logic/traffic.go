@@ -16,7 +16,7 @@ const ProcessCategoryUnavailableKey = "process:unavailable"
 
 // IsHARExportableHistoryFormat reports whether a history version can be
 // exported as HAR.
-func IsHARExportableHistoryFormat(version int) bool { return version == 1 || version == 2 }
+func IsHARExportableHistoryFormat(version int) bool { return version >= 1 && version <= 3 }
 
 // AdvanceEvictionWatermark returns the highest evicted ID seen.
 func AdvanceEvictionWatermark(watermark uint64, evicted ...uint64) uint64 {

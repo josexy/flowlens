@@ -8,13 +8,11 @@ import (
 	"fmt"
 	"iter"
 	"math"
-	"slices"
 	"strings"
 )
 
 const (
-	hexChunkCapacity = 64 * 1024
-	hexRangeChunk    = 0x8000
+	hexRangeChunk = 0x8000
 
 	// HexHorizontalPadding is the padding around the hex view's rows.
 	HexHorizontalPadding = 16
@@ -22,21 +20,7 @@ const (
 	HexSectionPadding = 8
 	// HexMaxBytesPerRow bounds a row.
 	HexMaxBytesPerRow = 64
-
-	base64Encoding = "base64"
 )
-
-// HexBytes stores a body for the hex view. Appending never copies what was
-// stored earlier, so a growing stream stays cheap.
-type HexBytes struct {
-	chunks []hexChunk
-	length int64
-}
-
-type hexChunk struct {
-	start int64
-	data  []byte
-}
 
 // HexSource is the bytes a hex view reads.
 type HexSource interface {
@@ -45,7 +29,7 @@ type HexSource interface {
 	Range(start, end int64) iter.Seq[[]byte]
 }
 
-// HexString reads a text body without copying it.
+// HexString reads a body's raw bytes without copying it.
 type HexString string
 
 // Len implements HexSource.
@@ -69,110 +53,6 @@ func (s HexString) Range(start, end int64) iter.Seq[[]byte] {
 			}
 		}
 	}
-}
-
-// Len returns how many bytes are stored.
-func (b *HexBytes) Len() int64 { return b.length }
-
-// Append adds data.
-func (b *HexBytes) Append(data []byte) {
-	if len(data) == 0 {
-		return
-	}
-	if count := len(b.chunks); count > 0 {
-		tail := &b.chunks[count-1]
-		room := min(len(data), cap(tail.data)-len(tail.data))
-		tail.data = append(tail.data, data[:room]...)
-		b.length += int64(room)
-		data = data[room:]
-		if len(data) == 0 {
-			return
-		}
-	}
-	capacity := len(data)
-	if b.length > 0 && capacity < hexChunkCapacity {
-		capacity = hexChunkCapacity
-	}
-	stored := make([]byte, len(data), capacity)
-	copy(stored, data)
-	b.chunks = append(b.chunks, hexChunk{start: b.length, data: stored})
-	b.length += int64(len(data))
-}
-
-// Get returns the byte at index.
-func (b *HexBytes) Get(index int64) (byte, bool) {
-	if index < 0 || index >= b.length {
-		return 0, false
-	}
-	position, found := slices.BinarySearchFunc(b.chunks, index, func(chunk hexChunk, target int64) int {
-		switch {
-		case target < chunk.start:
-			return 1
-		case target >= chunk.start+int64(len(chunk.data)):
-			return -1
-		default:
-			return 0
-		}
-	})
-	if !found {
-		return 0, false
-	}
-	return b.chunks[position].data[index-b.chunks[position].start], true
-}
-
-// Range yields the stored bytes from start up to end in pieces of at most 32
-// KiB.
-func (b *HexBytes) Range(start, end int64) iter.Seq[[]byte] {
-	return func(yield func([]byte) bool) {
-		end = min(b.length, end)
-		for _, chunk := range b.chunks {
-			if chunk.start >= end {
-				return
-			}
-			first := max(0, start-chunk.start)
-			last := min(int64(len(chunk.data)), end-chunk.start)
-			for offset := first; offset < last; offset += hexRangeChunk {
-				if !yield(chunk.data[offset:min(last, offset+hexRangeChunk)]) {
-					return
-				}
-			}
-		}
-	}
-}
-
-// DecodeHexInput returns the bytes of a body. Base64 may omit padding and may
-// hold whitespace.
-func DecodeHexInput(input string, encoding string) ([]byte, error) {
-	if encoding != base64Encoding {
-		return []byte(input), nil
-	}
-	compact := strings.Map(func(r rune) rune {
-		if strings.ContainsRune(" \t\r\n", r) {
-			return -1
-		}
-		return r
-	}, input)
-	decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(compact, "="))
-	if err != nil {
-		return nil, fmt.Errorf("decode base64 body: %w", err)
-	}
-	return decoded, nil
-}
-
-// EstimateDecodedByteLength returns a body's size without decoding it.
-func EstimateDecodedByteLength(input, encoding string) int64 {
-	if encoding != base64Encoding {
-		return int64(len(input))
-	}
-	end := len(input)
-	padding := 0
-	if end > 0 && input[end-1] == '=' {
-		padding++
-	}
-	if end > 1 && input[end-2] == '=' {
-		padding++
-	}
-	return max(0, int64(end)*3/4-int64(padding))
 }
 
 // HexLayout is how a width of the hex view divides into columns.

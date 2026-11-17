@@ -179,7 +179,7 @@ func TestHARImportTransactionAndLimits(t *testing.T) {
 				}
 				return
 			}
-			if len(files) != 2 || result.Imported != tt.imported || result.Skipped != tt.skipped || result.Metadata.FormatVersion != 2 {
+			if len(files) != 2 || result.Imported != tt.imported || result.Skipped != tt.skipped || result.Metadata.FormatVersion != 3 {
 				t.Fatalf("%v %+v", files, result)
 			}
 			idx, _ := os.ReadFile(filepath.Join(dir, "import-test.hidx"))
@@ -188,14 +188,14 @@ func TestHARImportTransactionAndLimits(t *testing.T) {
 			}
 			data, _ := os.ReadFile(filepath.Join(dir, "import-test.hbin"))
 			md, err := DecodeHistoryMetadata(bytes.NewReader(data))
-			if err != nil || md.Total != tt.imported {
+			if err != nil || md.Total != tt.imported || md.FormatVersion != 3 {
 				t.Fatal(md, err)
 			}
-			entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(data[binary.BigEndian.Uint32(idx[12:16]):]), 2)
+			entry, err := DecodeTrafficEntryWithVersion(bytes.NewReader(data[binary.BigEndian.Uint32(idx[12:16]):]), md.FormatVersion)
 			if err != nil || entry.ID != 1 {
 				t.Fatal(entry, err)
 			}
-			view, err := DecodeTrafficBody(bytes.NewReader(data[binary.BigEndian.Uint32(idx[16:20]):]))
+			view, err := DecodeTrafficBodyWithVersion(bytes.NewReader(data[binary.BigEndian.Uint32(idx[16:20]):]), md.FormatVersion)
 			if err != nil || view.ResponseBody != "hello" {
 				t.Fatal(view, err)
 			}
@@ -313,11 +313,11 @@ func TestHARImportMissingBodyPersistsAndBlocksRecovery(t *testing.T) {
 	}
 	index, _ := os.ReadFile(filepath.Join(dir, "missing.hidx"))
 	data, _ := os.ReadFile(filepath.Join(dir, "missing.hbin"))
-	view, err := DecodeTrafficBody(bytes.NewReader(data[binary.BigEndian.Uint32(index[16:20]):]))
+	view, err := DecodeTrafficBodyWithVersion(bytes.NewReader(data[binary.BigEndian.Uint32(index[16:20]):]), hbinVersionCurrent)
 	if err != nil || !view.RequestBodyUnavailable || view.ResponseBodyUnavailable {
 		t.Fatal(view, err)
 	}
-	if _, _, err := DecodeTrafficRequestBody(bytes.NewReader(data[binary.BigEndian.Uint32(index[16:20]):])); err == nil {
+	if _, _, err := DecodeTrafficRequestBody(bytes.NewReader(data[binary.BigEndian.Uint32(index[16:20]):]), hbinVersionCurrent); err == nil {
 		t.Fatal("missing body accepted for resend")
 	}
 	if _, err := (&ProxyService{}).RecoverRequestBodyForEditing("https://example.com", nil, *view); err == nil {

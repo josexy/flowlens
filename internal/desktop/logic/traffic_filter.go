@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"encoding/base64"
 	"slices"
 	"strconv"
 	"strings"
@@ -152,9 +153,10 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
-// BuildCurl returns a shell command that repeats the request. body is the
-// entry's request body and encoding is empty or "base64".
-func BuildCurl(entry *TrafficEntry, body, encoding string) string {
+// BuildCurl returns a shell command that repeats the request. body holds the
+// entry's raw request bytes; a binary body is piped through base64 -d so the
+// command text stays printable.
+func BuildCurl(entry *TrafficEntry, body string, binary bool) string {
 	var command strings.Builder
 	command.WriteString("curl")
 	if entry.Method != "GET" {
@@ -169,8 +171,9 @@ func BuildCurl(entry *TrafficEntry, body, encoding string) string {
 			command.WriteString(" \\\n  -H " + shellQuote(field.Name+": "+field.Value))
 		}
 	}
-	if body != "" && encoding == "base64" {
-		return "printf %s " + shellQuote(body) + " | base64 -d | " + command.String() + " --data-binary @-"
+	if body != "" && binary {
+		encoded := base64.StdEncoding.EncodeToString([]byte(body))
+		return "printf %s " + shellQuote(encoded) + " | base64 -d | " + command.String() + " --data-binary @-"
 	}
 	if body != "" {
 		command.WriteString(" \\\n  --data-raw " + shellQuote(body))

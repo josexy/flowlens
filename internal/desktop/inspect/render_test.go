@@ -1,7 +1,6 @@
 package inspect
 
 import (
-	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -72,7 +71,7 @@ func TestRenderWebSocketMessageDetails(t *testing.T) {
 	payload := `{"type":"hello","payload":"` + strings.Repeat("a received text message. ", 18) + `"}`
 	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
 		{Direction: "receive", MsgType: "text", Data: payload, DataSize: len(payload)},
-		{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte("\x00\x01binary frame\xff")), DataSize: 16},
+		{Direction: "send", MsgType: "binary", Data: "\x00\x01binary frame\xff", DataSize: 16},
 	}})
 	f.tester.SetSize(rendertest.Width, rendertest.Height)
 	f.settle()
@@ -107,7 +106,7 @@ func TestRenderWebSocketMessageList(t *testing.T) {
 	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{
 		{Direction: "send", MsgType: "text", Data: `{"type":"subscribe","channel":"prices"}`, DataSize: 39},
 		{Direction: "receive", MsgType: "text", Data: `{"type":"ack","channel":"prices"}`, DataSize: 33},
-		{Direction: "receive", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte("\x00\x01binary frame\xff")), DataSize: 16},
+		{Direction: "receive", MsgType: "binary", Data: "\x00\x01binary frame\xff", DataSize: 16},
 	}})
 	f.tester.SetSize(rendertest.Width, 520)
 	f.settle()

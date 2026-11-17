@@ -191,7 +191,7 @@ func ResponseViewOf(response proxyservice.SendRequestResponse) (view *HTTPRespon
 		StatusCode: response.StatusCode, StatusText: response.StatusText, Protocol: response.Protocol,
 		Headers: HeaderFieldsToEditableRows(response.HeaderFields), HeadersHaveWireOrder: response.HeaderFields != nil && !response.HeaderOrderUnavailable, HeadersTruncated: response.HeadersTruncated,
 		Trailers: HeaderFieldsToEditableRows(response.TrailerFields), TrailersHaveWireOrder: response.TrailerFields != nil && !response.TrailerOrderUnavailable, TrailersTruncated: response.TrailersTruncated,
-		Body: response.Body,
+		Body: response.Body, BodyBinary: response.BodyBinary,
 	}
 	if view.Outcome == "" {
 		view.Outcome = PluginOutcomeCompleted
@@ -201,9 +201,6 @@ func ResponseViewOf(response proxyservice.SendRequestResponse) (view *HTTPRespon
 	}
 	if streaming {
 		view.StreamState = StreamStateStreaming
-	}
-	if response.BodyEncoding == "base64" {
-		view.BodyEncoding = "base64"
 	}
 	if hasDiagnostics {
 		view.ErrorMessage = BuildPluginErrorDetails(response.Outcome, response.PluginExecution)

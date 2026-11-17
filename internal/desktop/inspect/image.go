@@ -2,7 +2,6 @@ package inspect
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
@@ -55,15 +54,10 @@ func (i *imagePreview) reset() {
 // imagePanePadding is the image area's padding, 1.0.5's p-2.5.
 const imagePanePadding float32 = 10
 
-func decodeImage(body, encoding string, svg bool) (decodedImage, error) {
+// decodeImage decodes body's raw bytes. It runs in a background job, so the
+// conversion to a byte slice never copies a large body on the main thread.
+func decodeImage(body string, svg bool) (decodedImage, error) {
 	data := []byte(body)
-	if encoding == "base64" {
-		decoded, err := base64.StdEncoding.DecodeString(body)
-		if err != nil {
-			return decodedImage{}, err
-		}
-		data = decoded
-	}
 	if svg {
 		parsed, err := ui.ParseSVG(data)
 		if err != nil {
@@ -82,14 +76,14 @@ func (i *imagePreview) ensure(b *BodyViewer) {
 	if i.started && i.body == b.content.Body && i.identity == b.content.Identity {
 		return
 	}
-	body, encoding := b.content.Body, b.content.Encoding
+	body := b.content.Body
 	svg := b.category == logic.BodySVG
 	i.reset()
 	i.identity, i.body, i.started, i.loading = b.content.Identity, body, true, true
 	i.sequence++
 	key := fmt.Sprintf("inspect:image:%p", i)
 	runtime.Run(b.deps.Runtime.Jobs, key, func(context.Context) (decodedImage, error) {
-		return decodeImage(body, encoding, svg)
+		return decodeImage(body, svg)
 	}, func(result decodedImage, err error) {
 		i.loading = false
 		if err != nil {
@@ -256,7 +250,7 @@ func (i *imagePreview) info(b *BodyViewer) string {
 	if i.width > 0 && i.height > 0 {
 		parts = append(parts, strconv.Itoa(i.width)+" x "+strconv.Itoa(i.height))
 	}
-	parts = append(parts, logic.FormatFileSize(logic.EstimateDecodedByteLength(b.content.Body, b.content.Encoding)))
+	parts = append(parts, logic.FormatFileSize(int64(len(b.content.Body))))
 	return strings.Join(parts, " | ")
 }
 

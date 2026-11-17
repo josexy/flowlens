@@ -2,7 +2,6 @@ package proxyservice
 
 import (
 	"bytes"
-	"encoding/base64"
 	"mime/multipart"
 	"net/textproto"
 	"os"
@@ -53,15 +52,11 @@ func TestGetTrafficBodyViewPreservesMultipartRequestBytesForRecovery(t *testing.
 	if err != nil {
 		t.Fatalf("GetTrafficBodyView returned error: %v", err)
 	}
-	if bodyView.RequestBodyEncoding != "base64" {
-		t.Fatalf("RequestBodyEncoding = %q, want base64", bodyView.RequestBodyEncoding)
+	if !bodyView.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary = false, want true")
 	}
-	decoded, err := base64.StdEncoding.DecodeString(bodyView.RequestBody)
-	if err != nil {
-		t.Fatalf("DecodeString: %v", err)
-	}
-	if !bytes.Equal(decoded, body.Bytes()) {
-		t.Fatal("decoded multipart bytes do not match original request body")
+	if bodyView.RequestBody != body.String() {
+		t.Fatal("multipart bytes do not match original request body")
 	}
 
 	result, err := svc.RecoverRequestBodyForEditing("http://example.com/upload", entry.Request.HeaderFields, *bodyView)
@@ -146,17 +141,20 @@ func TestRecoverRequestBodyForEditingMultipartTextAndFile(t *testing.T) {
 	assertRequestDraftCachePath(t, recoveredFile.Path)
 }
 
-func TestRecoverRequestBodyForEditingBase64BinaryFile(t *testing.T) {
+func TestRecoverRequestBodyForEditingBinaryFile(t *testing.T) {
 	t.Parallel()
 
-	bodyBytes := []byte{0x00, 0x01, 0x02, 0x03}
+	bodyBytes := make([]byte, 512)
+	for index := range bodyBytes {
+		bodyBytes[index] = byte(index)
+	}
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{})
 	result, err := svc.RecoverRequestBodyForEditing(
 		"http://example.com/files/archive.bin",
 		testHeaderFields(map[string][]string{"Content-Type": {"application/octet-stream"}}),
 		TrafficBodyView{
-			RequestBody:         base64.StdEncoding.EncodeToString(bodyBytes),
-			RequestBodyEncoding: "base64",
+			RequestBody:       string(bodyBytes),
+			RequestBodyBinary: true,
 		},
 	)
 	if err != nil {
@@ -254,31 +252,39 @@ func TestRecoverRequestBodyForEditingURLEncoded(t *testing.T) {
 	}
 }
 
-func TestRecoverRequestBodyForEditingInvalidBase64FallsBackWithWarning(t *testing.T) {
+func TestRecoverRequestBodyForEditingInvalidUTF8TextUsesOriginalBytes(t *testing.T) {
 	t.Parallel()
 
+	bodyBytes := []byte("caf\xe9 \xff\xfe text")
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{})
-	result, err := svc.RecoverRequestBodyForEditing(
-		"http://example.com/upload.bin",
-		testHeaderFields(map[string][]string{"Content-Type": {"application/octet-stream"}}),
-		TrafficBodyView{
-			RequestBody:         "%%%not-base64%%%",
-			RequestBodyEncoding: "base64",
+	entry := &TrafficEntry{
+		ID:   101,
+		Type: "http",
+		Request: &HTTPMessage{
+			HeaderFields: testHeaderFields(map[string][]string{"Content-Type": {"text/plain; charset=utf-8"}}),
 		},
-	)
+	}
+	svc.storeTrafficEntry(entry)
+	svc.trafficBodies.Store(entry.ID, &TrafficBodies{
+		requestBody: testCapturedBodyFromBytes(t, entry.ID, bodycache.KindRequest, bodyBytes),
+	})
+	bodyView, err := svc.GetTrafficBodyView(entry.ID)
+	if err != nil {
+		t.Fatalf("GetTrafficBodyView returned error: %v", err)
+	}
+	if !bodyView.RequestBodyBinary || bodyView.RequestBody != string(bodyBytes) {
+		t.Fatalf("body view binary=%t body=%q, want the captured bytes marked binary", bodyView.RequestBodyBinary, bodyView.RequestBody)
+	}
+
+	result, err := svc.RecoverRequestBodyForEditing("http://example.com/notes", entry.Request.HeaderFields, *bodyView)
 	if err != nil {
 		t.Fatalf("RecoverRequestBodyForEditing returned error: %v", err)
 	}
-
-	if result.BodyType != SendRequestBodyTypeFile {
-		t.Fatalf("BodyType = %q, want %q", result.BodyType, SendRequestBodyTypeFile)
+	if result.BodyType != SendRequestBodyTypeFile || result.File == nil {
+		t.Fatalf("BodyType = %q file=%+v, want a recovered file", result.BodyType, result.File)
 	}
-	if result.File != nil {
-		t.Fatalf("File = %+v, want nil when decode fails", result.File)
-	}
-	if len(result.Warnings) == 0 {
-		t.Fatal("Warnings = empty, want decode warning")
-	}
+	assertFileBytes(t, result.File.Path, bodyBytes)
+	assertRequestDraftCachePath(t, result.File.Path)
 }
 
 func TestRecoverRequestBodyForEditingTruncatedMultipartWarnsAndKeepsPartialData(t *testing.T) {
@@ -373,7 +379,7 @@ func TestRecoverRequestBodyForEditingBodyWithoutContentTypeUsesText(t *testing.T
 	}
 }
 
-func TestRecoverRequestBodyForEditingBase64BodyWithoutContentTypeUsesText(t *testing.T) {
+func TestRecoverRequestBodyForEditingBinaryBodyWithoutContentTypeUsesText(t *testing.T) {
 	t.Parallel()
 
 	bodyBytes := []byte{0x00, 0x01, 0x02, 0x03}
@@ -382,8 +388,8 @@ func TestRecoverRequestBodyForEditingBase64BodyWithoutContentTypeUsesText(t *tes
 		"http://example.com/items",
 		nil,
 		TrafficBodyView{
-			RequestBody:         base64.StdEncoding.EncodeToString(bodyBytes),
-			RequestBodyEncoding: "base64",
+			RequestBody:       string(bodyBytes),
+			RequestBodyBinary: true,
 		},
 	)
 	if err != nil {

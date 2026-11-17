@@ -234,7 +234,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 		},
 		Content: func(c *ui.Context, palette nui.Theme) {
 			if binary {
-				m.hex.Build(c, palette, 1, active.Data, "base64")
+				m.hex.Build(c, palette, 1, active.Data, true)
 				return
 			}
 			if m.view.Text() != active.Data {
@@ -257,11 +257,11 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 }
 
 func (m *MessageStream) save(message *logic.WebSocketDisplayMessage) {
-	name, encoding, contentType := "websocket-message.txt", "", "text/plain"
+	name, contentType := "websocket-message.txt", "text/plain"
 	if message.MsgType == "binary" {
-		name, encoding, contentType = "websocket-message.bin", "base64", "application/octet-stream"
+		name, contentType = "websocket-message.bin", "application/octet-stream"
 	}
-	saveToFile(m.deps, &m.exporting, name, proxyservice.SaveBodyToFileRequest{Body: message.Data, BodyEncoding: encoding, ContentType: contentType})
+	saveToFile(m.deps, &m.exporting, name, proxyservice.SaveBodyToFileRequest{Body: message.Data, ContentType: contentType})
 }
 
 // webSocketPane lists the entry's messages. Without a body view, once it is

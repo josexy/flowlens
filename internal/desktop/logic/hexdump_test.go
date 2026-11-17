@@ -9,43 +9,32 @@ import (
 	"testing"
 )
 
-func TestEstimateDecodedByteLength(t *testing.T) {
-	for _, input := range []string{"", "ASCII", "中文", "😀", "a😀中"} {
-		if got := EstimateDecodedByteLength(input, ""); got != int64(len(input)) {
-			t.Fatalf("%q: %d", input, got)
-		}
+func TestHexStringReadsRawBytes(t *testing.T) {
+	data := make([]byte, 135536)
+	for i := range data {
+		data[i] = byte(i)
 	}
-	for length := range 20 {
-		encoded := base64.StdEncoding.EncodeToString(make([]byte, length))
-		if got := EstimateDecodedByteLength(encoded, "base64"); got != int64(length) {
-			t.Fatalf("%d: %d", length, got)
-		}
-	}
-}
-
-func TestByteStorageAcrossBoundaries(t *testing.T) {
-	var store HexBytes
-	prefix := make([]byte, 65536)
-	for i := range prefix {
-		prefix[i] = byte(i)
-	}
-	store.Append(prefix)
-	for i := range 70000 {
-		store.Append([]byte{byte(i)})
-	}
-	if store.Len() != 135536 {
-		t.Fatalf("length %d", store.Len())
+	source := HexString(data)
+	if source.Len() != 135536 {
+		t.Fatalf("length %d", source.Len())
 	}
 	for _, index := range []int64{0, 255, 65535, 65536, 65537, 131071, 135535} {
-		if got, ok := store.Get(index); !ok || got != byte(index) {
+		if got, ok := source.Get(index); !ok || got != byte(index) {
 			t.Fatalf("%d: %d %v", index, got, ok)
 		}
 	}
-	if _, ok := store.Get(-1); ok {
+	if _, ok := source.Get(-1); ok {
 		t.Fatal("-1")
 	}
-	if _, ok := store.Get(store.Len()); ok {
+	if _, ok := source.Get(source.Len()); ok {
 		t.Fatal("end")
+	}
+	var joined []byte
+	for piece := range source.Range(3, source.Len()) {
+		joined = append(joined, piece...)
+	}
+	if string(joined) != string(data[3:]) {
+		t.Fatal("range lost bytes")
 	}
 }
 
@@ -95,38 +84,12 @@ func TestHexLayout(t *testing.T) {
 	}
 }
 
-func TestDecodeHexInput(t *testing.T) {
-	binary := make([]byte, 257)
-	for i := range binary {
-		binary[i] = byte(i)
-	}
-	encoded := base64.StdEncoding.EncodeToString(binary)
-	for _, input := range []string{encoded, strings.ReplaceAll(encoded, "=", ""), encoded[:10] + "\n" + encoded[10:]} {
-		got, err := DecodeHexInput(input, "base64")
-		if err != nil || string(got) != string(binary) {
-			t.Fatalf("%v", err)
-		}
-	}
-	for _, invalid := range []string{"A", "YQ==Yg==", "!!!!"} {
-		if _, err := DecodeHexInput(invalid, "base64"); err == nil {
-			t.Fatalf("%q accepted", invalid)
-		}
-	}
-	if got, _ := DecodeHexInput("a😀", ""); string(got) != "a😀" {
-		t.Fatal(string(got))
-	}
-}
-
-func sampleBytes() (*HexBytes, []byte) {
+func sampleBytes() (HexSource, []byte) {
 	data := make([]byte, 100003)
 	for i := range data {
 		data[i] = byte(i % 256)
 	}
-	store := &HexBytes{}
-	store.Append(data[:13])
-	store.Append(data[13:65537])
-	store.Append(data[65537:])
-	return store, data
+	return HexString(data), data
 }
 
 func TestSerializeSelection(t *testing.T) {
@@ -142,8 +105,7 @@ func TestSerializeSelection(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatal("hex", err)
 	}
-	sample := &HexBytes{}
-	sample.Append([]byte{0, 10, 31, 32, 65, 126, 127, 255})
+	sample := HexString([]byte{0, 10, 31, 32, 65, 126, 127, 255})
 	got, _ = SerializeHexSelection(ctx, sample, 0, 8, HexCopyText, false)
 	if got != "\x00\n\x1f A~\x7fÿ" {
 		t.Fatalf("%q", got)
@@ -165,8 +127,7 @@ func splitPairs(value string) []string {
 
 func TestUTF8SelectionKeepsCharacters(t *testing.T) {
 	text := "\xef\xbb\xbf" + strings.Repeat("a", 32764) + "中🙂\r\n\t尾\x00"
-	store := &HexBytes{}
-	store.Append([]byte(text))
+	store := HexString(text)
 	ctx := context.Background()
 	got, err := SerializeHexSelection(ctx, store, 0, store.Len(), HexCopyText, true)
 	if err != nil || got != text {
@@ -179,8 +140,7 @@ func TestUTF8SelectionKeepsCharacters(t *testing.T) {
 }
 
 func TestSelectionCancels(t *testing.T) {
-	store := &HexBytes{}
-	store.Append(make([]byte, 2*1024*1024))
+	store := HexString(make([]byte, 2*1024*1024))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := SerializeHexSelection(ctx, store, 0, store.Len(), HexCopyHex, false); !errors.Is(err, ErrHexCopyCanceled) {

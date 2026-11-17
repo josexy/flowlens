@@ -570,7 +570,7 @@ func verifyRewriteFinalExports(t *testing.T, svc *ProxyService, entry *TrafficEn
 	if decoded.URL != entry.URL || len(decoded.RewriteExecutions) != 0 || decoded.ResponseMetricsSource != "" || decoded.Response.Metrics.BodySize != entry.Response.Metrics.BodySize {
 		t.Fatalf("HBIN metadata: %+v", decoded)
 	}
-	view, err := DecodeTrafficBody(bytes.NewReader(data[bodyOffset:]))
+	view, err := DecodeTrafficBodyWithVersion(bytes.NewReader(data[bodyOffset:]), hbinVersionCurrent)
 	if err != nil || view.RequestBody != "final request" || view.ResponseBody != "rewritten response" {
 		t.Fatalf("HBIN body: %+v %v", view, err)
 	}

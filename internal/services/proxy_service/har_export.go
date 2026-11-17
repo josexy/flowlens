@@ -87,10 +87,10 @@ type HARWriteResult struct {
 }
 
 // DecodeTrafficHARBodies reads the decoded request and response payloads from
-// an HBIN entry body. The returned data is raw bytes; Encoding only guides the
-// HAR text/base64 representation.
-func DecodeTrafficHARBodies(r io.Reader) (HARBody, HARBody, error) {
-	bvi, err := hbinReadEntryBody(r)
+// an HBIN entry body written with formatVersion. The returned data is raw
+// bytes; Encoding only guides the HAR text/base64 representation.
+func DecodeTrafficHARBodies(r io.Reader, formatVersion uint16) (HARBody, HARBody, error) {
+	bvi, err := hbinReadEntryBody(r, formatVersion)
 	if err != nil {
 		return HARBody{}, HARBody{}, err
 	}
@@ -99,7 +99,7 @@ func DecodeTrafficHARBodies(r io.Reader) (HARBody, HARBody, error) {
 
 	requestBody, err := readHARBody(
 		bvi.RequestBodyReader,
-		bvi.RequestBodyEncoding,
+		harEncodingForBinary(bvi.RequestBodyBinary),
 		!bvi.RequestBodyUnavailable,
 	)
 	if err != nil {
@@ -107,13 +107,22 @@ func DecodeTrafficHARBodies(r io.Reader) (HARBody, HARBody, error) {
 	}
 	responseBody, err := readHARBody(
 		bvi.ResponseBodyReader,
-		bvi.ResponseBodyEncoding,
+		harEncodingForBinary(bvi.ResponseBodyBinary),
 		!bvi.ResponseBodyUnavailable,
 	)
 	if err != nil {
 		return HARBody{}, HARBody{}, fmt.Errorf("har: read response body: %w", err)
 	}
 	return requestBody, responseBody, nil
+}
+
+// harEncodingForBinary maps a binary display marker to the HAR text
+// representation that keeps the body's bytes intact.
+func harEncodingForBinary(isBinary bool) string {
+	if isBinary {
+		return "base64"
+	}
+	return ""
 }
 
 const harBodyMemorySpoolLimit = 1 << 20

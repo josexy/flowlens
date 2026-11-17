@@ -96,22 +96,32 @@ func TestHistoryHARSelectionKeepsUnselectedConnectionOwner(t *testing.T) {
 func TestExportHARStreamsV2ConnectionTimings(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeHistoryWithVersion(t, historyDir, "export-v2", 2)
+	writeHistoryWithVersion(t, historyDir, "export-v3", 3)
 	service := New(nil, nil)
 	if err := service.initializeHistoryIndexMap(); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(t.TempDir(), "v2.har")
-	result, err := service.ExportHAR(HARExportRequest{Key: "export-v2", Path: target, TrafficIDs: []uint64{9001}})
-	if err != nil {
-		t.Fatal(err)
+	exports := map[string][]byte{}
+	for _, key := range []string{"export-v2", "export-v3"} {
+		target := filepath.Join(t.TempDir(), key+".har")
+		result, err := service.ExportHAR(HARExportRequest{Key: key, Path: target, TrafficIDs: []uint64{9001}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Exported != 1 || result.Skipped != 0 {
+			t.Fatalf("%s result = %+v", key, result)
+		}
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		exports[key] = data
 	}
-	if result.Exported != 1 || result.Skipped != 0 {
-		t.Fatalf("result = %+v", result)
+	// The same entry exports identically whichever version stored it.
+	if !bytes.Equal(exports["export-v2"], exports["export-v3"]) {
+		t.Fatalf("v3 HAR differs from v2 HAR:\nv2: %s\nv3: %s", exports["export-v2"], exports["export-v3"])
 	}
-	data, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := exports["export-v3"]
 	var document struct {
 		Log struct {
 			Entries []struct {

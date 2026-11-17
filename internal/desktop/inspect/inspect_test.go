@@ -25,6 +25,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/store"
+	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
@@ -286,7 +287,7 @@ func (f *fixture) openMessage(label string) {
 func TestWebSocketMessageDetailContent(t *testing.T) {
 	f := wsFixture(t,
 		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello, world", DataSize: 12},
-		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: "\x01\x02\x03", DataSize: 3},
 	)
 	f.openMessage("hello, world")
 	f.has(locales.WorkspaceWebsocketClientMessageDetailReceive())
@@ -337,7 +338,7 @@ func TestWebSocketMessageDetailContent(t *testing.T) {
 func TestWebSocketMessageFileNames(t *testing.T) {
 	f := wsFixture(t,
 		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: "hello", DataSize: 5},
-		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3},
+		&proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: "\x01\x02\x03", DataSize: 3},
 	)
 	f.openMessage("hello")
 	f.click(locales.DetailSaveBody())
@@ -363,7 +364,17 @@ func TestWebSocketMessageFileNames(t *testing.T) {
 	if got, want := f.pickedNames(), []string{"websocket-message.txt", "websocket-message.bin", "websocket-selection.bin"}; !slices.Equal(got, want) {
 		t.Fatalf("suggested %v, want %v", got, want)
 	}
-	if last := f.saved[len(f.saved)-1]; last.Body != base64.StdEncoding.EncodeToString([]byte{1, 2}) {
+	if len(f.saved) != 3 {
+		t.Fatalf("saved %+v", f.saved)
+	}
+	if text := f.saved[0]; text.Body != "hello" || text.ContentType != "text/plain" {
+		t.Fatalf("saved text message %+v", text)
+	}
+	// The binary message and the selection are written as their exact bytes.
+	if message := f.saved[1]; message.Body != "\x01\x02\x03" || message.ContentType != "application/octet-stream" {
+		t.Fatalf("saved binary message %+v", message)
+	}
+	if last := f.saved[2]; last.Body != "\x01\x02" || last.ContentType != "application/octet-stream" {
 		t.Fatalf("exported %+v", last)
 	}
 }
@@ -385,7 +396,7 @@ func TestWebSocketMessageRows(t *testing.T) {
 }
 
 func TestWebSocketHexExportWaitsForTheDialogsSave(t *testing.T) {
-	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: base64.StdEncoding.EncodeToString([]byte{1, 2, 3}), DataSize: 3})
+	f := wsFixture(t, &proxyservice.WebSocketMessage{Direction: "send", MsgType: "binary", Data: "\x01\x02\x03", DataSize: 3})
 	f.openMessage(locales.WorkspaceWebsocketClientBinarySize("3"))
 	stream := f.panel.messages
 	stream.hex.anchor, stream.hex.focus, stream.hex.hasChoice = 0, 1, true
@@ -537,17 +548,19 @@ func TestRawTCPConnectDetails(t *testing.T) {
 	f.has("TCP/TLS")
 }
 
-func bodyFixture(t testing.TB, contentType, body, encoding string) *fixture {
+// bodyFixture shows a response body holding raw bytes. binary is the marker
+// the service sets for a body that cannot be shown as text.
+func bodyFixture(t testing.TB, contentType, body string, binary bool) *fixture {
 	entry := httpEntry()
 	entry.Response.HeaderFields = []logic.HeaderField{{Name: "Content-Type", Value: contentType}}
-	f := newFixture(t, entry, &proxyservice.TrafficBodyView{ResponseBody: body, ResponseBodyEncoding: encoding})
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{ResponseBody: body, ResponseBodyBinary: binary})
 	f.panel.responseTab = tabResponseBody
 	f.settle()
 	return f
 }
 
 func TestJSONBodyIsFormatted(t *testing.T) {
-	f := bodyFixture(t, "application/json", `{"a":1}`, "")
+	f := bodyFixture(t, "application/json", `{"a":1}`, false)
 	if f.panel.responseBody.Active() != logic.BodyTabRaw {
 		t.Fatal(f.panel.responseBody.Active())
 	}
@@ -562,7 +575,7 @@ func TestJSONBodyIsFormatted(t *testing.T) {
 }
 
 func TestSaveUsesInferredNameAndCompleteContent(t *testing.T) {
-	f := bodyFixture(t, "text/plain", "whole text", "")
+	f := bodyFixture(t, "text/plain", "whole text", false)
 	f.click(locales.DetailSaveBody())
 	if len(f.saved) != 1 || f.saved[0].Body != "whole text" || f.saved[0].Path != "/tmp/out" {
 		t.Fatalf("%+v", f.saved)
@@ -570,7 +583,7 @@ func TestSaveUsesInferredNameAndCompleteContent(t *testing.T) {
 }
 
 func TestEmptyIsDistinctFromUnavailable(t *testing.T) {
-	f := bodyFixture(t, "text/plain", "", "")
+	f := bodyFixture(t, "text/plain", "", false)
 	f.has(locales.DetailBodyEmpty())
 	f.lacks(locales.DetailBodyUnavailable())
 	f.data.body = &proxyservice.TrafficBodyView{ResponseBodyUnavailable: true}
@@ -580,7 +593,7 @@ func TestEmptyIsDistinctFromUnavailable(t *testing.T) {
 }
 
 func TestLargeTextIsPlain(t *testing.T) {
-	f := bodyFixture(t, "application/json", `"`+strings.Repeat("x", logic.LargeTextThreshold)+`"`, "")
+	f := bodyFixture(t, "application/json", `"`+strings.Repeat("x", logic.LargeTextThreshold)+`"`, false)
 	if !f.panel.responseBody.raw.PlainText() {
 		t.Fatal("not plain")
 	}
@@ -599,7 +612,17 @@ func imageFixture(t *testing.T, encode func(*bytes.Buffer, image.Image) error) s
 	if err := encode(&data, img); err != nil {
 		t.Fatal(err)
 	}
-	return base64.StdEncoding.EncodeToString(data.Bytes())
+	return data.String()
+}
+
+// webpFixture is a 1 x 1 lossy WebP image.
+func webpFixture(t *testing.T) string {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestImageFormatsDecode(t *testing.T) {
@@ -608,11 +631,11 @@ func TestImageFormatsDecode(t *testing.T) {
 		"image/jpeg": imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return jpeg.Encode(w, i, nil) }),
 		"image/gif":  imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return gif.Encode(w, i, nil) }),
 		"image/bmp":  imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return bmp.Encode(w, i) }),
-		"image/webp": "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
+		"image/webp": webpFixture(t),
 	}
-	for contentType, encoded := range cases {
+	for contentType, body := range cases {
 		t.Run(contentType, func(t *testing.T) {
-			f := bodyFixture(t, contentType, encoded, "base64")
+			f := bodyFixture(t, contentType, body, true)
 			if f.panel.responseBody.Active() != logic.BodyTabImage {
 				t.Fatal(f.panel.responseBody.Active())
 			}
@@ -626,7 +649,7 @@ func TestImageFormatsDecode(t *testing.T) {
 }
 
 func TestSVGPreview(t *testing.T) {
-	f := bodyFixture(t, "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`, "")
+	f := bodyFixture(t, "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`, false)
 	if f.panel.responseBody.image.failed || f.panel.responseBody.image.image.svg == nil {
 		t.Fatalf("%+v", f.panel.responseBody.image)
 	}
@@ -643,7 +666,7 @@ func TestInvalidImageKeepsRawAndHex(t *testing.T) {
 		{name: "unrecognized", contentType: "image/png", body: "not an image", hex: "6E 6F 74", unsupported: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := bodyFixture(t, tc.contentType, base64.StdEncoding.EncodeToString([]byte(tc.body)), "base64")
+			f := bodyFixture(t, tc.contentType, tc.body, true)
 			if tc.unsupported {
 				f.has(locales.DetailImageFormatUnsupported())
 				f.lacks(locales.DetailImagePreviewFailed())
@@ -669,7 +692,7 @@ func TestInvalidImageKeepsRawAndHex(t *testing.T) {
 }
 
 func TestImageZoomBounds(t *testing.T) {
-	f := bodyFixture(t, "image/png", imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }), "base64")
+	f := bodyFixture(t, "image/png", imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }), true)
 	preview := &f.panel.responseBody.image
 	for range 60 {
 		preview.zoom(logic.ImageScaleStep)
@@ -690,7 +713,7 @@ func TestImageZoomBounds(t *testing.T) {
 }
 
 func TestHexShowsColumnsAndCopiesSelection(t *testing.T) {
-	f := bodyFixture(t, "application/octet-stream", base64.StdEncoding.EncodeToString([]byte{0, 'A', '\n', '~', 0xFF}), "base64")
+	f := bodyFixture(t, "application/octet-stream", string([]byte{0, 'A', '\n', '~', 0xFF}), true)
 	f.click(locales.DetailHex())
 	f.has("00 41 0A 7E FF")
 	f.has(".A.~.")
@@ -710,13 +733,61 @@ func TestHexShowsColumnsAndCopiesSelection(t *testing.T) {
 	}
 	hex.exportSelection()
 	f.settle()
-	if len(f.saved) != 1 || f.saved[0].Body != "AEEKfv8=" || f.saved[0].BodyEncoding != "base64" {
+	if len(f.saved) != 1 || f.saved[0].Body != "\x00A\n~\xff" || f.saved[0].ContentType != "application/octet-stream" {
 		t.Fatalf("%+v", f.saved)
 	}
 }
 
+func allBytes() string {
+	data := make([]byte, 256)
+	for index := range data {
+		data[index] = byte(index)
+	}
+	return string(data)
+}
+
+func TestHexShowsBinaryBytesOnTheFirstFrame(t *testing.T) {
+	if err := apptheme.RegisterFonts(); err != nil {
+		t.Fatal(err)
+	}
+	// No job runner: the bytes must not wait for background work.
+	h := NewHexView(Dependencies{})
+	tester := ui.NewTester(func(c *ui.Context) {
+		palette := nui.App(c, apptheme.Resolve(apptheme.Appearance{}).Config)
+		h.Build(c, palette, 1, string([]byte{0x00, 0x41, 0xff, 0x80}), true)
+	}, 720, 300)
+	tester.Frame()
+	if !tester.HasText("00 41 FF 80") || !tester.HasText(".A..") {
+		t.Fatalf("first frame shows %v", tester.Texts())
+	}
+}
+
+func TestSavingABinaryBodyKeepsItsBytes(t *testing.T) {
+	body := allBytes()
+	f := bodyFixture(t, "application/octet-stream", body, true)
+	f.click(locales.DetailSaveBody())
+	f.settle()
+	if len(f.saved) != 1 || f.saved[0].Body != body || f.saved[0].ContentType != "application/octet-stream" {
+		t.Fatalf("saved %d requests, first body %d bytes", len(f.saved), len(f.saved[0].Body))
+	}
+	f.click(locales.DetailHex())
+	if !f.tester.HasText("00 01 02 03") {
+		t.Fatalf("hex shows %v", f.tester.Texts())
+	}
+}
+
+func TestInvalidUTF8BodyShowsHintAndOriginalBytes(t *testing.T) {
+	f := bodyFixture(t, "text/plain", "caf\xe9 \xff", true)
+	if f.panel.responseBody.Active() != logic.BodyTabRaw || f.panel.responseBody.raw.Text() != locales.DetailBinaryDataHint() {
+		t.Fatalf("raw view %q", f.panel.responseBody.raw.Text())
+	}
+	f.click(locales.DetailHex())
+	f.has("63 61 66 E9 20 FF")
+	f.lacks("EF BF BD")
+}
+
 func TestHexPointerSelectsBytes(t *testing.T) {
-	f := bodyFixture(t, "text/plain", strings.Repeat("A", 100), "")
+	f := bodyFixture(t, "text/plain", strings.Repeat("A", 100), false)
 	f.click(locales.DetailHex())
 	hex := f.panel.responseBody.hex
 	row, ok := f.tester.Find("00000")
@@ -739,7 +810,7 @@ func TestHexPointerSelectsBytes(t *testing.T) {
 }
 
 func TestHexResetsOnReplacement(t *testing.T) {
-	f := bodyFixture(t, "text/plain", "hello", "")
+	f := bodyFixture(t, "text/plain", "hello", false)
 	f.click(locales.DetailHex())
 	hex := f.panel.responseBody.hex
 	hex.anchor, hex.focus, hex.hasChoice = 0, 1, true
@@ -759,7 +830,7 @@ func TestHexResetsOnReplacement(t *testing.T) {
 }
 
 func TestHexBuildsOnlyVisibleRowsOf500MB(t *testing.T) {
-	f := bodyFixture(t, "text/plain", "x", "")
+	f := bodyFixture(t, "text/plain", "x", false)
 	f.click(locales.DetailHex())
 	// Frame does not advance the clock: let control transitions finish before
 	// measuring the work of two settled frames.
@@ -786,7 +857,7 @@ func (s hugeSource) Get(index int64) (byte, bool) {
 func (s hugeSource) Range(int64, int64) iter.Seq[[]byte] { return func(func([]byte) bool) {} }
 
 func BenchmarkHexFrame500MB(b *testing.B) {
-	f := bodyFixture(b, "text/plain", "x", "")
+	f := bodyFixture(b, "text/plain", "x", false)
 	f.panel.responseBody.active = logic.BodyTabHex
 	f.settle()
 	f.panel.responseBody.hex.source = hugeSource{500 * 1024 * 1024}
@@ -797,7 +868,7 @@ func BenchmarkHexFrame500MB(b *testing.B) {
 }
 
 func sseFixture(t testing.TB, body string) *fixture {
-	return bodyFixture(t, "text/event-stream", body, "")
+	return bodyFixture(t, "text/event-stream", body, false)
 }
 
 func TestSSEOpensByDefaultAndListsEvents(t *testing.T) {
@@ -914,8 +985,8 @@ func TestSSEIncompleteNotice(t *testing.T) {
 	f.has(locales.DetailSseMessageCount("1"))
 }
 
-func TestSSEBase64Explains(t *testing.T) {
-	f := bodyFixture(t, "text/event-stream", base64.StdEncoding.EncodeToString([]byte("data: x\n\n")), "base64")
+func TestSSEBinaryExplains(t *testing.T) {
+	f := bodyFixture(t, "text/event-stream", "data: x\n\n", true)
 	f.has(locales.DetailSseUnavailable())
 	f.click(locales.DetailHex())
 	if f.panel.responseBody.Active() != logic.BodyTabHex {

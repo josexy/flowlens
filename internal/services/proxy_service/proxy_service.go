@@ -877,15 +877,7 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 				entry,
 				resp.Header.Get("Content-Encoding"),
 				false,
-				func(offset int64, data []byte) {
-					chunkOffset := offset
-					s.emitCapturedTrafficLiveUpdate(entry, TrafficLiveUpdate{
-						TrafficID:   entry.ID,
-						Kind:        TrafficLiveUpdateSSEChunk,
-						Offset:      &chunkOffset,
-						ChunkBase64: base64.StdEncoding.EncodeToString(data),
-					})
-				},
+				s.capturedSSEChunkPublisher(entry),
 				func() { exchange.fillResponseTrailers(resp) },
 			)
 			resp.Body = observeTransferBody(capturedResponseBody, resp.ContentLength, exchange.responseBodyFinished)
@@ -1317,6 +1309,22 @@ func (s *ProxyService) emitTrafficPatch(entry *TrafficEntry, patch TrafficEntryP
 	s.emitHighFrequencyFrontendEvent(trafficPatchEventName, patch)
 }
 
+// capturedSSEChunkPublisher returns the onChunk callback that publishes the
+// decoded SSE data of a captured response. data is a window of the reader's
+// buffer, which is reused after the callback returns, so each update owns a
+// copy.
+func (s *ProxyService) capturedSSEChunkPublisher(entry *TrafficEntry) func(offset int64, data []byte) {
+	return func(offset int64, data []byte) {
+		chunkOffset := offset
+		s.emitCapturedTrafficLiveUpdate(entry, TrafficLiveUpdate{
+			TrafficID: entry.ID,
+			Kind:      TrafficLiveUpdateSSEChunk,
+			Offset:    &chunkOffset,
+			Chunk:     bytes.Clone(data),
+		})
+	}
+}
+
 func (s *ProxyService) emitCapturedTrafficLiveUpdate(entry *TrafficEntry, update TrafficLiveUpdate) {
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
@@ -1736,14 +1744,10 @@ func (s *ProxyService) getTrafficBodyViewInner(id uint64) (trafficBodyViewInner,
 			respCE = firstHeaderFieldValue(entry.Response.HeaderFields, "Content-Encoding")
 		}
 
-		if shouldEncodeBodyForTrafficView(reqCT, reqCE, reqBodySize) || !requestBodyUTF8Valid {
-			result.RequestBodyEncoding = "base64"
-		}
+		result.RequestBodyBinary = shouldShowBodyAsBinary(reqCT, reqCE, reqBodySize) || !requestBodyUTF8Valid
 		result.RequestBodyReader = reqBodyReader
 
-		if shouldEncodeBodyForTrafficView(respCT, respCE, respBodySize) || !responseBodyUTF8Valid {
-			result.ResponseBodyEncoding = "base64"
-		}
+		result.ResponseBodyBinary = shouldShowBodyAsBinary(respCT, respCE, respBodySize) || !responseBodyUTF8Valid
 		result.ResponseBodyReader = respBodyReader
 
 		if reqErr != nil {
@@ -1776,7 +1780,7 @@ func (s *ProxyService) GetTrafficBodyView(id uint64) (*TrafficBodyView, error) {
 	return convertToTrafficBodyView(&bvi)
 }
 
-// isBinaryContentType returns true for non-text content types that should be base64-encoded
+// isBinaryContentType returns true for non-text content types that are shown as binary
 func isBinaryContentType(ct string) bool {
 	if ct == "" {
 		return false
@@ -2529,9 +2533,7 @@ func (s *ProxyService) SendHTTPRequest(
 			response.PluginExecution = pluginSession.Execution()
 		}
 		sessionID := generateHistoryKey()
-		if hasUnsupportedContentEncoding(contentEncoding) {
-			response.BodyEncoding = "base64"
-		}
+		response.BodyBinary = hasUnsupportedContentEncoding(contentEncoding)
 		response.Streaming = true
 		response.StreamSessionID = sessionID
 		session := &httpRequestStreamSession{
@@ -2686,12 +2688,11 @@ func (s *ProxyService) SendHTTPRequest(
 			)
 		}
 
-		encodeBodyAsBase64 := pluginBodyKind == "binary"
 		// The response DTO exposes Body as a string, so even file-backed
 		// plugin results must be materialized once here. Keeping files through the
 		// hook chain avoids every earlier full-body byte slice and Worker frame.
 		bodyValue, bodySize, materializeErr := materializeHTTPRequestPluginResponseBody(
-			requestCtx, respBodyBytes, respBodyFile, encodeBodyAsBase64,
+			requestCtx, respBodyBytes, respBodyFile,
 		)
 		if materializeErr != nil && response.Outcome == RequestOutcomeCompleted {
 			response.Outcome = RequestOutcomeCompletedWithPluginError
@@ -2709,42 +2710,36 @@ func (s *ProxyService) SendHTTPRequest(
 			response.PluginExecution = appendHTTPRequestPluginResponseDiagnostic(
 				response.PluginExecution, "body_materialization_failed", materializeErr,
 			)
-			encodeBodyAsBase64 = pluginBodyKind == "binary"
 			bodyValue, bodySize, materializeErr = materializeHTTPRequestPluginResponseBody(
-				requestCtx, respBodyBytes, respBodyFile, encodeBodyAsBase64,
+				requestCtx, respBodyBytes, respBodyFile,
 			)
 		}
 		if materializeErr != nil {
 			return SendRequestResponse{}, fmt.Errorf("materialize HTTP response body: %w", materializeErr)
 		}
 		response.Body = bodyValue
-		if encodeBodyAsBase64 && bodySize > 0 {
-			response.BodyEncoding = "base64"
-		}
+		response.BodyBinary = pluginBodyKind == "binary" && bodySize > 0
 		logger.G().Infof(
-			"HTTP request completed: method=%s target=%s status_code=%d protocol=%s response_bytes=%d body_encoding=%s duration=%s",
+			"HTTP request completed: method=%s target=%s status_code=%d protocol=%s response_bytes=%d body_binary=%t duration=%s",
 			strings.ToUpper(method), logTarget, resp.StatusCode, resp.Proto,
-			bodySize, response.BodyEncoding, time.Since(started).Round(time.Millisecond),
+			bodySize, response.BodyBinary, time.Since(started).Round(time.Millisecond),
 		)
 		return response, nil
 	}
 
-	encodeBodyAsBase64 := isBinaryContentType(responseContentType)
-	response.Body, _, err = materializeHTTPRequestPluginResponseBody(requestCtx, respBodyBytes, nil, encodeBodyAsBase64)
+	response.Body, _, err = materializeHTTPRequestPluginResponseBody(requestCtx, respBodyBytes, nil)
 	if err != nil {
 		return SendRequestResponse{}, err
 	}
-	if encodeBodyAsBase64 && len(respBodyBytes) > 0 {
-		response.BodyEncoding = "base64"
-	}
+	response.BodyBinary = isBinaryContentType(responseContentType) && len(respBodyBytes) > 0
 	logger.G().Infof(
-		"HTTP request completed: method=%s target=%s status_code=%d protocol=%s response_bytes=%d body_encoding=%s duration=%s",
+		"HTTP request completed: method=%s target=%s status_code=%d protocol=%s response_bytes=%d body_binary=%t duration=%s",
 		strings.ToUpper(method),
 		logTarget,
 		resp.StatusCode,
 		resp.Proto,
 		len(respBodyBytes),
-		response.BodyEncoding,
+		response.BodyBinary,
 		time.Since(started).Round(time.Millisecond),
 	)
 	return response, nil
@@ -2769,10 +2764,11 @@ func (s *ProxyService) runHTTPRequestStreamReadLoop(session *httpRequestStreamSe
 			session.offset.Store(nextOffset)
 			eventOffset := startOffset
 			s.emitHTTPRequestEvent(HTTPRequestStreamEvent{
-				SessionID:   session.id,
-				EventType:   "chunk",
-				Offset:      &eventOffset,
-				ChunkBase64: base64.StdEncoding.EncodeToString(buffer[:n]),
+				SessionID: session.id,
+				EventType: "chunk",
+				Offset:    &eventOffset,
+				// buffer is reused by the next Read, so the event owns a copy.
+				Chunk: bytes.Clone(buffer[:n]),
 			})
 		}
 		if err == nil {
@@ -3259,18 +3255,10 @@ func normalizeBodyToFileSavePath(contentType string, path string) string {
 }
 
 func decodeBodyToFileBytes(req SaveBodyToFileRequest) ([]byte, error) {
-	body := req.Body
-	if body == "" {
+	if req.Body == "" {
 		return nil, fmt.Errorf("body is empty")
 	}
-	if req.BodyEncoding == "base64" {
-		decoded, err := base64.StdEncoding.DecodeString(body)
-		if err != nil {
-			return nil, fmt.Errorf("decode body: %w", err)
-		}
-		return decoded, nil
-	}
-	return string2Bytes(body), nil
+	return string2Bytes(req.Body), nil
 }
 
 func writeBodyToFile(path string, data []byte) error {
@@ -3340,12 +3328,11 @@ func (s *ProxyService) RecoverRequestBodyForEditing(
 	s.runRequestDraftCacheOperationHook("recover")
 
 	contentType := firstHeaderFieldValue(headerFields, "Content-Type")
-	bodyBytes, decodeWarnings := decodeTrafficRequestBody(bodyView)
+	bodyBytes := decodeTrafficRequestBody(bodyView)
 
 	result := RequestBodyRecoveryResult{
 		BodyType: inferRequestRecoveryBodyType(contentType),
 		Text:     bodyView.RequestBody,
-		Warnings: append([]string(nil), decodeWarnings...),
 	}
 
 	if len(bodyBytes) == 0 {
@@ -3652,19 +3639,13 @@ func recoverRequestURLEncodedBody(bodyBytes []byte) ([]*SendRequestURLEncodedIte
 	return items, warnings
 }
 
-func decodeTrafficRequestBody(bodyView TrafficBodyView) ([]byte, []string) {
-	if bodyView.RequestBodyEncoding != "base64" {
-		return string2Bytes(bodyView.RequestBody), nil
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(bodyView.RequestBody)
-	if err != nil {
-		return nil, []string{fmt.Sprintf("failed to decode base64 request body: %v", err)}
-	}
-	return decoded, nil
+// decodeTrafficRequestBody returns the captured request bytes of bodyView.
+// They share the view's memory and must be treated as read-only.
+func decodeTrafficRequestBody(bodyView TrafficBodyView) []byte {
+	return string2Bytes(bodyView.RequestBody)
 }
 
-func shouldEncodeBodyForTrafficView(contentType, contentEncoding string, bodySize int64) bool {
+func shouldShowBodyAsBinary(contentType, contentEncoding string, bodySize int64) bool {
 	if bodySize == 0 {
 		return false
 	}
@@ -3678,10 +3659,6 @@ func shouldEncodeBodyForTrafficView(contentType, contentEncoding string, bodySiz
 		return true
 	}
 	return false
-}
-
-func shouldEncodeRequestBodyForTrafficView(contentType, contentEncoding string, bodySize int64) bool {
-	return shouldEncodeBodyForTrafficView(contentType, contentEncoding, bodySize)
 }
 
 func hasUnsupportedContentEncoding(contentEncoding string) bool {
@@ -3757,7 +3734,7 @@ func shouldRecoverRequestSingleFile(
 	if isMultipartFormDataContentType(contentType) {
 		return false
 	}
-	if bodyView.RequestBodyEncoding == "base64" || isBinaryContentType(contentType) {
+	if bodyView.RequestBodyBinary || isBinaryContentType(contentType) {
 		return true
 	}
 
@@ -4778,10 +4755,6 @@ func normalizeWebSocketMessage(direction, msgType string, payload []byte) *WebSo
 		Direction: strings.ToLower(direction),
 		MsgType:   strings.ToLower(msgType),
 		DataSize:  len(payload),
-	}
-	if message.MsgType == "binary" {
-		message.Data = base64.StdEncoding.EncodeToString(payload)
-		return message
 	}
 	message.Data = string(payload)
 	return message

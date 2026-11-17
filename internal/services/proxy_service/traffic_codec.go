@@ -17,7 +17,7 @@ import (
 const (
 	hbinMagic                         = "PGHI"
 	hbinVersionOldestSupported uint16 = 1
-	hbinVersionCurrent         uint16 = 2
+	hbinVersionCurrent         uint16 = 3
 	hbinMaxHeaderFields               = 1 << 20
 )
 
@@ -60,22 +60,26 @@ const (
 //   - version 2 appends u8 connection_timings_present, followed by six i64
 //     Unix microsecond timestamps (DNS, connect, TLS start/end) when present.
 //     Version 1 remains readable and has no connection timing block.
+//   - version 3 keeps the version 2 layout; only the meaning of binary
+//     WebSocket payload bytes changes (see below).
 //   - entry body at body_offset:
 //   - u32 compressed_body_size
 //   - zstd stream of hbinWriteEntryBody fields:
-//   - u8 request_body_encoding, 0 = raw text marker, 1 = base64 view marker,
+//   - u8 request_body_flag, 0 = text display, 1 = binary display,
 //     2 = captured body unavailable
 //   - bytes request_body_raw_bytes
-//   - u8 response_body_encoding, 0 = raw text marker, 1 = base64 view marker,
+//   - u8 response_body_flag, 0 = text display, 1 = binary display,
 //     2 = captured body unavailable
 //   - bytes response_body_raw_bytes
 //   - u32 websocket_message_count
-//   - repeated websocket messages
+//   - repeated websocket messages: u8 direction, u8 msg_type,
+//     bytes payload, i32 data_size, optional traffic error
 //   - u8 websocket_messages_truncated
 //
-// Body bytes are stored as the raw captured bytes. The encoding flags describe
-// how the UI should render them when converting to TrafficBodyView; they do not
-// mean the bytes in .hbin are base64-encoded.
+// HTTP body bytes are the raw captured bytes in every version. The body flags
+// only describe how the UI renders them in TrafficBodyView. Version 3 stores
+// binary WebSocket payloads as raw bytes; versions 1 and 2 store them as
+// standard Base64 text, which the reader decodes.
 func encodeHistoryMetadata(hbinFile io.Writer, md HistoryMetadata) error {
 	if _, err := io.WriteString(hbinFile, hbinMagic); err != nil {
 		return err
@@ -158,8 +162,8 @@ func convertToTrafficBodyView(bvi *trafficBodyViewInner) (*TrafficBodyView, erro
 	bv := &TrafficBodyView{
 		RequestBodyUnavailable:  bvi.RequestBodyUnavailable,
 		ResponseBodyUnavailable: bvi.ResponseBodyUnavailable,
-		RequestBodyEncoding:     bvi.RequestBodyEncoding,
-		ResponseBodyEncoding:    bvi.ResponseBodyEncoding,
+		RequestBodyBinary:       bvi.RequestBodyBinary,
+		ResponseBodyBinary:      bvi.ResponseBodyBinary,
 		WebSocketMessages:       append([]*WebSocketMessage(nil), bvi.WebSocketMessages...),
 		WsMsgsTruncated:         bvi.WsMsgsTruncated,
 	}
@@ -169,27 +173,30 @@ func convertToTrafficBodyView(bvi *trafficBodyViewInner) (*TrafficBodyView, erro
 		if err != nil {
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
-		bv.RequestBody, bv.RequestBodyEncoding = encodeTrafficBodyView(reqBodyBytes, bvi.RequestBodyEncoding)
+		bv.RequestBody, bv.RequestBodyBinary = encodeTrafficBodyView(reqBodyBytes, bvi.RequestBodyBinary)
 	}
 	if bvi.ResponseBodyReader != nil {
 		rspBodyBytes, err := io.ReadAll(bvi.ResponseBodyReader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
-		bv.ResponseBody, bv.ResponseBodyEncoding = encodeTrafficBodyView(rspBodyBytes, bvi.ResponseBodyEncoding)
+		bv.ResponseBody, bv.ResponseBodyBinary = encodeTrafficBodyView(rspBodyBytes, bvi.ResponseBodyBinary)
 	}
 	return bv, nil
 }
 
-func encodeTrafficBodyView(bodyBytes []byte, encoding string) (string, string) {
-	if encoding == "base64" || !utf8.Valid(bodyBytes) {
-		return base64.StdEncoding.EncodeToString(bodyBytes), "base64"
-	}
-	return bytes2String(bodyBytes), encoding
+// encodeTrafficBodyView hands freshly read body bytes to the view without a
+// copy, and marks them binary when they are flagged or are not valid UTF-8.
+// The caller owns bodyBytes and must not modify them afterwards.
+func encodeTrafficBodyView(bodyBytes []byte, flagged bool) (string, bool) {
+	return bytes2String(bodyBytes), flagged || !utf8.Valid(bodyBytes)
 }
 
-func DecodeTrafficBody(r io.Reader) (*TrafficBodyView, error) {
-	bvi, err := hbinReadEntryBody(r)
+// DecodeTrafficBodyWithVersion reads an HBIN entry body written with
+// formatVersion. Binary WebSocket payloads from files older than v3 are
+// restored to their original bytes.
+func DecodeTrafficBodyWithVersion(r io.Reader, formatVersion uint16) (*TrafficBodyView, error) {
+	bvi, err := hbinReadEntryBody(r, formatVersion)
 	defer func() {
 		bvi.closeReqBodyReaderSafely()
 		bvi.closeRspBodyReaderSafely()
@@ -200,37 +207,38 @@ func DecodeTrafficBody(r io.Reader) (*TrafficBodyView, error) {
 	return convertToTrafficBodyView(bvi)
 }
 
-func DecodeTrafficRequestBody(r io.Reader) ([]byte, string, error) {
+// DecodeTrafficRequestBody reads the raw request body of an HBIN entry body
+// written with formatVersion, and whether it is marked for binary display.
+func DecodeTrafficRequestBody(r io.Reader, formatVersion uint16) ([]byte, bool, error) {
+	if !isSupportedHistoryFormatVersion(formatVersion) {
+		return nil, false, fmt.Errorf("hbin: unsupported version %d", formatVersion)
+	}
 	var size uint32
 	if err := binary.Read(r, binary.BigEndian, &size); err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
 	dec, err := compresspool.AcquireZstdDecoder(io.LimitReader(r, int64(size)))
 	if err != nil {
-		return nil, "", fmt.Errorf("hbin: zstd decompress: %w", err)
+		return nil, false, fmt.Errorf("hbin: zstd decompress: %w", err)
 	}
 	defer func() {
 		compresspool.ReleaseZstdDecoder(dec)
 	}()
 	var reqEnc uint8
 	if err := binary.Read(dec, binary.BigEndian, &reqEnc); err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
-	var encoding string
 	if reqEnc > 2 {
-		return nil, "", fmt.Errorf("hbin: invalid request body encoding %d", reqEnc)
+		return nil, false, fmt.Errorf("hbin: invalid request body encoding %d", reqEnc)
 	}
 	if reqEnc == 2 {
-		return nil, "", errors.New("hbin: request body unavailable")
-	}
-	if reqEnc == 1 {
-		encoding = "base64"
+		return nil, false, errors.New("hbin: request body unavailable")
 	}
 	reqBodyBytes, err := hbinReadBytes(dec)
 	if err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
-	return reqBodyBytes, encoding, nil
+	return reqBodyBytes, reqEnc == 1, nil
 }
 
 func hbinWriteEntry(hindexFile io.Writer, hbinFile io.WriteSeeker, te *TrafficEntry, bv *trafficBodyViewInner) error {
@@ -665,7 +673,7 @@ func hbinWriteEntryBody(w io.Writer, bv *trafficBodyViewInner) error {
 	reqEnc := uint8(0)
 	if bv.RequestBodyUnavailable {
 		reqEnc = 2
-	} else if bv.RequestBodyEncoding == "base64" {
+	} else if bv.RequestBodyBinary {
 		reqEnc = 1
 	}
 	if err := binary.Write(w, binary.BigEndian, reqEnc); err != nil {
@@ -678,7 +686,7 @@ func hbinWriteEntryBody(w io.Writer, bv *trafficBodyViewInner) error {
 	rspEnc := uint8(0)
 	if bv.ResponseBodyUnavailable {
 		rspEnc = 2
-	} else if bv.ResponseBodyEncoding == "base64" {
+	} else if bv.ResponseBodyBinary {
 		rspEnc = 1
 	}
 	if err := binary.Write(w, binary.BigEndian, rspEnc); err != nil {
@@ -706,7 +714,10 @@ func hbinWriteEntryBody(w io.Writer, bv *trafficBodyViewInner) error {
 	return nil
 }
 
-func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
+func hbinReadEntryBody(r io.Reader, formatVersion uint16) (bv *trafficBodyViewInner, err error) {
+	if !isSupportedHistoryFormatVersion(formatVersion) {
+		return nil, fmt.Errorf("hbin: unsupported version %d", formatVersion)
+	}
 	var size uint32
 	if err = binary.Read(r, binary.BigEndian, &size); err != nil {
 		err = fmt.Errorf("hbin: read body size: %w", err)
@@ -732,7 +743,7 @@ func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
 	}
 	switch reqEnc {
 	case 1:
-		bv.RequestBodyEncoding = "base64"
+		bv.RequestBodyBinary = true
 	case 2:
 		bv.RequestBodyUnavailable = true
 	}
@@ -757,7 +768,7 @@ func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
 	}
 	switch rspEnc {
 	case 1:
-		bv.ResponseBodyEncoding = "base64"
+		bv.ResponseBodyBinary = true
 	case 2:
 		bv.ResponseBodyUnavailable = true
 	}
@@ -779,7 +790,7 @@ func hbinReadEntryBody(r io.Reader) (bv *trafficBodyViewInner, err error) {
 	if wsMsgCount > 0 {
 		bv.WebSocketMessages = make([]*WebSocketMessage, 0, wsMsgCount)
 		for i := uint32(0); i < wsMsgCount; i++ {
-			msg, err := hbinReadWebSocketMessage(dec)
+			msg, err := hbinReadWebSocketMessage(dec, formatVersion)
 			if err != nil {
 				err = fmt.Errorf("hbin: read WebSocket message #%d: %w", i+1, err)
 				return nil, err
@@ -1057,7 +1068,7 @@ func hbinWriteWebSocketMessage(w io.Writer, msg *WebSocketMessage) error {
 	return hbinWriteOptTrafficError(w, msg.Error)
 }
 
-func hbinReadWebSocketMessage(r io.Reader) (*WebSocketMessage, error) {
+func hbinReadWebSocketMessage(r io.Reader, formatVersion uint16) (*WebSocketMessage, error) {
 	var dir uint8
 	if err := binary.Read(r, binary.BigEndian, &dir); err != nil {
 		return nil, err
@@ -1078,8 +1089,14 @@ func hbinReadWebSocketMessage(r io.Reader) (*WebSocketMessage, error) {
 	if err != nil {
 		return nil, err
 	}
+	binaryMessage := mt&1 != 0
+	if binaryMessage && formatVersion < 3 {
+		dataBytes = decodeLegacyWebSocketPayload(dataBytes)
+	}
+	// dataBytes is freshly read and owned here, so the message can hold it
+	// without a copy.
 	msg := &WebSocketMessage{
-		Data:     string(dataBytes),
+		Data:     bytes2String(dataBytes),
 		DataSize: int(dataSize),
 		Error:    e,
 	}
@@ -1088,12 +1105,24 @@ func hbinReadWebSocketMessage(r io.Reader) (*WebSocketMessage, error) {
 	} else {
 		msg.Direction = "receive"
 	}
-	if mt&1 == 0 {
-		msg.MsgType = "text"
-	} else {
+	if binaryMessage {
 		msg.MsgType = "binary"
+	} else {
+		msg.MsgType = "text"
 	}
 	return msg, nil
+}
+
+// decodeLegacyWebSocketPayload restores a binary WebSocket payload that v1 and
+// v2 files store as standard Base64. A payload that does not decode keeps its
+// stored bytes, so one damaged message does not fail the whole entry.
+func decodeLegacyWebSocketPayload(stored []byte) []byte {
+	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(stored)))
+	n, err := base64.StdEncoding.Decode(decoded, stored)
+	if err != nil {
+		return stored
+	}
+	return decoded[:n]
 }
 
 // hbinWriteString writes u32(len) + UTF-8 bytes.

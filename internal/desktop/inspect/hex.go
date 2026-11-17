@@ -2,7 +2,6 @@ package inspect
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"math"
 	"strings"
@@ -10,11 +9,9 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
-	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	"github.com/josexy/flowlens/locales"
-	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
@@ -39,10 +36,8 @@ type HexView struct {
 
 	identity uint64
 	body     string
-	encoding string
+	binary   bool
 	source   logic.HexSource
-	loading  bool
-	failed   bool
 
 	list      ui.ListState
 	menu      nui.MenuState
@@ -56,7 +51,6 @@ type HexView struct {
 	dragY     float32
 	exporting bool
 	clipboard *string
-	sequence  uint64
 	width     float32
 	// RowBuilds counts built rows, to verify that a frame's work follows the
 	// rows in view.
@@ -85,47 +79,20 @@ func (h *HexView) SelectionRange() (int64, int64, bool) {
 	return min(h.anchor, h.focus), max(h.anchor, h.focus) + 1, true
 }
 
-// load prepares the bytes of body. Text is read in place and Base64 is decoded
-// off the main thread. A body that only grew keeps the reading position and
-// the selection.
-func (h *HexView) load(identity uint64, body, encoding string) {
-	if h.source != nil || h.loading {
-		if identity == h.identity && body == h.body && encoding == h.encoding {
-			return
-		}
+// load reads the bytes of body in place. binary marks a body whose bytes are
+// not text, which Copy as text renders byte by byte. A body that only grew
+// keeps the reading position and the selection.
+func (h *HexView) load(identity uint64, body string, binary bool) {
+	if h.source != nil && identity == h.identity && body == h.body && binary == h.binary {
+		return
 	}
-	grew := identity == h.identity && encoding == h.encoding && len(body) >= len(h.body) && strings.HasPrefix(body, h.body)
+	grew := identity == h.identity && binary == h.binary && len(body) >= len(h.body) && strings.HasPrefix(body, h.body)
 	if !grew {
 		h.clearChoice()
 		h.list.ScrollTo(0, ui.Start)
 	}
-	h.identity, h.body, h.encoding, h.failed = identity, body, encoding, false
-	if encoding != "base64" {
-		h.source, h.loading = logic.HexString(body), false
-		return
-	}
-	h.source, h.loading = nil, true
-	h.sequence++
-	sequence := h.sequence
-	runtime.Run(h.deps.Runtime.Jobs, fmt.Sprintf("inspect:hex:%p", h), func(context.Context) (*logic.HexBytes, error) {
-		data, err := logic.DecodeHexInput(body, encoding)
-		if err != nil {
-			return nil, err
-		}
-		store := &logic.HexBytes{}
-		store.Append(data)
-		return store, nil
-	}, func(store *logic.HexBytes, err error) {
-		if sequence != h.sequence {
-			return
-		}
-		h.loading = false
-		if err != nil {
-			h.failed = true
-			return
-		}
-		h.source = store
-	})
+	h.identity, h.body, h.binary = identity, body, binary
+	h.source = logic.HexString(body)
 }
 
 func charWidth(c *ui.Context, theme nui.Theme) float32 {
@@ -136,24 +103,14 @@ func charWidth(c *ui.Context, theme nui.Theme) float32 {
 	return width
 }
 
-// Build shows body.
-func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body, encoding string) {
+// Build shows body, which holds raw bytes. binary marks a body that is not
+// text.
+func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body string, binary bool) {
 	if h.clipboard != nil {
 		c.WriteClipboard(*h.clipboard)
 		h.clipboard = nil
 	}
-	h.load(identity, body, encoding)
-	switch {
-	case h.failed:
-		emptyState(c, theme, lucide.TriangleAlert(), locales.DetailHexDecodeFailed())
-		return
-	case h.loading || h.source == nil:
-		ui.Column(c).Fill().Center().Gap(8).Children(func() {
-			widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted)
-			ui.Text(c, locales.DetailHexLoading()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-		})
-		return
-	}
+	h.load(identity, body, binary)
 	width := h.width
 	if width == 0 {
 		width = defaultHexWidth
@@ -292,7 +249,7 @@ func (h *HexView) copySelection(format logic.HexCopyFormat) {
 	if !ok {
 		return
 	}
-	source, utf8Text := h.source, h.encoding != "base64"
+	source, utf8Text := h.source, !h.binary
 	runtime.Run(h.deps.Runtime.Jobs, fmt.Sprintf("inspect:hex-copy:%p", h), func(ctx context.Context) (string, error) {
 		text, err := logic.SerializeHexSelection(ctx, source, start, end, format, utf8Text)
 		if err != nil || format != logic.HexCopyText {
@@ -318,12 +275,11 @@ func (h *HexView) exportSelection() {
 	for piece := range h.source.Range(start, end) {
 		data.Write(piece)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte(data.String()))
 	name := h.SelectionFilename
 	if name == "" {
 		name = "hex-selection.bin"
 	}
-	saveToFile(h.deps, h.exportBusy(), name, proxyservice.SaveBodyToFileRequest{Body: encoded, BodyEncoding: "base64", ContentType: "application/octet-stream"})
+	saveToFile(h.deps, h.exportBusy(), name, proxyservice.SaveBodyToFileRequest{Body: data.String(), ContentType: "application/octet-stream"})
 }
 
 // exportBusy returns the flag set while Export saves.

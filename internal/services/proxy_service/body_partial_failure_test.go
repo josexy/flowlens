@@ -111,7 +111,7 @@ func TestHistoryFlushKeepsReadableBodyWhenOtherCacheFileIsMissing(t *testing.T) 
 			if persistedEntry.ID != entry.ID {
 				t.Fatalf("persisted entry ID = %d, want %d", persistedEntry.ID, entry.ID)
 			}
-			requestBody, responseBody, err := DecodeTrafficHARBodies(file)
+			requestBody, responseBody, err := DecodeTrafficHARBodies(file, metadata.FormatVersion)
 			if err != nil {
 				t.Fatalf("DecodeTrafficHARBodies: %v", err)
 			}

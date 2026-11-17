@@ -3,7 +3,6 @@ package proxyservice
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"io"
 	"os"
 	"path/filepath"
@@ -69,11 +68,11 @@ func TestGetTrafficBodyViewFallsBackToDiskCache(t *testing.T) {
 	if view.RequestBody != "request from disk" {
 		t.Fatalf("RequestBody = %q, want request from disk", view.RequestBody)
 	}
-	if view.ResponseBodyEncoding != "base64" {
-		t.Fatalf("ResponseBodyEncoding = %q, want base64", view.ResponseBodyEncoding)
+	if !view.ResponseBodyBinary {
+		t.Fatal("ResponseBodyBinary = false, want true")
 	}
-	if view.ResponseBody != "AAEC" {
-		t.Fatalf("ResponseBody = %q, want AAEC", view.ResponseBody)
+	if view.ResponseBody != "\x00\x01\x02" {
+		t.Fatalf("ResponseBody = %q, want raw bytes 00 01 02", view.ResponseBody)
 	}
 }
 
@@ -473,12 +472,11 @@ func TestGetTrafficBodyViewBase64EncodesBinaryRequestBody(t *testing.T) {
 		t.Fatalf("GetTrafficBodyView: %v", err)
 	}
 
-	wantEncoded := base64.StdEncoding.EncodeToString(requestBody)
-	if view.RequestBodyEncoding != "base64" {
-		t.Fatalf("RequestBodyEncoding = %q, want base64", view.RequestBodyEncoding)
+	if !view.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary = false, want true")
 	}
-	if view.RequestBody != wantEncoded {
-		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, wantEncoded)
+	if view.RequestBody != string(requestBody) {
+		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, requestBody)
 	}
 }
 
@@ -729,12 +727,11 @@ func TestGetTrafficBodyViewBase64EncodesGzipRequestBody(t *testing.T) {
 		t.Fatalf("GetTrafficBodyView: %v", err)
 	}
 
-	wantEncoded := base64.StdEncoding.EncodeToString(requestBody)
-	if view.RequestBodyEncoding != "base64" {
-		t.Fatalf("RequestBodyEncoding = %q, want base64", view.RequestBodyEncoding)
+	if !view.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary = false, want true")
 	}
-	if view.RequestBody != wantEncoded {
-		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, wantEncoded)
+	if view.RequestBody != string(requestBody) {
+		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, requestBody)
 	}
 }
 
@@ -781,21 +778,21 @@ func TestGetTrafficBodyViewShowsDecodedGzipJSONBodiesAsText(t *testing.T) {
 		t.Fatalf("GetTrafficBodyView: %v", err)
 	}
 
-	if view.RequestBodyEncoding != "" {
-		t.Fatalf("RequestBodyEncoding = %q, want empty", view.RequestBodyEncoding)
+	if view.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary = true, want false")
 	}
 	if view.RequestBody != string(requestBody) {
 		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, string(requestBody))
 	}
-	if view.ResponseBodyEncoding != "" {
-		t.Fatalf("ResponseBodyEncoding = %q, want empty", view.ResponseBodyEncoding)
+	if view.ResponseBodyBinary {
+		t.Fatal("ResponseBodyBinary = true, want false")
 	}
 	if view.ResponseBody != string(responseBody) {
 		t.Fatalf("ResponseBody = %q, want %q", view.ResponseBody, string(responseBody))
 	}
 }
 
-func TestGetTrafficBodyViewBase64EncodesInvalidUTF8RequestBody(t *testing.T) {
+func TestGetTrafficBodyViewMarksInvalidUTF8RequestBodyBinary(t *testing.T) {
 	t.Parallel()
 
 	svc := newTestProxyService(t, nil)
@@ -827,12 +824,11 @@ func TestGetTrafficBodyViewBase64EncodesInvalidUTF8RequestBody(t *testing.T) {
 		t.Fatalf("GetTrafficBodyView: %v", err)
 	}
 
-	wantEncoded := base64.StdEncoding.EncodeToString(requestBody)
-	if view.RequestBodyEncoding != "base64" {
-		t.Fatalf("RequestBodyEncoding = %q, want base64", view.RequestBodyEncoding)
+	if !view.RequestBodyBinary {
+		t.Fatal("RequestBodyBinary = false, want true")
 	}
-	if view.RequestBody != wantEncoded {
-		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, wantEncoded)
+	if view.RequestBody != string(requestBody) {
+		t.Fatalf("RequestBody = %q, want %q", view.RequestBody, requestBody)
 	}
 }
 

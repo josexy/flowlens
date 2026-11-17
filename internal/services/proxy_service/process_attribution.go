@@ -1,7 +1,6 @@
 package proxyservice
 
 import (
-	"encoding/base64"
 	"errors"
 	"net"
 	"net/netip"
@@ -390,8 +389,8 @@ func (s *ProxyService) GetProcessIcon(iconKey string) (*ProcessIconData, error) 
 		}
 	}
 	return &ProcessIconData{
-		MIMEType:   "image/png",
-		DataBase64: base64.StdEncoding.EncodeToString(data),
+		MIMEType: "image/png",
+		Data:     data,
 	}, nil
 }
 

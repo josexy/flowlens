@@ -3,7 +3,6 @@ package proxyservice
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"image"
@@ -608,11 +607,14 @@ func TestGetProcessIconReturnsPNGAndMissing(t *testing.T) {
 	if data == nil || data.MIMEType != "image/png" {
 		t.Fatalf("GetProcessIcon data = %+v", data)
 	}
-	decodedBytes, err := base64.StdEncoding.DecodeString(data.DataBase64)
-	if err != nil {
-		t.Fatalf("DecodeString: %v", err)
+	stored, found, err := store.Get(key)
+	if err != nil || !found {
+		t.Fatalf("store.Get: found=%t err=%v", found, err)
 	}
-	if _, err := png.Decode(bytes.NewReader(decodedBytes)); err != nil {
+	if !bytes.Equal(data.Data, stored) {
+		t.Fatalf("icon bytes = %d bytes, want the %d stored PNG bytes", len(data.Data), len(stored))
+	}
+	if _, err := png.Decode(bytes.NewReader(data.Data)); err != nil {
 		t.Fatalf("returned data is not PNG: %v", err)
 	}
 	missing, err := service.GetProcessIcon(strings.Repeat("0", 64))
@@ -667,7 +669,7 @@ func TestGetProcessIconRestoresMissingFileFromActiveLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProcessIcon after deletion: %v", err)
 	}
-	if restored == nil || restored.MIMEType != "image/png" || restored.DataBase64 == "" {
+	if restored == nil || restored.MIMEType != "image/png" || len(restored.Data) == 0 {
 		t.Fatalf("restored icon = %+v, want PNG data", restored)
 	}
 	if got := iconCalls.Load(); got != 2 {

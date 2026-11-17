@@ -2,7 +2,6 @@ package proxyservice
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -128,14 +127,10 @@ func materializeHTTPRequestPluginResponseBody(
 	ctx context.Context,
 	body []byte,
 	file *HTTPRequestPluginBodyFile,
-	encodeBase64 bool,
 ) (string, int64, error) {
 	if file == nil {
 		if err := ctx.Err(); err != nil {
 			return "", 0, err
-		}
-		if encodeBase64 {
-			return base64.StdEncoding.EncodeToString(body), int64(len(body)), nil
 		}
 		return bytes2String(body), int64(len(body)), nil
 	}
@@ -147,13 +142,12 @@ func materializeHTTPRequestPluginResponseBody(
 		return "", 0, err
 	}
 	defer handle.Close()
-	return materializeHTTPRequestPluginResponseReader(ctx, handle, encodeBase64)
+	return materializeHTTPRequestPluginResponseReader(ctx, handle)
 }
 
 func materializeHTTPRequestPluginResponseReader(
 	ctx context.Context,
 	reader io.Reader,
-	encodeBase64 bool,
 ) (string, int64, error) {
 	if reader == nil {
 		return "", 0, errors.New("response body reader is nil")
@@ -161,18 +155,6 @@ func materializeHTTPRequestPluginResponseReader(
 	var builder strings.Builder
 	contextReader := &contextCheckingReader{ctx: ctx, reader: reader}
 	buffer := make([]byte, 64*1024)
-	if encodeBase64 {
-		encoder := base64.NewEncoder(base64.StdEncoding, &builder)
-		written, err := io.CopyBuffer(encoder, contextReader, buffer)
-		closeErr := encoder.Close()
-		if err != nil {
-			return "", written, fmt.Errorf("materialize response body: %w", err)
-		}
-		if closeErr != nil {
-			return "", written, fmt.Errorf("finalize response body encoding: %w", closeErr)
-		}
-		return builder.String(), written, nil
-	}
 	written, err := io.CopyBuffer(&builder, contextReader, buffer)
 	if err != nil {
 		return "", written, fmt.Errorf("materialize response body: %w", err)

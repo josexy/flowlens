@@ -30,7 +30,7 @@ func (s *HistoryService) ExportTraffic(ctx context.Context, request TrafficExpor
 	if fileIndex == nil || fileIndex.entries == nil {
 		return proxyservice.TrafficExportResult{}, fmt.Errorf("history not found: %s", request.Key)
 	}
-	if fileIndex.formatVersion != 1 && fileIndex.formatVersion != 2 {
+	if fileIndex.formatVersion < 1 || fileIndex.formatVersion > 3 {
 		return proxyservice.TrafficExportResult{}, fmt.Errorf("hbin: unsupported version %d", fileIndex.formatVersion)
 	}
 	indices, err := historyHARIndices(fileIndex.entries, request.TrafficIDs)

@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/base64"
 	"testing"
 
 	"github.com/josexy/flowlens/internal/desktop/logic"
@@ -65,7 +64,7 @@ func (h *workspaceHarness) emit(name string, values ...any) {
 }
 
 func chunk(session string, offset int64, text string) proxyservice.HTTPRequestStreamEvent {
-	return proxyservice.HTTPRequestStreamEvent{SessionID: session, EventType: "chunk", Offset: &offset, ChunkBase64: base64.StdEncoding.EncodeToString([]byte(text))}
+	return proxyservice.HTTPRequestStreamEvent{SessionID: session, EventType: "chunk", Offset: &offset, Chunk: []byte(text)}
 }
 
 func terminal(session, kind string, offset int64) proxyservice.HTTPRequestStreamEvent {
@@ -118,16 +117,23 @@ func TestStreamEventsBeforeRegistrationAreKept(t *testing.T) {
 	}
 }
 
-func TestStreamBinaryBodiesStayBase64(t *testing.T) {
+func TestStreamBinaryBodiesAppendRawBytesInOrder(t *testing.T) {
 	h := newWorkspaceHarness(t)
 	key := h.store.CreateHTTPRequestTab(logic.DraftNew, nil)
 	state := h.store.FindTab(key).HTTP
-	state.Response = &logic.HTTPResponseView{Kind: logic.ResponseKindSuccess, BodyEncoding: "base64"}
+	// The body received before streaming started counts toward the offset.
+	state.Response = &logic.HTTPResponseView{Kind: logic.ResponseKindSuccess, Body: "\x80", BodyBinary: true}
 	h.store.RegisterHTTPStream(key, "bin")
-	h.emit(eventHTTPRequest, chunk("bin", 0, "\xff\x00"), chunk("bin", 2, "\xfe"))
+	// The third chunk arrives first, then the first; the middle one is late.
+	h.emit(eventHTTPRequest, chunk("bin", 4, "\xfe\xfd"), chunk("bin", 1, "\xff\x00"))
 	h.clock.tick(streamFlushInterval)
-	if state.Response.Body != base64.StdEncoding.EncodeToString([]byte("\xff\x00\xfe")) {
-		t.Fatal(state.Response.Body)
+	if state.Response.Body != "\x80\xff\x00" || !state.Response.BodyBinary {
+		t.Fatalf("after first flush %q", state.Response.Body)
+	}
+	h.emit(eventHTTPRequest, chunk("bin", 3, "\xc3"))
+	h.clock.tick(streamFlushInterval)
+	if state.Response.Body != "\x80\xff\x00\xc3\xfe\xfd" || !state.Response.BodyBinary {
+		t.Fatalf("after second flush %q", state.Response.Body)
 	}
 }
 

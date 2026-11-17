@@ -193,7 +193,7 @@ func (r *responseView) content(c *ui.Context, theme nui.Theme, visible string, f
 		}
 		r.fieldsPane(c, theme, locales.WorkspaceHttpRequestResponseTrailerList(), trailers, warning, locales.WorkspaceHttpRequestCopyResponseTrailersJson(), locales.WorkspaceHttpRequestCopyResponseTrailersText(), locales.WorkspaceHttpRequestResponseTrailersCopiedJson(), locales.WorkspaceHttpRequestResponseTrailersCopiedText())
 	case logic.ResponseTabBody:
-		content := inspect.BodyContent{Identity: r.identity, Body: state.Response.Body, Encoding: state.Response.BodyEncoding, SourcePath: state.URL}
+		content := inspect.BodyContent{Identity: r.identity, Body: state.Response.Body, Binary: state.Response.BodyBinary, SourcePath: state.URL}
 		content.ContentType, _ = logic.FirstHeaderValue(fields, "content-type")
 		r.body.Build(c, theme, content)
 	default:

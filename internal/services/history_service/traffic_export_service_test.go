@@ -12,7 +12,7 @@ import (
 )
 
 func TestHistoryTrafficExportSupportedVersions(t *testing.T) {
-	for _, version := range []uint16{1, 2} {
+	for _, version := range []uint16{1, 2, 3} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			directory := setupHistoryTestStorage(t)
 			writeHistoryWithVersion(t, directory, "export", version)

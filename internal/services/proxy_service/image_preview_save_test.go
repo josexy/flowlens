@@ -1,26 +1,25 @@
 package proxyservice
 
 import (
-	"encoding/base64"
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestDecodeBodyToFileBytesDecodesBase64Binary(t *testing.T) {
+func TestDecodeBodyToFileBytesKeepsBinaryBytes(t *testing.T) {
 	t.Parallel()
 
-	encoded := base64.StdEncoding.EncodeToString([]byte{0x00, 0x41, 0xff})
+	raw := []byte{0x00, 0x41, 0xff}
 	got, err := decodeBodyToFileBytes(SaveBodyToFileRequest{
-		Body:         encoded,
-		BodyEncoding: "base64",
-		ContentType:  "application/octet-stream",
+		Body:        string(raw),
+		ContentType: "application/octet-stream",
 	})
 	if err != nil {
 		t.Fatalf("decodeBodyToFileBytes returned error: %v", err)
 	}
-	if string(got) != string([]byte{0x00, 0x41, 0xff}) {
-		t.Fatalf("decoded bytes = %v, want original binary bytes", got)
+	if !bytes.Equal(got, raw) {
+		t.Fatalf("bytes = %v, want original binary bytes", got)
 	}
 }
 
@@ -56,16 +55,12 @@ func TestDecodeBodyToFileBytesPreservesWhitespaceOnlyText(t *testing.T) {
 	}
 }
 
-func TestDecodeBodyToFileBytesRejectsInvalidBase64(t *testing.T) {
+func TestDecodeBodyToFileBytesRejectsEmptyBody(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeBodyToFileBytes(SaveBodyToFileRequest{
-		Body:         "%not-base64%",
-		BodyEncoding: "base64",
-		ContentType:  "application/octet-stream",
-	})
+	_, err := decodeBodyToFileBytes(SaveBodyToFileRequest{ContentType: "application/octet-stream"})
 	if err == nil {
-		t.Fatal("decodeBodyToFileBytes error = nil, want invalid base64 error")
+		t.Fatal("decodeBodyToFileBytes error = nil, want empty body error")
 	}
 }
 
@@ -94,13 +89,15 @@ func TestSaveBodyToFileWritesDecodedBodyToExplicitPath(t *testing.T) {
 
 	tempDir := t.TempDir()
 	target := filepath.Join(tempDir, "payload")
-	encoded := base64.StdEncoding.EncodeToString([]byte{0x00, 0x41, 0xff})
+	raw := make([]byte, 256)
+	for index := range raw {
+		raw[index] = byte(index)
+	}
 
 	if err := (&ProxyService{}).SaveBodyToFile(SaveBodyToFileRequest{
-		Path:         target,
-		Body:         encoded,
-		BodyEncoding: "base64",
-		ContentType:  "application/octet-stream",
+		Path:        target,
+		Body:        string(raw),
+		ContentType: "application/octet-stream",
 	}); err != nil {
 		t.Fatalf("SaveBodyToFile returned error: %v", err)
 	}
@@ -109,7 +106,7 @@ func TestSaveBodyToFileWritesDecodedBodyToExplicitPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile returned error: %v", err)
 	}
-	if string(got) != string([]byte{0x00, 0x41, 0xff}) {
+	if !bytes.Equal(got, raw) {
 		t.Fatalf("written bytes = %v, want original binary bytes", got)
 	}
 }

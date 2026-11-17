@@ -411,13 +411,22 @@ func TestColumnOrderHelpers(t *testing.T) {
 func TestBuildCurl(t *testing.T) {
 	entry := &TrafficEntry{Method: "POST", URL: "https://x.test/a'b", Request: &proxyservice.HTTPMessage{HeaderFields: []HeaderField{{Name: ":authority", Value: "x"}, {Name: "A", Value: "b"}}}}
 	want := "curl -X POST 'https://x.test/a'\\''b' \\\n  -H 'A: b' \\\n  --data-raw 'hi'"
-	if got := BuildCurl(entry, "hi", ""); got != want {
+	if got := BuildCurl(entry, "hi", false); got != want {
 		t.Fatalf("got %q", got)
 	}
-	if got := BuildCurl(entry, "aGk=", "base64"); !strings.HasPrefix(got, "printf %s 'aGk=' | base64 -d | curl") || !strings.HasSuffix(got, "--data-binary @-") {
+	// The binary command is the one produced when the body arrived as Base64.
+	wantBinary := "printf %s 'aGk=' | base64 -d | curl -X POST 'https://x.test/a'\\''b' \\\n  -H 'A: b' --data-binary @-"
+	if got := BuildCurl(entry, "hi", true); got != wantBinary {
 		t.Fatalf("got %q", got)
 	}
-	if got := BuildCurl(&TrafficEntry{Method: "GET", URL: "u"}, "", ""); got != "curl 'u'" {
+	raw := "\x00\xff'\x80"
+	if got := BuildCurl(entry, raw, true); got != "printf %s 'AP8ngA==' | base64 -d | curl -X POST 'https://x.test/a'\\''b' \\\n  -H 'A: b' --data-binary @-" {
+		t.Fatalf("got %q", got)
+	}
+	if got := BuildCurl(&TrafficEntry{Method: "GET", URL: "u"}, "", true); got != "curl 'u'" {
+		t.Fatalf("got %q", got)
+	}
+	if got := BuildCurl(&TrafficEntry{Method: "GET", URL: "u"}, "", false); got != "curl 'u'" {
 		t.Fatalf("got %q", got)
 	}
 }

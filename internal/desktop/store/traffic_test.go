@@ -1,7 +1,6 @@
 package store
 
 import (
-	"encoding/base64"
 	"errors"
 	"slices"
 	"sync"
@@ -513,7 +512,7 @@ func TestResetMarkerClearsBeforeLaterEvents(t *testing.T) {
 }
 
 func sseChunk(id uint64, offset int64, text string) proxyservice.TrafficLiveUpdate {
-	return proxyservice.TrafficLiveUpdate{TrafficID: id, Kind: proxyservice.TrafficLiveUpdateSSEChunk, Offset: &offset, ChunkBase64: base64.StdEncoding.EncodeToString([]byte(text))}
+	return proxyservice.TrafficLiveUpdate{TrafficID: id, Kind: proxyservice.TrafficLiveUpdateSSEChunk, Offset: &offset, Chunk: []byte(text)}
 }
 
 func wsMessage(id uint64, index int) proxyservice.TrafficLiveUpdate {
@@ -560,12 +559,25 @@ func TestLiveSSEJoinsSplitCharacters(t *testing.T) {
 	}
 }
 
-func TestLiveSSEDecodesBase64Snapshot(t *testing.T) {
-	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: base64.StdEncoding.EncodeToString([]byte("abc")), ResponseBodyEncoding: "base64"})
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 3, "def"))
+func TestLiveSSESwitchesBinarySnapshotToText(t *testing.T) {
+	// The snapshot ends inside "é", so it was marked binary as invalid UTF-8.
+	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "abc\xc3", ResponseBodyBinary: true})
+	h.emit(eventTrafficLiveUpdate, sseChunk(1, 4, "\xa9def"))
 	h.tick()
-	if h.store.BodyView.ResponseBody != "abcdef" || h.store.BodyView.ResponseBodyEncoding != "" {
+	if h.store.BodyView.ResponseBody != "abcédef" || h.store.BodyView.ResponseBodyBinary {
 		t.Fatalf("%+v", h.store.BodyView)
+	}
+}
+
+func TestLiveGapAfterBinarySnapshotReloadsSnapshot(t *testing.T) {
+	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "\x00\x01", ResponseBodyBinary: true})
+	before := h.backend.bodyCalls
+	h.backend.bodies[1] = &proxyservice.TrafficBodyView{ResponseBody: "data: x\n\n"}
+	h.emit(eventTrafficLiveUpdate, sseChunk(1, 5, "late"))
+	h.tick()
+	h.settle()
+	if h.backend.bodyCalls != before+1 || h.store.BodyView.ResponseBody != "data: x\n\n" || h.store.BodyView.ResponseBodyBinary {
+		t.Fatalf("calls %d view %+v", h.backend.bodyCalls, h.store.BodyView)
 	}
 }
 

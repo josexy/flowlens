@@ -113,12 +113,12 @@ type HTTPSendSettings struct {
 
 // HTTPResponseView is the response shown for a request.
 type HTTPResponseView struct {
-	Kind, Outcome, StreamState, StatusText, Protocol, Body, BodyEncoding, ErrorMessage string
-	PluginExecution                                                                    *proxyservice.HTTPRequestPluginExecution
-	StatusCode                                                                         int
-	ElapsedMicros                                                                      int64
-	Headers, Trailers                                                                  []EditableRow
-	HeadersHaveWireOrder, HeadersTruncated, TrailersHaveWireOrder, TrailersTruncated   bool
+	Kind, Outcome, StreamState, StatusText, Protocol, Body, ErrorMessage                         string
+	PluginExecution                                                                              *proxyservice.HTTPRequestPluginExecution
+	StatusCode                                                                                   int
+	ElapsedMicros                                                                                int64
+	Headers, Trailers                                                                            []EditableRow
+	HeadersHaveWireOrder, HeadersTruncated, TrailersHaveWireOrder, TrailersTruncated, BodyBinary bool
 }
 
 // HTTPEditorState is one HTTP Request Editor tab.

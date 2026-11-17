@@ -13,7 +13,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func TestShouldEncodeRequestBodyForTrafficView(t *testing.T) {
+func TestShouldShowBodyAsBinary(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -88,10 +88,10 @@ func TestShouldEncodeRequestBodyForTrafficView(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldEncodeRequestBodyForTrafficView(tt.contentType, tt.contentEncoding, tt.bodySize)
+			got := shouldShowBodyAsBinary(tt.contentType, tt.contentEncoding, tt.bodySize)
 			if got != tt.want {
 				t.Fatalf(
-					"shouldEncodeRequestBodyForTrafficView(%q, %q, %d) = %t, want %t",
+					"shouldShowBodyAsBinary(%q, %q, %d) = %t, want %t",
 					tt.contentType,
 					tt.contentEncoding,
 					tt.bodySize,

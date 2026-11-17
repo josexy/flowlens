@@ -24,7 +24,7 @@ func (ctx webSocketHandshakeDeadlineContext) Deadline() (time.Time, bool) {
 	return ctx.deadline, true
 }
 
-func TestNormalizeWebSocketMessageBinaryUsesBase64(t *testing.T) {
+func TestNormalizeWebSocketMessageBinaryKeepsRawBytes(t *testing.T) {
 	t.Parallel()
 
 	msg := normalizeWebSocketMessage("receive", "binary", []byte{0x00, 0x41, 0xff})
@@ -35,8 +35,8 @@ func TestNormalizeWebSocketMessageBinaryUsesBase64(t *testing.T) {
 	if msg.MsgType != "binary" {
 		t.Fatalf("msgType = %q, want binary", msg.MsgType)
 	}
-	if msg.Data != "AEH/" {
-		t.Fatalf("data = %q, want AEH/", msg.Data)
+	if msg.Data != "\x00\x41\xff" {
+		t.Fatalf("data = %q, want raw bytes 00 41 ff", msg.Data)
 	}
 	if msg.DataSize != 3 {
 		t.Fatalf("data size = %d, want 3", msg.DataSize)
@@ -54,8 +54,8 @@ func TestNormalizeWebSocketMessageNormalizesCapturedBinaryFrames(t *testing.T) {
 	if msg.MsgType != "binary" {
 		t.Fatalf("expected binary type, got %q", msg.MsgType)
 	}
-	if msg.Data != "AEH/" {
-		t.Fatalf("unexpected encoded payload: %q", msg.Data)
+	if msg.Data != "\x00\x41\xff" {
+		t.Fatalf("unexpected payload: %q", msg.Data)
 	}
 }
 

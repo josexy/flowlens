@@ -1,6 +1,7 @@
 package proxyservice
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -159,7 +160,7 @@ func TestFrontendEventBatcherKeepsTheByteLimitAcrossTypedPayloads(t *testing.T) 
 	}, func(batch FrontendEventBatch) { batches <- batch })
 	t.Cleanup(batcher.Close)
 
-	chunk := TrafficLiveUpdate{TrafficID: 1, Kind: TrafficLiveUpdateSSEChunk, ChunkBase64: strings.Repeat("x", 200)}
+	chunk := TrafficLiveUpdate{TrafficID: 1, Kind: TrafficLiveUpdateSSEChunk, Chunk: bytes.Repeat([]byte("x"), 200)}
 	if err := batcher.Publish("traffic:live-update", chunk); err != nil {
 		t.Fatalf("first chunk: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestFrontendEventBatcherPublishAfterCloseDoesNotBlock(t *testing.T) {
 
 func TestEstimateFrontendEventSizeCountsPayloadText(t *testing.T) {
 	small := estimateFrontendEventSize(TrafficLiveUpdate{TrafficID: 1})
-	large := estimateFrontendEventSize(TrafficLiveUpdate{TrafficID: 1, ChunkBase64: strings.Repeat("x", 4096)})
+	large := estimateFrontendEventSize(TrafficLiveUpdate{TrafficID: 1, Chunk: bytes.Repeat([]byte("x"), 4096)})
 	if large-small != 4096 {
 		t.Fatalf("large-small = %d, want 4096", large-small)
 	}

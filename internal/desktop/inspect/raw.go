@@ -39,7 +39,7 @@ func requestRawText(entry *logic.TrafficEntry, body *proxyservice.TrafficBodyVie
 		input.Protocol, input.HeaderFields = entry.Request.Proto, entry.Request.HeaderFields
 	}
 	if body != nil {
-		input.Body, input.BodyEncoding = &body.RequestBody, body.RequestBodyEncoding
+		input.Body, input.BodyBinary = &body.RequestBody, body.RequestBodyBinary
 	}
 	return logic.FormatRawHTTPRequest(input)
 }
@@ -58,7 +58,7 @@ func responseRawText(entry *logic.TrafficEntry, body *proxyservice.TrafficBodyVi
 		input.Protocol, input.HeaderFields = entry.Response.Proto, entry.Response.HeaderFields
 	}
 	if body != nil {
-		input.Body, input.BodyEncoding = &body.ResponseBody, body.ResponseBodyEncoding
+		input.Body, input.BodyBinary = &body.ResponseBody, body.ResponseBodyBinary
 	}
 	return logic.FormatRawHTTPResponse(input)
 }

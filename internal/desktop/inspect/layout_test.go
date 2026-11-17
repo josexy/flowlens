@@ -45,7 +45,7 @@ func TestHexColumnsFitAfterResize(t *testing.T) {
 }
 
 func TestBodyTabsKeepWholeLabelsInNarrowPane(t *testing.T) {
-	f := bodyFixture(t, "application/json", `{"ok":true}`, "")
+	f := bodyFixture(t, "application/json", `{"ok":true}`, false)
 	f.tester.SetSize(525, 700)
 	f.settle()
 	label, ok := f.tester.Find(locales.DetailFormatted())
@@ -76,7 +76,7 @@ func TestBodyTabsKeepWholeLabelsInNarrowPane(t *testing.T) {
 }
 
 func TestBodyEditorFollowsCodeFontPreviewAndDiscard(t *testing.T) {
-	f := bodyFixture(t, "text/plain", "sample", "")
+	f := bodyFixture(t, "text/plain", "sample", false)
 	f.settings.BeginEdit()
 	f.settings.Draft.CommonConfig.AppFontSize = 24
 	f.settings.PreviewDraftAppearance()

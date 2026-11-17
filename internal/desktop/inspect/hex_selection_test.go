@@ -24,7 +24,7 @@ func TestHexDragAcrossRows(t *testing.T) {
 				tester := ui.NewTester(func(c *ui.Context) {
 					palette := nui.App(c, desktoptheme.Resolve(desktoptheme.Appearance{}).Config)
 					char = charWidth(c, palette)
-					h.Build(c, palette, 1, strings.Repeat("A", 512), "")
+					h.Build(c, palette, 1, strings.Repeat("A", 512), false)
 				}, 525, 300)
 				for range 4 {
 					tester.Frame()

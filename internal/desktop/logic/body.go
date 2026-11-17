@@ -52,8 +52,9 @@ func mediaType(contentType string) string {
 	return strings.TrimSpace(media)
 }
 
-// ClassifyBody returns the category of a body.
-func ClassifyBody(contentType, encoding string) BodyCategory {
+// ClassifyBody returns the category of a body. binary marks a body that has
+// no text content type and cannot be shown as text.
+func ClassifyBody(contentType string, binary bool) BodyCategory {
 	media := mediaType(contentType)
 	switch {
 	case strings.Contains(media, "json"):
@@ -72,7 +73,7 @@ func ClassifyBody(contentType, encoding string) BodyCategory {
 		return BodyCSS
 	case strings.HasPrefix(media, "text/"):
 		return BodyText
-	case encoding == base64Encoding:
+	case binary:
 		return BodyBinary
 	default:
 		return BodyText
@@ -80,11 +81,11 @@ func ClassifyBody(contentType, encoding string) BodyCategory {
 }
 
 // BodyTabs returns the viewing modes for a body, in display order.
-func BodyTabs(contentType, encoding, body string, enableSSE bool) []BodyTab {
-	category := ClassifyBody(contentType, encoding)
+func BodyTabs(contentType string, binary bool, body string, enableSSE bool) []BodyTab {
+	category := ClassifyBody(contentType, binary)
 	var tabs []BodyTab
 	formattable := slices.Contains([]BodyCategory{BodyJSON, BodyXML, BodyHTML, BodyJS, BodyCSS, BodySVG}, category)
-	if formattable && EstimateDecodedByteLength(body, encoding) < LargeTextThreshold {
+	if formattable && len(body) < LargeTextThreshold {
 		tabs = append(tabs, BodyTabFormatted)
 	}
 	if category == BodyImage || category == BodySVG {

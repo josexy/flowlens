@@ -2,6 +2,7 @@ package historyservice
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"io"
 	"os"
@@ -16,7 +17,7 @@ import (
 
 func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
-	writeHistoryWithVersion(t, historyDir, "v3-future", 3)
+	writeHistoryWithVersion(t, historyDir, "v4-future", 4)
 	writeHistoryWithVersion(t, historyDir, "v1-current", 1)
 	writeHistoryWithVersion(t, historyDir, "v0-invalid", 0)
 	writeRawTCPHistory(t, historyDir, "v1-raw-tcp")
@@ -27,7 +28,7 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	}
 
 	service.mu.RLock()
-	futureIndex := service.indexMap["v3-future"]
+	futureIndex := service.indexMap["v4-future"]
 	currentIndex := service.indexMap["v1-current"]
 	invalidIndex := service.indexMap["v0-invalid"]
 	rawTCPIndex := service.indexMap["v1-raw-tcp"]
@@ -51,7 +52,7 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	if currentMetadata.FormatVersion != 1 {
 		t.Fatalf("metadata format version = %d, want 1", currentMetadata.FormatVersion)
 	}
-	for _, key := range []string{"v3-future", "v0-invalid"} {
+	for _, key := range []string{"v4-future", "v0-invalid"} {
 		if !fs.PathExists(filepath.Join(historyDir, fs.GetHBinFileName(key))) ||
 			!fs.PathExists(filepath.Join(historyDir, fs.GetHIdxFileName(key))) {
 			t.Fatalf("unsupported %s history files should remain on disk", key)
@@ -98,6 +99,61 @@ func writeHistoryWithVersion(t *testing.T, directory, key string, version uint16
 	writeHistoryFixture(t, directory, key, version, "https", nil)
 }
 
+// binaryWebSocketBodyRecord is an uncompressed entry body with empty HTTP
+// bodies and one received binary WebSocket message whose payload bytes are
+// stored exactly as given.
+func binaryWebSocketBodyRecord(stored []byte, dataSize int32) []byte {
+	var body bytes.Buffer
+	for range 2 {
+		_ = binary.Write(&body, binary.BigEndian, uint8(0))  // text display
+		_ = binary.Write(&body, binary.BigEndian, uint32(0)) // empty body
+	}
+	_ = binary.Write(&body, binary.BigEndian, uint32(1))
+	_ = binary.Write(&body, binary.BigEndian, uint8(1)) // receive
+	_ = binary.Write(&body, binary.BigEndian, uint8(1)) // binary
+	_ = binary.Write(&body, binary.BigEndian, uint32(len(stored)))
+	body.Write(stored)
+	_ = binary.Write(&body, binary.BigEndian, dataSize)
+	_ = binary.Write(&body, binary.BigEndian, uint8(0)) // no error
+	_ = binary.Write(&body, binary.BigEndian, uint8(0)) // not truncated
+	return body.Bytes()
+}
+
+func TestHistoryBinaryWebSocketMessageMatchesAcrossV2AndV3(t *testing.T) {
+	historyDir := setupHistoryTestStorage(t)
+	payload := make([]byte, 256)
+	for index := range payload {
+		payload[index] = byte(index)
+	}
+	// v2 stored binary payloads as standard Base64 text; v3 stores them raw.
+	legacy := []byte(base64.StdEncoding.EncodeToString(payload))
+	writeHistoryFixtureWithBody(t, historyDir, "ws-v2", 2, "https", nil, binaryWebSocketBodyRecord(legacy, int32(len(payload))))
+	writeHistoryFixtureWithBody(t, historyDir, "ws-v3", 3, "https", nil, binaryWebSocketBodyRecord(payload, int32(len(payload))))
+
+	service := New(nil, nil)
+	if err := service.initializeHistoryIndexMap(); err != nil {
+		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	}
+	views := map[string]*proxyservice.TrafficBodyView{}
+	for _, key := range []string{"ws-v2", "ws-v3"} {
+		view, err := service.GetHistoryTrafficBodyView(key, 9001)
+		if err != nil {
+			t.Fatalf("GetHistoryTrafficBodyView %s: %v", key, err)
+		}
+		if len(view.WebSocketMessages) != 1 || view.WebSocketMessages[0].MsgType != "binary" {
+			t.Fatalf("%s messages = %+v", key, view.WebSocketMessages)
+		}
+		views[key] = view
+	}
+	v2, v3 := views["ws-v2"].WebSocketMessages[0], views["ws-v3"].WebSocketMessages[0]
+	if v2.Data != v3.Data || v2.DataSize != v3.DataSize {
+		t.Fatalf("v2 message = %d bytes (size %d), v3 message = %d bytes (size %d)", len(v2.Data), v2.DataSize, len(v3.Data), v3.DataSize)
+	}
+	if v3.Data != string(payload) {
+		t.Fatalf("v3 message = %x, want %x", v3.Data, payload)
+	}
+}
+
 func TestHistoryServiceLoadsV2ConnectionTimingsAndBody(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeHistoryWithVersion(t, historyDir, "v2-timings", 2)
@@ -140,6 +196,22 @@ func writeHistoryFixture(
 	version uint16,
 	trafficType string,
 	rawTCP *proxyservice.RawTCPTunnelInfo,
+) {
+	t.Helper()
+	writeHistoryFixtureWithBody(t, directory, key, version, trafficType, rawTCP, nil)
+}
+
+// writeHistoryFixtureWithBody writes a one-entry history whose entry body is
+// bodyPayload before compression. A nil payload writes empty bodies and no
+// WebSocket messages.
+func writeHistoryFixtureWithBody(
+	t *testing.T,
+	directory string,
+	key string,
+	version uint16,
+	trafficType string,
+	rawTCP *proxyservice.RawTCPTunnelInfo,
+	bodyPayload []byte,
 ) {
 	t.Helper()
 	var hbin bytes.Buffer
@@ -216,13 +288,14 @@ func writeHistoryFixture(
 			writeHistoryValue(t, &hbin, tls)
 		}
 	}
-	if version == 2 {
+	if version >= 2 {
 		writeHistoryValue(t, &hbin, uint8(1))
 		writeHistoryValue(t, &hbin, proxyservice.HTTPConnectionTimings{DNSStartedAtMicros: 1000001, DNSEndedAtMicros: 1000123, ConnectStartedAtMicros: 1000123, ConnectEndedAtMicros: 1000456, TLSStartedAtMicros: -1, TLSEndedAtMicros: -1})
 	}
 	bodyOffset := uint32(hbin.Len())
-	bodyPayload := make([]byte, 0, 15)
-	bodyPayload = append(bodyPayload, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	if bodyPayload == nil {
+		bodyPayload = make([]byte, 15)
+	}
 	encoder, err := zstd.NewWriter(nil)
 	if err != nil {
 		t.Fatalf("zstd.NewWriter: %v", err)

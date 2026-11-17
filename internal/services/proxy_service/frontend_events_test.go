@@ -1,6 +1,7 @@
 package proxyservice
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -131,9 +132,9 @@ func TestRequestEditorFrontendEventsBypassSharedBatchLimits(t *testing.T) {
 	t.Cleanup(svc.frontendEventBatcher.Close)
 
 	svc.emitHTTPRequestEvent(HTTPRequestStreamEvent{
-		SessionID:   "http",
-		EventType:   "chunk",
-		ChunkBase64: strings.Repeat("h", 256),
+		SessionID: "http",
+		EventType: "chunk",
+		Chunk:     bytes.Repeat([]byte("h"), 256),
 	})
 	svc.emitWebSocketSessionEvent(WebSocketSessionEvent{
 		SessionID: "ws",

@@ -2,7 +2,7 @@ package inspect
 
 import (
 	"bytes"
-	"encoding/base64"
+	"fmt"
 	"image"
 	"image/png"
 	"math"
@@ -28,14 +28,11 @@ func avifFixture(t *testing.T, name string) []byte {
 
 func TestAVIFPreview(t *testing.T) {
 	for _, name := range []string{"opaque", "alpha"} {
-		for _, encoding := range []string{"", "base64"} {
-			t.Run(name+"/"+encoding, func(t *testing.T) {
+		for _, binary := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/binary=%t", name, binary), func(t *testing.T) {
 				data := avifFixture(t, name)
 				body := string(data)
-				if encoding == "base64" {
-					body = base64.StdEncoding.EncodeToString(data)
-				}
-				f := bodyFixture(t, "image/avif", body, encoding)
+				f := bodyFixture(t, "image/avif", body, binary)
 				preview := &f.panel.responseBody.image
 				if preview.failed || preview.image.bitmap == nil {
 					t.Fatal("AVIF preview failed")
@@ -46,14 +43,14 @@ func TestAVIFPreview(t *testing.T) {
 				for _, dark := range []bool{false, true} {
 					f.setDark(dark)
 					f.imageRects()
-					f.has("AVIF | 64 x 48")
+					f.has("AVIF | 64 x 48 | " + logic.FormatFileSize(int64(len(data))))
 					f.lacks(locales.DetailImagePreviewFailed())
 				}
-				if encoding == "base64" {
+				if binary {
 					rendertest.ShootThemes(t, f.tester, "image-avif-"+name, f.setDark)
 				}
 				f.click(locales.DetailSaveBody())
-				if len(f.saved) != 1 || f.saved[0].Body != body || f.saved[0].BodyEncoding != encoding {
+				if len(f.saved) != 1 || f.saved[0].Body != body {
 					t.Fatalf("saving changed the AVIF body: %+v", f.saved)
 				}
 				f.click(locales.DetailHex())
@@ -104,7 +101,7 @@ func TestImageCentersAsSoonAsLoadingFinishes(t *testing.T) {
 		{name: "svg", body: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><rect width="320" height="320" fill="#ff6600"/></svg>`, svg: true},
 	} {
 		t.Run(format.name, func(t *testing.T) {
-			decoded, err := decodeImage(format.body, "", format.svg)
+			decoded, err := decodeImage(format.body, format.svg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -173,7 +170,7 @@ func largeImageFixture(t *testing.T) *fixture {
 	if err := png.Encode(&data, image.NewGray(image.Rect(0, 0, 4000, 3000))); err != nil {
 		t.Fatal(err)
 	}
-	f := bodyFixture(t, "image/png", base64.StdEncoding.EncodeToString(data.Bytes()), "base64")
+	f := bodyFixture(t, "image/png", data.String(), true)
 	f.tester.SetSize(1400, 1000)
 	f.panel.responseBody.active = logic.BodyTabImage
 	f.settle()
@@ -209,7 +206,7 @@ func TestLargeImageFitsThePane(t *testing.T) {
 }
 
 func TestSmallImageIsNotUpscaled(t *testing.T) {
-	f := bodyFixture(t, "image/png", imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }), "base64")
+	f := bodyFixture(t, "image/png", imageFixture(t, func(w *bytes.Buffer, i image.Image) error { return png.Encode(w, i) }), true)
 	f.panel.responseBody.active = logic.BodyTabImage
 	f.settle()
 	_, picture := f.imageRects()

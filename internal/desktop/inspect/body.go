@@ -17,9 +17,11 @@ import (
 
 // BodyContent is the body a viewer shows.
 type BodyContent struct {
-	Identity    uint64
-	Body        string
-	Encoding    string
+	Identity uint64
+	// Body holds the body's raw bytes.
+	Body string
+	// Binary marks a body that cannot be shown as text.
+	Binary      bool
 	ContentType string
 	SourcePath  string
 	// Unavailable tells that the stored payload is missing.
@@ -68,15 +70,15 @@ func (b *BodyViewer) Active() logic.BodyTab { return b.active }
 
 func (b *BodyViewer) set(content BodyContent) {
 	changed := !b.shown || content.Identity != b.content.Identity || content.Body != b.bodyText ||
-		content.Encoding != b.content.Encoding || content.ContentType != b.content.ContentType
-	tabs := logic.BodyTabs(content.ContentType, content.Encoding, content.Body, b.enableSSE)
+		content.Binary != b.content.Binary || content.ContentType != b.content.ContentType
+	tabs := logic.BodyTabs(content.ContentType, content.Binary, content.Body, b.enableSSE)
 	if !b.shown || !sameTabs(tabs, b.tabs) {
 		b.active = logic.NextBodyTab(b.active, tabs, b.tabs)
 		b.tabs = tabs
 	}
 	identityChanged := !b.shown || content.Identity != b.content.Identity
 	b.content, b.shown = content, true
-	b.category = logic.ClassifyBody(content.ContentType, content.Encoding)
+	b.category = logic.ClassifyBody(content.ContentType, content.Binary)
 	if !changed {
 		return
 	}
@@ -85,7 +87,7 @@ func (b *BodyViewer) set(content BodyContent) {
 		b.image.reset()
 	}
 	b.formatted.SetLanguage(logic.EditorLanguage(b.category))
-	if content.Encoding != "base64" {
+	if !content.Binary {
 		b.formatted.SetText(logic.FormatBody(content.Body, b.category))
 		b.raw.SetText(content.Body)
 	} else {
@@ -135,9 +137,9 @@ func (p *Panel) bodyPane(c *ui.Context, theme nui.Theme, viewer *BodyViewer, ent
 	message := entry.Request
 	if response {
 		message = entry.Response
-		content.Body, content.Encoding, content.Unavailable = body.ResponseBody, body.ResponseBodyEncoding, body.ResponseBodyUnavailable
+		content.Body, content.Binary, content.Unavailable = body.ResponseBody, body.ResponseBodyBinary, body.ResponseBodyUnavailable
 	} else {
-		content.Body, content.Encoding, content.Unavailable = body.RequestBody, body.RequestBodyEncoding, body.RequestBodyUnavailable
+		content.Body, content.Binary, content.Unavailable = body.RequestBody, body.RequestBodyBinary, body.RequestBodyUnavailable
 	}
 	if message != nil {
 		content.ContentType, _ = logic.FirstHeaderValue(message.HeaderFields, "Content-Type")
@@ -174,7 +176,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 				b.sse.Build(c, theme, content)
 			case logic.BodyTabHex:
 				ui.Box(c).Fill().MinHeight(0).Border(1, theme.Border).Clip().Children(func() {
-					b.hex.Build(c, theme, content.Identity, content.Body, content.Encoding)
+					b.hex.Build(c, theme, content.Identity, content.Body, content.Binary)
 				})
 			default:
 				view := b.raw
@@ -219,21 +221,23 @@ func (b *BodyViewer) copyable() string {
 	switch {
 	case b.active == logic.BodyTabFormatted:
 		return b.formatted.Text()
-	case (b.active == logic.BodyTabRaw || b.active == logic.BodyTabSSE) && b.content.Encoding != "base64":
+	case (b.active == logic.BodyTabRaw || b.active == logic.BodyTabSSE) && !b.content.Binary:
 		return b.content.Body
 	default:
 		return ""
 	}
 }
 
-func (b *BodyViewer) saveTarget() (body, encoding string, ok bool) {
+// saveTarget returns the bytes Save writes: the formatted text on the
+// Formatted tab, and the raw body otherwise.
+func (b *BodyViewer) saveTarget() (body string, ok bool) {
 	if b.content.Body == "" {
-		return "", "", false
+		return "", false
 	}
 	if b.active == logic.BodyTabFormatted {
-		return b.formatted.Text(), "", true
+		return b.formatted.Text(), true
 	}
-	return b.content.Body, b.content.Encoding, true
+	return b.content.Body, true
 }
 
 func (b *BodyViewer) actions(c *ui.Context, theme nui.Theme) {
@@ -255,7 +259,7 @@ func (b *BodyViewer) actions(c *ui.Context, theme nui.Theme) {
 			b.deps.Notifier.Success(locales.DetailBodyCopied())
 		})
 	}
-	if _, _, ok := b.saveTarget(); ok {
+	if _, ok := b.saveTarget(); ok {
 		iconButton(c, theme, "save", lucide.Download(), locales.DetailSaveBody(), b.exporting, b.saveCurrent)
 	}
 }
@@ -269,11 +273,11 @@ func (b *BodyViewer) suggestedName() string {
 }
 
 func (b *BodyViewer) saveCurrent() {
-	body, encoding, ok := b.saveTarget()
+	body, ok := b.saveTarget()
 	if !ok || b.exporting {
 		return
 	}
-	saveToFile(b.deps, &b.exporting, b.suggestedName(), proxyservice.SaveBodyToFileRequest{Body: body, BodyEncoding: encoding, ContentType: b.content.ContentType})
+	saveToFile(b.deps, &b.exporting, b.suggestedName(), proxyservice.SaveBodyToFileRequest{Body: body, ContentType: b.content.ContentType})
 }
 
 // saveToFile asks for a path and writes request there, off the main thread. A

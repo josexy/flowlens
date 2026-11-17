@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -54,7 +53,6 @@ type httpStreamRuntime struct {
 	state      *logic.HTTPEditorState
 	byteOffset int64
 	decoder    *utf8StreamDecoder
-	binary     []byte
 	pending    []proxyservice.HTTPRequestStreamEvent
 	stopFlush  func()
 }
@@ -599,15 +597,8 @@ func (s *WorkspaceStore) RegisterHTTPStream(key, sessionID string) bool {
 	}
 	state := tab.HTTP
 	s.ignoredHTTP.values.Delete(hashSession(session))
-	var binary []byte
-	if state.Response.BodyEncoding == "base64" && state.Response.Body != "" {
-		binary, _ = base64.StdEncoding.DecodeString(state.Response.Body)
-	}
 	offset := int64(len(state.Response.Body))
-	if state.Response.BodyEncoding == "base64" {
-		offset = int64(len(binary))
-	}
-	stream := &httpStreamRuntime{sessionID: session, state: state, byteOffset: offset, decoder: &utf8StreamDecoder{}, binary: binary, pending: s.pendingHTTP[session]}
+	stream := &httpStreamRuntime{sessionID: session, state: state, byteOffset: offset, decoder: &utf8StreamDecoder{}, pending: s.pendingHTTP[session]}
 	delete(s.pendingHTTP, session)
 	s.streams[session] = stream
 	state.StreamSessionID, state.IsStreaming = session, true
@@ -675,13 +666,11 @@ func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
 	})
 	var deferred []proxyservice.HTTPRequestStreamEvent
 	response := stream.state.Response
-	var text strings.Builder
-	binaryChanged := false
+	// A binary body grows by its raw bytes and a text body by their decoded
+	// text. Either way the data already shown is not processed again.
+	var appended strings.Builder
 	for _, event := range chunks {
-		chunk, err := base64.StdEncoding.DecodeString(event.ChunkBase64)
-		if err != nil {
-			continue
-		}
+		chunk := event.Chunk
 		start, end := *event.Offset, *event.Offset+int64(len(chunk))
 		if end <= stream.byteOffset {
 			continue
@@ -691,19 +680,17 @@ func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
 			continue
 		}
 		fresh := chunk[max(0, stream.byteOffset-start):]
-		if response != nil && response.BodyEncoding == "base64" {
-			stream.binary = append(stream.binary, fresh...)
-			binaryChanged = true
-		} else if response != nil {
-			text.WriteString(stream.decoder.decode(fresh))
+		switch {
+		case response == nil:
+		case response.BodyBinary:
+			appended.Write(fresh)
+		default:
+			appended.WriteString(stream.decoder.decode(fresh))
 		}
 		stream.byteOffset = end
 	}
-	if response != nil && text.Len() > 0 {
-		response.Body += text.String()
-	}
-	if response != nil && binaryChanged {
-		response.Body = base64.StdEncoding.EncodeToString(stream.binary)
+	if response != nil && appended.Len() > 0 {
+		response.Body += appended.String()
 	}
 	stream.pending = deferred
 	for _, event := range terminal {

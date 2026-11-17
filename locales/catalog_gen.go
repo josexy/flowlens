@@ -1982,16 +1982,6 @@ func (msgs Messages) DetailHexCopyText() string {
 	return Catalog.Format(msgs.locale, "detailHexCopyText", nil)
 }
 
-// DetailHexDecodeFailed says "Failed to prepare hex view"
-// in the language the app shows.
-func DetailHexDecodeFailed() string { return In(i18n.Locale()).DetailHexDecodeFailed() }
-
-// DetailHexDecodeFailed says "Failed to prepare hex view"
-// in the language of msgs.
-func (msgs Messages) DetailHexDecodeFailed() string {
-	return Catalog.Format(msgs.locale, "detailHexDecodeFailed", nil)
-}
-
 // DetailHexExport says "Export"
 // in the language the app shows.
 func DetailHexExport() string { return In(i18n.Locale()).DetailHexExport() }
@@ -2030,16 +2020,6 @@ func DetailHexLastPage() string { return In(i18n.Locale()).DetailHexLastPage() }
 // in the language of msgs.
 func (msgs Messages) DetailHexLastPage() string {
 	return Catalog.Format(msgs.locale, "detailHexLastPage", nil)
-}
-
-// DetailHexLoading says "Preparing hex view..."
-// in the language the app shows.
-func DetailHexLoading() string { return In(i18n.Locale()).DetailHexLoading() }
-
-// DetailHexLoading says "Preparing hex view..."
-// in the language of msgs.
-func (msgs Messages) DetailHexLoading() string {
-	return Catalog.Format(msgs.locale, "detailHexLoading", nil)
 }
 
 // DetailHexNextPage says "Next segment"
