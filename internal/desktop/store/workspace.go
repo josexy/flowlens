@@ -53,8 +53,11 @@ type httpStreamRuntime struct {
 	state      *logic.HTTPEditorState
 	byteOffset int64
 	decoder    *utf8StreamDecoder
-	pending    []proxyservice.HTTPRequestStreamEvent
-	stopFlush  func()
+	// Append only on the main thread. String snapshots remain immutable as
+	// the buffer grows; do not copy a runtime after writing to its builder.
+	body      strings.Builder
+	pending   []proxyservice.HTTPRequestStreamEvent
+	stopFlush func()
 }
 
 // boundedKeys remembers a limited number of session IDs.
@@ -599,6 +602,7 @@ func (s *WorkspaceStore) RegisterHTTPStream(key, sessionID string) bool {
 	s.ignoredHTTP.values.Delete(hashSession(session))
 	offset := int64(len(state.Response.Body))
 	stream := &httpStreamRuntime{sessionID: session, state: state, byteOffset: offset, decoder: &utf8StreamDecoder{}, pending: s.pendingHTTP[session]}
+	stream.body.WriteString(state.Response.Body)
 	delete(s.pendingHTTP, session)
 	s.streams[session] = stream
 	state.StreamSessionID, state.IsStreaming = session, true
@@ -666,9 +670,6 @@ func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
 	})
 	var deferred []proxyservice.HTTPRequestStreamEvent
 	response := stream.state.Response
-	// A binary body grows by its raw bytes and a text body by their decoded
-	// text. Either way the data already shown is not processed again.
-	var appended strings.Builder
 	for _, event := range chunks {
 		chunk := event.Chunk
 		start, end := *event.Offset, *event.Offset+int64(len(chunk))
@@ -683,14 +684,15 @@ func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
 		switch {
 		case response == nil:
 		case response.BodyBinary:
-			appended.Write(fresh)
+			stream.body.Write(fresh)
 		default:
-			appended.WriteString(stream.decoder.decode(fresh))
+			stream.body.WriteString(stream.decoder.decode(fresh))
 		}
 		stream.byteOffset = end
 	}
-	if response != nil && appended.Len() > 0 {
-		response.Body += appended.String()
+	if response != nil {
+		// Publish without copying the accumulated prefix on every flush.
+		response.Body = stream.body.String()
 	}
 	stream.pending = deferred
 	for _, event := range terminal {

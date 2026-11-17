@@ -44,3 +44,29 @@ Date: 2026-11-17. Go 1.27.3, Linux arm64, Python 3.13.5. Branch `remove-base64-b
 ## Not run
 
 - The desktop pass in "Workflow follow-up" (open and save a captured PNG and a binary WebSocket message, open a v2 history) was not run; this session had no display. The headless `ui.NewTester` cases cover those surfaces.
+
+## Streaming append allocation follow-up
+
+Measured on 2026-11-17 with Go 1.27.3, Windows amd64, Intel Core i9-14900HX, `CGO_ENABLED=0`. The baseline uses the same new benchmark against the original `response.Body += appended.String()` implementation.
+
+```text
+go test ./internal/desktop/store -run '^$' -bench '^BenchmarkHTTPStreamAppend$' -benchmem -benchtime=1x -count=3
+```
+
+Each operation appends a complete stream through `flushStream`, flushing every 64 KiB chunk separately. Values below are median allocated MiB per operation across three runs, not peak or retained heap size. Binary chunks contain NUL and invalid UTF-8; text chunks contain four-byte UTF-8 characters.
+
+| Body size | Binary before | Binary after | Text before | Text after |
+| --- | ---: | ---: | ---: | ---: |
+| 4 MiB | 133.96 | 19.26 | 138.02 | 23.32 |
+| 8 MiB | 523.97 | 48.26 | 532.03 | 56.33 |
+| 16 MiB | 2072.00 | 95.16 | 2088.06 | 111.22 |
+| 32 MiB | 8240.06 | 186.79 | 8272.12 | 218.85 |
+
+Doubling the stream previously approximately quadrupled allocation. With the persistent builder, the 8/16/32 MiB runs approximately double allocation instead; growth-capacity rounding accounts for deviations. The 32 MiB binary run allocates 97.7% fewer bytes. These measurements cover body accumulation, not the cost of formatting or rendering the response.
+
+- `TestHTTPStreamBodyAllocationBudget` limits an 8 MiB stream to 96 MiB of cumulative allocation, allowing buffer growth, decoding, and event bookkeeping. Both binary and text cases fail on the original implementation (about 524/532 MiB) and pass after the fix (about 48/56 MiB).
+- `TestStreamBodySnapshotsSurviveAppendAndNextResponse` covers an existing response prefix, multiple growth steps, completion, a new response in the same tab, and retention of every earlier snapshot for binary and text bodies.
+- `TestStreamTextBodyUsesWireOffsetsAfterDecoding` covers a split BOM and UTF-8 character, invalid UTF-8 replacement, overlapping chunks, and duplicates across separate flushes. Existing ordering, gap, stop, and close tests also pass.
+- `task verify` passes on this Windows host: formatting, golangci-lint (0 issues), UI vet, i18n (1387 messages), and all Go test packages, including the theme package that failed on the earlier Linux host.
+- `CGO_ENABLED=1 go test -race ./internal/desktop/store ./internal/desktop/editor ./internal/desktop/inspect` passes, including the new snapshot and allocation-budget tests.
+- The broader `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service` run passes every package except `desktop/capture`, which reaches the default 10-minute package timeout. At the deadline, `TestCategoryGroupsShareOuterScroll` had been running for 2 seconds, with the stack in MyGo layout. No data race was reported; the complete capture race suite remains unverified. Its ordinary tests pass in `task verify`.
