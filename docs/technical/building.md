@@ -11,6 +11,12 @@ FlowLens is a Go application. Building it needs Go, the MyGo CLI that `go.mod` p
 
 The Taskfile sets this from the host system. A production `mygo build` for macOS with cgo disabled fails on purpose (`cgo_guard_darwin.go`), rather than producing an application without those features. Because one `mygo build` applies one `CGO_ENABLED` to all its targets, build macOS separately from Windows and Linux.
 
+## CI Verification
+
+CI and release verification run only on Ubuntu 24.04 with `CGO_ENABLED=0`. They invoke `gofmt`, `go tool mygo vet .`, `go tool mygo i18n check`, and `go test ./...` directly, without installing Task or golangci-lint. CI also checks that `go mod tidy` leaves `go.mod` and `go.sum` unchanged. Verification uses a separate Go cache from release packaging.
+
+Local `task verify` still includes golangci-lint. Run platform-specific tests locally when changing Windows or macOS behavior. Pull requests and main-branch pushes do not cross-compile release targets; the release workflow builds Windows, Linux, and macOS packages.
+
 ## Common Builds
 
 ```shell
