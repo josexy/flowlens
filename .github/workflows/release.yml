@@ -79,6 +79,8 @@ jobs:
           | Linux x64 | \`.deb\` for Debian and Ubuntu, or \`flowlens-*-linux-amd64.tar.gz\` with \`install.sh\` |
           | Linux ARM64 | \`*_arm64.deb\` for Debian and Ubuntu, or \`flowlens-*-linux-arm64.tar.gz\` with \`install.sh\` |
 
+          Every platform also has a \`flowlens-<version>-<target>.tar.gz\` archive and an \`update-<target>.json\` manifest for signed in-app updates, including Windows and macOS.
+
           Use \`SHA256SUMS\` to verify downloads.
 
           BODY
@@ -198,6 +200,10 @@ jobs:
             "flowlens-setup-${VERSION}-arm64.exe" \
             "flowlens-${VERSION}-arm64.dmg" \
             "flowlens-${VERSION}.dmg" \
+            "flowlens-${VERSION}-windows-amd64.tar.gz" \
+            "flowlens-${VERSION}-windows-arm64.tar.gz" \
+            "flowlens-${VERSION}-darwin-arm64.tar.gz" \
+            "flowlens-${VERSION}-darwin-universal.tar.gz" \
             "flowlens-${VERSION}-linux-amd64.tar.gz" \
             "flowlens-${VERSION}-linux-arm64.tar.gz"; do
             if ! grep -Fxq "$name" names.txt; then
@@ -206,6 +212,14 @@ jobs:
             fi
             if ! grep -Fxq "$name" checksum-names.txt; then
               echo "Missing release checksum: $name" >&2
+              exit 1
+            fi
+          done
+          # MyGo uploads update manifests separately and excludes them from SHA256SUMS.
+          for target in windows-amd64 windows-arm64 darwin-arm64 darwin-universal linux-amd64 linux-arm64; do
+            name="update-${target}.json"
+            if ! grep -Fxq "$name" names.txt; then
+              echo "Missing release asset: $name" >&2
               exit 1
             fi
           done

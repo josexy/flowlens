@@ -35,25 +35,15 @@ task package -- -platform windows/amd64,linux/amd64,linux/arm64 -skip-installer
 | `darwin/arm64`, `darwin/universal` | Application bundle and disk image. These need macOS. |
 | `linux/amd64`, `linux/arm64` | Executable, Debian package, `flowlens-<version>-linux-<arch>.tar.gz` with `install.sh`, and a `PKGBUILD` |
 
+With `MYGO_UPDATER_PRIVATE_KEY` set, every target also gets a signed update archive, `flowlens-<version>-<target>.tar.gz`, and its `update-<target>.json` manifest. Windows targets are `windows-amd64` and `windows-arm64`; macOS targets are `darwin-arm64` and `darwin-universal`. `mygo build -upload` uploads these alongside the installers and disk images. Linux uses its existing tar archive for updates too. Without the signing key, Windows and macOS builds do not produce these archives or manifests.
+
 ## Updates
 
-Installed applications accept only updates signed with the key whose public half is built into them. One key pair serves all releases:
+`mygo.json` sets the update source (`updates.github`) and verification key (`updates.publicKey`). Applications accept only updates signed with the matching private key.
 
-1. Run `go tool mygo keygen`. It writes `mygo-update.key` and `mygo-update.pub` outside the repository. Never commit the private key.
-2. Add this to `mygo.json`, with the contents of `mygo-update.pub`:
+Store the contents of `mygo-update.key` in the repository Actions secret `MYGO_UPDATER_PRIVATE_KEY`; the release workflow already uses it. Local signed builds use an environment variable of the same name. Keep the private key outside Git, back it up, and reuse it across releases.
 
-   ```json
-   "updates": {
-     "publicKey": "<contents of mygo-update.pub>",
-     "github": "josexy/flowlens"
-   }
-   ```
-
-3. Store the private key as a repository secret: `gh secret set MYGO_UPDATER_PRIVATE_KEY < path/to/mygo-update.key`.
-
-Losing the private key means installed copies can no longer update; they must be reinstalled from a release built with a new key.
-
-An installation updates itself when MyGo can write to where it is installed. Packages installed by a package manager, such as the Debian package, and development builds cannot, so the Software Update window offers the release page instead.
+Development builds and installations without write access, including package-managed installs, use the release page instead of in-app installation.
 
 ## Releasing
 
@@ -65,6 +55,6 @@ An installation updates itself when MyGo can write to where it is installed. Pac
 
 `.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows amd64/arm64 on `windows-latest`, Linux amd64/arm64 on `ubuntu-latest`, and macOS arm64/universal on `macos-latest`, with cgo enabled only on macOS. `darwin/universal` combines arm64 and amd64 in one application; listing `darwin/arm64,darwin/amd64` would produce two separate applications.
 
-Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, both Linux archives, both Debian architectures, and their checksum entries. The draft is created before the build checks.
+Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, all six platform update archives, both Debian architectures, and their checksum entries. It also requires all six `update-<target>.json` manifests, which MyGo excludes from `SHA256SUMS`. The draft is created before the build checks.
 
 Windows executables and installers are unsigned. macOS applications use MyGo's default ad-hoc signing and are not notarized. No platform-signing certificates or secrets are required. `MYGO_UPDATER_PRIVATE_KEY` is still required to sign update archives.
