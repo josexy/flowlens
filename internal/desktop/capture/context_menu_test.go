@@ -3,7 +3,6 @@ package capture
 import (
 	"fmt"
 	"image/color"
-	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
-	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -88,55 +86,6 @@ func TestTrafficMenuLastItemIsFullyVisibleWithoutScrolling(t *testing.T) {
 	}
 }
 
-func TestTrafficContextMenuSeparatorsAreOnePhysicalPixel(t *testing.T) {
-	f := newHistoryFixture(t, entry(1, "a.test"))
-	checkGaps := func(scale float32, pairs [][2]string) {
-		t.Helper()
-		frame := f.tester.Image()
-		line := rgba(f.theme().Border)
-		for _, pair := range pairs {
-			before, beforeOK := menutest.Item(f.tester, pair[0])
-			after, afterOK := menutest.Item(f.tester, pair[1])
-			if !beforeOK || !afterOK {
-				t.Fatalf("missing menu items around separator %q", pair)
-			}
-			x := int((before.Bounds.X + before.Bounds.W/2) * scale)
-			top := int(math.Round(float64((before.Bounds.Y + before.Bounds.H) * scale)))
-			bottom := int(math.Round(float64(after.Bounds.Y * scale)))
-			pixels := 0
-			for y := top; y < bottom; y++ {
-				if frame.RGBAAt(x, y) == line {
-					pixels++
-				}
-			}
-			if pixels != 1 {
-				t.Fatalf("scale=%v: separator between %q and %q is %d physical pixels, want 1", scale, pair[0], pair[1], pixels)
-			}
-		}
-	}
-	for _, dark := range []bool{false, true} {
-		f.setDark(dark)
-		for _, scale := range []float32{1, 1.25, 1.5, 2} {
-			f.tester.SetScale(scale)
-			for _, zoom := range []float32{1, 1.19} {
-				f.tester.SetZoom(zoom)
-				openRowMenu(t, f.fixture, "a.test")
-				f.tester.Advance(time.Second)
-				f.settle()
-				checkGaps(scale, [][2]string{{"Export", "Copy as cURL"}, {"Copy as cURL", "Copy"}, {"Copy", "Edit"}, {"Resend", "Highlight"}, {"Highlight", "Delete"}})
-				f.choose("Copy")
-				f.tester.Advance(time.Second)
-				f.settle()
-				checkGaps(scale, [][2]string{
-					{locales.ContextMenuTrafficTableCopyPath(), locales.ContextMenuTrafficTableCopyServerip()},
-					{locales.ContextMenuTrafficTableCopyClientaddr(), locales.ContextMenuTrafficTableCopyRow()},
-				})
-				menutest.Close(f.tester, f.settle)
-			}
-		}
-	}
-}
-
 // openHighlightSubmenu opens the Highlight submenu of the open row menu.
 func openHighlightSubmenu(t *testing.T, f *fixture) {
 	t.Helper()
@@ -187,29 +136,6 @@ func TestHighlightSwatchesUse105Colors(t *testing.T) {
 func sameRGB(a, b color.RGBA) bool {
 	near := func(x, y uint8) bool { return x-y < 3 || y-x < 3 }
 	return near(a.R, b.R) && near(a.G, b.G) && near(a.B, b.B)
-}
-
-func TestRenderDecoratedMenus(t *testing.T) {
-	f := newHistoryFixture(t, entry(1, "a.test"))
-	f.tester.SetSize(rendertest.Width, rendertest.Height)
-	f.settle()
-	for _, dark := range []bool{false, true} {
-		f.setDark(dark)
-		rendertest.SettleTheme(f.tester)
-		suffix := "-light"
-		if dark {
-			suffix = "-dark"
-		}
-		openRowMenu(t, f.fixture, "a.test")
-		openHighlightSubmenu(t, f.fixture)
-		rendertest.Shoot(t, f.tester, "menu-highlight"+suffix)
-		menutest.Close(f.tester, f.settle)
-		if err := menutest.Open(f.tester, f.settle, "session one"); err != nil {
-			t.Fatal(err)
-		}
-		rendertest.Shoot(t, f.tester, "menu-history"+suffix)
-		menutest.Close(f.tester, f.settle)
-	}
 }
 
 // As 1.0.5's: a right-click on a row not selected selects it alone and

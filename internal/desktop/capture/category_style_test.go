@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/locales"
 )
 
@@ -45,9 +44,10 @@ func (f *fixture) checkMark(label string) bool {
 	row := item.Bounds
 	theme := f.theme()
 	accent, text, background := rgba(theme.Primary), rgba(theme.Text), rgba(theme.Background)
+	frame := f.tester.Image()
 	for x := row.X + row.W - 32; x < row.X+row.W-8; x++ {
 		for y := row.Y + 4; y < row.Y+row.H-4; y++ {
-			if p := pixel(f.tester, x, y); closer(p, accent, background) && closer(p, accent, text) {
+			if p := frame.RGBAAt(int(x), int(y)); closer(p, accent, background) && closer(p, accent, text) {
 				return true
 			}
 		}
@@ -79,12 +79,4 @@ func TestCategoryAccordionCollapsesAndRestoresItems(t *testing.T) {
 	if _, ok := f.tester.Find(locales.CategoryTitle() + ": " + locales.CategoryHost()); !ok {
 		t.Fatal("expanding did not bring the hosts back")
 	}
-}
-
-func TestRenderCategoryTree(t *testing.T) {
-	f := newFixtureSized(t, rendertest.Traffic(), rendertest.Width, rendertest.Height)
-	f.showCategories = true
-	f.settle()
-	f.click("api.example.com")
-	rendertest.ShootThemes(t, f.tester, "category-tree", f.setDark)
 }

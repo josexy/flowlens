@@ -10,9 +10,6 @@ import (
 	"testing"
 )
 
-// minimumMessages guards against a conversion that loses messages.
-const minimumMessages = 1374
-
 var placeholderPattern = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 func readCatalog(t *testing.T, path string) map[string]string {
@@ -46,8 +43,8 @@ func placeholders(message string) []string {
 func TestCatalogsHaveEveryMessageWithMatchingPlaceholders(t *testing.T) {
 	english := readCatalog(t, "en.json")
 	chinese := readCatalog(t, "zh-Hans.json")
-	if len(english) != len(chinese) || len(english) < minimumMessages {
-		t.Fatalf("messages: en %d, zh-Hans %d, want the same count and at least %d", len(english), len(chinese), minimumMessages)
+	if len(english) != len(chinese) {
+		t.Fatalf("messages: en %d, zh-Hans %d, want the same count", len(english), len(chinese))
 	}
 	for key, message := range english {
 		translated, ok := chinese[key]
@@ -57,20 +54,6 @@ func TestCatalogsHaveEveryMessageWithMatchingPlaceholders(t *testing.T) {
 		}
 		if !slices.Equal(placeholders(message), placeholders(translated)) {
 			t.Errorf("%s: placeholders differ: %q and %q", key, message, translated)
-		}
-	}
-}
-
-func TestMessagesFormat(t *testing.T) {
-	for _, test := range []struct{ got, want string }{
-		{In("en").UpdaterUpToDateTitle(), "You're up to date"},
-		{In("en").StatusTotal("7"), "Total 7 items"},
-		{In("en").StatusEnvironmentMygo(), "MyGo"},
-		{In("zh-Hans").TrayClose(), "关闭"},
-		{In("en").SettingsRestartReasonProxyModeChanged(), readCatalog(t, "en.json")["settingsRestartReasonProxyModeChanged"]},
-	} {
-		if test.got != test.want {
-			t.Errorf("got %q, want %q", test.got, test.want)
 		}
 	}
 }

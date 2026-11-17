@@ -1141,3 +1141,28 @@ func TestSplitIsSavedPerLayout(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func (f *fixture) setDark(dark bool) {
+	mode := apptheme.ModeLight
+	if dark {
+		mode = apptheme.ModeDark
+	}
+	if err := f.settings.SetThemeMode(mode); err != nil {
+		f.t.Fatal(err)
+	}
+	f.settle()
+}
+
+func TestWebSocketMessageWrap(t *testing.T) {
+	payload := `{"type":"hello","payload":"` + strings.Repeat("a received text message. ", 18) + `"}`
+	f := wsFixture(t,
+		&proxyservice.WebSocketMessage{Direction: "receive", MsgType: "text", Data: payload, DataSize: len(payload)},
+	)
+	f.openMessage(payload)
+	view := f.panel.messages.view.State()
+	unwrapped := view.LineTop(1)
+	f.click(locales.DetailWrapBody())
+	if view.LineTop(1) <= unwrapped {
+		t.Fatal("the long message did not wrap")
+	}
+}

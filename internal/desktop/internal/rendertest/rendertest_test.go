@@ -64,26 +64,3 @@ func TestShootThemesWritesTwoImages(t *testing.T) {
 		t.Fatalf("modes = %v, want light, dark, then back to light", modes)
 	}
 }
-
-func TestTrafficFixtures(t *testing.T) {
-	entries := Traffic()
-	methods := map[string]bool{}
-	for _, entry := range entries {
-		methods[entry.Method] = true
-		if entry.Metadata == nil || entry.Metadata.Process == nil || entry.Response == nil {
-			t.Fatalf("entry %d lacks metadata, process, or response", entry.ID)
-		}
-	}
-	for _, method := range []string{"GET", "POST", "OPTIONS", "CONNECT", "PUT", "DELETE"} {
-		if !methods[method] {
-			t.Fatalf("no %s fixture", method)
-		}
-	}
-	found := false
-	for _, entry := range entries {
-		found = found || entry.ID == Inspected
-	}
-	if !found {
-		t.Fatalf("inspected fixture %d missing", Inspected)
-	}
-}

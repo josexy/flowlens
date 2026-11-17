@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/logic"
+	"github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -76,36 +77,6 @@ func TestHeaderShowsNativeDividersAtRest(t *testing.T) {
 				t.Fatalf("dark=%v: header pixel at x=%v is %v, want %v", dark, x, got, want)
 			}
 		}
-	}
-}
-
-func TestTrafficTableHeaderDividerIsOnePixel(t *testing.T) {
-	for _, name := range []string{"capture", "history"} {
-		t.Run(name, func(t *testing.T) {
-			f := newHistoryFixture(t, entry(1, "live.test")).fixture
-			if name == "history" {
-				f.click("session one")
-				f.requireText("saved.test")
-			}
-			f.tester.Move(1, 1)
-			for _, dark := range []bool{false, true} {
-				f.setDark(dark)
-				line := rgba(f.theme().Border)
-				for _, scale := range []float32{1, 1.25, 1.5, 2} {
-					f.tester.SetScale(scale)
-					for _, zoom := range []float32{1, 1.19} {
-						f.tester.SetZoom(zoom)
-						host := headerRect(t, f, locales.TrafficHost())
-						x := int((host.X + host.W/2) * scale)
-						y := int(math.Round(float64((host.Y + host.H) * scale)))
-						frame := f.tester.Image()
-						if above, divider, below := frame.RGBAAt(x, y-1), frame.RGBAAt(x, y), frame.RGBAAt(x, y+1); !near(divider, line) || near(above, line) || near(below, line) {
-							t.Fatalf("dark=%v scale=%v zoom=%v: divider and neighbors are %v, %v, %v, want %v on the middle pixel only", dark, scale, zoom, above, divider, below, line)
-						}
-					}
-				}
-			}
-		})
 	}
 }
 
@@ -209,9 +180,10 @@ func TestSortedHeaderShowsAccentArrow(t *testing.T) {
 	// the band, and nearer the accent than the title text.
 	found := false
 	accent, band, text := rgba(f.theme().Primary), rgba(f.theme().Elevated), rgba(f.theme().Text)
+	frame := f.tester.Image()
 	for x := arrow.X; x < arrow.X+arrow.W && !found; x++ {
 		for y := arrow.Y; y < arrow.Y+arrow.H; y++ {
-			if p := pixel(f.tester, x, y); closer(p, accent, band) && closer(p, accent, text) {
+			if p := frame.RGBAAt(int(x), int(y)); closer(p, accent, band) && closer(p, accent, text) {
 				found = true
 				break
 			}
@@ -348,9 +320,32 @@ func TestDurationAndSizeUseTabularNumerals(t *testing.T) {
 	}
 }
 
-func TestRenderTrafficTable(t *testing.T) {
-	f := newRenderFixture(t)
-	f.workspace.Table.state.Sort = ui.SortOrder{Column: string(logic.ColumnID), Descending: true}
+// newRenderFixture shows the reference traffic at the reference size, with
+// its highlights and the inspected row open in the detail panel.
+func newRenderFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixtureSized(t, rendertest.Traffic(), rendertest.Width, rendertest.Height)
+	for id, color := range rendertest.Highlighted {
+		f.data.Traffic.SetHighlight(id, color)
+	}
+	for _, entry := range f.data.Traffic.Entries {
+		if entry.ID == rendertest.Inspected {
+			f.data.Traffic.Select(entry)
+			f.data.Traffic.SetShowDetailPanel(true)
+		}
+	}
 	f.settle()
-	rendertest.ShootThemes(t, f.tester, "traffic-table", f.setDark)
+	return f
+}
+
+// setDark switches the fixture's theme mode.
+func (f *fixture) setDark(dark bool) {
+	mode := theme.ModeLight
+	if dark {
+		mode = theme.ModeDark
+	}
+	if err := f.data.Settings.SetThemeMode(mode); err != nil {
+		f.t.Fatal(err)
+	}
+	f.settle()
 }

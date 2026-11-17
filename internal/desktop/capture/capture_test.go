@@ -1321,9 +1321,16 @@ func TestEditLimit(t *testing.T) {
 	f.settle()
 	openRowMenu(t, f, "/p51")
 	f.choose("Edit")
-	for range 60 {
-		f.settle()
+	// Each body load schedules the next one through the main dispatcher.
+	// Complete that chain without rebuilding the whole table for every load.
+	for range maxEditEntries {
+		f.data.Runtime.Jobs.Wait()
+		f.window.Drain()
+		if len(f.opened) == maxEditEntries {
+			break
+		}
 	}
+	f.settle()
 	if len(f.opened) != 50 {
 		t.Fatalf("opened %d", len(f.opened))
 	}

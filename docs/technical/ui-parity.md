@@ -118,13 +118,13 @@ On Linux, formatting, Go lint, MyGo UI vet, catalog checks, the Go suite, and th
 
 ## Historical render review
 
-Each surface has a `TestRender…` test that writes light and dark PNGs at 1600×860 when `FLOWLENS_RENDER_DIR` is set (`internal/desktop/internal/rendertest`):
+The original review used a dedicated `TestRender…` case for each surface. Redundant screenshot-only cases were removed after behavior tests covered those surfaces. Remaining render helpers and behavior tests can still write PNGs through `internal/desktop/internal/rendertest` when `FLOWLENS_RENDER_DIR` is set. To run the remaining `TestRender…` cases explicitly:
 
 ```sh
-FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender
+FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1
 ```
 
-The renders were compared with `assets/screenshots/flowlens-{light,dark}.png` of the 1.0.5 repository and the values in the `restore-ui-parity` design. Beyond the deliberate differences above, the remaining differences are:
+The historical renders below were compared with `assets/screenshots/flowlens-{light,dark}.png` of the 1.0.5 repository and the values in the `restore-ui-parity` design. Some of their dedicated generators no longer exist. Beyond the deliberate differences above, the remaining differences are:
 
 - Font rendering. The headless tester draws with its bundled font, which is wider than Segoe UI, SF Pro, or Noto Sans, and has no CJK glyphs; Chinese layouts were checked by tests rather than by eye.
 - Process icons are blank in renders, because the tests have no icon cache. Rows otherwise match.
@@ -165,7 +165,7 @@ A review of the change found that two of these still differed and restored them:
 
 Tooltips carried over from the 1.0.5 templates (`frontend/src`) and their locale keys. Rows marked *dynamic* show data.
 
-`TestTooltipInventoryKeysHaveTooltipCallSites` in `internal/desktop/internal/parity` reads the keys in this table and fails unless each one's accessor is referenced from Go code that builds a tooltip. Keep the table in step when a tooltip is added or removed.
+This table is a historical migration inventory. Tooltip behavior is checked by the surface-level `tooltip_test.go` cases and `rendertest.RequireTooltip`; catalog keys and placeholders are checked by `locales/locales_test.go` and `task i18n:check`. The old AST scan was removed because finding a locale accessor anywhere in a tooltip-building call graph did not establish that the corresponding control actually showed that tooltip.
 
 | 1.0.5 template | Control | Keys |
 | --- | --- | --- |

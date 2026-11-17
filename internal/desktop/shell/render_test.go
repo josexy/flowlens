@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/theme"
 )
@@ -20,12 +19,6 @@ func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
 	if err := data.Settings.SetThemeMode(mode); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestRenderShell(t *testing.T) {
-	f := newFixture(t)
-	f.tester.SetSize(rendertest.Width, rendertest.Height)
-	rendertest.ShootThemes(t, f.tester, "shell", func(dark bool) { setRenderTheme(t, f.data, dark); f.tester.Frame() })
 }
 
 func TestStatusBarDividerUsesOneDevicePixel(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	"github.com/josexy/flowlens/internal/desktop/store"
+	"github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
 	apicollectionservice "github.com/josexy/flowlens/internal/services/api_collection_service"
@@ -988,4 +989,15 @@ func TestWebSocketResponseTabsSwitchOnClick(t *testing.T) {
 	if state.ActiveRightTab != socketTabResponse || !f.tester.HasText(locales.WorkspaceWebsocketClientNoMessages()) {
 		t.Fatalf("response click left %q: %v", state.ActiveRightTab, f.tester.Texts())
 	}
+}
+
+func (f *fixture) setDark(dark bool) {
+	mode := theme.ModeLight
+	if dark {
+		mode = theme.ModeDark
+	}
+	if err := f.data.Settings.SetThemeMode(mode); err != nil {
+		f.t.Fatal(err)
+	}
+	f.settle()
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/locales"
 )
 
@@ -119,19 +118,4 @@ func TestCreateDialogRejectsWhitespace(t *testing.T) {
 	if !f.view.creating || f.backend.createCalls != 0 || !f.has(locales.ApiCollectionFolderNameRequired()) {
 		t.Fatal("blank name reached the backend or did not explain the validation")
 	}
-}
-
-func TestRenderCreateFolderDialogs(t *testing.T) {
-	f := newFixture(t)
-	f.click(locales.ApiCollectionNewFolder())
-	f.tester.Type("New collection")
-	f.tester.Advance(300 * time.Millisecond)
-	rendertest.ShootThemes(t, f.tester, "collection-create-root", f.setDark)
-	f.click(locales.ApiCollectionCancel())
-	f.folder("", "Saved requests")
-	f.reload()
-	f.menu("Saved requests", locales.ApiCollectionNewChildFolder())
-	f.tester.Type("Authentication")
-	f.tester.Advance(300 * time.Millisecond)
-	rendertest.ShootThemes(t, f.tester, "collection-create-child", f.setDark)
 }

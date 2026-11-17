@@ -2,11 +2,9 @@ package plugins
 
 import (
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
-	"github.com/josexy/flowlens/internal/desktop/pythonapi"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/theme"
 )
@@ -20,12 +18,6 @@ func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
 	if err := data.Settings.SetThemeMode(mode); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestRenderPlugins(t *testing.T) {
-	f := newFixture(t)
-	f.create("Header signer", "Signs requests")
-	rendertest.ShootThemes(t, f.tester, "plugins", func(dark bool) { setRenderTheme(t, f.data, dark); f.settle() })
 }
 
 func TestRenderPluginDrag(t *testing.T) {
@@ -47,16 +39,4 @@ func TestRenderPluginDrag(t *testing.T) {
 	})
 	f.tester.Key(0, ui.KeyEscape)
 	f.tester.CancelPress()
-}
-
-func TestRenderPythonHelp(t *testing.T) {
-	f := newFixture(t)
-	f.data.Workbench.OpenPythonHelp(pythonapi.ScopeInline)
-	f.tester.Advance(time.Second)
-	f.settle()
-	rendertest.ShootThemes(t, f.tester, "python-help", func(dark bool) {
-		setRenderTheme(t, f.data, dark)
-		f.tester.Advance(time.Second)
-		f.settle()
-	})
 }

@@ -109,20 +109,6 @@ func (f *fixture) setDark(dark bool) {
 	f.tester.Advance(300 * time.Millisecond)
 }
 
-func TestRenderCollectionTree(t *testing.T) {
-	f := newFixture(t)
-	api := f.folder("", "bilibili")
-	f.request(api, "Home page", "http://a/")
-	f.request(api, "Archive list with a long name that is cut", "http://b/")
-	nested := f.folder(api, "nested")
-	f.request(nested, "deep", "http://c/")
-	f.folder("", "empty")
-	f.reload()
-	f.data.Collection.Expanded[api] = true
-	f.settle()
-	rendertest.ShootThemes(t, f.tester, "collection-tree", f.setDark)
-}
-
 func TestRenderNarrowCollectionTree(t *testing.T) {
 	f := newFixture(t)
 	f.sidebarWidth = 240

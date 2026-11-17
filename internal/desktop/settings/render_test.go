@@ -62,25 +62,6 @@ func setRenderTheme(t *testing.T, data *store.Store, dark bool) {
 	}
 }
 
-func TestRenderSettings(t *testing.T) {
-	f := newFixture(t)
-	for _, tab := range []string{locales.SettingsTabGeneral(), locales.SettingsTabProxy(), locales.SettingsTabStorage(), locales.SettingsTabShortcuts(), locales.SettingsTabLogs()} {
-		f.open(tab)
-		switch tab {
-		case locales.SettingsTabProxy():
-			f.click(locales.SettingsAddClientCert())
-		case locales.SettingsTabLogs():
-			f.clickControl(locales.SettingsLogLevelLabel())
-		}
-		rendertest.ShootThemes(t, f.tester, "settings-"+tab, func(dark bool) {
-			setRenderTheme(t, f.data, dark)
-			f.settle()
-			f.tester.Advance(time.Second)
-			f.settle()
-		})
-	}
-}
-
 func TestRenderRootCAAddMenu(t *testing.T) {
 	f := newFixture(t)
 	f.open(locales.SettingsTabProxy())
