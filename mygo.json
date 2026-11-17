@@ -2,7 +2,7 @@
   "name": "FlowLens",
   "slug": "flowlens",
   "identifier": "com.josexy.flowlens",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "out": "build",
   "resourcesExclude": [
     "**/*.ttf",
