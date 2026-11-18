@@ -43,8 +43,9 @@ tasks:
     cmds:
       - go test ./...
 
-  # The race detector needs cgo, and so a C compiler, on every platform. Pass
-  # packages after -- to narrow the run.
+  # On Windows and Linux the race detector needs cgo and a C compiler. On macOS
+  # it needs neither, but FlowLens builds there with cgo anyway. Pass packages
+  # after -- to narrow the run.
   test:race:
     desc: Runs Go tests with the race detector, by default on the concurrency-heavy packages
     env:
