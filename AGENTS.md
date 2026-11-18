@@ -1,112 +1,102 @@
 # AGENTS.md
 
-Engineering guidelines for FlowLens. Product usage belongs in [README.md](README.md) and [docs/](docs/user-guide.md); behavior specifications live in `openspec/specs/`.
+Engineering rules for FlowLens: where code belongs, contracts that are easy to break, and how to verify changes. Usage lives in [README.md](README.md) and the [user guide](docs/user-guide.md), specified behavior in `openspec/specs/`, and protocol, limit, and format details in `docs/technical/`.
 
 ## Workflow
 
-FlowLens uses Go 1.27.3+, MyGo native UI, `nuxt-ui-go` components, Task, SQLite, `mitmproxy-go`, and `xhttp`. Python hooks use external CPython 3, without an embedded interpreter or Python cgo dependency.
+Stack: Go (version in `go.mod`), MyGo native UI, `nuxt-ui-go` (`nui`), Task, SQLite, `mitmproxy-go`, and `xhttp`. Python hooks use an external CPython 3, with no embedded interpreter or Python cgo.
 
-- Before multi-step work, define the change, verification, and completion criteria. Check effects on persistence/files, networking/models, Python Workers, process attribution, events/shortcuts, windows, copy, and docs.
-- If more than two plausible interpretations would materially change the result, explain them first; otherwise follow existing behavior and proceed.
-- Keep changes within the owning module. Preserve unrelated workspace edits; avoid incidental formatting, parallel implementations, and one-off abstractions.
-- Follow existing Go service/package boundaries. Reuse `internal/desktop/store` state and `nui` base controls.
-- Views run on the main thread and rebuild every frame from Go state. Never store a `*ui.Context` or `Element`. Workers use `runtime.Run` and never touch view state.
+- Before multi-step work, define the change, its verification, and completion criteria. Check effects on persistence/files, networking/models, Python Workers, process attribution, events/shortcuts, windows, copy, and docs.
+- If more than two plausible interpretations would materially change the result, explain them first; otherwise follow existing behavior.
+- Stay within the owning module and reuse `internal/desktop/store` state and `nui` controls. Preserve unrelated edits; no incidental formatting, parallel implementations, or one-off abstractions.
+- Views run on the main thread and rebuild every frame from Go state: never store a `*ui.Context` or `Element`. Background work uses `runtime.Run` and never touches view state.
 
 ## Module Ownership
 
 | Owner | Responsibility |
 | --- | --- |
-| `main.go` | Delegation to `internal/app` |
-| `internal/app` | Application assembly, database startup, windows/tray, single instance, events, update engines, and shutdown |
-| `internal/serviceruntime` | Service startup and shutdown, lifecycle interfaces, and the in-process event bus |
-| `internal/services/app_service` | App/window APIs, environment info, and authoritative update state |
-| `internal/services/proxy_service` | Capture, synthetic requests, WebSocket, resend, metrics, HBIN, shared HAR/traffic export, and managed system-proxy integration |
-| `internal/services/history_service` | History reads/deletion/resend and import/export entry points; reuse proxy codecs and writers |
-| `internal/services/python_plugin_service` | Plugin registration/revisions/rules, Workers, protocol, SDK, request hooks, and execution output |
-| `internal/services/api_collection_service` | SQLite repository, tree transactions, and managed request-body files |
-| `internal/services/rewrite_service` | Rewrite-rule persistence, validation, compiled matchers, and published snapshots |
-| `internal/services/mem_stats_service` | Go runtime memory sampling for Memory Statistics |
-| `internal/services/{setting_service,logging_service,shortcut_service}` | Settings and CA trust, logging, and system shortcuts respectively |
-| `internal/pkg/{process_attribution,systemproxy}` | Platform process/icon lookup and system-proxy control |
-| `internal/pkg/{body_cache,body_spool,database,logger}` | Body cache, Python body temp files, shared database, and logging |
-| `internal/desktop/store` | Shared interface state, on the main thread; reuse its stores |
+| `internal/app` (`main.go` only delegates) | Assembly, database startup, windows/tray, single instance, events, update engines, shutdown |
+| `internal/serviceruntime` | Service lifecycle and the in-process event bus |
+| `internal/services/app_service` | App/window APIs, environment info, authoritative update state |
+| `internal/services/proxy_service` | Capture, synthetic requests, WebSocket, resend, metrics, HBIN, shared HAR/traffic export, managed system proxy |
+| `internal/services/history_service` | History reads/deletion/resend and import/export entry points, reusing proxy codecs and writers |
+| `internal/services/python_plugin_service` | Plugin registry/revisions/rules, Workers, protocol, SDK, hooks, execution output |
+| `internal/services/api_collection_service` | SQLite repository, tree transactions, managed request-body files |
+| `internal/services/rewrite_service` | Rewrite-rule persistence, validation, compiled matchers, published snapshots |
+| `internal/services/{setting,logging,shortcut,mem_stats}_service` | Settings and CA trust, logging, system shortcuts, and memory sampling, respectively |
+| `internal/pkg/` | `process_attribution`, `systemproxy`, `body_cache`, `body_spool` (Python body temp files), `database`, `logger` |
+| `internal/desktop/store` | Shared interface state on the main thread |
 | `internal/desktop/logic` | Pure rules: formatting, headers, cookies, filters, hex, table state |
 | `internal/desktop/runtime` | Main-thread dispatcher and cancelable background jobs |
-| `internal/desktop/{shell,capture,inspect,editor,collection,rewrite,plugins,settings,update,memstats,startupfailure}` | Main window frame and each surface or window |
 | `internal/desktop/widgets` | Shared controls, including `ProcessIcon` and its cache |
-| `internal/desktop/pythonapi` | Python API help catalog, help copy, and copied system prompts |
-| `internal/desktop/shortcuts` | Command catalog, bindings/conflicts, recording, and per-window dispatch |
-| `internal/desktop/theme`, `internal/desktop/locale`, `locales/` | Appearance, language, and message catalogs |
-
-Take the single-instance lock before opening SQLite so a second process exits before database contention. Python contracts/examples live in `docs/technical/python-plugins*.md` and `docs/examples/python-plugins`.
+| `internal/desktop/shortcuts` | Command catalog, bindings/conflicts, recording, per-window dispatch |
+| `internal/desktop/pythonapi` | Python API help, its copy, and copied system prompts |
+| `internal/desktop/theme`, `internal/desktop/locale`, `locales/` | Appearance, language, message catalogs |
+| Other `internal/desktop/*` | `shell` (main window frame) and one package per surface or window |
 
 ## High-Risk Contracts
 
 ### Networking, History, and Export
 
-- Proxy/editor HTTP uses `github.com/josexy/xhttp`, including its HTTP/2 support; do not mix standard-library HTTP types or another HTTP/2 implementation.
-- External headers/trailers remain `[]HTTPHeaderField`. Preserve raw HeaderBlock order, duplicates, casing, empty values, and truncation. Without raw data, use normalized fields and mark wire order unavailable; never substitute a map.
-- Keep request normalization in `synthetic_request_headers.go`: URL controls routing; the proxy service owns pseudo-headers, `Host`, framing, generated content type, and fallback UA. Reject HeaderOrder the selected transport cannot represent losslessly.
-- Keep synthetic transport/shared TLS dialing in `synthetic_transport.go`. Explicit HTTP/1.1 must not apply HTTP/2 fingerprints; redirects retain fingerprint semantics. Protocol, proxy, and fingerprint settings must round-trip through API Collection.
-- Live `HTTPMessageMetrics` comes only from transport-boundary events, with microsecond precision and retry/capture-generation isolation. HAR import may map valid file statistics. Unknown numbers use `-1`; failed, canceled, or incomplete bodies must not gain fabricated completion values.
-- `HeaderSize` is the UTF-8 size of the complete Raw-panel head, including start line, field lines, and terminating blank line. HTTP/2 uses synthetic start lines and displayed pseudo-header conversion, excluding TCP/TLS, HPACK, and frame overhead. The interface and HAR read it directly. `BodySize` counts entity bytes after transport encoding; traffic and certificate timestamps use Unix microseconds.
-- Write HBIN v3 and read v1/v2/v3; v1/v2 binary WebSocket payloads are Base64 and are decoded on read. Earlier development layouts remain unsupported. Skip unknown versions without deleting them. Traffic/model changes require codec, history/HAR tests, and `internal/desktop/logic`/view updates together.
-- Reuse proxy-service `HARFileWriter` and shared traffic-export writers with streamed atomic writes. Distinguish empty bodies from missing payloads, retain other exportable HAR entries, and report skipped/missing-body counts. Exports do not automatically redact credentials, cookies, bodies, or process paths.
-- Interface export goes through `internal/desktop/capture/export.go`, preserving source, ID order, capture generation, extensions, concurrency guards, and result statistics. Capture/history menus expose CSV/HAR; traffic-row menus expose individual message formats too.
-- API Collection transactions and managed body files must remain consistent through rollback, orphan cleanup, and startup validation.
+Timing, size, HAR, and HBIN semantics are defined in [traffic-metrics-and-har.md](docs/technical/traffic-metrics-and-har.md); keep it in step with the code.
+
+- HTTP goes through `github.com/josexy/xhttp`, including its HTTP/2; never mix in standard-library HTTP types or another HTTP/2 implementation.
+- Headers/trailers are ordered `[]HTTPHeaderField`, never maps. Preserve raw order, duplicates, casing, empty values, and truncation; with only normalized fields, mark wire order unavailable.
+- `synthetic_request_headers.go` owns request normalization: the URL controls routing, and the proxy service owns pseudo-headers, `Host`, framing, generated content type, and fallback UA. Reject a HeaderOrder the transport cannot represent losslessly.
+- `synthetic_transport.go` owns synthetic transport and TLS dialing: no HTTP/2 fingerprints on explicit HTTP/1.1, fingerprints survive redirects, and protocol/proxy/fingerprint settings round-trip through API Collection.
+- Metrics come only from transport-boundary events, isolated per retry and capture generation. Unknown values are `-1`; never fabricate completion values. Traffic and certificate timestamps are Unix microseconds.
+- Write HBIN v3, read v1–v3, and skip unknown versions without deleting them. Traffic-model changes update the codec, history/HAR tests, and `internal/desktop/logic`/views together.
+- Exports reuse the proxy service's `HARFileWriter` and traffic-export writers (streamed, atomic), keep empty and missing bodies distinct, report skipped counts, and never redact. Interface export goes through `internal/desktop/capture/export.go`, which owns source, ordering, capture generation, and concurrency guards.
+- API Collection transactions and managed body files stay consistent through rollback, orphan cleanup, and startup validation.
 
 ### Python Plugins
 
-- Hooks run only in HTTP Request Editor, excluding ordinary MITM capture, resend, and WebSocket Client. Plugins are trusted code; `-I` isolates imports, not execution.
-- Workers use versioned length-prefixed JSON with bounded frames, source, bodies, parameters, shared state, output, and hook time. Timeout, cancellation, crash, or corruption terminates/replaces the Worker; Windows also cleans up its child process tree.
-- Snapshot matching order, revisions, and parameters before send. Request order is global plugins → current script → network; responses reverse it. Requests fail closed; responses fail open. `context.shared` is isolated per plugin and shared only between its request/response hooks.
-- Separate user-facing body semantics from storage. Edited requests/ordinary responses over 4 MiB use `body_spool`; never put file bytes in Worker JSON or expose/persist temp paths.
-- Clean managed temp files after every outcome and Worker exit. SSE hooks may change only state/headers before response start; no body/trailer edits or spool files.
-- Persist global plugin metadata/rules/parameters/effective revisions in SQLite plus the managed directory. API Collection may save current script source; bypass/enabled switches belong to the current tab and default off when reopened.
-- Complete output belongs only in the request-editor console with its execution ID; do not add global log rings or plugin-workbench log history.
+Scopes, ordering, failure handling, limits, and security are specified in [python-plugins.md](docs/technical/python-plugins.md), with examples in `docs/examples/python-plugins`.
+
+- Hooks run only in HTTP Request Editor, never in MITM capture, resend, or WebSocket Client. Plugins are trusted code; `-I` isolates imports, not execution.
+- Workers speak versioned, length-prefixed, bounded JSON. Timeout, cancellation, crash, or corruption terminates and replaces the Worker, including its child process tree on Windows.
+- Snapshot matches, revisions, and parameters before send. Requests run global plugins → current script → network and fail closed; responses run in reverse and fail open.
+- Edited requests and ordinary responses over 4 MiB use `body_spool`: no file bytes in Worker JSON, no exposed or persisted temp paths, and cleanup after every outcome and Worker exit. SSE hooks change only status and headers.
+- Global plugins persist in SQLite plus the managed directory. Current-script enable/bypass switches belong to the tab and default off.
+- Output goes only to the request-editor console under its execution ID; no global or workbench log history.
 
 ### Process Attribution and Icons
 
-- Lookup is asynchronous and must not block proxy connections. Only direct local connections participate; mark and skip remote clients.
-- Identify processes by PID + `StartToken`; bound queue, TTL, capacity, and query timeout. Late results must revalidate the connection and record.
-- Icon cleanup coordinates Manager rotation/shutdown, pending-task cancellation, stale `IconKey` invalidation, disk deletion, and the interface's cache. Missing disk files must remain recoverable on demand.
-- Reuse `widgets.ProcessIcon`; views must not call `GetProcessIcon` directly or create another cache.
-- `ProcessInfo` changes require proxy models, HBIN codec/tests, history, and interface updates together.
+- Lookup is asynchronous, never blocks proxy connections, and covers only direct local connections; mark and skip remote clients.
+- Identify processes by PID + `StartToken` with a bounded queue, TTL, capacity, and timeout. Late results revalidate the connection and record.
+- Icon cleanup coordinates Manager rotation/shutdown, pending-task cancellation, stale `IconKey` invalidation, disk deletion, and the interface cache; missing files stay recoverable. Views use only `widgets.ProcessIcon`.
+- `ProcessInfo` changes update proxy models, the HBIN codec and tests, history, and the interface together.
 
 ### Settings, Certificates, and Lifecycle
 
-- Settings defaults, validation, partitioned serialization, and SQLite persistence belong to `setting_service`; logs go through `internal/pkg/logger`/`logging_service`.
-- Ordinary settings use `UpdatePreservingShortcuts`. Preserve newer shortcut, Python-runtime, and traffic-detail state from narrow writes; layout/table preferences use `SaveTrafficDetailConfig`/`SaveTrafficTableConfig`, serialized with full saves and published only after persistence succeeds.
-- CA trust stays in `setting_service`, serialized with generation and guarded by the expected certificate fingerprint. Install only the public certificate into the current user's Windows root store or macOS login keychain/user trust; validate CA, validity, and key pair first.
-- CA status must distinguish unknown/incomplete/installed states. Uninstall only the exact certificate/trust record, including expired certificates or missing keys. Remove existing/incomplete trust before regeneration; do not add automatic replacement, historical-CA cleanup, or machine-wide trust.
-- Managed system proxy uses `proxy_service` and `internal/pkg/systemproxy`. Preserve the original snapshot and restore on normal shutdown only if the managed configuration still matches; never overwrite newer external changes.
-- Updates use `app_service` snapshots/revisions and `store.UpdaterStore` across windows. Keep one operation active, ignore stale events, and cancel/wait during shutdown. Install only updates signed with the built-in key, and retain the manual path through the release page. Restart must use the quit guards and normal shutdown even after the update window closes.
-- Save every function `EventBus.On` returns and call it when the listener goes away.
+- `setting_service` owns settings defaults, validation, serialization, and persistence. Ordinary writes use `UpdatePreservingShortcuts`, which keeps newer shortcut, Python-runtime, and traffic-detail state. Layout/table preferences use `SaveTrafficDetailConfig`/`SaveTrafficTableConfig`, serialized with full saves and published only after persisting. Logs go through `internal/pkg/logger`.
+- CA trust is serialized by generation and guarded by the expected certificate fingerprint. Validate the CA, validity, and key pair, then install only the public certificate into the current user's trust store. Status distinguishes unknown, incomplete, and installed. Uninstall only the exact certificate/trust record, even when expired or keyless, and remove existing trust before regenerating. No automatic replacement, historical-CA cleanup, or machine-wide trust.
+- The managed system proxy restores the original snapshot on normal shutdown only if its configuration still matches.
+- Updates keep one active operation through `app_service` revisions and `store.UpdaterStore`, ignore stale events, cancel/wait on shutdown, install only updates signed with the built-in key, and keep the manual release-page path. Restart uses the quit guards and normal shutdown, even after the update window closes.
+- Take the single-instance lock before opening SQLite.
+- Call every function `EventBus.On` returns when its listener goes away.
 
 ### Shortcuts
 
-- System shortcuts belong only to `shortcut_service`: allowlist, register before persist, rollback on failure, and cleanup on shutdown. Changes use `ApplyShortcutConfig`.
-- In-app commands go through `internal/desktop/shortcuts`; buttons/menus/shortcuts share business functions. Do not add parallel key handlers in views.
-- `When` checks the real active page/tab. Text fields and code editors retain their keys unless a command explicitly allows them.
-- Display resolved bindings; `primary` means Command on macOS and Ctrl elsewhere. Missing override uses the default; `binding: null` explicitly disables it.
+- System shortcuts belong to `shortcut_service` (allowlist, register before persisting, roll back on failure, clean up on shutdown) and change through `ApplyShortcutConfig`.
+- In-app commands go through `internal/desktop/shortcuts` and share business functions with buttons and menus; no key handlers in views. `When` checks the real active page/tab; text fields and code editors keep their keys unless a command opts in.
+- Show resolved bindings (`primary` is Command on macOS, Ctrl elsewhere). No override means the default; `binding: null` disables the command.
 
 ### Interface and Copy
 
 - Prefer `nui` components, theme colors, and `lucide` icons. Select values cannot be empty strings; use a local sentinel.
-- Reuse `internal/desktop/logic` for ordered header editing/copying, degradation hints, dates, microsecond times, durations, and sizes.
-- Reuse `internal/desktop/theme` and the settings store for fonts/colors/layout. Check light/dark themes and affected windows; tray/title-bar/visibility changes must cover `internal/app`, `internal/desktop/shell`, settings, and locales together.
-- Every window root calls `theme.Begin`, which applies the Windows text-scale factor once; do not scale text again in views.
-- Page, pane, grid, card, tab, and window-frame borders use `nui.Theme.Border`, not MyGo's stronger native `Theme.Border`. Control outlines and selection, focus, error, and drop indicators keep their semantic colors.
-- Keep hex viewing in `internal/desktop/inspect/hex.go` and `internal/desktop/logic/hexdump.go`; preserve byte-based selection/copy/export and bounded rendering for large bodies.
-- Put copy in both `locales/{en,zh-Hans}.json` with matching keys and placeholders, then run `task i18n:generate`. Generated accessors take arguments in alphabetical order of placeholder name. Keep persistent copy short, preserve distinct lifecycles, and retain delete/overwrite/cancel/restart/truncation/order-degradation semantics.
+- Reuse `internal/desktop/logic` for header editing/copying, dates, times, durations, and sizes, and `internal/desktop/theme` plus the settings store for fonts, colors, and layout. Check light and dark themes in every affected window.
+- Window roots call `theme.Begin`, which applies Windows text scaling once; never scale text again.
+- Page, pane, grid, card, tab, and window-frame borders use `nui.Theme.Border`, not MyGo's `Theme.Border`; controls and selection/focus/error/drop indicators keep semantic colors.
+- Tray, title-bar, and visibility changes update `internal/app`, `internal/desktop/shell`, settings, and locales together.
+- Hex viewing stays in `internal/desktop/inspect/hex.go` and `internal/desktop/logic/hexdump.go`: byte-based and bounded for large bodies.
+- Add copy to both `locales/{en,zh-Hans}.json` with matching keys and placeholders, then run `task i18n:generate`; accessor arguments follow alphabetical placeholder order. Keep copy short and preserve delete/overwrite/cancel/restart/truncation/order-degradation semantics.
 
 ## Verification
 
-Use the Go version from `go.mod`. Task is recommended; Python 3 is optional outside hook tests. Windows and Linux use `CGO_ENABLED=0`, macOS `CGO_ENABLED=1`; the Taskfile sets this.
+Run the smallest checks that match the risk; `task verify` is the full check and needs no display. The Taskfile sets `CGO_ENABLED` for each platform.
 
-Run the smallest checks matching the risk. Full verification is `task verify`, which needs no display. Root tasks: `task dev`, `task package`, `task run`. Without Task, run `go tool mygo dev`.
-
-| Scope | Relevant Go test packages |
+| Scope | `go test` packages |
 | --- | --- |
 | SQLite/settings/API Collection | `./internal/pkg/database ./internal/services/setting_service ./internal/services/api_collection_service` |
 | Shortcuts | `./internal/services/setting_service ./internal/services/shortcut_service ./internal/desktop/shortcuts` |
@@ -118,16 +108,14 @@ Run the smallest checks matching the risk. Full verification is `task verify`, w
 | Request editor | `./internal/desktop/editor ./internal/desktop/store` |
 | Rewrite rules | `./internal/services/rewrite_service ./internal/desktop/rewrite ./internal/desktop/store` |
 
-Prefix package lists with `go test`. For concurrency/lifecycle changes, also run `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service` when supported. Worker/SDK/interpreter/package changes must actually run Python 3 integration tests, without skips.
-
-View changes run under `ui.NewTester` with no display. After changing views, run `task vet:ui`. To inspect renders, set `FLOWLENS_RENDER_DIR` to a directory and run the `TestRender…` cases, for example `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
+- Concurrency/lifecycle changes also run `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service` where supported.
+- Worker/SDK/interpreter changes run the Python 3 integration tests without skips.
+- View changes run `task vet:ui`. To inspect renders, run `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
 
 ## Docs, Releases, and Completion
 
-- Keep [docs/user-guide.md](docs/user-guide.md) task-oriented; put protocol, limit, and format details in `docs/technical/`. Metrics, HAR, and HBIN changes update [traffic-metrics-and-har.md](docs/technical/traffic-metrics-and-har.md); rewrite changes update [http-rewrite-rules.md](docs/technical/http-rewrite-rules.md).
-- Python entry-point/scope/hook/order/limit/security/console changes update both technical guides, examples, README, and `internal/desktop/pythonapi/data`.
-- When specified behavior changes, update `openspec/specs/` through an OpenSpec change and archive it once implemented, so the specs match the shipped application.
-- Use English Conventional Commits: `<type>(<scope>): <summary>`, one class of change per commit. Include only verified in-scope files and consistent bilingual copy.
-- Keep the application version only in `mygo.json`; MyGo embeds it and `appservice.Version()` reads it through `mygo.App.Version()`. Release tags must match this version. Each release needs a `## <version>` section in `CHANGELOG.md`, which becomes its update notes. See [Building and Packaging](docs/technical/building.md).
-- macOS must keep `CGO_ENABLED=1`; `cgo_guard_darwin.go` fails a production build without it. MyGo upgrades go through `go.mod`, which pins the CLI.
-- Report the completed result, checks run, and unresolved risks. If verification is unavailable, state why; feasibility alone is not completion.
+- Update docs with behavior: the user guide stays task-oriented, and details go in `docs/technical/` (such as `traffic-metrics-and-har.md` and `http-rewrite-rules.md`). Python hook/scope/order/limit/security/console changes also update both plugin guides, the examples, README, and `internal/desktop/pythonapi/data`.
+- Change specified behavior through an OpenSpec change, archived once implemented.
+- Commits are English Conventional Commits, `<type>(<scope>): <summary>`, one class of change each, with only verified in-scope files.
+- The version lives only in `mygo.json`; releases need a matching tag and a `## <version>` section in `CHANGELOG.md`. macOS builds keep `CGO_ENABLED=1`. See [Building and Packaging](docs/technical/building.md).
+- Report the result, checks run, and unresolved risks. If verification was unavailable, say why; feasibility alone is not completion.
