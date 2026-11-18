@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
+	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/store"
@@ -510,6 +511,76 @@ func TestSavingANewTabLinksIt(t *testing.T) {
 	}
 	if f.data.Collection.SelectedNodeID != tab.APIID {
 		t.Fatal("selected", f.data.Collection.SelectedNodeID)
+	}
+}
+
+func TestSaveDialogPicksFolderFromTree(t *testing.T) {
+	f := newFixture(t)
+	parent := f.folder("", "Parent")
+	child := f.folder(parent, "Child")
+	grandchild := f.folder(child, "Grandchild")
+	sibling := f.folder(child, "Sibling")
+	f.folder("", "Other")
+	f.reload()
+	// The sidebar stays collapsed, so nested names appear only in the dialog.
+	f.data.Collection.LastSelectedFolderID = grandchild
+	workspace := f.data.Workspace
+	key := workspace.CreateHTTPRequestTab(logic.DraftNew, nil)
+	workspace.FindTab(key).HTTP.URL = "http://example.com/"
+	f.view.SaveTab(key)
+	f.settle()
+	if f.view.save.parent != grandchild || !f.view.save.folders.Selection.Has(grandchild) {
+		t.Fatalf("default folder not selected: %+v", f.view.save.parent)
+	}
+	if !f.has("Grandchild") || !f.has("Sibling") || !f.has("/Parent/Child/Grandchild") {
+		t.Fatalf("default folder not revealed: %v", f.tester.Texts())
+	}
+	rendertest.ShootThemes(t, f.tester, "collection-save-folder-tree", f.setDark)
+	f.click("Sibling")
+	if f.view.save.parent != sibling || !f.has("/Parent/Child/Sibling") {
+		t.Fatalf("parent = %q, %v", f.view.save.parent, f.tester.Texts())
+	}
+	if err := f.tester.ClickWith(ui.Ctrl, "Sibling"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	if f.view.save.parent != sibling || !f.view.save.folders.Selection.Has(sibling) {
+		t.Fatalf("Ctrl-click cleared the destination: %q", f.view.save.parent)
+	}
+	f.click(locales.ApiCollectionSave())
+	tab := workspace.FindTab(key)
+	if f.view.save.open || tab.APIID == "" || f.data.Collection.ParentOf(tab.APIID) != sibling {
+		t.Fatalf("saved into %q", f.data.Collection.ParentOf(tab.APIID))
+	}
+}
+
+func TestSaveDialogDropsDeletedDestination(t *testing.T) {
+	f := newFixture(t)
+	// Nested folders keep their names out of the collapsed sidebar.
+	root := f.folder("", "Root")
+	keep := f.folder(root, "Keep")
+	gone := f.folder(root, "Gone")
+	f.reload()
+	f.data.Collection.LastSelectedFolderID = gone
+	key := f.data.Workspace.CreateHTTPRequestTab(logic.DraftNew, nil)
+	f.view.SaveTab(key)
+	f.settle()
+	if f.view.save.parent != gone {
+		t.Fatal(f.view.save.parent)
+	}
+	if err := f.service.DeleteNodes([]string{gone}); err != nil {
+		t.Fatal(err)
+	}
+	f.reload()
+	if f.view.save.parent != "" || f.view.save.folders.Selection.Len() != 0 {
+		t.Fatalf("deleted destination kept: %q", f.view.save.parent)
+	}
+	if save, ok := f.tester.AccessByRole(ui.RoleButton, locales.ApiCollectionSave()); !ok || !save.Disabled {
+		t.Fatal("save stays available without a destination")
+	}
+	f.click("Keep")
+	if f.view.save.parent != keep {
+		t.Fatal(f.view.save.parent)
 	}
 }
 

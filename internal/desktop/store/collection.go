@@ -50,7 +50,8 @@ type CollectionRow struct {
 
 // CollectionFolderOption is a folder that can receive a request.
 type CollectionFolderOption struct {
-	ID, Path string
+	// ParentID is "" at the top level.
+	ID, ParentID, Name, Path string
 }
 
 // CollectionStore holds the saved request tree.
@@ -225,19 +226,19 @@ func (s *CollectionStore) rows(includeCollapsed bool) []CollectionRow {
 	return rows
 }
 
-// FolderOptions lists every folder with its path.
+// FolderOptions lists every folder with its path, parents before children.
 func (s *CollectionStore) FolderOptions() []CollectionFolderOption {
 	var options []CollectionFolderOption
-	var visit func(folder *CollectionFolder, prefix string)
-	visit = func(folder *CollectionFolder, prefix string) {
+	var visit func(folder *CollectionFolder, parent, prefix string)
+	visit = func(folder *CollectionFolder, parent, prefix string) {
 		path := prefix + "/" + folder.Name
-		options = append(options, CollectionFolderOption{ID: folder.ID, Path: path})
+		options = append(options, CollectionFolderOption{ID: folder.ID, ParentID: parent, Name: folder.Name, Path: path})
 		for _, child := range sortedFolders(folder.Folders) {
-			visit(child, path)
+			visit(child, folder.ID, path)
 		}
 	}
 	for _, folder := range sortedFolders(s.Tree.Folders) {
-		visit(folder, "")
+		visit(folder, "", "")
 	}
 	return options
 }
