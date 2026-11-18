@@ -124,6 +124,22 @@ func NewTable(source Source, deps TableDependencies) *Table {
 	return t
 }
 
+// Reset drops the rows, the sorter's remembered values, and the selection and
+// scroll state, so the table keeps no entry of a source that was closed. The
+// column layout and sort order stay.
+func (t *Table) Reset() {
+	columns, sort := t.state.List.Columns, t.state.Sort
+	t.state = nui.TableState[int]{}
+	t.state.List.Selected = &t.selectedRow
+	t.state.List.DragSelect = true
+	t.state.List.Columns, t.state.Sort = columns, sort
+	t.selectedRow, t.lastFirst, t.revealing = -1, -1, 0
+	t.sorter = logic.NewTrafficTableSorter()
+	t.rows, t.rowsComputed, t.rowsVersion, t.rowsSort = nil, false, 0, logic.TrafficSort{}
+	t.historyShown = ""
+	t.menuTarget = tableMenuTarget{}
+}
+
 func trafficRowID(id uint64) string { return strconv.FormatUint(id, 10) }
 
 // Rows returns the rows in table order.

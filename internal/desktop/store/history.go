@@ -166,7 +166,7 @@ func (t *HistoryTraffic) Reset() {
 	t.clearBody()
 	t.Key, t.Entries, t.Selected, t.SelectedCount, t.ShowDetailPanel, t.PendingFocusID = "", nil, nil, 0, false, 0
 	t.EntriesVersion++
-	clear(t.Highlights)
+	t.Highlights = map[uint64]string{}
 }
 
 // Delete removes entries from the opened history's view. The file itself is
@@ -239,6 +239,13 @@ func (s *HistoryStore) clearSelection() {
 	s.SelectedKey, s.LoadingHistory, s.LoadingHistoryKey = "", false, ""
 	s.Traffic.Reset()
 	s.Filter.ClearFilters()
+	s.Filter.Release()
+}
+
+// CloseOpened releases the opened history: a load in progress, its entries,
+// details, highlights, and filter results. The list of saved histories stays.
+func (s *HistoryStore) CloseOpened() {
+	s.clearSelection()
 }
 
 // LoadList refreshes the list, newest first. A selected history that no longer
@@ -300,6 +307,9 @@ func (s *HistoryStore) Select(key string) {
 		}
 		s.Filter.ClearSelectedHosts()
 		s.Filter.ClearSelectedProcesses()
+		// Drop the previous history's filter results before the new entries
+		// replace it.
+		s.Filter.Release()
 		s.Traffic.Load(key, slices.DeleteFunc(slices.Clone(entries), func(entry *logic.TrafficEntry) bool { return entry == nil }))
 	})
 }

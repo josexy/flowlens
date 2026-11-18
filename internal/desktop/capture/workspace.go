@@ -279,6 +279,7 @@ func (w *Workspace) syncTabs() {
 	if workspace == nil {
 		return
 	}
+	defer w.releaseClosedHistory()
 	workbench := w.Data.Workbench
 	if selection := workbench.CaptureSelection; selection != w.lastSelection {
 		w.selectItem(selection)
@@ -306,6 +307,26 @@ func (w *Workspace) syncTabs() {
 		workbench.SelectCaptureItem(selection)
 	}
 	w.lastSelection = selection
+}
+
+// releaseClosedHistory frees the opened history once its tab is closed: its
+// entries and details, the history table's rows, and the categories built
+// from it.
+func (w *Workspace) releaseClosedHistory() {
+	history := w.Data.History
+	if history == nil || w.Data.Workspace.FindTab(logic.HistoryTabKey) != nil {
+		return
+	}
+	if history.Traffic.Key == "" && history.SelectedKey == "" && !history.LoadingHistory {
+		return
+	}
+	history.CloseOpened()
+	if w.HistoryTable != nil {
+		w.HistoryTable.Reset()
+	}
+	if strings.HasPrefix(w.category.context, "history:") {
+		w.category.reset()
+	}
 }
 
 func (w *Workspace) detailVisible() bool {

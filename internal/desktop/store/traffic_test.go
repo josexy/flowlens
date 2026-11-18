@@ -2,7 +2,9 @@ package store
 
 import (
 	"errors"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -743,4 +745,83 @@ func TestResetAndDropInOneBatchEndOnTheSnapshot(t *testing.T) {
 	})
 	h.settle()
 	requireIDs(t, h.store.Entries, idRange(10, 2))
+}
+
+func TestLiveSSEAppendsChunksWithoutCopyingTheBody(t *testing.T) {
+	const (
+		snapshotSize = 1 << 20
+		chunkSize    = 1 << 10
+		chunks       = 1000
+	)
+	snapshot := strings.Repeat("s", snapshotSize)
+	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: snapshot})
+	updates := make([]proxyservice.TrafficLiveUpdate, chunks)
+	var want strings.Builder
+	want.WriteString(snapshot)
+	for i := range updates {
+		text := strings.Repeat(string(rune('a'+i%26)), chunkSize)
+		updates[i] = sseChunk(1, int64(snapshotSize+i*chunkSize), text)
+		want.WriteString(text)
+	}
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for _, update := range updates {
+		h.emit(eventTrafficLiveUpdate, update)
+		h.tick()
+	}
+	runtime.ReadMemStats(&after)
+
+	if h.store.BodyView.ResponseBody != want.String() {
+		t.Fatalf("body has %d bytes, want the %d-byte concatenation", len(h.store.BodyView.ResponseBody), want.Len())
+	}
+	// Copying the body on every chunk would allocate over 1 GiB here. Apart
+	// from seeding and growing the builder (a few times the final body), each
+	// chunk must cost a bounded multiple of its own size.
+	allocated := after.TotalAlloc - before.TotalAlloc
+	seed := uint64(4 * (snapshotSize + chunks*chunkSize))
+	if perChunk := (max(allocated, seed) - seed) / chunks; perChunk > 16*chunkSize {
+		t.Fatalf("allocated %d bytes for %d chunks (%d per chunk beyond the seed)", allocated, chunks, perChunk)
+	}
+}
+
+func TestEvictionForgetsHighlights(t *testing.T) {
+	h := newTrafficHarness(t, entryRange(1, 1))
+	h.store.SetHighlight(1, "red")
+	for id := uint64(2); id <= TrafficEntryCap+2; id++ {
+		h.store.AddOrUpdate(trafficEntry(id))
+	}
+	h.store.SetHighlight(TrafficEntryCap+2, "blue")
+	h.tick()
+
+	if h.store.holdsEntry(1) {
+		t.Fatal("entry 1 should have left the window")
+	}
+	if _, ok := h.store.Highlights[1]; ok {
+		t.Fatal("highlight of an evicted entry was kept")
+	}
+	if h.store.Highlights[TrafficEntryCap+2] != "blue" {
+		t.Fatalf("highlight of a shown entry was removed: %v", h.store.Highlights)
+	}
+}
+
+func TestHeldWindowKeepsHighlightsOfShownEntries(t *testing.T) {
+	h := newTrafficHarness(t, entryRange(1, TrafficEntryCap))
+	h.store.SetHighlight(1, "red")
+	h.store.PauseLiveEviction()
+	for id := uint64(TrafficEntryCap + 1); id <= 3*TrafficEntryCap; id++ {
+		h.store.AddOrUpdate(trafficEntry(id))
+		if id%1000 == 0 {
+			h.tick()
+		}
+	}
+	h.tick()
+	if h.store.Highlights[1] != "red" {
+		t.Fatal("highlight of an entry shown in the held window was removed")
+	}
+	h.store.ResumeLiveEviction()
+	if _, ok := h.store.Highlights[1]; ok {
+		t.Fatal("highlight was kept after the held window released its entry")
+	}
 }

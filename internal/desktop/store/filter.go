@@ -169,6 +169,15 @@ func (f *FilterStore) ToggleProcess(key string) {
 func (f *FilterStore) ClearSelectedProcesses() { f.SelectedProcessKeys = nil }
 
 // ClearFilters returns every filter to its default.
+// Release drops the computed lists and remembered results, so the filter keeps
+// no entry of a source that was closed. The next read recomputes them.
+func (f *FilterStore) Release() {
+	f.computed = false
+	f.base, f.filtered = nil, nil
+	f.baseMatches, f.categoryMatch = nil, nil
+	f.version++
+}
+
 func (f *FilterStore) ClearFilters() {
 	f.SearchText, f.ActiveTab = "", logic.TabAll
 	f.SelectedHosts, f.SelectedProcessKeys = nil, nil

@@ -74,3 +74,26 @@ func TestFilterTabHidesCompletedNonMatchingEntry(t *testing.T) {
 		t.Fatal("no content type yet")
 	}
 }
+
+func TestFilterReleaseDropsEveryEntryReference(t *testing.T) {
+	entries := entryRange(1, 3)
+	version := uint64(1)
+	filters := NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return entries, version })
+	filters.SelectedHosts = []string{entries[0].Host}
+	if len(filters.Filtered()) == 0 || len(filters.Base()) != 3 {
+		t.Fatal("filter did not compute")
+	}
+	before := filters.Version()
+
+	entries, version = nil, 2
+	filters.Release()
+	if filters.base != nil || filters.filtered != nil || len(filters.baseMatches) != 0 || len(filters.categoryMatch) != 0 {
+		t.Fatal("released filter still references entries")
+	}
+	if len(filters.Base()) != 0 || len(filters.Filtered()) != 0 {
+		t.Fatal("released filter returned entries of the closed source")
+	}
+	if filters.Version() == before {
+		t.Fatal("release did not change the filter version")
+	}
+}

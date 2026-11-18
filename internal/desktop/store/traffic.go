@@ -155,6 +155,7 @@ type TrafficStore struct {
 	liveCursorEntry uint64
 	liveSSEOffset   int64
 	liveSSEDecoder  *utf8StreamDecoder
+	liveSSEBody     *strings.Builder // the published live SSE body, appended per chunk
 	liveSSEReady    bool
 	liveWSCount     int
 	liveRecovering  bool
@@ -394,6 +395,7 @@ func (s *TrafficStore) resetLiveReconciliation() {
 	s.liveCursorEntry = 0
 	s.liveSSEOffset = 0
 	s.liveSSEDecoder = &utf8StreamDecoder{}
+	s.liveSSEBody = nil
 	s.liveSSEReady = false
 	s.liveWSCount = 0
 	s.liveRecovering = false
@@ -402,6 +404,9 @@ func (s *TrafficStore) resetLiveReconciliation() {
 func (s *TrafficStore) initLiveCursors(entryID uint64, view *proxyservice.TrafficBodyView) {
 	s.liveCursorEntry = entryID
 	s.liveSSEDecoder = &utf8StreamDecoder{}
+	// Seeded from the snapshot by the first SSE chunk, so bodies that never
+	// stream are not copied.
+	s.liveSSEBody = nil
 	s.liveSSEReady = !view.ResponseBodyBinary
 	s.liveSSEOffset = 0
 	if s.liveSSEReady {
@@ -420,10 +425,24 @@ func (s *TrafficStore) prepareBinarySSESnapshot(view *proxyservice.TrafficBodyVi
 	decoded := s.liveSSEDecoder.decode([]byte(view.ResponseBody))
 	s.liveSSEOffset = int64(len(view.ResponseBody))
 	s.liveSSEReady = true
+	s.liveSSEBody = &strings.Builder{}
+	s.liveSSEBody.WriteString(decoded)
 	copied := *view
-	copied.ResponseBody = decoded
+	copied.ResponseBody = s.liveSSEBody.String()
 	copied.ResponseBodyBinary = false
 	return &copied
+}
+
+// liveSSEBodyFor returns the builder holding current, seeding a new one when
+// the published body is not the builder's. Comparing with the builder's own
+// string is constant time while the two share their bytes.
+func (s *TrafficStore) liveSSEBodyFor(current string) *strings.Builder {
+	if s.liveSSEBody != nil && s.liveSSEBody.String() == current {
+		return s.liveSSEBody
+	}
+	s.liveSSEBody = &strings.Builder{}
+	s.liveSSEBody.WriteString(current)
+	return s.liveSSEBody
 }
 
 func (s *TrafficStore) scheduleLiveFlush(delay time.Duration) {
@@ -494,8 +513,7 @@ func (s *TrafficStore) applyLive(view *proxyservice.TrafficBodyView, sse, ws []p
 		if wasBinary && !next.ResponseBodyBinary {
 			changed = true
 		}
-		var body strings.Builder
-		body.WriteString(next.ResponseBody)
+		body := s.liveSSEBodyFor(next.ResponseBody)
 		for _, update := range sse {
 			chunk := update.Chunk
 			start := *update.Offset
@@ -794,12 +812,13 @@ func (s *TrafficStore) mergeRecoveredSnapshot(snapshot normalizedSnapshot) {
 		}
 		recovered = append(recovered, current)
 	}
+	var evicted uint64
 	if over := len(recovered) - TrafficEntryCap; over > 0 {
-		s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, recovered[over-1].ID)
+		evicted = recovered[over-1].ID
 		recovered = recovered[over:]
 	}
-	s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, snapshot.evicted)
 	s.Entries = recovered
+	s.advanceEviction(evicted, snapshot.evicted)
 	s.entriesChanged()
 	s.rebuildIndex()
 	s.reconcileSelected()
@@ -927,6 +946,27 @@ func bufferInitialPatch(buffer *initialTrafficBuffer, patch *logic.TrafficPatch)
 	buffer.patches.Set(patch.TrafficID, patches)
 }
 
+// advanceEviction moves the eviction watermark past evicted IDs and forgets
+// the highlights of entries that left the window. Call it after Entries no
+// longer holds the evicted entries.
+func (s *TrafficStore) advanceEviction(evicted ...uint64) {
+	s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, evicted...)
+	for id := range s.Highlights {
+		// A held window can still show entries at or below the watermark, and
+		// the watermark can pass an entry before the window lets it go.
+		if logic.IsTrafficEntryEvicted(id, s.evictedThrough) && !s.holdsEntry(id) {
+			delete(s.Highlights, id)
+		}
+	}
+}
+
+func (s *TrafficStore) holdsEntry(id uint64) bool {
+	_, found := slices.BinarySearchFunc(s.Entries, id, func(entry *logic.TrafficEntry, id uint64) int {
+		return cmp.Compare(entry.ID, id)
+	})
+	return found
+}
+
 func (s *TrafficStore) outsideWindow(entry *logic.TrafficEntry) bool {
 	return logic.IsTrafficEntryEvicted(entry.ID, s.evictedThrough)
 }
@@ -979,8 +1019,9 @@ func (s *TrafficStore) applyBatch(batch []*logic.TrafficEntry) {
 	}
 	reindex := needsSort
 	if over := len(s.Entries) - TrafficEntryCap; over > 0 {
-		s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, s.Entries[over-1].ID)
+		evicted := s.Entries[over-1].ID
 		s.Entries = slices.Clone(s.Entries[over:])
+		s.advanceEviction(evicted)
 		reindex = true
 		s.EvictionVersion++
 	}
@@ -1023,7 +1064,7 @@ func (s *TrafficStore) AddOrUpdate(entry *logic.TrafficEntry) {
 	}
 	if evicted := setBoundedEntry(s.pending, entry); evicted != nil {
 		if _, retained := s.index[evicted.ID]; !retained {
-			s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, evicted.ID)
+			s.advanceEviction(evicted.ID)
 		}
 	}
 	if s.stopBatch != nil {
@@ -1069,7 +1110,7 @@ func (s *TrafficStore) queuePaused(entry *logic.TrafficEntry) {
 		return
 	}
 	if evicted := setBoundedEntry(s.pausedEntries, entry); evicted != nil {
-		s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, evicted.ID)
+		s.advanceEviction(evicted.ID)
 	}
 }
 
@@ -1287,8 +1328,8 @@ func (s *TrafficStore) loadInitialSnapshot(generation uint64, buffer *initialTra
 }
 
 func (s *TrafficStore) finishInitialSnapshot(generation uint64, buffer *initialTrafficBuffer, snapshot normalizedSnapshot) {
-	s.evictedThrough = logic.AdvanceEvictionWatermark(s.evictedThrough, snapshot.evicted, buffer.evicted)
 	s.Entries = slices.DeleteFunc(snapshot.entries, func(entry *logic.TrafficEntry) bool { return buffer.deletedIDs.Has(entry.ID) })
+	s.advanceEviction(snapshot.evicted, buffer.evicted)
 	s.entriesChanged()
 	s.rebuildIndex()
 
