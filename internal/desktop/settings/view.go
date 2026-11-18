@@ -158,6 +158,13 @@ func (v *View) syncDirty() {
 	if draft == nil || base == nil || v.committing {
 		return
 	}
+	// The main window can persist language and theme mode while this editor is
+	// open. SettingsStore updates Current and Draft for those external changes;
+	// advance the matching baseline fields so they do not appear as draft edits.
+	if current := settings.Current; current != nil && current.CommonConfig != nil && base.CommonConfig != nil {
+		base.CommonConfig.Language = current.CommonConfig.Language
+		base.CommonConfig.ThemeMode = current.CommonConfig.ThemeMode
+	}
 	mark := func(section store.SettingsSection, left, right any) {
 		settings.SetSectionDirty(section, !reflect.DeepEqual(left, right))
 	}

@@ -316,6 +316,54 @@ func TestSixSectionsAndDraftsSurviveNavigation(t *testing.T) {
 	}
 }
 
+func TestExternalLanguageAndThemeChangesDoNotDirtyOpenDraft(t *testing.T) {
+	f := newFixture(t)
+	assertDirty := func(want bool) {
+		t.Helper()
+		button, ok := f.tester.AccessByRole(ui.RoleButton, locales.SettingsSave())
+		if !ok || button.Disabled == want || f.view.Dirty() != want {
+			t.Fatalf("want dirty=%v, view=%v, save=%+v", want, f.view.Dirty(), button)
+		}
+	}
+
+	if err := f.data.Settings.SetThemeMode("dark"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	assertDirty(false)
+	if err := f.data.Settings.SetLanguage("zh"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	assertDirty(false)
+
+	fontSize := f.draft().CommonConfig.AppFontSize
+	f.draft().CommonConfig.AppFontSize++
+	f.settle()
+	assertDirty(true)
+
+	if err := f.data.Settings.SetThemeMode("light"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.data.Settings.SetLanguage("en"); err != nil {
+		t.Fatal(err)
+	}
+	f.settle()
+	assertDirty(true)
+	if f.draft().CommonConfig.AppFontSize != fontSize+1 {
+		t.Fatal("external changes overwrote the settings draft")
+	}
+
+	f.click(locales.SettingsSave())
+	saved, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.CommonConfig.ThemeMode != "light" || saved.CommonConfig.Language != "en" || saved.CommonConfig.AppFontSize != fontSize+1 {
+		t.Fatalf("save lost external or draft settings: %+v", saved.CommonConfig)
+	}
+}
+
 func TestCloseConfirmsWhenDirty(t *testing.T) {
 	f := newFixture(t)
 	if !f.view.CloseRequested() {
