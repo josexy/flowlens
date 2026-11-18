@@ -25,6 +25,7 @@ Without Task, run `go tool mygo dev`. The Taskfile builds Windows and Linux with
 | `task run` | Build with MyGo and launch once |
 | `task package` | Build release packages for the current platform |
 | `task test` | Run all Go tests |
+| `task test:race` | Run the concurrency-heavy packages, or those passed after `--`, with the race detector |
 | `task verify` | Run formatting, lint, UI lifecycle, catalog, and test checks |
 | `task lint:go` / `task lint:go:fix` | Check Go lint and formatting, or apply safe fixes |
 | `task vet:ui` | Check native UI lifecycle rules |
@@ -47,10 +48,11 @@ Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#
 task verify
 ```
 
-Changes to Python Workers must run the integration tests with a real Python 3 interpreter rather than skipping them. Concurrency-sensitive changes should also run the race detector, which needs cgo:
+Changes to Python Workers must run the integration tests with a real Python 3 interpreter rather than skipping them. Concurrency-sensitive changes should also run the race detector. On Windows and Linux it needs cgo and a C compiler; on macOS it needs nothing beyond the usual build toolchain:
 
 ```shell
-CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service
+task test:race                                       # desktop, process attribution, proxy service
+task test:race -- ./internal/services/proxy_service  # only the packages you changed
 ```
 
 ## Pull Requests
