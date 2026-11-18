@@ -50,7 +50,7 @@ type categoryView struct {
 	hostView      categoryViewport
 	processView   categoryViewport
 	structureView categoryViewport
-	tree          nui.TreeState
+	tree          *nui.TreeState
 	treeDirty     bool
 	treeSearch    string
 	treeItems     map[string]*categoryTreeItem
@@ -117,9 +117,11 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 func (v *categoryView) reset() {
 	v.context, v.version, v.computed, v.activeLeaf = "", 0, time.Time{}, ""
 	v.selectedHosts, v.selectedProcessKeys = nil, nil
+	v.expanded = map[string]bool{}
 	v.entries, v.roots = nil, nil
-	v.tree.SetNodes(nil)
-	v.tree.Selection.Clear()
+	// Replace the pointer: an already-built list may still use the old state
+	// during this frame's layout. Hidden sidebars release it after that frame.
+	v.tree = &nui.TreeState{}
 	v.treeItems, v.visible, v.treeDirty = nil, nil, true
 }
 
@@ -139,6 +141,9 @@ func (v *categoryView) facets(filter *store.FilterStore) ([]logic.HostSummaryIte
 // CategorySidebar builds the Categories section's sidebar.
 func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 	view := &w.category
+	if view.tree == nil {
+		view.tree = &nui.TreeState{}
+	}
 	if view.expanded == nil {
 		view.sections = []string{sectionHost, sectionProcess, sectionStructure}
 		view.expanded = map[string]bool{}
@@ -334,7 +339,7 @@ func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *ca
 		return n
 	}
 	view.structureView.build(c.Key("structure"), &view.scroll, categoryContentHeight(theme, count(roots), 0), func(height float32) {
-		nui.Tree(c, theme, &view.tree, nui.TreeOptions{
+		nui.Tree(c, theme, view.tree, nui.TreeOptions{
 			Label:  locales.CategoryTitle() + ": " + locales.CategoryStructure(),
 			Height: height, Size: nui.MD, EmptyText: locales.CategoryEmptyFiltered(),
 			Style:             view.structureView.style,

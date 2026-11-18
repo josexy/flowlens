@@ -92,7 +92,13 @@ func (s *SSEView) resetList() {
 	s.rows = widgets.NewRowActivator(&s.table.List, &s.table.Selection)
 }
 
-func (s *SSEView) closeDetail() { s.open, s.selected = false, nil }
+func (s *SSEView) closeDetail() {
+	s.open, s.selected = false, nil
+	s.formatted = ""
+	if s.detailView.Text() != "" {
+		s.detailView = widgets.NewCodeView("plaintext", true)
+	}
+}
 
 // update parses what arrived since the last call.
 func (s *SSEView) update(content BodyContent) {

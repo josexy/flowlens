@@ -111,7 +111,7 @@ func NewPanel(data Data, deps Dependencies) *Panel {
 	}
 }
 
-// Release drops every viewer's data when the owning history closes or is
+// Release drops every viewer's data when its selection closes or is
 // replaced. Cancel decoding/parsing before replacing the viewers so a posted
 // background result cannot repopulate a hidden panel. Tab choices stay.
 func (p *Panel) Release() {
@@ -119,7 +119,14 @@ func (p *Panel) Release() {
 	p.responseBody.release()
 	next := NewPanel(p.data, p.deps)
 	next.OnClose = p.OnClose
+	next.entryID = p.entryID
 	next.requestTab, next.responseTab = p.requestTab, p.responseTab
+	next.requestSort, next.responseSort, next.trailerSort = p.requestSort, p.responseSort, p.trailerSort
+	next.requestBody.copyPreferences(p.requestBody)
+	next.responseBody.copyPreferences(p.responseBody)
+	next.requestRaw.view.SetWordWrap(p.requestRaw.view.WordWrap())
+	next.responseRaw.view.SetWordWrap(p.responseRaw.view.WordWrap())
+	next.messages.filter = p.messages.filter
 	*p = *next
 }
 

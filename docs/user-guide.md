@@ -65,6 +65,8 @@ In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on
 
 Enter, a double-click, or the row menu's **Show** opens the detail panel. **Close details** hides it, keeps the selection, and returns focus to the table. Changing the selection updates an open panel but does not reopen a closed one.
 
+Clearing or restarting a capture releases its detail-view, table, filter, and category caches, including hidden views. Closing details or selecting another record releases the previous record's viewer caches; opening details again reloads the selected record. Stopping the proxy keeps the captured records available. Memory can decrease after garbage collection; the Go `Sys` statistic also includes address space whose physical memory has already been returned to the operating system.
+
 Capture, history, and row context menus export all or selected entries as CSV or HAR. Row menus can also export a request, response, headers, body, or the combined exchange.
 
 ### Categories

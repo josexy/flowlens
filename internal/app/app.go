@@ -421,6 +421,7 @@ func openMainWindow(started *launched, shown func()) {
 	})
 	detail.OnClose = captureWorkspace.Table.CloseDetails
 	captureWorkspace.Detail = detail.Build
+	captureWorkspace.ReleaseDetail = detail.Release
 	historyDetail := inspect.NewPanel(store.HistoryDetailData{History: data.History}, inspect.Dependencies{
 		Runtime: data.Runtime, Settings: data.Settings, Notifier: &app.Notifier, Icons: icons,
 		PickSavePath: func(filename string) (string, error) {
