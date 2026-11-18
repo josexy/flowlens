@@ -101,7 +101,7 @@ Process attribution is enabled by default under `Settings > Proxy`. It applies o
 
 ## History and HAR
 
-Saved capture sessions appear under History and survive restarts.
+Saved capture sessions appear under History and survive restarts. Only the history open in the history tab is kept in memory: opening another history replaces it, and closing the history tab frees it and returns to the capture. Reopening a history shows the same entries.
 
 **Import.** Use **Import HAR** beside the History refresh button, or drop `.har` files onto the capture or history table. Files are imported one at a time, each into a new history named after the file; importing the same file again creates another history. The first imported history opens in the history tab. The result reports imported files and entries, skipped entries, unavailable bodies, and failed files. Canceling the file picker does nothing.
 
@@ -228,6 +228,8 @@ Logs can contain hosts, paths, API Collection names, and local file paths. Revie
 ### Local Storage
 
 FlowLens keeps `flowlens.db`, history, API Collection files (`api_collections/files`), logs, and caches (including `cache/process-icons`) in the operating system's user configuration directory. On Unix-like systems, its directories are owner-only (`0700`) and its database, history, log, and body-cache files are `0600`. Windows relies on the permissions of the user's configuration directory.
+
+Bodies cached during a capture session are removed once they are no longer needed: after **Save and Restart** or **Discard and Restart**, after the final save when FlowLens quits, and at the next start if FlowLens did not quit cleanly or the final save failed. Saved histories and cached process icons stay.
 
 Storage cleanup removes either caches alone, or caches together with the current capture and readable saved history. Cache-only cleanup first saves a non-empty current capture to history. History files in unsupported or unknown formats are kept. Cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
 
