@@ -430,6 +430,7 @@ func openMainWindow(started *launched, shown func()) {
 	})
 	historyDetail.OnClose = captureWorkspace.HistoryTable.CloseDetails
 	captureWorkspace.HistoryDetail = historyDetail.Build
+	captureWorkspace.ReleaseHistoryDetail = historyDetail.Release
 	collections := collection.New(data, &app.Notifier, &app.Confirm)
 	requestEditor := editor.New(data, editor.Host{
 		SaveTab:        collections.SaveTab,

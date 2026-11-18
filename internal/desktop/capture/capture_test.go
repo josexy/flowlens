@@ -1969,7 +1969,10 @@ func TestCategoryStructureFollowsSelections(t *testing.T) {
 
 func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f := newHistoryFixture(t, entry(1, "live.test"))
+	var released int
+	f.workspace.ReleaseHistoryDetail = func() { released++ }
 	f.click("session one")
+	opened := released
 	f.requireText("saved.test")
 	f.showCategories = true
 	f.settle()
@@ -1980,6 +1983,9 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)
 	f.settle()
+	if released != opened+1 {
+		t.Fatalf("closing history released detail %d times, want once", released-opened)
+	}
 	history := f.data.History
 	if history.Traffic.Key != "" || history.Traffic.Entries != nil || len(history.Filter.Base()) != 0 {
 		t.Fatalf("closed history kept its entries: key %q entries %d", history.Traffic.Key, len(history.Traffic.Entries))
@@ -2004,5 +2010,30 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f.requireText("saved.test")
 	if len(f.workspace.HistoryTable.Rows()) != 2 {
 		t.Fatalf("reopened history rows = %d", len(f.workspace.HistoryTable.Rows()))
+	}
+}
+
+func TestReplacingAndClearingHistoryReleaseHiddenDetails(t *testing.T) {
+	f := newHistoryFixture(t)
+	var released int
+	f.workspace.ReleaseHistoryDetail = func() { released++ }
+	f.click("session one")
+	opened := released
+	// Switching histories need not show the previous detail panel again.
+	f.data.History.Traffic.Load("k2", []*logic.TrafficEntry{entry(1, "replacement.test")})
+	f.settle()
+	if released != opened+1 {
+		t.Fatal("replacing a history did not release its details")
+	}
+	// Deletion can clear the store before the tab is closed.
+	f.data.History.CloseOpened()
+	f.settle()
+	if released != opened+2 || len(f.workspace.HistoryTable.Rows()) != 0 {
+		t.Fatal("clearing a history kept hidden view state")
+	}
+	f.data.Workspace.CloseTab(logic.HistoryTabKey)
+	f.settle()
+	if released != opened+2 {
+		t.Fatal("empty frames repeatedly released the detail panel")
 	}
 }

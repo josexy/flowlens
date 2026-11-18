@@ -3,8 +3,10 @@ package proxyservice
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -257,7 +259,6 @@ func TestFrontendEventBatcherDoesNotWaitForUnclaimedBatches(t *testing.T) {
 	recorder := newClaimingBatchRecorder(false)
 	batcher := newFrontendEventBatcher(frontendEventBatcherOptions{
 		FlushInterval: time.Millisecond,
-		ClaimTimeout:  time.Hour,
 	}, recorder.emit)
 	t.Cleanup(batcher.Close)
 
@@ -277,7 +278,6 @@ func TestFrontendEventBatcherHoldsBatchesWhileClaimed(t *testing.T) {
 		FlushInterval:    time.Millisecond,
 		MaxPendingEvents: 4,
 		MaxPendingBytes:  1 << 20,
-		ClaimTimeout:     time.Hour,
 	}, recorder.emit)
 	t.Cleanup(batcher.Close)
 
@@ -312,25 +312,44 @@ func TestFrontendEventBatcherHoldsBatchesWhileClaimed(t *testing.T) {
 	}
 }
 
-func TestFrontendEventBatcherResumesAfterClaimTimeout(t *testing.T) {
-	recorder := newClaimingBatchRecorder(true)
-	batcher := newFrontendEventBatcher(frontendEventBatcherOptions{
-		FlushInterval: time.Millisecond,
-		ClaimTimeout:  100 * time.Millisecond,
-	}, recorder.emit)
-	t.Cleanup(batcher.Close)
-
-	if err := batcher.Publish("traffic:entry", 1); err != nil {
-		t.Fatalf("publish first: %v", err)
-	}
-	recorder.next(t, time.Second)
-	if err := batcher.Publish("traffic:entry", 2); err != nil {
-		t.Fatalf("publish second: %v", err)
-	}
-	// The first batch is never released.
-	recorder.none(t, 50*time.Millisecond)
-	if got := eventIDs(recorder.next(t, time.Second)); len(got) != 1 || got[0] != 2 {
-		t.Fatalf("batch after timeout = %v, want [2]", got)
+func TestFrontendEventBatcherKeepsClaimsBoundedDuringLongStalls(t *testing.T) {
+	for _, byteBound := range []bool{false, true} {
+		t.Run(fmt.Sprintf("byteBound=%t", byteBound), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				recorder := newClaimingBatchRecorder(true)
+				options := frontendEventBatcherOptions{FlushInterval: time.Millisecond, MaxPendingEvents: 4, MaxPendingBytes: 1 << 20}
+				wantPending := 4
+				if byteBound {
+					options.MaxPendingEvents = 100
+					options.MaxPendingBytes = 2 * (len("traffic:entry") + frontendEventOverhead + estimateFrontendEventSize(1))
+					wantPending = 2
+				}
+				batcher := newFrontendEventBatcher(options, recorder.emit)
+				defer batcher.Close()
+				if err := batcher.Publish("traffic:entry", 0); err != nil {
+					t.Fatal(err)
+				}
+				recorder.next(t, time.Second)
+				release := <-recorder.releases
+				for round := range 3 {
+					for i := range 10 {
+						_ = batcher.Publish("traffic:entry", round*10+i+1)
+					}
+					// Each interval exceeds the former two-second escape hatch.
+					recorder.none(t, 3*time.Second)
+				}
+				release()
+				batch := recorder.next(t, time.Second)
+				if len(batch.Events) != wantPending || batch.Dropped["traffic:entry"] != uint64(30-wantPending) {
+					t.Fatalf("pending=%d dropped=%v, want %d and %d", len(batch.Events), batch.Dropped, wantPending, 30-wantPending)
+				}
+				for i, id := range eventIDs(batch) {
+					if id != i+1 {
+						t.Fatalf("event %d = %d, want publication order", i, id)
+					}
+				}
+			})
+		})
 	}
 }
 
@@ -338,7 +357,6 @@ func TestFrontendEventBatcherCloseReturnsWhileWaitingForRelease(t *testing.T) {
 	recorder := newClaimingBatchRecorder(true)
 	batcher := newFrontendEventBatcher(frontendEventBatcherOptions{
 		FlushInterval: time.Millisecond,
-		ClaimTimeout:  time.Hour,
 	}, recorder.emit)
 
 	if err := batcher.Publish("traffic:entry", 1); err != nil {
@@ -359,7 +377,12 @@ func TestFrontendEventBatcherCloseReturnsWhileWaitingForRelease(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Close blocked on an unreleased batch")
 	}
-	if got := eventIDs(recorder.next(t, time.Second)); len(got) != 1 || got[0] != 2 {
-		t.Fatalf("final batch = %v, want [2]", got)
+	select {
+	case batch := <-recorder.batches:
+		t.Fatalf("shutdown queued another batch behind an abandoned claim: %+v", batch)
+	default:
+	}
+	if batcher.hasPending() {
+		t.Fatal("shutdown kept pending payloads alive")
 	}
 }

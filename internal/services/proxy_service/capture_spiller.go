@@ -38,10 +38,16 @@ func (s *ProxyService) waitCaptureSpiller() {
 	}
 }
 
-// wakeCaptureSpiller asks the spiller to run once the window has grown by a
-// batch. It never blocks.
-func (s *ProxyService) wakeCaptureSpiller() {
-	if s.spillWake == nil || s.trafficEntries.Len() <= captureMemoryWindow+captureSpillBatch {
+// wakeSettledCaptureSpiller also spills a single old exchange that just
+// finished. Waiting for a full batch here would retain it until new traffic.
+func (s *ProxyService) wakeSettledCaptureSpiller() {
+	s.wakeCaptureSpiller(captureMemoryWindow)
+}
+
+// wakeCaptureSpiller coalesces wakeups once memory exceeds limit. It never
+// performs disk I/O on the producer or registration goroutine.
+func (s *ProxyService) wakeCaptureSpiller(limit int) {
+	if s.spillWake == nil || s.trafficEntries.Len() <= limit {
 		return
 	}
 	select {

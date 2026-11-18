@@ -15,10 +15,7 @@ import (
 const BatchedAppEventName = "app:event-batch"
 
 const (
-	// frontendEventClaimTimeout bounds how long the batcher waits for a claimed
-	// batch to be released, in case its consumer drops it without releasing.
-	frontendEventClaimTimeout = 2 * time.Second
-	frontendEventOverhead     = 32
+	frontendEventOverhead = 32
 	// frontendEventMaxSizeDepth bounds the payload walk. Event payloads are
 	// shallow, so anything deeper is counted as a small constant.
 	frontendEventMaxSizeDepth = 16
@@ -46,8 +43,8 @@ type FrontendEventBatch struct {
 }
 
 // Claim tells the batcher that the batch is still being applied: no further
-// batch is emitted until every claim is released, the batcher stops, or a
-// safety timeout passes. Events published meanwhile stay within the pending
+// batch is emitted until every claim is released. Shutdown ends the wait
+// without delivering another batch. Events published meanwhile stay within the pending
 // limits or are dropped and counted. Claim must be called while the batch is
 // being emitted. It is safe on a batch the batcher did not emit, and release
 // is safe to call more than once.
@@ -93,8 +90,6 @@ type frontendEventBatcherOptions struct {
 	FlushInterval    time.Duration
 	MaxPendingEvents int
 	MaxPendingBytes  int
-	// ClaimTimeout bounds the wait for a claimed batch to be released.
-	ClaimTimeout time.Duration
 }
 
 type frontendEventBatcher struct {
@@ -125,9 +120,6 @@ func newFrontendEventBatcher(
 	}
 	if options.MaxPendingBytes <= 0 {
 		options.MaxPendingBytes = 4 << 20
-	}
-	if options.ClaimTimeout <= 0 {
-		options.ClaimTimeout = frontendEventClaimTimeout
 	}
 	if emit == nil {
 		emit = func(FrontendEventBatch) {}
@@ -245,6 +237,11 @@ func (b *frontendEventBatcher) Close() {
 		b.mu.Unlock()
 		close(b.stop)
 		<-b.done
+		// An abandoned UI claim must not keep pending payloads alive after
+		// shutdown, or cause one more batch to enter the stalled UI queue.
+		b.mu.Lock()
+		b.pending, b.dropped, b.pendingBytes = nil, nil, 0
+		b.mu.Unlock()
 	})
 }
 
@@ -267,7 +264,6 @@ func (b *frontendEventBatcher) run() {
 			select {
 			case <-timer.C:
 				if !b.waitForRelease(b.emitPending()) {
-					b.emitPending()
 					return
 				}
 			case <-b.stop:
@@ -315,22 +311,18 @@ func (b *frontendEventBatcher) emitPending() *frontendBatchClaim {
 	return batch.claim
 }
 
-// waitForRelease waits until a claimed batch is released or the claim timeout
-// passes. It returns false when the batcher is stopping.
+// waitForRelease waits until every consumer releases the batch. Only shutdown
+// may abandon a claim; elapsed time does not mean the UI consumed its payload.
 func (b *frontendEventBatcher) waitForRelease(claim *frontendBatchClaim) bool {
 	if claim == nil || !claim.isActive() {
 		return true
 	}
-	timer := time.NewTimer(b.options.ClaimTimeout)
-	defer timer.Stop()
 	for {
 		select {
 		case <-claim.idle:
 			if !claim.isActive() {
 				return true
 			}
-		case <-timer.C:
-			return true
 		case <-b.stop:
 			return false
 		}

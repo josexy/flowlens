@@ -766,7 +766,7 @@ func (s *ProxyService) newTrafficEntry(entry TrafficEntry) *TrafficEntry {
 	s.captureLifecycleMu.RLock()
 	entry.ID = atomic.AddUint64(&s.nextID, 1)
 	entry.captureGeneration = s.captureGeneration
-	entry.lifecycle = &trafficEntryLifecycle{}
+	entry.lifecycle = &trafficEntryLifecycle{onSettled: s.wakeSettledCaptureSpiller}
 	s.captureLifecycleMu.RUnlock()
 	return &entry
 }
@@ -4574,7 +4574,7 @@ func (s *ProxyService) storeTrafficSnapshot(
 		return nil
 	}
 	if entry.lifecycle == nil {
-		entry.lifecycle = &trafficEntryLifecycle{}
+		entry.lifecycle = &trafficEntryLifecycle{onSettled: s.wakeSettledCaptureSpiller}
 	}
 	// The caller may keep updating its working copy as the exchange advances.
 	// Store an immutable snapshot. Each cloner owns the collections changed at
@@ -4596,7 +4596,7 @@ func (s *ProxyService) storeTrafficSnapshot(
 	s.trafficAttributionMu.Unlock()
 	s.markHistoryDirty()
 	if inserted {
-		s.wakeCaptureSpiller()
+		s.wakeCaptureSpiller(captureMemoryWindow + captureSpillBatch)
 		atomic.AddInt64(&s.trafficEntries.Statistics.Total, 1)
 		switch entry.Type {
 		case "http", "https":

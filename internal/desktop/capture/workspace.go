@@ -59,6 +59,8 @@ type Workspace struct {
 	HistoryTable *Table
 	// HistoryDetail, when set, builds the detail panel of a saved session.
 	HistoryDetail func(c *ui.Context, theme nui.Theme)
+	// ReleaseHistoryDetail drops the saved session's viewer caches and jobs.
+	ReleaseHistoryDetail func()
 	// TabBar, when set, builds the workspace tab strip.
 	TabBar func(c *ui.Context, theme nui.Theme)
 	// RequestTab, when set, builds a request editor tab.
@@ -74,6 +76,7 @@ type Workspace struct {
 	lastSelection      string
 	lastActive         string
 	historyListSeen    uint64
+	historyDetailKey   string
 	toolbar            toolbarState
 	alias              aliasDialog
 	// captureMenu, historyMenus and categoryMenus are the states of the
@@ -279,7 +282,7 @@ func (w *Workspace) syncTabs() {
 	if workspace == nil {
 		return
 	}
-	defer w.releaseClosedHistory()
+	defer w.syncHistoryData()
 	workbench := w.Data.Workbench
 	if selection := workbench.CaptureSelection; selection != w.lastSelection {
 		w.selectItem(selection)
@@ -309,23 +312,28 @@ func (w *Workspace) syncTabs() {
 	w.lastSelection = selection
 }
 
-// releaseClosedHistory frees the opened history once its tab is closed: its
-// entries and details, the history table's rows, and the categories built
-// from it.
-func (w *Workspace) releaseClosedHistory() {
+// syncHistoryData releases view state when a history closes or is replaced,
+// including when deletion already cleared its store before the tab closed.
+func (w *Workspace) syncHistoryData() {
 	history := w.Data.History
-	if history == nil || w.Data.Workspace.FindTab(logic.HistoryTabKey) != nil {
+	if history == nil {
 		return
 	}
-	if history.Traffic.Key == "" && history.SelectedKey == "" && !history.LoadingHistory {
-		return
+	if w.Data.Workspace.FindTab(logic.HistoryTabKey) == nil &&
+		(history.Traffic.Key != "" || history.SelectedKey != "" || history.LoadingHistory) {
+		history.CloseOpened()
 	}
-	history.CloseOpened()
-	if w.HistoryTable != nil {
-		w.HistoryTable.Reset()
-	}
-	if strings.HasPrefix(w.category.context, "history:") {
-		w.category.reset()
+	if key := history.Traffic.Key; key != w.historyDetailKey {
+		w.historyDetailKey = key
+		if w.ReleaseHistoryDetail != nil {
+			w.ReleaseHistoryDetail()
+		}
+		if w.HistoryTable != nil {
+			w.HistoryTable.Reset()
+		}
+		if strings.HasPrefix(w.category.context, "history:") {
+			w.category.reset()
+		}
 	}
 }
 

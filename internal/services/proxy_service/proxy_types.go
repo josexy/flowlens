@@ -185,6 +185,9 @@ type trafficEntryLifecycle struct {
 	// spilled marks an entry moved to the session's spill store: late updates
 	// must not bring it back into memory.
 	spilled atomic.Bool
+	// onSettled is fixed before publication and wakes retention when the last
+	// producer finishes, even if no new traffic will arrive.
+	onSettled func()
 }
 
 // hold registers a producer of the entry and returns its release, which ends
@@ -195,7 +198,13 @@ func (l *trafficEntryLifecycle) hold() (release func()) {
 	}
 	l.pending.Add(1)
 	var once sync.Once
-	return func() { once.Do(func() { l.pending.Add(-1) }) }
+	return func() {
+		once.Do(func() {
+			if l.pending.Add(-1) == 0 && !l.deleted.Load() && !l.spilled.Load() && l.onSettled != nil {
+				l.onSettled()
+			}
+		})
+	}
 }
 
 // settled reports whether no producer can change the entry any more.

@@ -111,6 +111,18 @@ func NewPanel(data Data, deps Dependencies) *Panel {
 	}
 }
 
+// Release drops every viewer's data when the owning history closes or is
+// replaced. Cancel decoding/parsing before replacing the viewers so a posted
+// background result cannot repopulate a hidden panel. Tab choices stay.
+func (p *Panel) Release() {
+	p.requestBody.release()
+	p.responseBody.release()
+	next := NewPanel(p.data, p.deps)
+	next.OnClose = p.OnClose
+	next.requestTab, next.responseTab = p.requestTab, p.responseTab
+	*p = *next
+}
+
 func (p *Panel) copyText(text, success string) {
 	p.clipboard = &text
 	p.deps.Notifier.Success(success)

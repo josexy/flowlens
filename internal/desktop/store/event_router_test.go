@@ -3,6 +3,7 @@ package store
 import (
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/josexy/flowlens/internal/serviceruntime"
@@ -48,6 +49,10 @@ func (p *heldPoster) runNext() {
 }
 
 func TestConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
+	synctest.Test(t, testConnectKeepsAtMostOneBatchWaitingForTheMainThread)
+}
+
+func testConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
 	h := newTrafficHarness(t, nil)
 	bus := serviceruntime.NewBus()
 	poster := &heldPoster{}
@@ -72,7 +77,8 @@ func TestConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
 	if dropped == 0 {
 		t.Fatal("burst beyond the pending bound dropped nothing")
 	}
-	time.Sleep(100 * time.Millisecond)
+	// The real router must keep the claim beyond the old two-second timeout.
+	time.Sleep(10 * time.Second)
 	if got := poster.count(); got != 1 {
 		t.Fatalf("batches waiting for the main thread = %d, want 1", got)
 	}

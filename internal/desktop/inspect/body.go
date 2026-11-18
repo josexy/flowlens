@@ -65,12 +65,23 @@ func NewBodyViewer(deps Dependencies, enableSSE bool) *BodyViewer {
 	}
 }
 
+func (b *BodyViewer) release() {
+	if jobs := b.deps.Runtime.Jobs; jobs != nil {
+		jobs.Cancel(fmt.Sprintf("inspect:image:%p", &b.image))
+		jobs.Cancel(fmt.Sprintf("inspect:sse:%p", b.sse))
+	}
+}
+
 // Active returns the viewing mode on show.
 func (b *BodyViewer) Active() logic.BodyTab { return b.active }
 
 func (b *BodyViewer) set(content BodyContent) {
 	changed := !b.shown || content.Identity != b.content.Identity || content.Body != b.bodyText ||
 		content.Binary != b.content.Binary || content.ContentType != b.content.ContentType
+	streamingText := b.enableSSE && !content.Binary && logic.IsEventStream(content.ContentType)
+	previousBody := b.bodyText
+	grew := streamingText && b.shown && content.Identity == b.content.Identity &&
+		!b.content.Binary && content.ContentType == b.content.ContentType && strings.HasPrefix(content.Body, previousBody)
 	tabs := logic.BodyTabs(content.ContentType, content.Binary, content.Body, b.enableSSE)
 	if !b.shown || !sameTabs(tabs, b.tabs) {
 		b.active = logic.NextBodyTab(b.active, tabs, b.tabs)
@@ -87,7 +98,22 @@ func (b *BodyViewer) set(content BodyContent) {
 		b.image.reset()
 	}
 	b.formatted.SetLanguage(logic.EditorLanguage(b.category))
-	if !content.Binary {
+	if streamingText {
+		if grew {
+			chunk := content.Body[len(previousBody):]
+			// The editor normalizes CR and CRLF to LF. When a chunk splits a
+			// CRLF, its CR already supplied the visible newline.
+			if strings.HasSuffix(previousBody, "\r") && strings.HasPrefix(chunk, "\n") {
+				chunk = chunk[1:]
+			}
+			b.raw.AppendText(chunk)
+		} else {
+			b.raw.SetText(content.Body)
+			// SSE has no Formatted tab. Retaining a second full copy here
+			// would undo the store's incremental body updates.
+			b.formatted.SetText("")
+		}
+	} else if !content.Binary {
 		b.formatted.SetText(logic.FormatBody(content.Body, b.category))
 		b.raw.SetText(content.Body)
 	} else {
