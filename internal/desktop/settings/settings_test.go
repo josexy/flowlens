@@ -364,6 +364,62 @@ func TestExternalLanguageAndThemeChangesDoNotDirtyOpenDraft(t *testing.T) {
 	}
 }
 
+func TestToolbarProxyChangesDoNotDirtyOpenDraft(t *testing.T) {
+	f := newFixture(t)
+	for _, mutate := range []func(*settingservice.ProxyConfig){
+		func(config *settingservice.ProxyConfig) { config.DNSCacheEnabled = true },
+		func(config *settingservice.ProxyConfig) { config.DNSCacheTTLSeconds = 120 },
+	} {
+		if !f.data.Settings.UpdateProxyConfig(mutate, nil) {
+			t.Fatal("UpdateProxyConfig refused")
+		}
+		f.settle()
+		button, ok := f.tester.AccessByRole(ui.RoleButton, locales.SettingsSave())
+		if f.view.Dirty() || !ok || !button.Disabled {
+			t.Fatalf("toolbar change left unsaved changes: %v, save=%+v", f.data.Settings.DirtySections(), button)
+		}
+	}
+
+	f.draft().CommonConfig.AppFontSize++
+	wantSize := f.draft().CommonConfig.AppFontSize
+	f.settle()
+	f.click(locales.SettingsSave())
+	saved, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.ProxyConfig.DNSCacheEnabled || saved.ProxyConfig.DNSCacheTTLSeconds != 120 || saved.CommonConfig.AppFontSize != wantSize {
+		t.Fatalf("save reverted toolbar settings: proxy=%+v, font=%d", saved.ProxyConfig, saved.CommonConfig.AppFontSize)
+	}
+}
+
+func TestFailedSaveKeepsNewerColumnLayout(t *testing.T) {
+	f := newFixture(t)
+	f.data.Settings.SetTrafficColumnLayout([]string{"host", "id"}, map[string]float32{"host": 300})
+	f.settle()
+	f.draft().CommonConfig.AppFontSize++
+	wantSize := f.draft().CommonConfig.AppFontSize
+	f.open(locales.SettingsTabShortcuts())
+	f.click(locales.ShortcutsClearFor(locales.ShortcutsCommandsAppSave()))
+	f.shortcut.fail = errors.New("registration failed")
+	f.click(locales.SettingsSave())
+	if got := f.data.Settings.DirtySections(); !slices.Equal(got, []store.SettingsSection{store.SectionCommon, store.SectionShortcuts}) {
+		t.Fatalf("failed save marked unedited sections: %v", got)
+	}
+
+	f.shortcut.fail = nil
+	f.data.Settings.SetTrafficColumnLayout([]string{"id", "host"}, nil)
+	f.settle()
+	f.click(locales.SettingsSave())
+	saved, err := f.service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(saved.TrafficTableConfig.ColumnOrder, []string{"id", "host"}) || saved.CommonConfig.AppFontSize != wantSize || f.view.Dirty() {
+		t.Fatalf("retry lost the newer layout: order=%v, font=%d, dirty=%v", saved.TrafficTableConfig.ColumnOrder, saved.CommonConfig.AppFontSize, f.view.Dirty())
+	}
+}
+
 func TestCloseConfirmsWhenDirty(t *testing.T) {
 	f := newFixture(t)
 	if !f.view.CloseRequested() {

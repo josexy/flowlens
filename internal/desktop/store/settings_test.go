@@ -415,6 +415,95 @@ func TestThemeModeAndLanguageUpdateCurrentAndDraft(t *testing.T) {
 	if h.store.Theme().Mode != "dark" {
 		t.Fatalf("theme = %q", h.store.Theme().Mode)
 	}
+	if h.store.SyncDirty(); h.store.Dirty() {
+		t.Fatalf("outside changes counted as edits: %v", h.store.DirtySections())
+	}
+}
+
+func TestOutsideProxyChangesFollowAnUneditedDraft(t *testing.T) {
+	h := newHarness(t, nil, &fakeProxy{})
+	h.store.BeginEdit()
+	for _, mutate := range []func(*settingservice.ProxyConfig){
+		func(config *settingservice.ProxyConfig) { config.DNSCacheEnabled = true },
+		func(config *settingservice.ProxyConfig) { config.DNSCacheTTLSeconds = 120 },
+	} {
+		if !h.store.UpdateProxyConfig(mutate, nil) {
+			t.Fatal("UpdateProxyConfig refused")
+		}
+		h.settle()
+		if h.store.SyncDirty(); h.store.Dirty() {
+			t.Fatalf("outside proxy change counted as an edit: %v", h.store.DirtySections())
+		}
+	}
+	if proxy := h.store.Draft.ProxyConfig; !proxy.DNSCacheEnabled || proxy.DNSCacheTTLSeconds != 120 {
+		t.Fatalf("draft proxy = %+v", proxy)
+	}
+
+	h.store.Draft.CommonConfig.AppFontSize = 18
+	h.store.SyncDirty()
+	h.store.Save(nil)
+	h.settle()
+	if got, _ := h.service.Snapshot(); !got.ProxyConfig.DNSCacheEnabled || got.ProxyConfig.DNSCacheTTLSeconds != 120 || got.CommonConfig.AppFontSize != 18 {
+		t.Fatalf("saved proxy = %+v, font = %d", got.ProxyConfig, got.CommonConfig.AppFontSize)
+	}
+}
+
+func TestOutsideProxyChangesKeepAnEditedDraft(t *testing.T) {
+	h := newHarness(t, nil, &fakeProxy{})
+	h.store.BeginEdit()
+	h.store.Draft.ProxyConfig.Port = 9000
+	h.store.UpdateProxyConfig(func(config *settingservice.ProxyConfig) { config.DNSCacheTTLSeconds = 120 }, nil)
+	h.settle()
+	if h.store.Draft.ProxyConfig.Port != 9000 {
+		t.Fatal("outside change replaced the proxy edit")
+	}
+	if h.store.SyncDirty(); !slices.Equal(h.store.DirtySections(), []SettingsSection{SectionProxy}) {
+		t.Fatalf("dirty = %v", h.store.DirtySections())
+	}
+}
+
+type failingSettingsUpdate struct {
+	SettingsBackend
+	err error
+}
+
+func (f failingSettingsUpdate) UpdatePreservingShortcuts(*settingservice.Settings) error {
+	return f.err
+}
+
+func TestFailedSaveMovesTheBaselineOfUneditedSections(t *testing.T) {
+	h := newHarness(t, nil, nil)
+	h.store.BeginEdit()
+	h.store.SetTrafficColumnLayout([]string{"host", "id"}, map[string]float32{"host": 300})
+	h.settle()
+
+	backend := h.store.deps.Backend
+	h.store.deps.Backend = failingSettingsUpdate{SettingsBackend: backend, err: errors.New("database unavailable")}
+	h.store.Draft.CommonConfig.AppFontSize = 18
+	h.store.SyncDirty()
+	var saveErr error
+	h.store.Save(func(_ SaveResult, err error) { saveErr = err })
+	h.settle()
+	if saveErr == nil {
+		t.Fatal("save succeeded")
+	}
+	if order := h.store.Draft.TrafficTableConfig.ColumnOrder; !slices.Equal(order, []string{"host", "id"}) {
+		t.Fatalf("draft column order = %v", order)
+	}
+	if h.store.SyncDirty(); !slices.Equal(h.store.DirtySections(), []SettingsSection{SectionCommon}) {
+		t.Fatalf("dirty = %v", h.store.DirtySections())
+	}
+
+	// A newer layout from the main window survives the retry.
+	h.store.deps.Backend = backend
+	h.store.SetTrafficColumnLayout([]string{"id", "host"}, nil)
+	h.settle()
+	h.store.Save(nil)
+	h.settle()
+	got, _ := h.service.Snapshot()
+	if !slices.Equal(got.TrafficTableConfig.ColumnOrder, []string{"id", "host"}) || got.CommonConfig.AppFontSize != 18 {
+		t.Fatalf("saved column order = %v, font = %d", got.TrafficTableConfig.ColumnOrder, got.CommonConfig.AppFontSize)
+	}
 }
 
 func TestTrafficDetailLayoutToggleSaves(t *testing.T) {

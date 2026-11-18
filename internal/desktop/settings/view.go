@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -96,7 +95,6 @@ type View struct {
 	MacOS    bool
 
 	tab        string
-	baseline   *settingservice.Settings
 	committing bool
 	notice     string
 	noticeKind nui.Color
@@ -121,8 +119,6 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 // Begin starts editing a private copy of the settings.
 func (v *View) Begin() {
 	v.Data.Settings.BeginEdit()
-	store.NormalizeSettings(v.Data.Settings.Draft)
-	v.baseline = store.CloneSettings(v.Data.Settings.Draft)
 	v.tab = tabGeneral
 	v.started = true
 	v.showNotice = false
@@ -151,32 +147,13 @@ func camel(value string) string {
 	return out.String()
 }
 
-// syncDirty updates each section's unsaved state against the baseline.
+// syncDirty updates each section's unsaved state and previews the draft.
 func (v *View) syncDirty() {
 	settings := v.Data.Settings
-	draft, base := settings.Draft, v.baseline
-	if draft == nil || base == nil || v.committing {
+	if settings.Draft == nil || v.committing {
 		return
 	}
-	// The main window can persist language and theme mode while this editor is
-	// open. SettingsStore updates Current and Draft for those external changes;
-	// advance the matching baseline fields so they do not appear as draft edits.
-	if current := settings.Current; current != nil && current.CommonConfig != nil && base.CommonConfig != nil {
-		base.CommonConfig.Language = current.CommonConfig.Language
-		base.CommonConfig.ThemeMode = current.CommonConfig.ThemeMode
-	}
-	mark := func(section store.SettingsSection, left, right any) {
-		settings.SetSectionDirty(section, !reflect.DeepEqual(left, right))
-	}
-	mark(store.SectionCommon, draft.CommonConfig, base.CommonConfig)
-	mark(store.SectionProxy, draft.ProxyConfig, base.ProxyConfig)
-	mark(store.SectionProcessAttribution, draft.ProcessAttributionConfig, base.ProcessAttributionConfig)
-	mark(store.SectionWindow, draft.WindowConfig, base.WindowConfig)
-	mark(store.SectionCache, draft.CacheConfig, base.CacheConfig)
-	mark(store.SectionHistoryRetention, draft.HistoryRetentionConfig, base.HistoryRetentionConfig)
-	mark(store.SectionTrafficTable, draft.TrafficTableConfig, base.TrafficTableConfig)
-	mark(store.SectionPythonPlugins, draft.PythonPluginConfig, base.PythonPluginConfig)
-	mark(store.SectionShortcuts, draft.Shortcuts, base.Shortcuts)
+	settings.SyncDirty()
 	settings.PreviewDraftAppearance()
 }
 
@@ -234,9 +211,6 @@ func (v *View) save() {
 			v.Notifier.Error(locales.SettingsSaveFailed(caErrorMessage(err)))
 			return
 		}
-		store.NormalizeSettings(settings.Draft)
-		v.baseline = store.CloneSettings(settings.Current)
-		store.NormalizeSettings(v.baseline)
 		v.setSavedNotice()
 		if v.tab == tabProxy {
 			v.loadCA()

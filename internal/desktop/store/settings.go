@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"time"
 
@@ -35,6 +36,38 @@ const (
 	SectionPythonPlugins      SettingsSection = "pythonPlugins"
 	SectionShortcuts          SettingsSection = "shortcuts"
 )
+
+// editableSections are the sections the Settings window edits.
+var editableSections = []SettingsSection{
+	SectionCommon, SectionProxy, SectionProcessAttribution, SectionWindow, SectionCache,
+	SectionHistoryRetention, SectionTrafficTable, SectionPythonPlugins, SectionShortcuts,
+}
+
+// sectionField returns the address of the field of settings that holds
+// section.
+func sectionField(settings *settingservice.Settings, section SettingsSection) any {
+	switch section {
+	case SectionCommon:
+		return &settings.CommonConfig
+	case SectionProxy:
+		return &settings.ProxyConfig
+	case SectionProcessAttribution:
+		return &settings.ProcessAttributionConfig
+	case SectionWindow:
+		return &settings.WindowConfig
+	case SectionCache:
+		return &settings.CacheConfig
+	case SectionHistoryRetention:
+		return &settings.HistoryRetentionConfig
+	case SectionTrafficTable:
+		return &settings.TrafficTableConfig
+	case SectionPythonPlugins:
+		return &settings.PythonPluginConfig
+	case SectionShortcuts:
+		return &settings.Shortcuts
+	}
+	panic(fmt.Sprintf("unknown settings section %q", section))
+}
 
 const (
 	settingsSaveJob     = "settings/save"
@@ -110,6 +143,10 @@ type SettingsStore struct {
 	// Draft is what the Settings window edits. It is nil while the window is
 	// closed.
 	Draft *settingservice.Settings
+	// baseline is the saved state Draft started from. Changes that reach
+	// Draft from outside the Settings window move it along, so only the
+	// user's edits count as unsaved.
+	baseline *settingservice.Settings
 
 	dirtySections  map[SettingsSection]bool
 	clock          Clock
@@ -219,6 +256,10 @@ func (s *SettingsStore) HiddenTrafficColumns() []string {
 // BeginEdit gives the Settings window a private copy of the saved settings.
 func (s *SettingsStore) BeginEdit() {
 	s.Draft = CloneSettings(s.Current)
+	if s.Draft != nil {
+		NormalizeSettings(s.Draft)
+	}
+	s.baseline = CloneSettings(s.Draft)
 	s.dirtySections = map[SettingsSection]bool{}
 	s.LastProxyApplyResult = nil
 	s.LastShortcutResult = nil
@@ -227,8 +268,43 @@ func (s *SettingsStore) BeginEdit() {
 // EndEdit discards the draft and any appearance preview.
 func (s *SettingsStore) EndEdit() {
 	s.Draft = nil
+	s.baseline = nil
 	s.dirtySections = map[SettingsSection]bool{}
 	s.EndPreview()
+}
+
+// SyncDirty marks each section whose draft differs from the saved state it
+// started from, and clears the others.
+func (s *SettingsStore) SyncDirty() {
+	if s.Draft == nil || s.baseline == nil {
+		return
+	}
+	for _, section := range editableSections {
+		s.SetSectionDirty(section, !reflect.DeepEqual(sectionField(s.Draft, section), sectionField(s.baseline, section)))
+	}
+}
+
+// unedited reports whether the user has left section of the draft as it
+// started.
+func (s *SettingsStore) unedited(section SettingsSection) bool {
+	return s.Draft != nil && s.baseline != nil && !s.dirtySections[section] &&
+		reflect.DeepEqual(sectionField(s.Draft, section), sectionField(s.baseline, section))
+}
+
+// replaceDraft installs a draft that a save refreshed from the saved
+// settings. Sections the user has not edited take their new values into the
+// baseline as well.
+func (s *SettingsStore) replaceDraft(next *settingservice.Settings) {
+	if s.baseline != nil {
+		source := CloneSettings(next)
+		for _, section := range editableSections {
+			if s.unedited(section) {
+				field := reflect.ValueOf(sectionField(s.baseline, section)).Elem()
+				field.Set(reflect.ValueOf(sectionField(source, section)).Elem())
+			}
+		}
+	}
+	s.Draft = next
 }
 
 // MarkDirty records that the draft changed in section.
@@ -438,7 +514,7 @@ func (s *SettingsStore) applySaveOutcome(outcome saveOutcome, err error) {
 		}
 	}
 	if s.Draft != nil && outcome.draft != nil {
-		s.Draft = outcome.draft
+		s.replaceDraft(outcome.draft)
 	}
 	if err != nil {
 		return
@@ -450,6 +526,11 @@ func (s *SettingsStore) applySaveOutcome(outcome saveOutcome, err error) {
 		s.dirtySections = map[SettingsSection]bool{SectionShortcuts: true}
 	}
 	s.Current = outcome.persisted
+	if s.Draft != nil {
+		NormalizeSettings(s.Draft)
+		s.baseline = CloneSettings(s.Current)
+		NormalizeSettings(s.baseline)
+	}
 	s.preview = nil
 	s.refreshTheme()
 	s.rt.Dispatcher.InvalidateAll()
@@ -460,7 +541,7 @@ func (s *SettingsStore) SetThemeMode(mode string) error {
 	if err := s.deps.Backend.SetThemeMode(mode); err != nil {
 		return err
 	}
-	for _, settings := range []*settingservice.Settings{s.Current, s.Draft} {
+	for _, settings := range []*settingservice.Settings{s.Current, s.Draft, s.baseline} {
 		if settings != nil && settings.CommonConfig != nil {
 			settings.CommonConfig.ThemeMode = mode
 		}
@@ -479,7 +560,7 @@ func (s *SettingsStore) SetLanguage(language string) error {
 	if err := s.deps.Backend.SetLanguage(language); err != nil {
 		return err
 	}
-	for _, settings := range []*settingservice.Settings{s.Current, s.Draft} {
+	for _, settings := range []*settingservice.Settings{s.Current, s.Draft, s.baseline} {
 		if settings != nil && settings.CommonConfig != nil {
 			settings.CommonConfig.Language = language
 		}
@@ -630,8 +711,9 @@ func (s *SettingsStore) UpdateProxyConfig(mutate func(*settingservice.ProxyConfi
 		if err == nil {
 			s.LastProxyApplyResult = outcome.proxyResult
 			s.Current = outcome.persisted
-			if s.Draft != nil && !s.dirtySections[SectionProxy] {
+			if s.unedited(SectionProxy) {
 				s.Draft.ProxyConfig = CloneSettings(outcome.persisted).ProxyConfig
+				s.baseline.ProxyConfig = CloneSettings(outcome.persisted).ProxyConfig
 			}
 			s.rt.Dispatcher.InvalidateAll()
 		}
@@ -922,7 +1004,7 @@ func (s *SettingsStore) ResetDraftToDefaults(shortcutIDs []string) {
 	for _, id := range shortcutIDs {
 		delete(draft.Shortcuts.Overrides, id)
 	}
-	for _, section := range []SettingsSection{SectionCommon, SectionProxy, SectionWindow, SectionCache, SectionHistoryRetention, SectionProcessAttribution, SectionTrafficTable, SectionPythonPlugins, SectionShortcuts} {
+	for _, section := range editableSections {
 		s.dirtySections[section] = true
 	}
 	s.LastProxyApplyResult, s.LastShortcutResult = nil, nil
