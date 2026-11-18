@@ -108,7 +108,7 @@ Run the smallest checks that match the risk; `task verify` is the full check and
 | Request editor | `./internal/desktop/editor ./internal/desktop/store` |
 | Rewrite rules | `./internal/services/rewrite_service ./internal/desktop/rewrite ./internal/desktop/store` |
 
-- Concurrency/lifecycle changes also run `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service` where supported.
+- Concurrency/lifecycle changes also run `task test:race -- <affected packages>`; with no packages it covers `./internal/desktop/...`, process attribution, and the proxy service. It needs cgo and a C compiler.
 - Worker/SDK/interpreter changes run the Python 3 integration tests without skips.
 - View changes run `task vet:ui`. To inspect renders, run `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
 
