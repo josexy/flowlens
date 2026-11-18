@@ -39,27 +39,17 @@ With `MYGO_UPDATER_PRIVATE_KEY` set, every target also gets a signed update arch
 
 ## Application and Tray Icons
 
-All platforms use the same shield-and-nodes artwork from
-`assets/icons/app-icon.svg`. Windows and Linux use its `resources/icon.png`
-export. macOS packages use `assets/macos/app-icon.icns`, selected by `macos.icon`
-in `mygo.json`. The ICNS contains multiple resolutions rendered directly from
-SVG and works with the existing macOS 12.0 deployment target; it does not require
-Icon Composer or a newer Xcode.
+All platforms use the same shield-and-nodes artwork. Its sources are `assets/icons/app-icon.svg` and, for the macOS menu bar, `assets/icons/tray-template.svg`:
 
-Run `task icons:generate` (or `go run ./assets/icons/generate.go`) after editing
-the SVG sources. This exports the shared PNG, macOS ICNS, and tray template with
-supersampled anti-aliasing.
+| Use | Generated file |
+| --- | --- |
+| Windows and Linux application and tray icon, macOS Dock icon under `mygo dev` | `resources/icon.png` |
+| macOS application bundle (`macos.icon` in `mygo.json`) | `assets/macos/app-icon.icns` |
+| macOS menu bar | `resources/trayicon-template.png` |
 
-The macOS menu bar uses the separate embedded `resources/trayicon-template.png`
-with `IconIsTemplate`, so AppKit colors the shield and nodes for the menu bar's
-appearance and selection state. The 72-pixel source is displayed at 18 points
-by MyGo. Windows and Linux continue using the common application icon for
-their tray icons.
+After editing the SVG sources, run `task icons:generate` (or `go run ./assets/icons/generate.go`) to export all three with supersampled anti-aliasing. The ICNS holds several resolutions rendered from the SVG and works with the macOS 12.0 deployment target, without Icon Composer or a newer Xcode.
 
-MyGo's `mygo dev` uses the common PNG for the macOS Dock icon, now showing
-the same artwork. Check the packaged ICNS with `task run` or `task package` on
-macOS, including Finder/Dock at small sizes and the tray in light, dark, and
-selected states on 1× and Retina displays.
+The menu-bar icon is a 72-pixel template image shown at 18 points with `IconIsTemplate`, so AppKit colors it for the menu bar's appearance and selection state. Check the packaged ICNS with `task run` or `task package` on macOS: Finder and Dock at small sizes, and the tray in light, dark, and selected states on 1× and Retina displays.
 
 ## Updates
 

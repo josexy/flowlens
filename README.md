@@ -44,21 +44,15 @@ Download the latest build from [GitHub Releases](https://github.com/josexy/flowl
 
 Verify downloads with `SHA256SUMS`. Unsigned Windows/macOS packages may trigger operating-system warnings.
 
-Use the status-bar update control to check releases. Installations FlowLens can write to download, verify, and apply signed updates after a restart; package-managed installations are pointed to the release page. Versions 1.0.x must install the first native release once by hand.
+Use the status-bar update control to check releases. Installations FlowLens can write to download, verify, and apply signed updates after a restart; package-managed installations are pointed to the release page. FlowLens 1.0.x cannot update itself to 2.0.0; install 2.0.0 once from the release page.
 
-Start the proxy and configure your client to use `127.0.0.1:8080` by default. New installations automatically generate a built-in CA; trust it in Settings for HTTPS capture. You can also select custom CA certificate and key files, which FlowLens never regenerates. Windows/macOS offer a current-user install/uninstall control. See the [User Guide](docs/user-guide.md) for setup details.
+## Get Started
 
-## Quick Start from Source
+Start the proxy and point your client at `127.0.0.1:8080`. New installations generate a built-in CA; trust it from Settings to capture HTTPS, or select your own certificate and key, which FlowLens never regenerates. On Windows and macOS, Settings can install the CA for the current user. See the [User Guide](docs/user-guide.md#set-up-capture) for details.
 
-### Requirements
+## Build from Source
 
-- Go 1.27.3 or newer
-- [Task](https://taskfile.dev) (recommended)
-- Xcode Command Line Tools on macOS
-
-Python 3 is needed only for Python request hooks; FlowLens detects existing interpreters but does not install them. See the [Python setup guide](docs/technical/python-plugins.md#set-up-python).
-
-### Run the Desktop App
+Requirements: Go 1.27.3 or newer, [Task](https://taskfile.dev) (recommended), and the Xcode Command Line Tools on macOS. Python 3 is needed only for Python request hooks; FlowLens detects installed interpreters but does not install one.
 
 ```shell
 git clone https://github.com/josexy/flowlens.git
@@ -66,48 +60,31 @@ cd flowlens
 task dev
 ```
 
-If Task is unavailable, run `go tool mygo dev`.
+Without Task, run `go tool mygo dev`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the other development commands and [Building and Packaging](docs/technical/building.md) for release builds.
 
 ## Documentation
 
-- [User Guide](docs/user-guide.md) — request editing, rewrite rules, shortcuts, system proxy, DNS cache, HAR, process attribution, logs, storage, and certificates
-- [HTTP Rewrite Rules](docs/technical/http-rewrite-rules.md) — execution, limits, and lifecycle
-- [Python Plugin Guide](docs/technical/python-plugins.md) · [简体中文](docs/technical/python-plugins.zh-CN.md) — open API Help from the Python Plugins sidebar or Request Editor Script toolbar to search APIs and copy a complete system prompt for either scripting scope.
-- [Python Plugin Examples](docs/examples/python-plugins)
-- [Building and Packaging](docs/technical/building.md)
-- [Contributing Guide](CONTRIBUTING.md)
-- [Engineering Guidelines](AGENTS.md)
-- [Security Policy](SECURITY.md)
-
-## Development
-
-Run commands from the repository root.
-
-| Command | Purpose |
+| Document | Contents |
 | --- | --- |
-| `task dev` | Run with live reload |
-| `task run` | Build with MyGo and launch once |
-| `task package` | Build release packages for the current platform |
-| `task test` | Run all Go tests |
-| `task verify` | Run formatting, lint, UI lifecycle, catalog, and test checks |
-| `task lint:go` / `task lint:go:fix` | Check Go lint and formatting, or apply safe fixes |
-| `task vet:ui` | Check native UI lifecycle rules |
-| `task i18n:generate` / `task i18n:check` | Regenerate or check the message catalogs |
-
-Set the application version in `mygo.json`; MyGo embeds it during development and packaging. See [Building and Packaging](docs/technical/building.md#releasing) for release checks and tags.
+| [User Guide](docs/user-guide.md) | Capture setup, certificates, inspection, history and HAR, Request Editor, API Collections, rewrite rules, shortcuts, settings, and storage |
+| [Python Plugin Guide](docs/technical/python-plugins.md) · [简体中文](docs/technical/python-plugins.zh-CN.md) | Python setup, hook API, limits, and [examples](docs/examples/python-plugins) |
+| [HTTP Rewrite Rules](docs/technical/http-rewrite-rules.md) | Rule execution, limits, and lifecycle |
+| [Traffic Metrics and HAR](docs/technical/traffic-metrics-and-har.md) | Timing and size definitions, HAR mapping, and the HBIN history format |
+| [Building and Packaging](docs/technical/building.md) | Cgo, packages, signed updates, and releases |
+| [Contributing](CONTRIBUTING.md) · [Engineering Guidelines](AGENTS.md) | Development workflow and repository rules |
+| [Changelog](CHANGELOG.md) · [Security Policy](SECURITY.md) | Release notes and vulnerability reporting |
 
 ## Data and Security
 
-Local data is stored under the operating-system user configuration directory. See [storage and cleanup](docs/user-guide.md#settings-and-local-storage) for paths and retention behavior.
+FlowLens stores its data in the operating system's user configuration directory; see [Local Storage](docs/user-guide.md#local-storage).
 
 - Use FlowLens only for traffic you own or are authorized to inspect.
-- Listening on `ALL` (`0.0.0.0`) exposes the proxy to reachable devices.
-- Keep the generated MITM CA private key private and remove the CA from trust stores when it is no longer needed.
-- Captures, exports, history, API Collections, logs, caches, and process metadata may contain sensitive data; exports are not automatically redacted.
-- Python plugins execute as trusted local code; interpreter isolation is not a security sandbox.
-- An abnormal shutdown can prevent managed system-proxy restoration. See [Managed System Proxy](docs/user-guide.md#managed-system-proxy) for recovery details.
+- Listening on `ALL` (`0.0.0.0`) exposes the proxy to every device that can reach it.
+- Keep the MITM CA private key private, and remove the CA from trust stores when you no longer need it.
+- Captures, history, exports, and logs may contain credentials and other sensitive data; exports are not redacted.
+- Python plugins run as trusted local code without a sandbox.
 
-Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
+See the [User Guide](docs/user-guide.md#security) for more, and report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Contributing and Support
 

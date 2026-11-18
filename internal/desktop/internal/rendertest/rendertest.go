@@ -4,7 +4,7 @@
 // Renders are written only when FLOWLENS_RENDER_DIR names a directory, so
 // ordinary test runs write nothing:
 //
-//	FLOWLENS_RENDER_DIR=/tmp/renders go test ./desktop/capture -run Render
+//	FLOWLENS_RENDER_DIR=/tmp/renders go test ./internal/desktop/capture -run Render
 package rendertest
 
 import (
