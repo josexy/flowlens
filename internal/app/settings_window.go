@@ -16,11 +16,9 @@ import (
 
 // settingsWindowController opens the single Settings window.
 type settingsWindowController struct {
-	all     *services
-	data    *store.Store
-	restart func()
-	// exit quits once a reset is waiting for the next launch.
-	exit     func()
+	all      *services
+	data     *store.Store
+	restart  func()
 	canClose func() bool
 	blocked  func() bool
 
@@ -103,7 +101,6 @@ func (s *settingsWindowController) host() settings.Host {
 		DataSize:     func() (proxyservice.LocalDataSize, error) { return all.proxy.GetLocalDataSize() },
 		ClearCache:   all.proxy.ClearCacheFiles,
 		ClearAllData: all.proxy.ClearCacheAndHistory,
-		ResetApp:     all.app.ResetApplication,
 		PythonStatus: all.python.GetRuntimeStatus,
 		TestPython:   all.python.TestInterpreter,
 		FindPython:   all.python.DiscoverInterpreters,
@@ -113,11 +110,6 @@ func (s *settingsWindowController) host() settings.Host {
 			}
 		},
 		DirtyChanged: s.dirty.Store,
-		ExitAfterReset: func() {
-			if s.exit != nil {
-				s.exit()
-			}
-		},
 	}
 }
 

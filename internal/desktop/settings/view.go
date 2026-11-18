@@ -55,7 +55,6 @@ type Host struct {
 	DataSize     func() (proxyservice.LocalDataSize, error)
 	ClearCache   func() error
 	ClearAllData func() error
-	ResetApp     func() error
 
 	PythonStatus func() (*pythonpluginservice.RuntimeStatus, error)
 	TestPython   func(path string) (*pythonpluginservice.RuntimeStatus, error)
@@ -65,8 +64,6 @@ type Host struct {
 	Frame widgets.WindowFrame
 	// Close closes the window.
 	Close func()
-	// ExitAfterReset quits once a reset waits for the next launch.
-	ExitAfterReset func()
 	// DirtyChanged hears whether unsaved changes exist.
 	DirtyChanged func(dirty bool)
 }
@@ -197,7 +194,7 @@ func caErrorMessage(err error) string {
 
 func (v *View) save() {
 	settings := v.Data.Settings
-	if v.committing || settings.Saving || settings.Resetting || settings.Draft == nil {
+	if v.committing || settings.Saving || settings.Draft == nil {
 		return
 	}
 	if problem := v.validate(); problem != "" {
@@ -247,7 +244,7 @@ func (v *View) setSavedNotice() {
 
 func (v *View) reset() {
 	settings := v.Data.Settings
-	if settings.Resetting || settings.Draft == nil {
+	if settings.Draft == nil {
 		return
 	}
 	ids := make([]string, len(shortcuts.Catalog))
@@ -261,12 +258,6 @@ func (v *View) reset() {
 // CloseRequested decides whether the window may close, asking first when
 // changes would be lost.
 func (v *View) CloseRequested() bool {
-	if v.Data.Settings.Resetting {
-		if v.Data.Settings.ResetAwaitingRestart && v.Host.ExitAfterReset != nil {
-			v.Host.ExitAfterReset()
-		}
-		return false
-	}
 	if !v.Dirty() {
 		v.finish()
 		return true
@@ -281,12 +272,6 @@ func (v *View) CloseRequested() bool {
 		}},
 	})
 	return false
-}
-
-func (v *View) exitAfterReset() {
-	if v.Host.ExitAfterReset != nil {
-		v.Host.ExitAfterReset()
-	}
 }
 
 func (v *View) finish() {
@@ -313,41 +298,11 @@ func (v *View) AskDiscardBeforeQuit(update bool, proceed, cancel func()) {
 	})
 }
 
-// ResetOverlay blocks a window while Restore Initial State runs, then offers
-// to exit so that the next launch can finish it.
-func ResetOverlay(data *store.Store, dispatcher *shortcuts.Dispatcher, exit func()) func(*ui.Context, nui.Theme) {
-	return func(c *ui.Context, theme nui.Theme) {
-		state := data.Settings
-		if !state.Resetting {
-			return
-		}
-		dispatcher.NoteModal()
-		open := true
-		title, description := locales.SettingsResetApplicationProgress(), locales.SettingsResetApplicationProgressDescription()
-		var footer func(*ui.Context, nui.Theme)
-		if state.ResetAwaitingRestart {
-			title, description = locales.SettingsResetApplicationReady(), locales.SettingsResetApplicationReadyDescription()
-			footer = func(c *ui.Context, theme nui.Theme) {
-				ui.Row(c).FillWidth().Justify(ui.End).Children(func() {
-					nui.Button(c.Key("exit"), theme, locales.SettingsResetApplicationExit(), nui.ButtonOptions{}).OnClick(exit)
-				})
-			}
-		}
-		nui.ModalWithOptions(c.Key("application-reset"), theme, &open, nui.ModalOptions{
-			Title: title, Description: description, Width: nui.Set[float32](420), Dismissible: nui.Set(false), CloseButton: nui.Set(false), Footer: footer,
-		}, func(nui.Theme) {
-			if !state.ResetAwaitingRestart {
-				ui.Row(c.Key("spinner")).FillWidth().Justify(ui.Center).Padding(8).Children(func() { widgets.Spinner(c, theme) })
-			}
-		})
-	}
-}
-
 func (v *View) declareShortcuts() {
 	settings := v.Data.Settings
 	v.Dispatcher.Handle(shortcuts.Handler{
 		CommandID: shortcuts.AppSave, Priority: 10,
-		When: func() bool { return settings.Dirty() && !settings.Saving && !v.committing && !settings.Resetting },
+		When: func() bool { return settings.Dirty() && !settings.Saving && !v.committing },
 		Run:  v.save,
 	})
 }
@@ -418,7 +373,6 @@ func (v *View) Build(c *ui.Context) {
 		v.Dispatcher.NoteModal()
 	}
 	v.Confirm.Build(c, theme)
-	ResetOverlay(v.Data, v.Dispatcher, v.exitAfterReset)(c, theme)
 	v.Dispatcher.Install(c)
 	if v.Host.DirtyChanged != nil {
 		v.Host.DirtyChanged(v.Dirty())
@@ -521,12 +475,11 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 		if v.tab == tabLogs && settings.Dirty() {
 			ui.Text(c, locales.SettingsOtherUnsavedNotice()).Grow(1).Basis(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Muted)
 		}
-		busy := v.committing || settings.Resetting
-		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: busy}).DimDisabled(settings.Resetting).MinWidth(88).Shrink(0)
-		if !busy {
+		reset := nui.Button(c.Key("reset"), theme, locales.SettingsReset(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.RefreshCw(), Disabled: v.committing}).DimDisabled(false).MinWidth(88).Shrink(0)
+		if !v.committing {
 			reset.OnClick(v.reset)
 		}
-		disabled := !settings.Dirty() || settings.Resetting
+		disabled := !settings.Dirty()
 		save := nui.Button(c.Key("save"), theme, locales.SettingsSave(), nui.ButtonOptions{Leading: lucide.Save(), Disabled: disabled, Loading: settings.Saving || v.committing}).DimDisabled(disabled).MinWidth(88).Shrink(0)
 		if !disabled {
 			save.OnClick(v.save)

@@ -10,7 +10,7 @@ The review compared the original repository at `972cf419b60551bea63813b8c4dfe42b
 
 | Area | Source-review conclusion |
 | --- | --- |
-| Shell, capture/history, editor, collection, rewrite, plugins, settings, update/reset | The principal surfaces and business entry points have native implementations. This is not proof that every branch or platform behaves identically. |
+| Shell, capture/history, editor, collection, rewrite, plugins, settings, update | The principal surfaces and business entry points have native implementations. This is not proof that every branch or platform behaves identically. |
 | Traffic selection and details | The reviewed baseline overrode native selection to reproduce the original modifier-click model. The native-first change removes that override and gives details explicit open/close actions. |
 | Navigation and editable grids | Several custom rows only handled clicks. Settings lost the original keyboard entry; some other mouse-only entry points were inherited from the old frontend. |
 | Memory Statistics | The reviewed baseline kept fixed card/metric columns instead of adapting to available content width. Layout acceptance includes the minimum window with the widest sidebar. |
@@ -110,7 +110,7 @@ FlowLens needs no source change; NuxtUI-Go 0.1.1 only moves to MyGo 0.9.2 and do
 - `ui.SVG` is no longer comparable. FlowLens holds icons only as `*ui.SVG` and never compares SVG values or uses them as map keys.
 - `Element.PopoverMenu` takes variadic options. FlowLens does not call it; its context menus are `nui.ContextMenu`.
 - `ui.Tester` gives keys pressed without Ctrl or Super during `Compose` to the input method, as each platform's filter does. FlowLens has no `Composing()` guards of its own and relies on that filter, as NuxtUI-Go does; `TestEditableGridCompositionStaysInEditor` now exercises it.
-- `RequestSingleInstanceLock` holds the lock until the process exits, so the update restart's `Relaunch` waits for the old process instead of starting beside it. Startup still takes the lock before opening SQLite, and the reset progress process does not take it.
+- `RequestSingleInstanceLock` holds the lock until the process exits, so the update restart's `Relaunch` waits for the old process instead of starting beside it. Startup still takes the lock before opening SQLite.
 
 `ListState.MoveAnimation` is not adopted, because NuxtUI-Go's motion levels and `AppConfig.DisableAnimations` do not govern it. Windows builds do not use the `mygo_nowebview` tag, because no build with that tag has been run on Windows yet.
 
@@ -156,7 +156,7 @@ The `restore-ui-behavior-parity` change compared what each surface does with 1.0
 - API Collection.
 - Rewrite Rules and Python Plugins, including reordering.
 - Settings, with its save, reset, and quit guard.
-- Update, Memory Statistics, and Reset Startup.
+- Update and Memory Statistics.
 - Shell, status bar, and title bar.
 
 A review of the change found that two of these still differed and restored them: the SSE message list of the body pane, and the WebSocket message rows and bubbles of the detail panel and the WebSocket Client.

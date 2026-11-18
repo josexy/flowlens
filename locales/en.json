@@ -585,20 +585,6 @@
       }
     }
   },
-  "@settingsResetApplicationExitFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "@settingsResetApplicationFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "@settingsRootCasCount": {
     "placeholders": {
       "count": {
@@ -1762,25 +1748,6 @@
   "settingsRemoveDomainFilter": "Remove Domain",
   "settingsRemoveRootCa": "Remove Root CA",
   "settingsReset": "Restore Defaults",
-  "settingsResetApplication": "Restore Initial State",
-  "settingsResetApplicationAction": "Reset",
-  "settingsResetApplicationConfirm": "Remove built-in CA trust, then clear all app data and restore defaults on the next launch. Unsaved content is discarded; external files are kept. This cannot be undone.",
-  "settingsResetApplicationDescription": "Clear app data and restore defaults. Manual restart required.",
-  "settingsResetApplicationExit": "Exit Application",
-  "settingsResetApplicationExitFailed": "Exit failed: {error}",
-  "settingsResetApplicationFailed": "Reset failed: {error}",
-  "settingsResetApplicationProgress": "Preparing Reset",
-  "settingsResetApplicationProgressDescription": "Please wait.",
-  "settingsResetApplicationReady": "Restart FlowLens",
-  "settingsResetApplicationReadyDescription": "Exit and reopen FlowLens to finish the reset.",
-  "settingsResetApplicationSuccess": "Reset complete. Trust the new built-in CA when needed.",
-  "settingsResetRecoveryDescription": "Resolve the error and retry, or exit and reopen FlowLens.",
-  "settingsResetRecoveryExit": "Exit",
-  "settingsResetRecoveryRetry": "Retry",
-  "settingsResetRecoveryTitle": "Reset Incomplete",
-  "settingsResetStartupInitializing": "Initialise app",
-  "settingsResetStartupStorage": "Clear app data",
-  "settingsResetStartupTitle": "Restoring Initial State",
   "settingsRestartReasonListenAddressChanged": "listen address",
   "settingsRestartReasonMitmCaChanged": "MITM CA",
   "settingsRestartReasonProxyModeChanged": "proxy mode",
@@ -1936,7 +1903,6 @@
   "startupFailureQuit": "Quit",
   "startupFailureRetry": "Retry",
   "startupFailureStageDatabase": "Open app data",
-  "startupFailureStageReset": "Restore initial state",
   "startupFailureStageServices": "Start services",
   "startupFailureStageSettings": "Load settings",
   "startupFailureTitle": "Startup Failed",

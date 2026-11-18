@@ -78,7 +78,6 @@ func TestShowsTheFailedStepAndError(t *testing.T) {
 func TestStageLabels(t *testing.T) {
 	f := newFixture(t)
 	for stage, label := range map[Stage]string{
-		StageReset:    locales.StartupFailureStageReset(),
 		StageSettings: locales.StartupFailureStageSettings(),
 		StageServices: locales.StartupFailureStageServices(),
 	} {

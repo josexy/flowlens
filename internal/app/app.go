@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/plugins"
 	"github.com/josexy/flowlens/internal/desktop/pythonapi"
 	"github.com/josexy/flowlens/internal/desktop/rewrite"
-	"github.com/josexy/flowlens/internal/desktop/settings"
 	"github.com/josexy/flowlens/internal/desktop/shell"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	"github.com/josexy/flowlens/internal/desktop/startupfailure"
@@ -55,12 +53,10 @@ const (
 )
 
 // startupSteps are the stages that must happen in this order: a second instance
-// has to exit before it can touch the database, and nothing may open SQLite
-// before a pending Restore Initial State has been cleaned.
+// has to exit before it can touch the database.
 type startupSteps struct {
 	enableBootstrapLogging func()
 	acquireInstanceLock    func() bool
-	prepareReset           func() (*resetManifest, *resetStartupClient, error)
 	openDatabase           func() (*sql.DB, error)
 	// startServices returns a *startupError naming the failed step, or another
 	// error for one of the services.
@@ -71,69 +67,43 @@ type startupSteps struct {
 	serve func(first *launched, failure *startupError, retry startupAttempt)
 }
 
-// startupAttempt runs the steps that can fail. canceled means the user chose to
-// exit from the reset progress window.
-type startupAttempt func() (started *launched, failure *startupError, canceled bool)
+// startupAttempt runs the steps that can fail.
+type startupAttempt func() (started *launched, failure *startupError)
 
 func (s startupSteps) run() {
 	s.enableBootstrapLogging()
 	if !s.acquireInstanceLock() {
 		return
 	}
-	started, failure, canceled := s.attempt()
-	if canceled {
-		return
-	}
-	s.serve(started, failure, func() (*launched, *startupError, bool) {
+	started, failure := s.attempt()
+	s.serve(started, failure, func() (*launched, *startupError) {
 		s.enableBootstrapLogging()
 		return s.attempt()
 	})
 }
 
 // attempt starts the application once. A failed attempt releases what it
-// opened, so the next one starts again from the reset marker.
-func (s startupSteps) attempt() (*launched, *startupError, bool) {
-	reset, progress, err := s.prepareReset()
-	if err != nil {
-		closeResetProgress(progress)
-		if errors.Is(err, context.Canceled) {
-			return nil, nil, true
-		}
-		// The reset marker stays, and SQLite remains closed until a later
-		// attempt has cleaned up.
-		return nil, s.failed(startupFailed(startupfailure.StageReset, err)), false
-	}
+// opened, so the next one starts again from the beginning.
+func (s startupSteps) attempt() (*launched, *startupError) {
 	db, err := s.openDatabase()
 	if err != nil {
-		closeResetProgress(progress)
-		return nil, s.failed(startupFailed(startupfailure.StageDatabase, err)), false
+		return nil, s.failed(startupFailed(startupfailure.StageDatabase, err))
 	}
 	started, err := s.startServices(db)
 	if err != nil {
-		closeResetProgress(progress)
 		closeDatabase(db)
 		var failure *startupError
 		if !errors.As(err, &failure) {
 			failure = startupFailed(startupfailure.StageServices, err)
 		}
-		return nil, s.failed(failure), false
+		return nil, s.failed(failure)
 	}
-	started.reset, started.progress = reset, progress
-	return started, nil, false
+	return started, nil
 }
 
 func (s startupSteps) failed(failure *startupError) *startupError {
 	s.reportFailure(failure)
 	return failure
-}
-
-func closeResetProgress(progress *resetStartupClient) {
-	if progress == nil {
-		return
-	}
-	if err := progress.Close(); err != nil {
-		logger.G().Warnf("Close reset startup window: %v", err)
-	}
 }
 
 func closeDatabase(db *sql.DB) {
@@ -147,15 +117,10 @@ func closeDatabase(db *sql.DB) {
 
 // Run starts the application and returns when it exits.
 func Run() {
-	if os.Getenv(resetStartupEnvironment) != "" {
-		runResetStartupWindow()
-		return
-	}
 	mygo.App.SetName(applicationName())
 	startupSteps{
 		enableBootstrapLogging: enableBootstrapLogging,
 		acquireInstanceLock:    mygo.App.RequestSingleInstanceLock,
-		prepareReset:           prepareResetStartup,
 		openDatabase:           appdatabase.Open,
 		startServices:          startServices,
 		reportFailure:          reportStartupFailure,
@@ -256,13 +221,11 @@ func configureLogging(settingSvc *settingservice.SettingService) {
 
 // launched is a started application whose main window is yet to open.
 type launched struct {
-	db       *sql.DB
-	all      *services
-	rt       store.Runtime
-	data     *store.Store
-	window   *settingservice.WindowConfig
-	reset    *resetManifest
-	progress *resetStartupClient
+	db     *sql.DB
+	all    *services
+	rt     store.Runtime
+	data   *store.Store
+	window *settingservice.WindowConfig
 
 	showMain    atomic.Pointer[func()]
 	application *shell.App
@@ -359,7 +322,6 @@ func (l *launched) stop() {
 		logger.G().Warnf("Stop services: %v", err)
 	}
 	l.rt.Close()
-	closeResetProgress(l.progress)
 	closeDatabase(l.db)
 	logger.G().Info("Application shutdown completed")
 }
@@ -389,7 +351,6 @@ func serve(first *launched, failure *startupError, retry startupAttempt) {
 // is visible.
 func openMainWindow(started *launched, shown func()) {
 	all, data, windowConfig := started.all, started.data, started.window
-	startupReset, startupProgress := started.reset, started.progress
 	locale.Apply(data.Settings.Language())
 	if err := theme.RegisterFonts(); err != nil {
 		logger.G().Warnf("Register fonts: %v", err)
@@ -526,14 +487,10 @@ func openMainWindow(started *launched, shown func()) {
 		quitGuard.setDirty(rules.Dirty())
 		rules.Overlay(c, theme)
 	})
-	var lifecycle *appLifecycle
 	settingsWindow := newSettingsWindowController(all, data, func() { captureWorkspace.Restart() })
 	updateWindow := &updateWindowController{data: data}
 	app.Host.OpenSettings = settingsWindow.open
 	app.Host.OpenUpdate = updateWindow.open
-	exitAfterReset := func() { go lifecycle.RequestQuit() }
-	settingsWindow.exit = exitAfterReset
-	app.Overlays = append(app.Overlays, settings.ResetOverlay(data, app.Dispatcher, exitAfterReset))
 	app.Surfaces[store.WorkspaceAPICollection] = shell.Surface{Sidebar: collections.Sidebar, Content: captureWorkspace.Content}
 	app.Surfaces[store.WorkspaceCategory] = shell.Surface{Sidebar: captureWorkspace.CategorySidebar, Content: captureWorkspace.Content}
 	data.History.LoadList()
@@ -581,7 +538,7 @@ func openMainWindow(started *launched, shown func()) {
 		mygo.RunOnMain(show)
 	})
 
-	lifecycle = &appLifecycle{
+	lifecycle := &appLifecycle{
 		window:   window,
 		settings: all.setting,
 		saveGeom: func() { updateWindowConfigFromRuntimeIfStartupReady(all.setting, window, &ready) },
@@ -595,7 +552,7 @@ func openMainWindow(started *launched, shown func()) {
 				show()
 			})
 		},
-		prepare:        func() error { return prepareShutdown(all, lifecycle) },
+		prepare:        func() error { return prepareShutdown(all) },
 		onPrepareError: func(err error) { logger.G().Errorf("Application shutdown preparation completed with errors: %v", err) },
 		quit: func() {
 			if lifecycle.relaunch.Load() {
@@ -605,8 +562,7 @@ func openMainWindow(started *launched, shown func()) {
 			mygo.App.Quit()
 		},
 	})
-	busy := func() bool { return lifecycle.resetting.Load() || lifecycle.coordinator.InProgress() }
-	settingsWindow.blocked, updateWindow.blocked = busy, busy
+	settingsWindow.blocked, updateWindow.blocked = lifecycle.coordinator.InProgress, lifecycle.coordinator.InProgress
 	settingsWindow.canClose, updateWindow.canClose = lifecycle.coordinator.CanQuit, lifecycle.coordinator.CanQuit
 	restartForUpdate := &updateRestartHandler{
 		blocked: func(proceed func()) bool { return lifecycle.blockedByGuards(quitReasonUpdate, proceed) },
@@ -614,18 +570,6 @@ func openMainWindow(started *launched, shown func()) {
 		failed:  func(err error) { all.bus.Emit(appservice.UpdateRestartFailedEventName, err.Error()) },
 	}
 	all.bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) { go restartForUpdate.request() })
-	appservice.SetResetApplicationHandler(all.app, (&resetRequest{
-		lifecycle:     lifecycle,
-		language:      func() string { return currentLanguage(all.setting) },
-		begin:         func() (resetGuard, error) { return settingservice.BeginApplicationReset(all.setting) },
-		cancelUpdates: func() { appservice.CancelUpdateForReset(all.app) },
-		saveManifest:  saveResetManifest,
-		clearMarker:   clearResetMarker,
-		committed: func() {
-			settingsWindow.dirty.Store(false)
-			ready.Store(false)
-		},
-	}).run)
 	data.Updater.Initialize(all.bus, data.Runtime.Dispatcher.Post)
 	data.MemStats.Initialize(all.bus, data.Runtime.Dispatcher.Post)
 	app.Host.ShutdownUIReady = func() { lifecycle.coordinator.UIReady() }
@@ -669,17 +613,10 @@ func openMainWindow(started *launched, shown func()) {
 	window.OnReadyToShow(func() {
 		restoreSavedWindowState(windowConfig, window, screenRects())
 		show()
-		closeResetProgress(startupProgress)
 		if shown != nil {
 			shown()
 		}
 		ready.Store(true)
-		if startupReset != nil && startupReset.Phase == resetCleaned {
-			if err := clearResetMarker(); err != nil {
-				logger.G().Warnf("Remove completed reset marker: %v", err)
-			}
-			app.Notifier.WithTimeout(5 * time.Second).Success(locales.SettingsResetApplicationSuccess())
-		}
 		go startGlobalShortcuts(all.shortcut)
 	})
 }
@@ -732,7 +669,7 @@ func screenRects() []windowRect {
 
 // prepareShutdown stops background work before the process exits, in the order
 // the services depend on each other.
-func prepareShutdown(all *services, lifecycle *appLifecycle) error {
+func prepareShutdown(all *services) error {
 	var failures []error
 	note := func(step string, err error) {
 		if err != nil {
@@ -744,9 +681,7 @@ func prepareShutdown(all *services, lifecycle *appLifecycle) error {
 	all.app.ShutdownUpdater()
 	note("stop rewrite rule loading", all.rewrite.Shutdown())
 	note("release global shortcuts", all.shortcut.Shutdown())
-	if !lifecycle.resetting.Load() {
-		note("save settings", all.setting.Save())
-	}
+	note("save settings", all.setting.Save())
 	note("stop memory monitoring", all.memStats.Shutdown())
 	note("wait for history maintenance", all.history.Shutdown())
 	note("stop proxy services", all.proxy.Shutdown())

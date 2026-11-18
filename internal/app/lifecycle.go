@@ -35,27 +35,16 @@ type appLifecycle struct {
 	guards      []quitGuard
 
 	trayAvailable atomic.Bool
-	resetting     atomic.Bool
-	resetReady    atomic.Bool
 	relaunch      atomic.Bool
 	mu            sync.Mutex
 }
 
 // RequestQuit begins quitting unless unsaved work needs the user first.
 func (l *appLifecycle) RequestQuit() {
-	if l.resetting.Load() && !l.resetReady.Load() {
-		return
-	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	logger.G().Info("Application quit requested")
 	if l.coordinator.InProgress() {
-		return
-	}
-	if l.resetting.Load() {
-		if l.resetReady.Load() {
-			l.coordinator.Request()
-		}
 		return
 	}
 	if l.blockedByGuards(quitReasonQuit, func() { go l.RequestQuit() }) {
@@ -65,13 +54,10 @@ func (l *appLifecycle) RequestQuit() {
 }
 
 // restartForUpdate shuts down and starts the staged version. It fails, leaving
-// the application running, when a shutdown or reset is already under way.
+// the application running, when a shutdown is already under way.
 func (l *appLifecycle) restartForUpdate() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.resetting.Load() {
-		return errors.New("application_reset_in_progress")
-	}
 	if l.coordinator.InProgress() || l.coordinator.CanQuit() {
 		return errors.New("the application is already shutting down")
 	}
@@ -108,11 +94,7 @@ func (l *appLifecycle) MainWindowClosing() (prevent bool) {
 	if l.coordinator.CanQuit() {
 		return false // quitting closes every window, this one included
 	}
-	if l.resetReady.Load() {
-		l.RequestQuit()
-		return true
-	}
-	if l.resetting.Load() || l.coordinator.InProgress() {
+	if l.coordinator.InProgress() {
 		logger.G().Info("Main window close ignored while application shutdown is in progress")
 		l.window.Show()
 		l.window.Focus()

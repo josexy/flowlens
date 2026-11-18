@@ -30,7 +30,7 @@ FlowLens uses Go 1.27.3+, MyGo native UI, `nuxt-ui-go` components, Task, SQLite,
 | `internal/desktop/store` | Shared interface state, on the main thread; reuse its stores |
 | `internal/desktop/logic` | Pure rules: formatting, headers, cookies, filters, hex, table state |
 | `internal/desktop/runtime` | Main-thread dispatcher and cancelable background jobs |
-| `internal/desktop/{shell,capture,inspect,editor,collection,rewrite,plugins,settings,update,memstats,resetstartup,startupfailure}` | Main window frame and each surface or window |
+| `internal/desktop/{shell,capture,inspect,editor,collection,rewrite,plugins,settings,update,memstats,startupfailure}` | Main window frame and each surface or window |
 | `internal/desktop/widgets` | Shared controls, including `ProcessIcon` and its cache |
 | `internal/desktop/shortcuts` | Command catalog, bindings/conflicts, recording, and per-window dispatch |
 | `internal/desktop/theme`, `internal/desktop/locale`, `locales/` | Appearance, language, and message catalogs |

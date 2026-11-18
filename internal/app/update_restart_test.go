@@ -2,8 +2,6 @@ package app
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -190,152 +188,12 @@ func TestRestartFailureKeepsTheApplicationRunning(t *testing.T) {
 	}
 }
 
-func TestRestartRefusedDuringShutdownOrReset(t *testing.T) {
+func TestRestartRefusedDuringShutdown(t *testing.T) {
 	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	f.lifecycle.resetting.Store(true)
-	if err := f.lifecycle.restartForUpdate(); err == nil {
-		t.Fatal("reset blocks restart")
-	}
-	f.lifecycle.resetting.Store(false)
 	if !f.lifecycle.coordinator.Request() {
 		t.Fatal("request")
 	}
 	if err := f.lifecycle.restartForUpdate(); err == nil || f.lifecycle.relaunch.Load() {
 		t.Fatal("shutdown blocks restart")
-	}
-}
-
-type fakeResetGuard struct {
-	removeErr           error
-	committed, canceled int
-}
-
-func (g *fakeResetGuard) RemoveBuiltinCATrust() error { return g.removeErr }
-func (g *fakeResetGuard) Commit()                     { g.committed++ }
-func (g *fakeResetGuard) Cancel() {
-	if g.committed == 0 {
-		g.canceled++
-	}
-}
-
-func resetFixture(t *testing.T, f *lifecycleFixture, guard resetGuard) (*resetRequest, *int) {
-	t.Helper()
-	committed := new(int)
-	return &resetRequest{
-		lifecycle: f.lifecycle, language: func() string { return "en" },
-		begin:         func() (resetGuard, error) { return guard, nil },
-		cancelUpdates: func() {},
-		saveManifest:  saveResetManifest,
-		clearMarker:   clearResetMarker,
-		committed:     func() { *committed++ },
-	}, committed
-}
-
-func TestResetCommitsForTheNextLaunch(t *testing.T) {
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	guard := &fakeResetGuard{}
-	request, committed := resetFixture(t, f, guard)
-	if err := request.run(); err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := loadResetManifest()
-	if err != nil || manifest == nil || manifest.Phase != resetPending || manifest.Language != "en" {
-		t.Fatalf("%+v %v", manifest, err)
-	}
-	if guard.committed != 1 || *committed != 1 || !f.lifecycle.resetReady.Load() || !f.lifecycle.resetting.Load() {
-		t.Fatal("committed")
-	}
-	if err := request.run(); err == nil {
-		t.Fatal("only once")
-	}
-	if err := clearResetMarker(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestCATrustFailureLeavesDataIntact(t *testing.T) {
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	root, err := resetDirectory()
-	if err != nil {
-		t.Fatal(err)
-	}
-	data := filepath.Join(filepath.Dir(root), "keep.txt")
-	if err := os.MkdirAll(filepath.Dir(data), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(data, []byte("mine"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	guard := &fakeResetGuard{removeErr: errors.New("user refused the trust prompt")}
-	request, committed := resetFixture(t, f, guard)
-	if err := request.run(); !errors.Is(err, guard.removeErr) {
-		t.Fatal(err)
-	}
-	manifest, err := loadResetManifest()
-	if err != nil || manifest != nil {
-		t.Fatalf("no marker survives: %+v %v", manifest, err)
-	}
-	if contents, err := os.ReadFile(data); err != nil || string(contents) != "mine" {
-		t.Fatal(err)
-	}
-	if guard.canceled != 1 || guard.committed != 0 || *committed != 0 || f.lifecycle.resetting.Load() || f.lifecycle.resetReady.Load() {
-		t.Fatalf("%+v", guard)
-	}
-	guard.removeErr = nil
-	if err := request.run(); err != nil {
-		t.Fatal("a later reset still works", err)
-	}
-	_ = clearResetMarker()
-}
-
-func TestResetRefusedDuringShutdown(t *testing.T) {
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	request, _ := resetFixture(t, f, &fakeResetGuard{})
-	f.lifecycle.coordinator.Request()
-	if err := request.run(); err == nil || f.lifecycle.resetting.Load() {
-		t.Fatal(err)
-	}
-}
-
-func TestQuitIsBlockedWhileResetRuns(t *testing.T) {
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	f.lifecycle.resetting.Store(true)
-	f.lifecycle.RequestQuit()
-	if f.lifecycle.coordinator.InProgress() {
-		t.Fatal("reset must finish first")
-	}
-	f.lifecycle.resetReady.Store(true)
-	f.lifecycle.RequestQuit()
-	if !f.lifecycle.coordinator.InProgress() {
-		t.Fatal("exit proceeds once committed")
-	}
-}
-
-func TestResetStartupActions(t *testing.T) {
-	directory := t.TempDir()
-	visible, shown := false, 0
-	actions := &resetStartupActions{directory: directory, visible: func() bool { return visible }, show: func() { shown++ }}
-	if err := actions.run("show"); err == nil || shown != 1 {
-		t.Fatal("an invisible window is an error", err)
-	}
-	if err := actions.run("ready"); err == nil {
-		t.Fatal("cannot authorise invisibly")
-	}
-	if err := actions.run("retry"); err == nil {
-		t.Fatal("retry waits for ready")
-	}
-	if _, err := os.Stat(filepath.Join(directory, "action.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-	visible = true
-	if err := actions.run("ready"); err != nil {
-		t.Fatal(err)
-	}
-	if err := actions.run("retry"); err != nil {
-		t.Fatal(err)
-	}
-	var action resetStartupAction
-	if err := readResetStartupJSON(directory, "action.json", &action); err != nil || action.Action != "retry" || !action.Ready || action.Sequence != 2 {
-		t.Fatalf("%+v %v", action, err)
 	}
 }

@@ -170,18 +170,6 @@ func TestClosingDuringShutdownKeepsTheWindowOpen(t *testing.T) {
 	}
 }
 
-func TestQuitWhileResetIsPreparingIsIgnored(t *testing.T) {
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
-	f.lifecycle.resetting.Store(true)
-	f.lifecycle.RequestQuit()
-	if f.lifecycle.coordinator.InProgress() {
-		t.Fatal("quit started during reset preparation")
-	}
-	f.lifecycle.resetReady.Store(true)
-	f.lifecycle.RequestQuit()
-	f.waitForQuit(t)
-}
-
 func TestWindowClosesOnceShutdownHasFinished(t *testing.T) {
 	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit)
 	f.lifecycle.RequestQuit()

@@ -12,7 +12,6 @@ import (
 
 // startupStageDescriptions name the startup steps in the log.
 var startupStageDescriptions = map[startupfailure.Stage]string{
-	startupfailure.StageReset:    "restore initial state",
 	startupfailure.StageDatabase: "open application database",
 	startupfailure.StageSettings: "load application settings",
 	startupfailure.StageServices: "start services",
@@ -42,9 +41,9 @@ func (e *startupError) failure() startupfailure.Failure {
 	return startupfailure.Failure{Stage: e.stage, Error: e.err.Error()}
 }
 
-// enableBootstrapLogging releases the previous attempt's log file before a
-// pending reset can remove it. File logging resumes when settings are loaded
-// or another startup failure is reported.
+// enableBootstrapLogging releases the previous attempt's log file and writes to
+// standard error until file logging resumes, when settings are loaded or another
+// startup failure is reported.
 func enableBootstrapLogging() {
 	err := logger.Close()
 	logger.EnableBootstrapOutput(os.Stderr)

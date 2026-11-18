@@ -15,7 +15,6 @@ type Stage string
 
 // Startup steps, in the order they run.
 const (
-	StageReset    Stage = "reset"
 	StageDatabase Stage = "database"
 	StageSettings Stage = "settings"
 	StageServices Stage = "services"
@@ -80,8 +79,6 @@ func (v *View) openLogs() {
 
 func stageLabel(stage Stage) string {
 	switch stage {
-	case StageReset:
-		return locales.StartupFailureStageReset()
 	case StageDatabase:
 		return locales.StartupFailureStageDatabase()
 	case StageSettings:

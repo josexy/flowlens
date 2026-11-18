@@ -388,7 +388,7 @@ func (v *View) loadDataSize() {
 
 func (v *View) clearData(work func() error, done *bool) {
 	state := &v.storage
-	if state.pending || v.Data.Settings.Resetting {
+	if state.pending {
 		return
 	}
 	state.pending, state.cacheDone, state.allDone = true, false, false
@@ -405,22 +405,6 @@ func (v *View) clearData(work func() error, done *bool) {
 
 func formatSize(bytes int64) string {
 	return logic.FormatFileSizeWith(bytes, logic.FileSizeOptions{Precision: 1})
-}
-
-func (v *View) resetApplication() {
-	settings := v.Data.Settings
-	if settings.Resetting || v.storage.pending || v.committing || settings.Saving {
-		return
-	}
-	settings.Resetting = true
-	run(v, "reset", func() (struct{}, error) { return struct{}{}, v.Host.ResetApp() }, func(_ struct{}, err error) {
-		if err != nil {
-			settings.Resetting, settings.ResetAwaitingRestart = false, false
-			v.Notifier.Error(locales.SettingsResetApplicationFailed(caErrorMessage(err)))
-			return
-		}
-		settings.ResetAwaitingRestart = true
-	})
 }
 
 func (v *View) dangerRow(c *ui.Context, palette nui.Theme, key, title, description, label string, color nui.Color, variant nui.Variant, disabled, loading bool, run func()) {
@@ -450,7 +434,6 @@ func (v *View) dangerRow(c *ui.Context, palette nui.Theme, key, title, descripti
 
 func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservice.Settings) {
 	state := &v.storage
-	settings := v.Data.Settings
 	cache, retention := draft.CacheConfig, draft.HistoryRetentionConfig
 	v.section(c, palette, "cache", locales.SettingsSectionCache(), false, nil, func() {
 		row(c, palette, "threshold", locales.SettingsCacheThresholdLabel(), locales.SettingsCacheThresholdHint(), func() {
@@ -510,16 +493,12 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 		if state.allDone {
 			nui.Alert(c.Key("all-done"), palette, nui.AlertOptions{Title: locales.SettingsClearAllDataSuccess(), Color: nui.Success, Variant: nui.Subtle})
 		}
-		blocked := state.pending || settings.Resetting
+		blocked := state.pending
 		v.dangerRow(c, palette, "clear-cache", locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesDesc(), locales.SettingsClearAction(), nui.Neutral, nui.Outline, blocked, false, func() {
 			v.Confirm.Ask(confirmRequest(locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesConfirm(), locales.SettingsClearAction(), nui.Warning, func() { v.clearData(v.Host.ClearCache, &state.cacheDone) }))
 		})
 		v.dangerRow(c, palette, "clear-all", locales.SettingsClearAllData(), locales.SettingsClearAllDataDesc(), locales.SettingsClearAction(), nui.Error, nui.Solid, blocked, false, func() {
 			v.Confirm.Ask(confirmRequest(locales.SettingsClearAllData(), locales.SettingsClearAllDataConfirm(), locales.SettingsClearAction(), nui.Error, func() { v.clearData(v.Host.ClearAllData, &state.allDone) }))
-		})
-		resetBlocked := blocked || v.committing || settings.Saving || v.proxy.changing || v.proxy.generating
-		v.dangerRow(c, palette, "reset", locales.SettingsResetApplication(), locales.SettingsResetApplicationDescription(), locales.SettingsResetApplicationAction(), nui.Error, nui.Solid, resetBlocked, settings.Resetting, func() {
-			v.Confirm.Ask(confirmRequest(locales.SettingsResetApplication(), locales.SettingsResetApplicationConfirm(), locales.SettingsResetApplicationAction(), nui.Error, v.resetApplication))
 		})
 	})
 }
