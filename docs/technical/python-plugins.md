@@ -19,7 +19,7 @@ Both scopes use the same synchronous `onRequest` and `onResponse` API. If you on
 
 ## In-app API help and system prompt
 
-Open **Python API Help** with the book icon in the **Python Plugins** sidebar heading or the HTTP Request Editor **Script** toolbar. Help is available even before Python is configured or a plugin is created. It appears beside the workspace when its content area is at least 1100 px wide, with a resizable 420 px panel by default; narrower workspaces use a right-side drawer. Leaving the workbench or switching request tabs closes help without changing the script.
+Open **Python API Help** with the book icon in the **Python Plugins** sidebar heading or the HTTP Request Editor **Script** toolbar. Help is available even before Python is configured or a plugin is created. It slides in as a 420 px panel at the window's right edge and closes with Escape or a click beside it. Leaving the workbench or switching request tabs also closes help without changing the script.
 
 **Quick start** shows three setup steps and the essential hook behavior; expand the minimal script or runtime rules when needed. The searchable **API reference** groups interfaces by type and expands matching groups as you search. Signatures include parameters and return types; usage notes and import guidance can be expanded separately.
 
@@ -404,34 +404,9 @@ response.body = Body(
 )
 ```
 
-Descriptor-backed request Bodies support `text`, `json`, `xml`, `binary`, and `file`. Descriptor-backed response Bodies support `text`, `json`, `xml`, and `binary`; `file` remains request-only. `write_file()` does not support URL-encoded or multipart Bodies.
+`FileDescriptor.from_file(path)` validates the path and reads the file's name and size. Use it with `Body("file", ...)` when a request should keep the semantic `file` kind, or as a `MultipartPart` file, as shown in [Direct assignment](#direct-assignment).
 
-Use `FileDescriptor.from_file(path)` when the request should retain the semantic `file` kind. It validates the path and reads the basename and size automatically:
-
-```python
-request.body = Body(
-    "file",
-    FileDescriptor.from_file("C:/files/request.bin"),
-)
-```
-
-The same descriptor constructor creates new multipart file parts:
-
-```python
-request.body = Body(
-    "multipart",
-    [
-        MultipartPart("description", "monthly report"),
-        MultipartPart(
-            "upload",
-            file=FileDescriptor.from_file("C:/files/report.pdf"),
-            filename="monthly-report.pdf",
-        ),
-    ],
-)
-```
-
-The source must be an absolute, non-symlink regular file. Assigning a descriptor-backed `Body` to `request.body` or `response.body` immediately copies the source into managed temporary storage, so the script may delete its source after assignment, including on Windows. Both `file` and multipart are request-only Body kinds.
+Descriptor-backed request Bodies support `text`, `json`, `xml`, `binary`, and `file`. Descriptor-backed response Bodies support `text`, `json`, `xml`, and `binary`; `file` and `multipart` are request-only. `write_file()` does not support URL-encoded or multipart Bodies.
 
 The kind is always explicit; there is no extension-based inference. Assigning the path string itself creates a text Body rather than reading the file:
 
@@ -440,12 +415,10 @@ request.body = Body("binary", FileDescriptor.from_file("C:/files/request.bin"))
 request.body = "C:/files/request.bin"  # text containing the path
 ```
 
-Large inline replacements are automatically staged before crossing IPC. The 4 MiB threshold and the managed file location are internal implementation details, not Python API.
-
 ### Temporary-file ownership and failures
 
 - Paths passed to `FileDescriptor.from_file()` must be absolute, non-symlink regular files. Close writers before constructing the descriptor.
-- Assigning `Body(kind, descriptor)` to a request or response copies a pending source into the current FlowLens session before the assignment returns. The script may then delete its source.
+- Assigning `Body(kind, descriptor)` to a request or response copies the source into managed temporary storage before the assignment returns. The script may then delete its source, including on Windows.
 - New multipart file parts are mutable list items and therefore stage during request serialization rather than owner assignment. Do not delete or replace their source before the hook returns.
 - FlowLens removes managed files after success, blocking, hook failure, timeout, cancellation, or Worker exit.
 - Invalid request files fail closed. Invalid response files fail open and return the untouched response with diagnostics.
@@ -668,7 +641,7 @@ Hook outcomes, matched revisions, per-phase durations, transformations, and sani
 - **A current-request script disappeared:** only HTTP requests saved or updated in API Collection persist their script source; closing an unsaved new tab discards it. A reopened saved request leaves the script disabled until you turn it on. Use a global plugin to reuse behavior across requests.
 - **A response Body is unavailable:** the response is SSE. Restrict that hook to `code` and headers; ordinary responses remain available through the Body API.
 - **Body processing uses too much memory:** avoid reading `body.value` for that Body. Export it with `write_file()` and process the resulting file with ordinary Python APIs instead.
-- **`file()`, `binary(path)`, or `textFromFile()` fails:** close the source writer, pass an absolute non-symlink regular-file path, and keep the copy within the hook timeout.
+- **`FileDescriptor.from_file()` or a descriptor-backed Body assignment fails:** close the source writer, pass an absolute non-symlink regular-file path, and keep the copy within the hook timeout.
 - **Edits fail validation:** the last good immutable revision stays active. Correct the saved source and validate again; unsaved editor content remains local to the current FlowLens window.
 
 Plugin package import/export, automatic dependency installation, regex rules, directory watching, asynchronous hooks, and per-plugin interpreters are not part of API v1.

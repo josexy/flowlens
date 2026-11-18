@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Engineering guidelines for FlowLens. Product usage belongs in [README.md](README.md) and [docs/](docs/user-guide.md).
+Engineering guidelines for FlowLens. Product usage belongs in [README.md](README.md) and [docs/](docs/user-guide.md); behavior specifications live in `openspec/specs/`.
 
 ## Workflow
 
@@ -24,6 +24,8 @@ FlowLens uses Go 1.27.3+, MyGo native UI, `nuxt-ui-go` components, Task, SQLite,
 | `internal/services/history_service` | History reads/deletion/resend and import/export entry points; reuse proxy codecs and writers |
 | `internal/services/python_plugin_service` | Plugin registration/revisions/rules, Workers, protocol, SDK, request hooks, and execution output |
 | `internal/services/api_collection_service` | SQLite repository, tree transactions, and managed request-body files |
+| `internal/services/rewrite_service` | Rewrite-rule persistence, validation, compiled matchers, and published snapshots |
+| `internal/services/mem_stats_service` | Go runtime memory sampling for Memory Statistics |
 | `internal/services/{setting_service,logging_service,shortcut_service}` | Settings and CA trust, logging, and system shortcuts respectively |
 | `internal/pkg/{process_attribution,systemproxy}` | Platform process/icon lookup and system-proxy control |
 | `internal/pkg/{body_cache,body_spool,database,logger}` | Body cache, Python body temp files, shared database, and logging |
@@ -32,6 +34,7 @@ FlowLens uses Go 1.27.3+, MyGo native UI, `nuxt-ui-go` components, Task, SQLite,
 | `internal/desktop/runtime` | Main-thread dispatcher and cancelable background jobs |
 | `internal/desktop/{shell,capture,inspect,editor,collection,rewrite,plugins,settings,update,memstats,startupfailure}` | Main window frame and each surface or window |
 | `internal/desktop/widgets` | Shared controls, including `ProcessIcon` and its cache |
+| `internal/desktop/pythonapi` | Python API help catalog, help copy, and copied system prompts |
 | `internal/desktop/shortcuts` | Command catalog, bindings/conflicts, recording, and per-window dispatch |
 | `internal/desktop/theme`, `internal/desktop/locale`, `locales/` | Appearance, language, and message catalogs |
 
@@ -92,6 +95,8 @@ Take the single-instance lock before opening SQLite so a second process exits be
 - Prefer `nui` components, theme colors, and `lucide` icons. Select values cannot be empty strings; use a local sentinel.
 - Reuse `internal/desktop/logic` for ordered header editing/copying, degradation hints, dates, microsecond times, durations, and sizes.
 - Reuse `internal/desktop/theme` and the settings store for fonts/colors/layout. Check light/dark themes and affected windows; tray/title-bar/visibility changes must cover `internal/app`, `internal/desktop/shell`, settings, and locales together.
+- Every window root calls `theme.Begin`, which applies the Windows text-scale factor once; do not scale text again in views.
+- Page, pane, grid, card, tab, and window-frame borders use `nui.Theme.Border`, not MyGo's stronger native `Theme.Border`. Control outlines and selection, focus, error, and drop indicators keep their semantic colors.
 - Keep hex viewing in `internal/desktop/inspect/hex.go` and `internal/desktop/logic/hexdump.go`; preserve byte-based selection/copy/export and bounded rendering for large bodies.
 - Put copy in both `locales/{en,zh-Hans}.json` with matching keys and placeholders, then run `task i18n:generate`. Generated accessors take arguments in alphabetical order of placeholder name. Keep persistent copy short, preserve distinct lifecycles, and retain delete/overwrite/cancel/restart/truncation/order-degradation semantics.
 
@@ -115,11 +120,13 @@ Run the smallest checks matching the risk. Full verification is `task verify`, w
 
 Prefix package lists with `go test`. For concurrency/lifecycle changes, also run `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service` when supported. Worker/SDK/interpreter/package changes must actually run Python 3 integration tests, without skips.
 
-View changes run under `ui.NewTester` with no display. After changing views, run `task vet:ui`.
+View changes run under `ui.NewTester` with no display. After changing views, run `task vet:ui`. To inspect renders, set `FLOWLENS_RENDER_DIR` to a directory and run the `TestRender…` cases, for example `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
 
 ## Docs, Releases, and Completion
 
+- Keep [docs/user-guide.md](docs/user-guide.md) task-oriented; put protocol, limit, and format details in `docs/technical/`. Metrics, HAR, and HBIN changes update [traffic-metrics-and-har.md](docs/technical/traffic-metrics-and-har.md); rewrite changes update [http-rewrite-rules.md](docs/technical/http-rewrite-rules.md).
 - Python entry-point/scope/hook/order/limit/security/console changes update both technical guides, examples, README, and `internal/desktop/pythonapi/data`.
+- When specified behavior changes, update `openspec/specs/` through an OpenSpec change and archive it once implemented, so the specs match the shipped application.
 - Use English Conventional Commits: `<type>(<scope>): <summary>`, one class of change per commit. Include only verified in-scope files and consistent bilingual copy.
 - Keep the application version only in `mygo.json`; MyGo embeds it and `appservice.Version()` reads it through `mygo.App.Version()`. Release tags must match this version. Each release needs a `## <version>` section in `CHANGELOG.md`, which becomes its update notes. See [Building and Packaging](docs/technical/building.md).
 - macOS must keep `CGO_ENABLED=1`; `cgo_guard_darwin.go` fails a production build without it. MyGo upgrades go through `go.mod`, which pins the CLI.

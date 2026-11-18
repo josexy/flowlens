@@ -1,8 +1,14 @@
 # Spec Delta
 
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: Row selection
+**Reason**: The 1.0.5 Shift-toggle and Ctrl/Cmd-click model overrode the toolkit's native selection; this change returns selection to MyGo.
+**Migration**: Use Native row selection. Shift-click now selects a range and Ctrl/Cmd-click toggles a row.
+
+## ADDED Requirements
+
+### Requirement: Native row selection
 Traffic tables SHALL use conventional native single, additive, range, drag, and keyboard selection. Selecting rows SHALL NOT itself open a closed detail panel. Selection SHALL track entry identity through table changes, exclude removed entries, and report its current count. An interrupted pointer gesture SHALL NOT leave selection or keyboard navigation stuck. Opening another saved session SHALL clear its previous selection, focus, and details.
 
 #### Scenario: Click selects without opening details

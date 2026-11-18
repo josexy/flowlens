@@ -1,8 +1,14 @@
 # Spec Delta
 
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: Traffic detail panel
+**Reason**: Ctrl/Cmd-click no longer toggles details and the panel now has an explicit close action, so the 1.0.5 toggle and no-close-button scenarios no longer apply.
+**Migration**: Use Explicit traffic detail panel. Open details with Enter, an unmodified double-click, or Show; hide them with Close details.
+
+## ADDED Requirements
+
+### Requirement: Explicit traffic detail panel
 The panel SHALL show the focused entry with applicable request tabs Overview, Raw, Headers, Query, Cookies, Body and response tabs Raw, Headers, Cookies, Trailers, Body. Enter, an unmodified double-click in a traffic table, or its Show action SHALL open details. Selection alone SHALL NOT open a closed panel. A visible, keyboard-operable close action SHALL hide details without clearing row selection and return focus to the originating table.
 
 #### Scenario: Failed exchange
