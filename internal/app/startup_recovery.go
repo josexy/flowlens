@@ -62,7 +62,7 @@ func (r *startupRecovery) fail(failure *startupError) { r.show(failure) }
 // retry starts the application again and reports the outcome on the main
 // thread. It blocks, so the window spawns it.
 func (r *startupRecovery) retry() {
-	started, failure, canceled := r.attempt()
+	started, failure := r.attempt()
 	if started != nil {
 		// Whatever happens to the window, the event loop's end stops it.
 		r.mu.Lock()
@@ -70,14 +70,11 @@ func (r *startupRecovery) retry() {
 		r.mu.Unlock()
 	}
 	r.post(func() {
-		switch {
-		case canceled:
-			r.quit()
-		case failure != nil:
+		if failure != nil {
 			r.show(failure)
-		default:
-			r.open(started)
+			return
 		}
+		r.open(started)
 	})
 }
 

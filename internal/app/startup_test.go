@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/josexy/flowlens/internal/desktop/startupfailure"
 	appdatabase "github.com/josexy/flowlens/internal/pkg/database"
+	appfs "github.com/josexy/flowlens/internal/pkg/fs"
 	"github.com/josexy/flowlens/internal/pkg/logger"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
@@ -20,7 +20,6 @@ import (
 type startupRecorder struct {
 	calls       []string
 	locked      bool
-	resetErr    error
 	dbErr       error
 	servicesErr error
 	db          *sql.DB
@@ -37,10 +36,6 @@ func (r *startupRecorder) steps() startupSteps {
 		acquireInstanceLock: func() bool {
 			r.calls = append(r.calls, "lock")
 			return r.locked
-		},
-		prepareReset: func() (*resetManifest, *resetStartupClient, error) {
-			r.calls = append(r.calls, "reset")
-			return nil, nil, r.resetErr
 		},
 		openDatabase: func() (*sql.DB, error) {
 			r.calls = append(r.calls, "database")
@@ -67,7 +62,7 @@ func (r *startupRecorder) steps() startupSteps {
 func TestStartupOrder(t *testing.T) {
 	recorder := &startupRecorder{locked: true}
 	recorder.steps().run()
-	if want := []string{"log", "lock", "reset", "database", "services", "serve"}; !slices.Equal(recorder.calls, want) {
+	if want := []string{"log", "lock", "database", "services", "serve"}; !slices.Equal(recorder.calls, want) {
 		t.Fatalf("calls %v, want %v", recorder.calls, want)
 	}
 	if recorder.first == nil || recorder.failure != nil {
@@ -80,25 +75,6 @@ func TestSecondInstanceNeverOpensTheDatabase(t *testing.T) {
 	recorder.steps().run()
 	if slices.Contains(recorder.calls, "database") || recorder.served {
 		t.Fatalf("calls %v", recorder.calls)
-	}
-}
-
-func TestResetFailureStaysOpenWithoutTheDatabase(t *testing.T) {
-	recorder := &startupRecorder{locked: true, resetErr: errors.New("boom")}
-	recorder.steps().run()
-	if slices.Contains(recorder.calls, "database") || !recorder.served || recorder.first != nil {
-		t.Fatalf("calls %v", recorder.calls)
-	}
-	if recorder.failure == nil || recorder.failure.stage != startupfailure.StageReset || !slices.Equal(recorder.failures, []startupfailure.Stage{startupfailure.StageReset}) {
-		t.Fatalf("failure %v, reported %v", recorder.failure, recorder.failures)
-	}
-}
-
-func TestExitFromTheResetWindowQuitsQuietly(t *testing.T) {
-	recorder := &startupRecorder{locked: true, resetErr: context.Canceled}
-	recorder.steps().run()
-	if recorder.served || len(recorder.failures) != 0 || slices.Contains(recorder.calls, "database") {
-		t.Fatalf("calls %v, failures %v", recorder.calls, recorder.failures)
 	}
 }
 
@@ -137,72 +113,43 @@ func TestRetryRunsEveryStepAgain(t *testing.T) {
 	recorder.steps().run()
 	recorder.calls = nil
 
-	started, failure, canceled := recorder.retry()
-	if failure == nil || started != nil || canceled {
-		t.Fatalf("still locked: %v %v %v", started, failure, canceled)
+	started, failure := recorder.retry()
+	if failure == nil || started != nil {
+		t.Fatalf("still locked: %v %v", started, failure)
 	}
 	recorder.dbErr = nil
 	recorder.calls = nil
-	started, failure, canceled = recorder.retry()
-	if started == nil || failure != nil || canceled {
-		t.Fatalf("retry: %v %v %v", started, failure, canceled)
+	started, failure = recorder.retry()
+	if started == nil || failure != nil {
+		t.Fatalf("retry: %v %v", started, failure)
 	}
-	if want := []string{"log", "reset", "database", "services"}; !slices.Equal(recorder.calls, want) {
+	if want := []string{"log", "database", "services"}; !slices.Equal(recorder.calls, want) {
 		t.Fatalf("calls %v, want %v", recorder.calls, want)
 	}
 }
 
-func TestResetRetryReleasesFailureLog(t *testing.T) {
-	base := resetTestStorage(t)
-	t.Cleanup(func() { _ = logger.Close() })
-	manifest := resetTestManifest()
-	if err := saveResetManifest(manifest); err != nil {
+// useTestStorage points the application's storage at a temporary directory
+// and returns the FlowLens data directory inside it.
+func useTestStorage(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("APPDATA", root)
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", root)
+	base, err := appfs.BaseStoragePath()
+	if err != nil {
 		t.Fatal(err)
 	}
-	resetErr := errors.New("reset progress window did not become ready")
-	recorder := &startupRecorder{locked: true, dbErr: errors.New("database unavailable after reset")}
-	steps := recorder.steps()
-	steps.enableBootstrapLogging = enableBootstrapLogging
-	steps.reportFailure = reportStartupFailure
-	steps.prepareReset = func() (*resetManifest, *resetStartupClient, error) {
-		if resetErr != nil {
-			return nil, nil, resetErr
-		}
-		pending := manifest.Phase == resetPending
-		if err := cleanResetData(manifest, os.RemoveAll, 1, 0); err != nil {
-			return nil, nil, err
-		}
-		logger.G().Warn("Reset retry bootstrap output")
-		if pending {
-			if _, err := os.Stat(base); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("bootstrap logging recreated reset storage: %v", err)
-			}
-		}
-		return manifest, nil, nil
-	}
-	steps.run()
-	if recorder.failure == nil || recorder.failure.stage != startupfailure.StageReset {
-		t.Fatalf("initial failure: %v", recorder.failure)
-	}
-	logPath := logger.Status().CurrentFile
-	content, err := os.ReadFile(logPath)
-	if err != nil || !strings.Contains(string(content), resetErr.Error()) {
-		t.Fatalf("initial failure log: %q, %v", content, err)
-	}
+	return base
+}
 
-	resetErr = nil
-	started, failure, canceled := recorder.retry()
-	if started != nil || canceled || failure == nil || failure.stage != startupfailure.StageDatabase {
-		t.Fatalf("retry did not pass reset cleanup: %v %v %v", started, failure, canceled)
+func writeTestFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	content, err = os.ReadFile(logPath)
-	if err != nil || !strings.Contains(string(content), recorder.dbErr.Error()) {
-		t.Fatalf("failure after reset was not logged to a new file: %q, %v", content, err)
-	}
-	recorder.dbErr = nil
-	started, failure, canceled = recorder.retry()
-	if started == nil || failure != nil || canceled {
-		t.Fatalf("retry after repairing the database: %v %v %v", started, failure, canceled)
+	if err := os.WriteFile(path, []byte("retained test content"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -215,7 +162,7 @@ func TestServiceConstructionFailurePreservesSavedLanguage(t *testing.T) {
 		{
 			name: "python plugins", message: "initialize Python plugin service",
 			setup: func(t *testing.T, _ *sql.DB, base string) {
-				writeResetTestFile(t, filepath.Join(base, "python_plugins"))
+				writeTestFile(t, filepath.Join(base, "python_plugins"))
 			},
 		},
 		{
@@ -228,7 +175,7 @@ func TestServiceConstructionFailurePreservesSavedLanguage(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			base := resetTestStorage(t)
+			base := useTestStorage(t)
 			t.Cleanup(func() { _ = logger.Close() })
 			db, err := appdatabase.Open()
 			if err != nil {
@@ -293,7 +240,7 @@ func newRecoveryRecorder(first *launched, attempt startupAttempt) *recoveryRecor
 
 func TestRecoveryOpensTheMainWindowAfterASuccessfulRetry(t *testing.T) {
 	started := &launched{}
-	r := newRecoveryRecorder(nil, func() (*launched, *startupError, bool) { return started, nil, false })
+	r := newRecoveryRecorder(nil, func() (*launched, *startupError) { return started, nil })
 	r.recovery.retry()
 	if len(r.opened) != 1 || r.opened[0] != started || len(r.shown) != 0 {
 		t.Fatalf("opened %v, shown %v", r.opened, r.shown)
@@ -305,24 +252,16 @@ func TestRecoveryOpensTheMainWindowAfterASuccessfulRetry(t *testing.T) {
 
 func TestRecoveryShowsAFailedRetry(t *testing.T) {
 	failure := startupFailed(startupfailure.StageDatabase, errors.New("locked"))
-	r := newRecoveryRecorder(nil, func() (*launched, *startupError, bool) { return nil, failure, false })
+	r := newRecoveryRecorder(nil, func() (*launched, *startupError) { return nil, failure })
 	r.recovery.retry()
 	if len(r.shown) != 1 || r.shown[0] != failure || len(r.opened) != 0 || r.recovery.finish() != nil {
 		t.Fatalf("shown %v, opened %v", r.shown, r.opened)
 	}
 }
 
-func TestRecoveryQuitsWhenTheResetWindowExits(t *testing.T) {
-	r := newRecoveryRecorder(nil, func() (*launched, *startupError, bool) { return nil, nil, true })
-	r.recovery.retry()
-	if r.quits != 1 || len(r.shown) != 0 || len(r.opened) != 0 {
-		t.Fatalf("quits %d, shown %v, opened %v", r.quits, r.shown, r.opened)
-	}
-}
-
 func TestRecoveryStopsWhatARetryStartedAfterTheLoopEnded(t *testing.T) {
 	started := &launched{}
-	r := newRecoveryRecorder(nil, func() (*launched, *startupError, bool) { return started, nil, false })
+	r := newRecoveryRecorder(nil, func() (*launched, *startupError) { return started, nil })
 	r.recovery.post = func(func()) {} // the event loop has stopped
 	r.recovery.retry()
 	if len(r.opened) != 0 || r.recovery.finish() != started {
@@ -333,9 +272,9 @@ func TestRecoveryStopsWhatARetryStartedAfterTheLoopEnded(t *testing.T) {
 func TestRecoveryFinishWaitsForARunningAttempt(t *testing.T) {
 	release := make(chan struct{})
 	started := &launched{}
-	r := newRecoveryRecorder(nil, func() (*launched, *startupError, bool) {
+	r := newRecoveryRecorder(nil, func() (*launched, *startupError) {
 		<-release
-		return started, nil, false
+		return started, nil
 	})
 	r.recovery.post = func(func()) {}
 	r.recovery.spawn(r.recovery.retry)

@@ -156,8 +156,6 @@ type SettingsStore struct {
 	columnLayoutDirty bool
 
 	Saving                    bool
-	Resetting                 bool
-	ResetAwaitingRestart      bool
 	SavingTrafficTableConfig  bool
 	SavingTrafficDetailConfig bool
 
@@ -373,7 +371,7 @@ type saveOutcome struct {
 // Save writes the draft's dirty sections. It reports false when a save is
 // already running or there is nothing to save; done is then not called.
 func (s *SettingsStore) Save(done func(SaveResult, error)) bool {
-	if s.Resetting || s.Saving || s.Draft == nil {
+	if s.Saving || s.Draft == nil {
 		return false
 	}
 	s.Saving = true
@@ -575,7 +573,7 @@ func (s *SettingsStore) SetLanguage(language string) error {
 // ToggleTrafficDetailLayout switches the detail panel layout and saves it. On
 // failure the previous layout returns and done receives the error.
 func (s *SettingsStore) ToggleTrafficDetailLayout(done func(error)) bool {
-	if s.Current == nil || s.SavingTrafficDetailConfig || s.Resetting {
+	if s.Current == nil || s.SavingTrafficDetailConfig {
 		return false
 	}
 	previous := s.TrafficDetailLayout()
@@ -622,7 +620,7 @@ func (s *SettingsStore) ShowAllTrafficColumns(done func(error)) bool {
 }
 
 func (s *SettingsStore) replaceHiddenColumns(values []string, done func(error)) bool {
-	if s.Current == nil || s.SavingTrafficTableConfig || s.Resetting {
+	if s.Current == nil || s.SavingTrafficTableConfig {
 		return false
 	}
 	previous := s.HiddenTrafficColumns()
@@ -656,7 +654,7 @@ func (s *SettingsStore) TrafficColumnLayout() ([]string, map[string]float32) {
 // already is followed by another with the latest layout, so a drag produces
 // few writes.
 func (s *SettingsStore) SetTrafficColumnLayout(order []string, widths map[string]float32) {
-	if s.Current == nil || s.Resetting {
+	if s.Current == nil {
 		return
 	}
 	current, currentWidths := s.TrafficColumnLayout()
@@ -697,7 +695,7 @@ func (s *SettingsStore) saveTrafficTableConfig(done func(error)) {
 // Settings window and applies it to the running proxy. It reports false when
 // a save is running; done is then not called.
 func (s *SettingsStore) UpdateProxyConfig(mutate func(*settingservice.ProxyConfig), done func(*proxyservice.ProxyConfigApplyResult, error)) bool {
-	if s.Current == nil || s.Resetting || s.Saving {
+	if s.Current == nil || s.Saving {
 		return false
 	}
 	draft := CloneSettings(s.Current)
@@ -744,7 +742,7 @@ func (s *SettingsStore) TrafficDetailSplit(name string, fallback float32) float3
 // SetTrafficDetailSplit records a split percentage and saves it shortly after
 // the last change, so dragging a divider writes once.
 func (s *SettingsStore) SetTrafficDetailSplit(name string, percent float32) {
-	if s.Current == nil || s.Resetting {
+	if s.Current == nil {
 		return
 	}
 	splits := s.trafficDetailSplits()

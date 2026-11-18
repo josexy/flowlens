@@ -91,8 +91,7 @@ func GetBaseStorageDir() (string, error) {
 	return userConfigDir, nil
 }
 
-// BaseStoragePath resolves the managed directory without creating it. Reset
-// startup must not recreate directories while removing the old installation data.
+// BaseStoragePath resolves the managed directory without creating it.
 func BaseStoragePath() (string, error) {
 	userConfigDir, err := os.UserConfigDir()
 	if err != nil {

@@ -11,6 +11,7 @@ FlowLens is now a native desktop application built on MyGo instead of a web view
 - macOS keeps process attribution with icons and the managed system proxy. Windows and Linux builds no longer need cgo.
 - A response in the request editor now shows the time the client measured for it.
 - The "Use pointer cursor" setting is removed: controls show the system's default cursor. Your other settings are kept.
+- Restore Initial State is removed from Settings > Storage. Clear Cache Files and Clear Caches and History remain.
 - Traffic tables use native selection: Ctrl/Cmd-click adds or removes rows and Shift-click selects a range. Enter, double-click, or Show opens details; Close details preserves selection. This replaces the former Shift-toggle and Ctrl/Cmd-detail gestures.
 
 ### Installing this version

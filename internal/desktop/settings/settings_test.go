@@ -190,7 +190,6 @@ func newFixture(t *testing.T) *fixture {
 		DataSize:     func() (proxyservice.LocalDataSize, error) { return f.size, nil },
 		ClearCache:   func() error { f.note("clear-cache"); return nil },
 		ClearAllData: func() error { f.note("clear-all"); return nil },
-		ResetApp:     func() error { f.note("reset"); return nil },
 		PythonStatus: func() (*pythonpluginservice.RuntimeStatus, error) { return f.python, nil },
 		TestPython: func(string) (*pythonpluginservice.RuntimeStatus, error) {
 			if f.testErr != nil {
@@ -1046,15 +1045,6 @@ func TestStorageUsageAndEveryCleanupConfirms(t *testing.T) {
 			t.Fatalf("%v", f.tester.Texts())
 		}
 	}
-	f.clickAction(locales.SettingsResetApplication())
-	if f.called("reset") || !f.has(locales.SettingsResetApplicationConfirm()) {
-		t.Fatalf("%v", f.tester.Texts())
-	}
-	f.confirm.Accept()
-	f.settle()
-	if !f.called("reset") || !f.data.Settings.ResetAwaitingRestart {
-		t.Fatal(f.calls)
-	}
 }
 
 func TestSaveShortcutRunsSave(t *testing.T) {
@@ -1103,48 +1093,6 @@ func TestPartialShortcutSaveKeepsOnlyUnappliedChangesDirty(t *testing.T) {
 	f.click(locales.SettingsSave())
 	if f.view.Dirty() {
 		t.Fatal("successful retry did not clear unsaved changes")
-	}
-}
-
-func TestResetBlocksTheWindowThenOffersExit(t *testing.T) {
-	f := newFixture(t)
-	exits := 0
-	f.view.Host.ExitAfterReset = func() { exits++ }
-	f.view.Host.ResetApp = func() error { f.note("reset"); return nil }
-	f.data.Settings.Resetting = true
-	f.settle()
-	if !f.has(locales.SettingsResetApplicationProgress()) || f.view.CloseRequested() || exits != 0 {
-		t.Fatalf("%v", f.tester.Texts())
-	}
-	if f.dispatch.Invoke(shortcuts.AppSave) {
-		t.Fatal("shortcuts are off")
-	}
-	f.data.Settings.ResetAwaitingRestart = true
-	f.settle()
-	if !f.has(locales.SettingsResetApplicationReady()) || !f.has(locales.SettingsResetApplicationReadyDescription()) {
-		t.Fatalf("%v", f.tester.Texts())
-	}
-	f.click(locales.SettingsResetApplicationExit())
-	if exits != 1 {
-		t.Fatal(exits)
-	}
-	if f.view.CloseRequested() || exits != 2 {
-		t.Fatal("closing the window exits too", exits)
-	}
-}
-
-func TestFailedResetUnblocks(t *testing.T) {
-	f := newFixture(t)
-	f.open(locales.SettingsTabStorage())
-	f.view.Host.ResetApp = func() error { return errors.New("ca_trust_timeout") }
-	f.clickAction(locales.SettingsResetApplication())
-	f.confirm.Accept()
-	f.settle()
-	if f.data.Settings.Resetting || f.has(locales.SettingsResetApplicationProgress()) {
-		t.Fatalf("%v", f.tester.Texts())
-	}
-	if !f.has(locales.SettingsResetApplicationFailed(locales.SettingsCaTrustErrorsCaTrustTimeout())) {
-		t.Fatalf("%v", f.tester.Texts())
 	}
 }
 
