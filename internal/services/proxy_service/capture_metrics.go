@@ -26,6 +26,11 @@ type captureExchange struct {
 	downstreamResponse    bool
 	deferredResponseStart *mitmproxy.HTTPExchangeTimingEvent
 	deferredResponseEnd   *mitmproxy.HTTPExchangeTimingEvent
+	// release ends the exchange's hold on its entry. It runs once, at the
+	// exchange's last update: a failure, a bodyless response, the end of the
+	// response body, or, with awaitDownstreamSend, the downstream send result.
+	release             func()
+	awaitDownstreamSend bool
 }
 
 func newCaptureExchange(service *ProxyService, ctx context.Context, entry *TrafficEntry) *captureExchange {
@@ -70,6 +75,13 @@ func completedHandshakeMetrics(
 	metrics.BodySize = bodySize
 	metrics.State = HTTPMessageStateCompleted
 	return metrics
+}
+
+// settle ends the exchange's hold on its entry.
+func (x *captureExchange) settle() {
+	if x.release != nil {
+		x.release()
+	}
 }
 
 func (x *captureExchange) setRequestBodyless(bodyless bool) {
@@ -231,6 +243,9 @@ func (x *captureExchange) responseEnded(ended time.Time, complete bool, response
 func (x *captureExchange) markBodylessResponseSize() {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	if !x.awaitDownstreamSend {
+		defer x.settle()
+	}
 	if x.entry.Response == nil {
 		return
 	}
@@ -250,6 +265,9 @@ func (x *captureExchange) responseBodyFinished(size int64, complete bool, readEr
 func (x *captureExchange) bodyFinished(isRequest bool, size int64, _ bool, _ error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	if !isRequest && !x.awaitDownstreamSend {
+		defer x.settle()
+	}
 	if !isRequest && x.downstreamResponse {
 		return
 	}
@@ -293,6 +311,7 @@ func (x *captureExchange) fail(err error) {
 	metrics.State = state
 	x.entry.Error = &TrafficError{Timestamp: now, Error: err.Error()}
 	x.publishFailureLocked()
+	x.settle()
 }
 
 func (x *captureExchange) fillResponseTrailers(response *http.Response) {

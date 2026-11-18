@@ -26,15 +26,25 @@ func (s *ProxyService) ExportTraffic(ctx context.Context, request TrafficExportR
 	if err := s.validateTrafficExportGeneration(request.CaptureGeneration); err != nil {
 		return TrafficExportResult{}, err
 	}
-	entries, _, err := s.harExportSnapshots(request.TrafficIDs)
+	refs, _, err := s.harExportSnapshots(request.TrafficIDs)
 	if err != nil {
 		return TrafficExportResult{}, err
 	}
-	return WriteTrafficExport(ctx, request, len(entries), func(index int) (*TrafficEntry, error) {
-		return entries[index], nil
-	}, func(entry *TrafficEntry, _ string) (HARBody, HARBody, error) {
-		requestBody, responseBody := s.trafficExportBodies(entry, request.Kind)
-		return requestBody, responseBody, nil
+	byID := make(map[uint64]captureEntryRef)
+	return WriteTrafficExport(ctx, request, len(refs), func(index int) (*TrafficEntry, error) {
+		ref := refs[index]
+		clear(byID)
+		byID[ref.id] = ref
+		return ref.Entry()
+	}, func(entry *TrafficEntry, temporaryDir string) (HARBody, HARBody, error) {
+		ref, ok := byID[entry.ID]
+		if !ok || ref.entry != nil {
+			requestBody, responseBody := s.trafficExportBodies(entry, request.Kind)
+			return requestBody, responseBody, nil
+		}
+		// A spilled entry's bodies are decoded from its HBIN record. The
+		// writer uses the sides it exports and closes both.
+		return ref.harBodies(temporaryDir)
 	})
 }
 

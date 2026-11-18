@@ -15,6 +15,8 @@ import (
 const (
 	KindRequest  = "req"
 	KindResponse = "resp"
+	// KindWebSocket holds an entry's WebSocket payloads above the threshold.
+	KindWebSocket = "ws"
 )
 
 const (
@@ -67,10 +69,14 @@ func (c *BodyCache) tmpFilePath(id uint64, kind string) string {
 }
 
 func kindBit(kind string) uint8 {
-	if kind == KindRequest {
+	switch kind {
+	case KindRequest:
 		return 1
+	case KindWebSocket:
+		return 4
+	default:
+		return 2
 	}
-	return 2
 }
 
 func (c *BodyCache) Write(id uint64, kind string, data []byte) error {
@@ -100,7 +106,10 @@ type BodyCacheWriter struct {
 	path  string
 	tmp   string
 	file  *os.File
-	mu    sync.Mutex
+	// written counts the bytes appended to the tmp file. SnapshotReader limits
+	// its view to this size, which later appends never change.
+	written int64
+	mu      sync.Mutex
 }
 
 func (c *BodyCache) Writer(id uint64, kind string) (*BodyCacheWriter, error) {
@@ -131,30 +140,41 @@ func (w *BodyCacheWriter) Write(p []byte) (int, error) {
 	if w.file == nil {
 		return 0, fmt.Errorf("body_cache: writer closed")
 	}
-	return w.file.Write(p)
+	n, err := w.file.Write(p)
+	w.written += int64(n)
+	return n, err
 }
 
-// Snapshot returns a stable copy of the bytes written so far without closing
-// the streaming writer. Callers may continue writing after Snapshot returns.
-func (w *BodyCacheWriter) Snapshot() ([]byte, error) {
+// SnapshotReader opens a read-only view of the bytes written so far without
+// copying them or closing the streaming writer. Callers may keep writing: later
+// writes only append past the returned size. Written bytes are visible to other
+// handles of the file without fsync. After Close or Preserve, it opens the
+// committed or preserved file instead.
+func (w *BodyCacheWriter) SnapshotReader() (io.ReadCloser, int64, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if w.file == nil {
-		data, err := w.cache.Read(w.id, w.kind)
+		reader, size, err := w.cache.Reader(w.id, w.kind)
 		if err != nil {
-			return nil, fmt.Errorf("body_cache: snapshot closed writer: %w", err)
+			return nil, 0, fmt.Errorf("body_cache: snapshot closed writer: %w", err)
 		}
-		return data, nil
+		return reader, size, nil
 	}
-	if err := w.file.Sync(); err != nil {
-		return nil, fmt.Errorf("body_cache: sync snapshot %s: %w", w.tmp, err)
-	}
-	data, err := os.ReadFile(w.tmp)
+	fp, err := openSharedReadOnly(w.tmp)
 	if err != nil {
-		return nil, fmt.Errorf("body_cache: read snapshot %s: %w", w.tmp, err)
+		return nil, 0, fmt.Errorf("body_cache: open snapshot %s: %w", w.tmp, err)
 	}
-	return data, nil
+	return &limitedFileReader{Reader: io.LimitReader(fp, w.written), file: fp}, w.written, nil
+}
+
+type limitedFileReader struct {
+	io.Reader
+	file *os.File
+}
+
+func (r *limitedFileReader) Close() error {
+	return r.file.Close()
 }
 
 func (w *BodyCacheWriter) markCachedLocked() {
@@ -243,9 +263,11 @@ func (c *BodyCache) Has(id uint64, kind string) bool {
 	return c.cached[id]&kindBit(kind) != 0
 }
 
+// Delete removes every cache file of an entry.
 func (c *BodyCache) Delete(id uint64) {
 	c.DeleteKind(id, KindRequest)
 	c.DeleteKind(id, KindResponse)
+	c.DeleteKind(id, KindWebSocket)
 }
 
 func (c *BodyCache) DeleteKind(id uint64, kind string) {
@@ -257,6 +279,84 @@ func (c *BodyCache) DeleteKind(id uint64, kind string) {
 	c.mu.Unlock()
 	_ = os.Remove(c.tmpFilePath(id, kind))
 	_ = os.Remove(c.filePath(id, kind))
+}
+
+var errAppendFileClosed = errors.New("body_cache: append file closed")
+
+// AppendFile is an append-only cache file of one entry, such as its WebSocket
+// payloads. Appends and reads may run concurrently: a read sees every append
+// that returned before it, and an append never changes bytes already written.
+// Delete removes the file with the entry's other cache files.
+type AppendFile struct {
+	path string
+	// mu guards file and size. Reads hold it shared so Close cannot close the
+	// file under them.
+	mu   sync.RWMutex
+	file *os.File
+	size int64
+}
+
+// AppendFile creates an empty append-only file of kind for id, replacing any
+// earlier one.
+func (c *BodyCache) AppendFile(id uint64, kind string) (*AppendFile, error) {
+	path := c.filePath(id, kind)
+	fp, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_RDWR, appfs.PrivateFileMode)
+	if err != nil {
+		return nil, fmt.Errorf("body_cache: open append file %s: %w", path, err)
+	}
+	if err := appfs.EnsurePrivateFile(path); err != nil {
+		_ = fp.Close()
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("body_cache: tighten append file %s: %w", path, err)
+	}
+	return &AppendFile{path: path, file: fp}, nil
+}
+
+// Append writes p at the end of the file and returns where it starts.
+func (f *AppendFile) Append(p []byte) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.file == nil {
+		return 0, errAppendFileClosed
+	}
+	offset := f.size
+	n, err := f.file.WriteAt(p, offset)
+	// A partial write still occupies its bytes; later appends follow them.
+	f.size += int64(n)
+	if err != nil {
+		return 0, fmt.Errorf("body_cache: append %s: %w", f.path, err)
+	}
+	return offset, nil
+}
+
+// ReadAt reads bytes written by earlier appends. After Close it reads the file
+// through a new handle.
+func (f *AppendFile) ReadAt(p []byte, off int64) (int, error) {
+	f.mu.RLock()
+	if f.file != nil {
+		defer f.mu.RUnlock()
+		return f.file.ReadAt(p, off)
+	}
+	f.mu.RUnlock()
+	fp, err := openSharedReadOnly(f.path)
+	if err != nil {
+		return 0, err
+	}
+	defer fp.Close()
+	return fp.ReadAt(p, off)
+}
+
+// Close ends appending and releases the file handle. The file stays readable
+// until it is deleted.
+func (f *AppendFile) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.file == nil {
+		return nil
+	}
+	err := f.file.Close()
+	f.file = nil
+	return err
 }
 
 func (c *BodyCache) SessionDir() string {

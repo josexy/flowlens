@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -164,25 +165,49 @@ func convertToTrafficBodyView(bvi *trafficBodyViewInner) (*TrafficBodyView, erro
 		ResponseBodyUnavailable: bvi.ResponseBodyUnavailable,
 		RequestBodyBinary:       bvi.RequestBodyBinary,
 		ResponseBodyBinary:      bvi.ResponseBodyBinary,
-		WebSocketMessages:       append([]*WebSocketMessage(nil), bvi.WebSocketMessages...),
+		WebSocketMessages:       materializedWebSocketMessages(bvi.WebSocketMessages),
 		WsMsgsTruncated:         bvi.WsMsgsTruncated,
 	}
 
 	if bvi.RequestBodyReader != nil {
-		reqBodyBytes, err := io.ReadAll(bvi.RequestBodyReader)
+		reqBodyBytes, err := readBodyOfSize(bvi.RequestBodyReader, bvi.RequestBodySize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
 		bv.RequestBody, bv.RequestBodyBinary = encodeTrafficBodyView(reqBodyBytes, bvi.RequestBodyBinary)
 	}
 	if bvi.ResponseBodyReader != nil {
-		rspBodyBytes, err := io.ReadAll(bvi.ResponseBodyReader)
+		rspBodyBytes, err := readBodyOfSize(bvi.ResponseBodyReader, bvi.ResponseBodySize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 		bv.ResponseBody, bv.ResponseBodyBinary = encodeTrafficBodyView(rspBodyBytes, bvi.ResponseBodyBinary)
 	}
 	return bv, nil
+}
+
+// readBodyOfSize reads a body whose size is known in advance with a single
+// allocation. A wrong size only costs extra growth, never data.
+func readBodyOfSize(r io.Reader, size int64) ([]byte, error) {
+	if size <= 0 || size >= math.MaxInt {
+		return io.ReadAll(r)
+	}
+	buf := make([]byte, size)
+	n, err := io.ReadFull(r, buf)
+	switch {
+	case err == io.EOF || err == io.ErrUnexpectedEOF:
+		return buf[:n], nil
+	case err != nil:
+		return nil, err
+	}
+	rest, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) == 0 {
+		return buf, nil
+	}
+	return append(buf, rest...), nil
 }
 
 // encodeTrafficBodyView hands freshly read body bytes to the view without a
@@ -1059,7 +1084,11 @@ func hbinWriteWebSocketMessage(w io.Writer, msg *WebSocketMessage) error {
 	if err := binary.Write(w, binary.BigEndian, mt); err != nil {
 		return err
 	}
-	if err := hbinWriteBytes(w, string2Bytes(msg.Data)); err != nil {
+	if msg.spooled != nil {
+		if err := hbinWriteSpooledPayload(w, msg.spooled, msg.DataSize); err != nil {
+			return err
+		}
+	} else if err := hbinWriteBytes(w, string2Bytes(msg.Data)); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.BigEndian, int32(msg.DataSize)); err != nil {
@@ -1155,6 +1184,22 @@ func hbinReadString(r io.Reader) (string, error) {
 }
 
 // hbinWriteBytes writes u32(len) + raw bytes.
+// hbinWriteSpooledPayload writes a spooled WebSocket payload as hbinWriteBytes
+// would, streaming it from the cache file.
+func hbinWriteSpooledPayload(w io.Writer, payload *spooledWebSocketPayload, size int) error {
+	if err := binary.Write(w, binary.BigEndian, uint32(size)); err != nil {
+		return err
+	}
+	n, err := io.Copy(w, io.NewSectionReader(payload.file, payload.offset, int64(size)))
+	if err != nil {
+		return fmt.Errorf("hbin: read spooled WebSocket payload: %w", err)
+	}
+	if n != int64(size) {
+		return fmt.Errorf("hbin: spooled WebSocket payload has %d bytes, want %d", n, size)
+	}
+	return nil
+}
+
 func hbinWriteBytes(w io.Writer, b []byte) error {
 	if err := binary.Write(w, binary.BigEndian, uint32(len(b))); err != nil {
 		return err

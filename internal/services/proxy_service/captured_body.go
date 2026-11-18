@@ -201,11 +201,13 @@ func (b *capturedBody) Reader() (io.ReadCloser, int64, bool, error) {
 		return io.NopCloser(bytes.NewReader(data)), int64(len(data)), false, nil
 	}
 	if b.writer != nil {
-		data, err := b.writer.Snapshot()
+		// Read the bytes received so far straight from the tmp file instead of
+		// copying a large in-progress body into memory first.
+		reader, size, err := b.writer.SnapshotReader()
 		if err != nil {
 			return nil, 0, false, err
 		}
-		return io.NopCloser(bytes.NewReader(data)), int64(len(data)), false, nil
+		return reader, size, true, nil
 	}
 	if b.cache == nil || !b.cache.Has(b.flowID, b.kind) {
 		return nil, 0, false, nil

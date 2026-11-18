@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,6 +118,68 @@ func TestGetTrafficBodyViewReadsActiveCacheBackedResponse(t *testing.T) {
 	}
 	if secondView.ResponseBody != "data: first\n\ndata: second\n\n" {
 		t.Fatalf("second response body = %q", secondView.ResponseBody)
+	}
+}
+
+func TestGetTrafficBodyViewOfLargeInProgressBodyCopiesItOnce(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	cache, err := bodycache.NewWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewWithDir: %v", err)
+	}
+	svc.bodyCache = cache
+
+	entry := &TrafficEntry{
+		ID:   3,
+		Type: "http",
+		Response: &HTTPMessage{HeaderFields: testHeaderFields(map[string][]string{
+			"Content-Type": {"application/octet-stream"},
+		})},
+	}
+	responseBody := newCapturedBody(entry.ID, bodycache.KindResponse, bodycache.MaxBodyCacheThresholdBytes, cache)
+	t.Cleanup(responseBody.Close)
+	svc.storeTrafficEntry(entry)
+	bodies := &TrafficBodies{liveState: 1, responseBody: responseBody}
+	svc.trafficBodies.Store(entry.ID, bodies)
+
+	const bodySize = 64 << 20
+	chunk := make([]byte, 1<<20)
+	received := make([]byte, 0, bodySize)
+	for i := 0; len(received) < bodySize; i++ {
+		for j := range chunk {
+			chunk[j] = byte(i + j)
+		}
+		bodies.lockRespBody.Lock()
+		responseBody.Write(chunk)
+		bodies.lockRespBody.Unlock()
+		received = append(received, chunk...)
+	}
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	view, err := svc.GetTrafficBodyView(entry.ID)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatalf("GetTrafficBodyView: %v", err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated >= 2*bodySize {
+		t.Fatalf("body view of a %d-byte in-progress body allocated %d bytes, want < %d", bodySize, allocated, 2*bodySize)
+	}
+	if view.ResponseBody != string(received) {
+		t.Fatalf("response body has %d bytes, want the %d bytes received so far", len(view.ResponseBody), len(received))
+	}
+
+	// The stream keeps receiving after the view was opened.
+	bodies.lockRespBody.Lock()
+	responseBody.Write([]byte("tail"))
+	bodies.lockRespBody.Unlock()
+	view, err = svc.GetTrafficBodyView(entry.ID)
+	if err != nil {
+		t.Fatalf("GetTrafficBodyView after more data: %v", err)
+	}
+	if len(view.ResponseBody) != bodySize+len("tail") || !strings.HasSuffix(view.ResponseBody, "tail") {
+		t.Fatalf("response body after more data has %d bytes", len(view.ResponseBody))
 	}
 }
 
@@ -412,6 +477,72 @@ func TestStreamBodyReaderDamagedCompressedPayloadDoesNotDeadlockForwarding(t *te
 	}
 	if err := reader.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestStreamBodyReaderDrainsBytesAfterDeflateStream(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	payload := []byte(`{"decoded":"deflate"}`)
+	compressed, err := compressWithFlate(payload)
+	if err != nil {
+		t.Fatalf("compressWithFlate: %v", err)
+	}
+	// The decoder stops at the final DEFLATE block. Everything after it must
+	// still be forwarded without the TeeReader blocking on the pipe.
+	encoded := append(append([]byte{}, compressed...), bytes.Repeat([]byte{0xa5}, 64*1024)...)
+	entry := &TrafficEntry{ID: 10_402, Type: "http", Method: http.MethodGet}
+	svc.storeTrafficEntry(entry)
+	captured := make(chan struct{})
+	reader := svc.newStreamBodyReader(
+		io.NopCloser(bytes.NewReader(encoded)),
+		entry.ID,
+		"deflate",
+		false,
+		func() { close(captured) },
+	)
+
+	result := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(reader)
+		result <- data
+	}()
+	select {
+	case got := <-result:
+		if !bytes.Equal(got, encoded) {
+			t.Fatalf("forwarded %d bytes, want %d unchanged bytes", len(got), len(encoded))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("forwarding stalled on bytes after the deflate stream")
+	}
+	select {
+	case <-captured:
+	case <-time.After(2 * time.Second):
+		t.Fatal("captured body did not complete")
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- reader.Close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not return")
+	}
+	stream := reader.(*StreamBodyReader)
+	select {
+	case <-stream.decodedDone:
+	default:
+		t.Fatal("decoding goroutine still running after Close")
+	}
+
+	view, err := svc.GetTrafficBodyView(entry.ID)
+	if err != nil {
+		t.Fatalf("GetTrafficBodyView: %v", err)
+	}
+	if view.ResponseBody != string(payload) {
+		t.Fatalf("captured body = %q, want %q", view.ResponseBody, payload)
 	}
 }
 
@@ -856,6 +987,112 @@ func TestDeleteTrafficEntryRemovesCachedBodyFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(cache.SessionDir(), "7_req.body")); !os.IsNotExist(err) {
 		t.Fatalf("request cache file should be removed, got %v", err)
 	}
+}
+
+func TestDeleteBetweenCaptureCheckAndAttachLeavesNoCaptureState(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	cache, err := bodycache.NewWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewWithDir: %v", err)
+	}
+	svc.bodyCache = cache
+	if err := svc.settingService.Update(&settingservice.Settings{
+		ProxyConfig: &settingservice.ProxyConfig{},
+		CacheConfig: &settingservice.CacheConfig{
+			BodyCacheThresholdBytes: 8,
+			MaxWsMessages:           1000,
+		},
+	}); err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+
+	// deleteDuringAttach blocks the capture side right after its tombstone
+	// check and deletes the entry from another goroutine before letting the
+	// capture attach its state.
+	deleteDuringAttach := func(t *testing.T, entry *TrafficEntry, attach func()) {
+		t.Helper()
+		passedCheck := make(chan struct{})
+		continueAttach := make(chan struct{})
+		var once sync.Once
+		svc.captureAttachPrecheckHook = func() {
+			once.Do(func() {
+				close(passedCheck)
+				<-continueAttach
+			})
+		}
+		t.Cleanup(func() { svc.captureAttachPrecheckHook = nil })
+		attached := make(chan struct{})
+		go func() {
+			defer close(attached)
+			attach()
+		}()
+		<-passedCheck
+		deleted := make(chan struct{})
+		go func() {
+			svc.deleteTrafficEntry(entry.ID)
+			close(deleted)
+		}()
+		select {
+		case <-deleted:
+		case <-time.After(2 * time.Second):
+			t.Fatal("delete blocked behind the capture attach")
+		}
+		close(continueAttach)
+		<-attached
+	}
+	assertNoCaptureState := func(t *testing.T, id uint64) {
+		t.Helper()
+		if _, ok := svc.trafficBodies.Load(id); ok {
+			t.Fatal("trafficBodies still holds the deleted entry")
+		}
+		if _, ok := svc.trafficWsMsgs.Load(id); ok {
+			t.Fatal("trafficWsMsgs still holds the deleted entry")
+		}
+		files, err := os.ReadDir(cache.SessionDir())
+		if err != nil {
+			t.Fatalf("ReadDir: %v", err)
+		}
+		prefix := strconv.FormatUint(id, 10) + "_"
+		for _, file := range files {
+			if strings.HasPrefix(file.Name(), prefix) {
+				t.Fatalf("body cache still holds %s", file.Name())
+			}
+		}
+	}
+
+	t.Run("body", func(t *testing.T) {
+		entry := svc.newTrafficEntry(TrafficEntry{Type: "http", Method: http.MethodPost})
+		svc.storeTrafficEntry(entry)
+		payload := bytes.Repeat([]byte("orphan-body"), 64)
+		var reader io.ReadCloser
+		deleteDuringAttach(t, entry, func() {
+			reader = svc.newCaptureStreamBodyReader(io.NopCloser(bytes.NewReader(payload)), entry, "", true)
+		})
+		got, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if err := reader.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatal("forwarded body changed after the entry was deleted")
+		}
+		assertNoCaptureState(t, entry.ID)
+	})
+
+	t.Run("websocket", func(t *testing.T) {
+		entry := svc.newTrafficEntry(TrafficEntry{Type: "ws", Method: http.MethodGet})
+		svc.storeTrafficEntry(entry)
+		var wsMsgs *TrafficWsMsgs
+		deleteDuringAttach(t, entry, func() {
+			wsMsgs = svc.newCaptureWebSocketMessages(entry)
+		})
+		if wsMsgs != nil {
+			t.Fatal("deleted entry received WebSocket message storage")
+		}
+		assertNoCaptureState(t, entry.ID)
+	})
 }
 
 type testHistoryCleaner struct {

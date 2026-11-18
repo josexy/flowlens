@@ -4,10 +4,12 @@ import (
 	"crypto/x509/pkix"
 	"io"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	bodycache "github.com/josexy/flowlens/internal/pkg/body_cache"
 	"github.com/josexy/flowlens/internal/pkg/fs"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
@@ -176,6 +178,29 @@ type TrafficEntry struct {
 // capture session.
 type trafficEntryLifecycle struct {
 	deleted atomic.Bool
+	// pending counts the producers that can still change the entry: its HTTP
+	// exchange, each captured body, its WebSocket frame loop, and its process
+	// lookup. The entry is settled once it reaches zero.
+	pending atomic.Int32
+	// spilled marks an entry moved to the session's spill store: late updates
+	// must not bring it back into memory.
+	spilled atomic.Bool
+}
+
+// hold registers a producer of the entry and returns its release, which ends
+// the hold exactly once however often it runs.
+func (l *trafficEntryLifecycle) hold() (release func()) {
+	if l == nil {
+		return func() {}
+	}
+	l.pending.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { l.pending.Add(-1) }) }
+}
+
+// settled reports whether no producer can change the entry any more.
+func (l *trafficEntryLifecycle) settled() bool {
+	return l == nil || l.pending.Load() == 0
 }
 
 type TrafficError struct {
@@ -263,6 +288,15 @@ type WebSocketMessage struct {
 	Data      string        `json:"data"`
 	DataSize  int           `json:"dataSize"`
 	Error     *TrafficError `json:"error,omitempty"`
+
+	// spooled, when set, locates a captured payload held in the entry's
+	// WebSocket cache file instead of Data. Its size is DataSize.
+	spooled *spooledWebSocketPayload
+}
+
+type spooledWebSocketPayload struct {
+	file   *bodycache.AppendFile
+	offset int64
 }
 
 type TrafficLiveUpdateKind string
