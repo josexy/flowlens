@@ -50,7 +50,7 @@ Alternatives considered:
 
 Each producer increments the count when it is attached and decrements it exactly once at its terminal point. An entry is **settled** when the count reaches zero. A settled entry cannot be updated again.
 
-A single spiller goroutine starts with the proxy service. `storeTrafficSnapshot` wakes it, without blocking, when the in-memory count exceeds 5000 + 256. The spiller works in batches of up to 256 entries:
+A single spiller goroutine starts with the proxy service. `storeTrafficSnapshot` wakes it, without blocking, when the in-memory count exceeds 5000 + 256. The last producer's release also wakes it whenever more than 5000 entries remain; this includes a single old exchange finishing after new traffic stops. The lifecycle's settlement callback is fixed before publication, uses the same coalesced wake channel, and performs no disk I/O. The spiller works in batches of up to 256 entries:
 1. Under `clearDataMu` and `captureLifecycleMu.RLock`, it walks `trafficEntries` from the oldest entry and takes settled entries until fewer than 5000 newer entries remain.
 2. It encodes them into the spill store using `getTrafficBodyViewInner` readers.
 3. Under `trafficAttributionMu`, it rechecks generation, tombstone, and `Revision`, then swaps each entry. The swap removes the snapshot from `trafficEntries`, adds the spill index record, deactivates and releases the process binding, aborts and drops `TrafficBodies`, deletes that ID's body-cache files, and drops `TrafficWsMsgs`.
@@ -120,11 +120,11 @@ In `newObservedStreamBodyReader`, the decoding goroutine runs `io.Copy(io.Discar
 ### 9. One UI batch in flight
 
 `FrontendEventBatch` gains a nil-safe `Claim() (release func())`.
-- `EventRouter.Connect` claims each batch synchronously in the bus callback and calls `release` after `Dispatch` runs on the main thread. The release is deferred so that panics and closed-dispatcher paths cannot skip it.
-- After emitting a claimed batch, the batcher's `run` loop waits for the release, `stop`, or a 2-second safety timeout before forming the next batch. Meanwhile `publish` keeps applying `MaxPendingEvents` and `MaxPendingBytes`, and excess events are dropped and counted, which triggers the existing snapshot recovery.
+- `EventRouter.Connect` claims each batch synchronously in the bus callback and defers `release` around `Dispatch` on the main thread. A dispatcher that has closed may discard the posted function; shutdown handles this abandoned claim.
+- After emitting a claimed batch, the batcher's `run` loop waits for every claim's release or `stop`. There is no timeout: a stalled interface still owns the previously queued payload. Meanwhile `publish` keeps applying `MaxPendingEvents` and `MaxPendingBytes`, and excess events are dropped and counted, which triggers the existing snapshot recovery.
 - Unclaimed batches (headless runs, tests, no UI listener) do not wait.
 
-The timeout limits the damage if MyGo drops a posted function after its loop has shut down. In that case at most one 4 MiB batch is lost per 2 seconds, and only after shutdown has begun.
+`Close` signals `stop`, so an abandoned claim cannot block shutdown. When stopping with an outstanding claim, the batcher discards and releases its pending payloads instead of enqueueing another batch behind the abandoned one. Closing with no outstanding claim can still flush the final pending batch.
 
 Alternatives considered:
 - **Bounding the queue inside `Dispatcher`.** It cannot tell lossless events from droppable ones. Rejected.
@@ -132,7 +132,9 @@ Alternatives considered:
 
 ### 10. Incremental live SSE body
 
-`TrafficStore` keeps a `strings.Builder` for the live cursor, seeded from the snapshot body in `initLiveCursors` and `prepareBinarySSESnapshot`. `applyLive` appends only the decoded new bytes and publishes `builder.String()`, which is zero-copy. This is the same technique `WorkspaceStore.flushStream` already uses. The builder is dropped in `resetLiveReconciliation`. The SSE view's `strings.HasPrefix` check stays cheap because successive bodies share a backing array.
+`TrafficStore` keeps a `strings.Builder` for the live cursor, seeded when the first SSE chunk uses a text snapshot or in `prepareBinarySSESnapshot` for a binary snapshot. `applyLive` appends only decoded new bytes and publishes `builder.String()`, which is zero-copy. The builder is dropped in `resetLiveReconciliation`.
+
+`inspect.BodyViewer` recognizes SSE growth with the same entry, content type and text encoding, then appends only the suffix to its existing Raw `CodeView`. It does not retain a Formatted buffer for SSE, which has no Formatted tab. Read-only `CodeView.AppendText` uses the pinned editor's `EditRemote` and `MarkSaved` to preserve selection without accumulating undo history. A CRLF split across updates contributes one visible newline while the source body and Hex keep the original bytes. Replacement, a new entry, or an encoding/content-type change reloads the text. Tests exercise the viewer's allocation path as well as actual Raw/Hex/SSE frames in both themes.
 
 ### 11. History memory
 
@@ -143,7 +145,8 @@ Alternatives considered:
 - **Interface.**
   - `HistoryStore` gains `CloseOpened()`, which cancels the load job and resets `Traffic`.
   - `FilterStore` gains `Release()`, which drops `base`, `filtered`, and the match maps. `clearSelection` calls it as well.
-  - `capture.Workspace.syncTabs` calls `CloseOpened`, `HistoryTable.Reset()` (new: drops rows, sorter state, and table state), and the category view's reset when it finds the history tab gone.
+  - `capture.Workspace.syncTabs` closes a history whose tab is gone and tracks the loaded history key. A changed key, including a store cleared by deletion, resets the history table and categories and invokes the detail release callback wired in `internal/app`.
+  - `inspect.Panel.Release` cancels image-decode and SSE-parse jobs before replacing its viewers, dropping body, text-editor, Raw, Hex, SSE, WebSocket and image caches even while the panel is hidden. Posted results are discarded by the job dispatcher; tab choices remain available when a history reopens.
   - `TrafficStore.applyBatch` deletes highlights of IDs at or below the eviction watermark.
 
 ## Risks / Trade-offs

@@ -17,6 +17,10 @@ A capture session SHALL hold in memory only its newest 5000 entries and entries 
 - **WHEN** a WebSocket connection or streaming response opened early stays open while thousands of newer entries arrive
 - **THEN** it stays in memory and keeps receiving updates until it finishes
 
+#### Scenario: Exchanges finish after traffic stops
+- **WHEN** exchanges older than the newest 5000 entries finish and no new entries arrive
+- **THEN** their data moves to disk automatically, including when only one such entry remains, and their details remain readable
+
 #### Scenario: Acting on an older entry
 - **WHEN** the table holds its window while reading and the user opens, copies as cURL, resends, edits, exports, or deletes an entry that is no longer among the newest 5000
 - **THEN** the action behaves as it does for the newest entries, with the same headers, bodies, and messages

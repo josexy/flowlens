@@ -101,7 +101,7 @@ Process attribution is enabled by default under `Settings > Proxy`. It applies o
 
 ## History and HAR
 
-Saved capture sessions appear under History and survive restarts. Only the history open in the history tab is kept in memory: opening another history replaces it, and closing the history tab frees it and returns to the capture. Reopening a history shows the same entries.
+Saved capture sessions appear under History and survive restarts. Only the open history's decoded entries and bodies are kept in memory: opening another history replaces them, and closing the history tab frees them, including detail-view caches, and returns to the capture. FlowLens may retain compact indexes for up to four recently accessed histories. Reopening a history shows the same entries.
 
 **Import.** Use **Import HAR** beside the History refresh button, or drop `.har` files onto the capture or history table. Files are imported one at a time, each into a new history named after the file; importing the same file again creates another history. The first imported history opens in the history tab. The result reports imported files and entries, skipped entries, unavailable bodies, and failed files. Canceling the file picker does nothing.
 

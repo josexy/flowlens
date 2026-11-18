@@ -23,7 +23,7 @@ Long captures are FlowLens's main use, so memory must stay flat over time.
 - **Release capture storage.** A session's body-cache directory, including spill segments, is removed after Save/Discard and Restart and after a successful final save at shutdown. Directories from earlier runs are removed at startup. Deleting entries while their bodies start leaves no data behind.
 - **Fix the decoding stall.** Capture decoding always drains the encoded stream, so trailing bytes cannot stall forwarding or leak a goroutine.
 - **Back-pressure UI event delivery.** At most one event batch waits for the UI thread. Events published meanwhile stay within the existing pending bound, and excess events are dropped and counted so the UI recovers through a snapshot, as today.
-- **Make live SSE updates incremental.** Each update appends only the new data instead of copying the whole body.
+- **Make live SSE updates incremental.** Both the retained body and its displayed Raw text append only new data. The viewer keeps no unused Formatted copy of SSE and no undo history for received chunks.
 - **Hold history data only while open.** Closing the history tab releases the opened history's entries, details, filter caches, table rows, and category data. The history service loads an entry index only when a history is opened or exported, and caches a small number of indexes instead of every saved history's.
 - **Prune row highlights.** Highlights of entries that leave the live window are removed.
 
@@ -50,6 +50,7 @@ None.
   - `internal/services/history_service`: index loading, delete, clear, exports.
   - `internal/desktop/store`: `traffic.go`, `history.go`, `filter.go`, `event_router.go`.
   - `internal/desktop/capture`: workspace and history-tab close handling, table and category reset.
+  - `internal/desktop/inspect`, `internal/desktop/widgets`, and `internal/app`: release hidden detail viewers and their pending work, wire the history lifecycle, and append SSE text without resetting the editor.
 - **Formats:** HBIN v3 is unchanged. Spill segments use the HBIN v3 entry encoding and live only inside the session's body-cache directory.
 - **Disk:** a session's on-disk cache now also holds spilled entries until it is saved and the session ends. Cache directories from previous runs are no longer kept.
 - **Docs:** `docs/user-guide.md` (storage and history notes) and `docs/technical/traffic-metrics-and-har.md` (spill and save behavior).

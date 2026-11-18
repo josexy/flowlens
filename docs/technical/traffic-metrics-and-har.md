@@ -66,7 +66,7 @@ FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection t
 
 A capture session keeps in memory only its newest 5000 entries and the entries whose exchange is still in progress: an HTTP exchange until its response ends or fails, a captured body until it is read to its end or closed, a WebSocket entry until its connection closes, and a process lookup until its result is final. These are the entries the interface shows.
 
-Older entries that are finished move to the session's spill store in batches of up to 256, once the in-memory entries pass 5000 + 256. The status bar, saved history, capture-wide exports, and the actions on an entry (details, resend, edit, copy, export, delete) include spilled entries as before.
+Older entries that are finished move to the session's spill store in batches of up to 256. New entries wake the spiller once in-memory entries pass 5000 + 256; the final producer of an exchange also wakes it whenever more than 5000 entries remain, so an old exchange can move to disk after traffic stops. The status bar, saved history, capture-wide exports, and the actions on an entry (details, resend, edit, copy, export, delete) include spilled entries as before.
 
 - **Location.** Spill segments are `spill-NNNN.hbin` files in the session's body-cache directory, `cache/<session-uuid>/`. A new segment starts once the current one reaches 1 GiB.
 - **Encoding.** Each spilled entry is written with the HBIN v3 entry encoding: its header, then its zstd body record with both bodies and its WebSocket messages. An in-memory index of about 24 bytes per entry locates it. Deleting a spilled entry overwrites its bytes with zeros.

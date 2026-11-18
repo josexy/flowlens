@@ -16,3 +16,11 @@ Pending high-frequency events SHALL be bounded, with events beyond the bound dro
 #### Scenario: Slow interface
 - **WHEN** the interface has not finished applying the previous batch of events
 - **THEN** no further batch is handed to it, and events published meanwhile stay within the pending limit or are dropped and counted
+
+#### Scenario: Prolonged interface stall
+- **WHEN** the interface leaves a batch unapplied for more than two seconds while capture continues
+- **THEN** elapsed time does not allow another batch into the interface queue, and both the pending event count and pending byte limits still apply
+
+#### Scenario: Shutdown with an unapplied batch
+- **WHEN** event delivery stops while the interface still holds an unapplied batch
+- **THEN** shutdown returns without waiting for that batch, releases pending payloads, and does not enqueue another batch behind it

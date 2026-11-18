@@ -15,4 +15,12 @@ A live SSE body in the detail panel SHALL grow by the data received, in offset o
 
 #### Scenario: Long-running stream
 - **WHEN** an SSE response shown in the detail panel has already received 50 MiB and another chunk arrives
-- **THEN** applying the chunk costs time and memory in proportion to the chunk, without copying the data already shown
+- **THEN** both the retained body and the displayed text append the new data without rebuilding or copying the already displayed body on each update, and read-only streaming updates do not accumulate undo history
+
+#### Scenario: Text and line-ending boundaries
+- **WHEN** SSE chunks cross UTF-8 or CRLF boundaries
+- **THEN** the text and SSE views show the same characters and line breaks as a complete snapshot, and Hex retains the exact received bytes
+
+#### Scenario: Replacing the stream snapshot
+- **WHEN** the selected entry, body encoding, or previously displayed stream content changes
+- **THEN** the viewers replace their previous content and subsequent chunks extend the replacement without retaining or appending the previous stream

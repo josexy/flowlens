@@ -19,7 +19,7 @@
 
 ## 4. Back-pressured UI event delivery
 
-- [x] 4.1 In `frontend_event_batcher.go`, add `FrontendEventBatch.Claim() (release func())` and make `run` wait for the release of a claimed batch, `stop`, or a 2-second timeout before emitting again, while `publish` keeps applying the pending limits (design §9). Add tests in `frontend_event_batcher_test.go` for these cases: an unclaimed batch does not wait; while a claimed batch is unreleased, a burst beyond the limits is dropped and counted; the release resumes delivery in order; the timeout resumes delivery; and `Close` returns while waiting.
+- [x] 4.1 In `frontend_event_batcher.go`, add `FrontendEventBatch.Claim() (release func())` and make `run` wait for the release of every claim or shutdown, while `publish` keeps applying the pending limits (design §9). Test unclaimed delivery, prolonged stalls, count and byte bounds, ordered delivery and drop reporting after release, and shutdown releasing pending payloads without enqueueing behind an abandoned claim. The review fix in 13.1 removes the original two-second timeout.
 - [x] 4.2 In `internal/desktop/store/event_router.go`, claim in the bus callback and release in a `defer` after `Dispatch` on the main thread. Add a store test with a fake dispatcher that holds posted functions, verifying at most one batch is outstanding and drop counts trigger `requestRecovery`. Verify with `go test ./internal/desktop/store ./internal/services/proxy_service` and `CGO_ENABLED=1 go test -race ./internal/desktop/store ./internal/services/proxy_service`.
 
 ## 5. Live capture interface memory
@@ -50,10 +50,10 @@
 
 ## 10. Spilling and spill-aware access
 
-- [x] 10.1 Add the spiller goroutine (design §2): wake on in-memory count above 5000 + 256, batches of 256 settled entries under `clearDataMu` and `captureLifecycleMu.RLock`, and a swap under `trafficAttributionMu` with generation, tombstone, and revision rechecks that releases the snapshot, bodies, body-cache files, WebSocket messages, and process binding. Stop it on cancel and before the final flush. Disable it with a single warning when the body cache is unavailable. Add tests verifying that after 20000 settled entries the in-memory map holds 5000 plus unsettled entries; that an unsettled WebSocket entry older than the window stays in memory; and that clear, restart, and delete racing with a batch leave a consistent state (`-race`).
+- [x] 10.1 Add the spiller goroutine (design §2): wake on insertion above 5000 + 256 and on final producer release above 5000, batches of 256 settled entries under `clearDataMu` and `captureLifecycleMu.RLock`, and a swap under `trafficAttributionMu` with generation, tombstone, and revision rechecks that releases the snapshot, bodies, body-cache files, WebSocket messages, and process binding. Stop it on cancel and before the final flush. Disable it with a single warning when the body cache is unavailable. Test that after 20000 settled entries memory holds 5000 plus unsettled entries, that an old open WebSocket stays in memory, and that clear, restart, and delete racing with a batch leave a consistent state (`-race`). Task 13.2 covers completion without subsequent traffic.
 - [x] 10.2 Route `GetTrafficBodyView`, `ResendRequest`, `DeleteTraffic`, `harExportSnapshots`, `currentHARExportEntry`, `trafficExportBodies`, and `ExportHAR`/`ExportTraffic` through a single ID resolver that handles spill refs, with lazy per-entry decoding during export and statistics decrement by kind on spilled delete (design §3). Add tests that body view, resend, edit recovery (via the returned `TrafficBodyView`), delete, and HAR and CSV export of a spilled entry match the same entry before spilling, and that an export of all entries in a partly spilled session lists every ID in order.
 - [x] 10.3 Update `docs/technical/traffic-metrics-and-har.md` with the spill store: location, encoding, lifetime, and the 5000-plus-in-progress memory window. Verify it matches the implementation constants.
-- [ ] 10.4 Run `go test ./internal/services/proxy_service ./internal/services/history_service ./internal/desktop/capture ./internal/desktop/logic` and `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service`, and verify both pass.
+- [x] 10.4 Run `go test ./internal/services/proxy_service ./internal/services/history_service ./internal/desktop/capture ./internal/desktop/logic` and `CGO_ENABLED=1 go test -race ./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service`, and verify both pass. The full race run used `-timeout 30m`; capture completed in 730.83 seconds with no exclusions.
 
 ## 11. Memory-safe periodic save
 
@@ -63,10 +63,18 @@
 
 ## 12. Integration verification
 
-- [ ] 12.1 Run `task verify` and verify it passes with no skipped proxy, history, or desktop packages.
+- [x] 12.1 Run `task verify` and verify it passes with no skipped proxy, history, or desktop packages.
 - [x] 12.2 Run a soak check in a test or benchmark (`internal/services/proxy_service`) that captures 200000 small HTTP exchanges and 20 long WebSocket connections through the real interceptors. Verify that heap in use after GC stays within a fixed bound independent of the entry count (compare the 50k and 200k checkpoints), that goroutines return to baseline after the proxy stops, and that the cache directory is removed after Restart. Record the numbers in the change's PR description.
 
-## Workflow follow-up
+## 13. Review regressions
 
-- Record follow-ups for Request Editor stream back-pressure, the WebSocket Client message limit, and an HBIN format with 64-bit offsets.
-- Archive this OpenSpec change after review, and sync the delta specs into `openspec/specs/`.
+- [x] 13.1 Keep a claimed frontend event batch outstanding until release or shutdown, without timeout-based delivery of another batch. Cover a stalled interface beyond the former timeout, bounded pending events and bytes, ordered recovery after release, and shutdown without waiting for an abandoned claim.
+- [x] 13.2 Wake the background spiller when the last producer finishes, including when no new traffic arrives and only one old unfinished entry remains beyond the window. Exercise the real spiller and producer releases without calling `spillAll` after completion.
+- [x] 13.3 Release the persistent history detail panel and its body, Raw, Hex, SSE, WebSocket, and image caches when its history closes or changes, rejecting pending viewer work. Cover closing, empty frames, reopening, and switching histories with the real detail panel.
+- [x] 13.4 Apply SSE growth incrementally in the displayed body viewers as well as the store. Cover text-buffer content, reset/replacement and UTF-8 boundaries, and allocations on the actual viewer update path after a large snapshot.
+- [x] 13.5 Reconcile the proposal, design, delta and main specs with the fixes, explicitly distinguish the bounded history index cache from open history data, and record verification results and remaining limitations.
+
+## Workflow completion
+
+- Follow-ups for Request Editor stream back-pressure, the WebSocket Client message limit, and an HBIN format with 64-bit offsets are recorded in [verification.md](verification.md).
+- Delta specs were synchronized into `openspec/specs/` and compared requirement by requirement. The completed change was archived on 2026-11-18 after the review fixes and verification.
