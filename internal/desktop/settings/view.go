@@ -151,7 +151,7 @@ func camel(value string) string {
 	return out.String()
 }
 
-// syncDirty marks the sections whose draft differs from the baseline.
+// syncDirty updates each section's unsaved state against the baseline.
 func (v *View) syncDirty() {
 	settings := v.Data.Settings
 	draft, base := settings.Draft, v.baseline
@@ -159,9 +159,7 @@ func (v *View) syncDirty() {
 		return
 	}
 	mark := func(section store.SettingsSection, left, right any) {
-		if !reflect.DeepEqual(left, right) {
-			settings.MarkDirty(section)
-		}
+		settings.SetSectionDirty(section, !reflect.DeepEqual(left, right))
 	}
 	mark(store.SectionCommon, draft.CommonConfig, base.CommonConfig)
 	mark(store.SectionProxy, draft.ProxyConfig, base.ProxyConfig)
@@ -169,6 +167,7 @@ func (v *View) syncDirty() {
 	mark(store.SectionWindow, draft.WindowConfig, base.WindowConfig)
 	mark(store.SectionCache, draft.CacheConfig, base.CacheConfig)
 	mark(store.SectionHistoryRetention, draft.HistoryRetentionConfig, base.HistoryRetentionConfig)
+	mark(store.SectionTrafficTable, draft.TrafficTableConfig, base.TrafficTableConfig)
 	mark(store.SectionPythonPlugins, draft.PythonPluginConfig, base.PythonPluginConfig)
 	mark(store.SectionShortcuts, draft.Shortcuts, base.Shortcuts)
 	settings.PreviewDraftAppearance()
@@ -229,7 +228,8 @@ func (v *View) save() {
 			return
 		}
 		store.NormalizeSettings(settings.Draft)
-		v.baseline = store.CloneSettings(settings.Draft)
+		v.baseline = store.CloneSettings(settings.Current)
+		store.NormalizeSettings(v.baseline)
 		v.setSavedNotice()
 		if v.tab == tabProxy {
 			v.loadCA()

@@ -232,7 +232,16 @@ func (s *SettingsStore) EndEdit() {
 }
 
 // MarkDirty records that the draft changed in section.
-func (s *SettingsStore) MarkDirty(section SettingsSection) { s.dirtySections[section] = true }
+func (s *SettingsStore) MarkDirty(section SettingsSection) { s.SetSectionDirty(section, true) }
+
+// SetSectionDirty records whether the draft has unsaved changes in section.
+func (s *SettingsStore) SetSectionDirty(section SettingsSection, dirty bool) {
+	if dirty {
+		s.dirtySections[section] = true
+	} else {
+		delete(s.dirtySections, section)
+	}
+}
 
 // Dirty reports whether the draft has unsaved changes.
 func (s *SettingsStore) Dirty() bool { return len(s.dirtySections) > 0 }

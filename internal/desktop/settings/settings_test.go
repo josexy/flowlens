@@ -27,6 +27,7 @@ import (
 type shortcutApplier struct {
 	service *settingservice.SettingService
 	fail    error
+	result  *shortcutservice.ShortcutApplyResult
 	applied int
 }
 
@@ -34,6 +35,9 @@ func (s *shortcutApplier) ApplyShortcutConfig(config *settingservice.ShortcutCon
 	s.applied++
 	if s.fail != nil {
 		return nil, s.fail
+	}
+	if s.result != nil {
+		return s.result, nil
 	}
 	if err := s.service.SaveShortcutConfig(config); err != nil {
 		return nil, err
@@ -401,9 +405,27 @@ func TestRestoreDefaultsFillsDraft(t *testing.T) {
 	f.draft().CommonConfig.AppFontSize = 22
 	f.draft().ProxyConfig.Port = 9999
 	f.settle()
+	f.click(locales.SettingsSave())
 	f.click(locales.SettingsReset())
 	if f.draft().CommonConfig.AppFontSize != 16 || f.draft().ProxyConfig.Port != 8080 || !f.view.Dirty() {
 		t.Fatalf("%+v", f.draft().CommonConfig)
+	}
+}
+
+func TestRestoreDefaultsClearsRevertedEdits(t *testing.T) {
+	f := newFixture(t)
+	// Establish a saved default draft, including all sections reset touches.
+	f.click(locales.SettingsReset())
+	if f.view.Dirty() {
+		f.click(locales.SettingsSave())
+	}
+	f.draft().CommonConfig.AppFontSize = 22
+	f.draft().ProxyConfig.Port = 9999
+	f.settle()
+	f.click(locales.SettingsReset())
+	button, ok := f.tester.AccessByRole(ui.RoleButton, locales.SettingsSave())
+	if f.view.Dirty() || !ok || !button.Disabled {
+		t.Fatalf("restoring the saved defaults left changes: %v, save=%+v", f.data.Settings.DirtySections(), button)
 	}
 }
 
@@ -955,6 +977,28 @@ func TestFailedSaveKeepsDraft(t *testing.T) {
 	f.click(locales.SettingsSave())
 	if !f.view.Dirty() || !f.has(locales.SettingsSaveFailed("registrar broke")) {
 		t.Fatalf("%v", f.tester.Texts())
+	}
+}
+
+func TestPartialShortcutSaveKeepsOnlyUnappliedChangesDirty(t *testing.T) {
+	f := newFixture(t)
+	f.shortcut.result = &shortcutservice.ShortcutApplyResult{Config: store.CloneSettings(f.data.Settings.Current).Shortcuts}
+	f.draft().CommonConfig.AppFontSize++
+	wantSize := f.draft().CommonConfig.AppFontSize
+	f.open(locales.SettingsTabShortcuts())
+	f.click(locales.ShortcutsClearFor(locales.ShortcutsCommandsAppSave()))
+	f.click(locales.SettingsSave())
+	if got := f.data.Settings.DirtySections(); !slices.Equal(got, []store.SettingsSection{store.SectionShortcuts}) {
+		t.Fatalf("partial save must retain only unapplied shortcuts: %v", got)
+	}
+	stored, err := f.service.Snapshot()
+	if err != nil || stored.CommonConfig.AppFontSize != wantSize {
+		t.Fatalf("ordinary settings did not save: %v", err)
+	}
+	f.shortcut.result = nil
+	f.click(locales.SettingsSave())
+	if f.view.Dirty() {
+		t.Fatal("successful retry did not clear unsaved changes")
 	}
 }
 
