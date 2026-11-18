@@ -19,7 +19,7 @@ Python 插件是可选功能，默认关闭。
 
 ## 应用内 API 帮助与系统提示词
 
-点击 **Python 插件**侧栏标题处或 HTTP 请求编辑器 **Script** 工具栏的书本图标，即可打开 **Python API 帮助**。尚未配置 Python 或创建插件时也可查阅。工作区内容区域宽度达到 1100 px 时，帮助在右侧并排显示，默认宽度 420 px，可通过分隔条调整；更窄时改用右侧抽屉。离开工作台或切换请求标签会关闭帮助，脚本内容保持不变。
+点击 **Python 插件**侧栏标题处或 HTTP 请求编辑器 **Script** 工具栏的书本图标，即可打开 **Python API 帮助**。尚未配置 Python 或创建插件时也可查阅。帮助以 420 px 宽的面板从窗口右侧滑出，按 Escape 或点击面板外侧即可关闭。离开工作台或切换请求标签也会关闭帮助，脚本内容保持不变。
 
 **快速上手**展示三步操作和必要的 Hook 说明，最小脚本与运行规则可按需展开。**API 参考**按类型分组，搜索时自动展开匹配分组；签名包含参数与返回类型，使用说明和类型导入说明可单独展开。
 
@@ -406,34 +406,9 @@ response.body = Body(
 )
 ```
 
-descriptor-backed 请求 Body 支持 `text`、`json`、`xml`、`binary` 和 `file`；descriptor-backed 响应 Body 支持 `text`、`json`、`xml` 和 `binary`，`file` 仍仅支持请求。`write_file()` 不支持 URL-encoded 和 multipart Body。
+`FileDescriptor.from_file(path)` 会校验路径，并自动读取文件名和大小。请求需要保留语义上的 `file` kind 时，将其用于 `Body("file", ...)`；也可作为 `MultipartPart` 的文件，示例见[直接赋值](#直接赋值)。
 
-请求需要保留语义上的 `file` kind 时，使用 `FileDescriptor.from_file(path)`；它会校验路径，并自动读取文件名和大小：
-
-```python
-request.body = Body(
-    "file",
-    FileDescriptor.from_file("C:/files/request.bin"),
-)
-```
-
-新的 multipart 文件 part 也使用同一个描述符构造方法：
-
-```python
-request.body = Body(
-    "multipart",
-    [
-        MultipartPart("description", "monthly report"),
-        MultipartPart(
-            "upload",
-            file=FileDescriptor.from_file("C:/files/report.pdf"),
-            filename="monthly-report.pdf",
-        ),
-    ],
-)
-```
-
-源路径必须是绝对路径，并指向非符号链接普通文件。把 descriptor-backed `Body` 赋给 `request.body` 或 `response.body` 时，FlowLens 会立即把源文件复制到托管临时存储；赋值成功后脚本可以删除源文件，在 Windows 上同样适用。`file` 和 multipart 都仅支持请求 Body。
+descriptor-backed 请求 Body 支持 `text`、`json`、`xml`、`binary` 和 `file`；descriptor-backed 响应 Body 支持 `text`、`json`、`xml` 和 `binary`，`file` 和 multipart 仅支持请求。`write_file()` 不支持 URL-encoded 和 multipart Body。
 
 kind 必须显式指定，不会根据扩展名推断。直接赋值路径字符串只会创建文本 Body，不会读取文件：
 
@@ -442,12 +417,10 @@ request.body = Body("binary", FileDescriptor.from_file("C:/files/request.bin"))
 request.body = "C:/files/request.bin"  # 内容为路径的 text
 ```
 
-较大的内联替换会在进入 IPC 前自动暂存。4 MiB 阈值和托管文件位置属于内部实现，不是 Python API。
-
 ### 临时文件归属与失败行为
 
 - 传给 `FileDescriptor.from_file()` 的路径必须是绝对路径、非符号链接普通文件；构造 descriptor 前先关闭写入句柄。
-- 把 `Body(kind, descriptor)` 赋给请求或响应时，会在赋值返回前把待处理源文件复制到当前 FlowLens session；之后脚本可以删除源文件。
+- 把 `Body(kind, descriptor)` 赋给请求或响应时，会在赋值返回前把源文件复制到托管临时存储；之后脚本可以删除源文件，在 Windows 上同样适用。
 - 新建 multipart 文件 part 是可修改列表项，因此会在请求序列化时暂存，而不是在 owner 赋值时暂存；不能在 hook 返回前删除或替换源文件。
 - 成功、阻断、hook 失败、超时、取消或 Worker 退出后，FlowLens 都会清理托管文件。
 - 无效请求文件按 fail-closed 处理；无效响应文件按 fail-open 处理，并返回未修改的响应和诊断。
@@ -670,7 +643,7 @@ Hook 结果、匹配到的 revision、各阶段耗时、内容转换和脱敏后
 - **当前请求脚本消失：** 只有保存或更新到 API Collection 的 HTTP 请求会持久化脚本源码；未保存的新标签页关闭后会丢失。重新打开已保存请求时脚本默认关闭，需要手动启用。需要跨多个请求复用时请创建全局插件。
 - **响应 Body 不可用：** 该响应是 SSE。请将该 hook 限制为修改 `code` 和响应头；普通响应仍可通过 Body API 访问。
 - **处理 Body 时内存占用过高：** 不要读取该 Body 的 `body.value`；请先通过 `write_file()` 导出，再使用普通 Python 文件 API 处理。
-- **`file()`、`binary(path)` 或 `textFromFile()` 失败：** 请先关闭源文件写入句柄，传入非符号链接普通文件的绝对路径，并确保复制操作在 hook 超时内完成。
+- **`FileDescriptor.from_file()` 或基于文件描述符的 Body 赋值失败：** 请先关闭源文件写入句柄，传入非符号链接普通文件的绝对路径，并确保复制操作在 hook 超时内完成。
 - **编辑内容校验失败：** 上一个可用的不可变 revision 会继续激活。修正并保存源码后重新校验；未保存的编辑器内容只保留在当前 FlowLens 窗口中。
 
 插件包导入/导出、自动安装依赖、正则规则、目录监听、异步 hook 和每插件独立解释器不属于 API v1。
