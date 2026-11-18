@@ -1,6 +1,6 @@
 # Live HTTP Rewrite Rules
 
-For setup and examples, see the [user guide](../user-guide.md#live-https-rewrite-rules).
+For setup and examples, see the [user guide](../user-guide.md#rewrite-rules).
 
 ## Scope and Ownership
 
@@ -71,13 +71,13 @@ Rule deletion offers cancel/delete and removes the confirmed rule and its draft 
 
 The panel keeps samples only while mounted and always previews the original sample. Pattern/replacement edits debounce by **300 ms**; obsolete calls are canceled and stale results ignored. The sample editor stays mounted to preserve undo/view state. Pending or failed results cannot be copied; errors reveal the sample.
 
-The read-only inline diff includes whitespace changes and has a **1-second** computation limit. If either input or output reaches **512 Ki characters** total or **128 Ki on one line**, show the complete plain result without diffing or wrapping. Fonts/themes use the existing stores. See the [user guide](../user-guide.md#live-https-rewrite-rules) for controls.
+The read-only inline diff includes whitespace changes and has a **1-second** computation limit. If either input or output reaches **512 Ki characters** total or **128 Ki on one line**, show the complete plain result without diffing or wrapping. Fonts/themes use the existing stores. See the [user guide](../user-guide.md#rewrite-rules) for controls.
 
 ## Capture, Metrics, History, and Export
 
 Capture records final fields, bodies, URL, Host, and protocol. Request metrics use upstream transport events. Changed responses use downstream send events (`responseMetricsSource: downstream`); unchanged responses, including regex no-ops, retain upstream metrics. Upstream EOF during buffering never proves downstream completion.
 
-Use the shared [size and timing conventions](../user-guide.md#timing-sizes-and-har-importexport). `BodySize` counts encoded entity bytes actually sent; failures and incomplete sends retain unknown/incomplete metrics.
+Use the shared [size and timing conventions](traffic-metrics-and-har.md). `BodySize` counts encoded entity bytes actually sent; failures and incomplete sends retain unknown/incomplete metrics.
 
 Live summaries retain the latest **64 actions**, cap reasons at **512 characters**, and follow traffic retention. HBIN writes v3/reads v1/v2/v3, storing final content/errors without live summaries or the metrics-source label. Shared exports preserve final fields/metrics and missing-body counts; sensitive data is not automatically redacted.
 
