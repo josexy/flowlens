@@ -126,6 +126,10 @@ type TrafficStore struct {
 	Highlights      map[uint64]string
 	// PendingFocusID asks the table to reveal an entry; zero means none.
 	PendingFocusID uint64
+	// OnReset releases views derived from a discarded capture, even when hidden.
+	OnReset func()
+	// OnDetailReset releases viewer caches when their selection becomes invalid.
+	OnDetailReset func()
 
 	index          map[uint64]int
 	surfaceActive  bool
@@ -212,6 +216,9 @@ func (s *TrafficStore) syncDetail() {
 	previousSurface := s.watchSurface
 	if !first && id == s.watchEntry && s.ShowDetailPanel == s.watchPanel && s.surfaceActive == s.watchSurface {
 		return
+	}
+	if (id != s.watchEntry || !s.ShowDetailPanel) && s.OnDetailReset != nil {
+		s.OnDetailReset()
 	}
 	s.watched, s.watchEntry, s.watchPanel, s.watchSurface = true, id, s.ShowDetailPanel, s.surfaceActive
 
@@ -598,6 +605,9 @@ func (s *TrafficStore) ResetState() {
 	s.pausedEntries.Clear()
 	s.resetLiveReconciliation()
 	s.syncDetail()
+	if s.OnReset != nil {
+		s.OnReset()
+	}
 }
 
 // ClearAll asks the backend to clear the capture.

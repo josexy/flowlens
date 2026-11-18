@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -60,6 +61,21 @@ func NewMessageStream(deps Dependencies) *MessageStream {
 func (m *MessageStream) SetMessages(messages []logic.WebSocketDisplayMessage) {
 	m.source = messages
 	m.applyFilter()
+	if m.active != nil && !slices.ContainsFunc(messages, func(message logic.WebSocketDisplayMessage) bool { return message == *m.active }) {
+		m.closeDetail()
+	}
+}
+
+func (m *MessageStream) closeDetail() {
+	m.open, m.active, m.showHex = false, nil, false
+	if m.view.Text() != "" {
+		m.view = widgets.NewCodeView("plaintext", true)
+	}
+	if m.hex.source != nil {
+		m.hex = NewHexView(m.deps)
+		m.hex.SelectionFilename = "websocket-selection.bin"
+		m.hex.Exporting = &m.exporting
+	}
 }
 
 func (m *MessageStream) applyFilter() {
@@ -252,7 +268,7 @@ func (m *MessageStream) detail(c *ui.Context, theme nui.Theme) {
 	}
 	widgets.DetailDialog(c.Key("ws-detail"), theme, &m.open, options)
 	if !m.open {
-		m.active = nil
+		m.closeDetail()
 	}
 }
 

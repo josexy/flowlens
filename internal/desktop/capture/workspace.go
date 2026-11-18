@@ -51,6 +51,8 @@ type Workspace struct {
 	Confirm    *widgets.ConfirmDialog
 	// Detail, when set, builds the panel for the selected entry.
 	Detail func(c *ui.Context, theme nui.Theme)
+	// ReleaseDetail drops the live selection's viewer caches and jobs.
+	ReleaseDetail func()
 	// History, when set, builds the saved sessions below the capture item.
 	History func(c *ui.Context, theme nui.Theme)
 
@@ -76,7 +78,6 @@ type Workspace struct {
 	lastSelection      string
 	lastActive         string
 	historyListSeen    uint64
-	historyDetailKey   string
 	toolbar            toolbarState
 	alias              aliasDialog
 	// captureMenu, historyMenus and categoryMenus are the states of the
@@ -98,8 +99,32 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 		Runtime: data.Runtime, MacOS: shortcuts.IsMacOS(),
 	}
 	w.Table = NewTable(LiveSource{Traffic: data.Traffic, Filters: data.Filter}, deps)
+	data.Traffic.OnDetailReset = func() {
+		if w.ReleaseDetail != nil {
+			w.ReleaseDetail()
+		}
+	}
+	data.Traffic.OnReset = func() {
+		data.Filter.Release()
+		w.Table.Reset()
+		if w.category.context == "capture" {
+			w.category.reset()
+		}
+	}
 	if data.History != nil {
 		w.HistoryTable = NewTable(HistorySource{History: data.History}, deps)
+		data.History.Traffic.OnDetailReset = func() {
+			if w.ReleaseHistoryDetail != nil {
+				w.ReleaseHistoryDetail()
+			}
+		}
+		data.History.Traffic.OnReset = func() {
+			data.History.Filter.Release()
+			w.HistoryTable.Reset()
+			if strings.HasPrefix(w.category.context, "history:") {
+				w.category.reset()
+			}
+		}
 		w.HistoryTable.HistoryKey = func() string { return data.History.Traffic.Key }
 		w.HistoryTable.HistoryAlias = func() string {
 			key := data.History.Traffic.Key
@@ -312,8 +337,7 @@ func (w *Workspace) syncTabs() {
 	w.lastSelection = selection
 }
 
-// syncHistoryData releases view state when a history closes or is replaced,
-// including when deletion already cleared its store before the tab closed.
+// syncHistoryData closes a history whose workspace tab was removed.
 func (w *Workspace) syncHistoryData() {
 	history := w.Data.History
 	if history == nil {
@@ -322,18 +346,6 @@ func (w *Workspace) syncHistoryData() {
 	if w.Data.Workspace.FindTab(logic.HistoryTabKey) == nil &&
 		(history.Traffic.Key != "" || history.SelectedKey != "" || history.LoadingHistory) {
 		history.CloseOpened()
-	}
-	if key := history.Traffic.Key; key != w.historyDetailKey {
-		w.historyDetailKey = key
-		if w.ReleaseHistoryDetail != nil {
-			w.ReleaseHistoryDetail()
-		}
-		if w.HistoryTable != nil {
-			w.HistoryTable.Reset()
-		}
-		if strings.HasPrefix(w.category.context, "history:") {
-			w.category.reset()
-		}
 	}
 }
 

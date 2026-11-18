@@ -72,6 +72,13 @@ func (b *BodyViewer) release() {
 	}
 }
 
+func (b *BodyViewer) copyPreferences(previous *BodyViewer) {
+	b.active, b.tabChoice, b.tabs = previous.active, previous.tabChoice, previous.tabs
+	b.raw.SetWordWrap(previous.raw.WordWrap())
+	b.formatted.SetWordWrap(previous.formatted.WordWrap())
+	b.sse.table.List.Columns = previous.sse.table.List.Columns
+}
+
 // Active returns the viewing mode on show.
 func (b *BodyViewer) Active() logic.BodyTab { return b.active }
 
@@ -80,21 +87,27 @@ func (b *BodyViewer) set(content BodyContent) {
 		content.Binary != b.content.Binary || content.ContentType != b.content.ContentType
 	streamingText := b.enableSSE && !content.Binary && logic.IsEventStream(content.ContentType)
 	previousBody := b.bodyText
-	grew := streamingText && b.shown && content.Identity == b.content.Identity &&
-		!b.content.Binary && content.ContentType == b.content.ContentType && strings.HasPrefix(content.Body, previousBody)
+	appended := b.shown && content.Identity == b.content.Identity && content.Binary == b.content.Binary &&
+		content.ContentType == b.content.ContentType && strings.HasPrefix(content.Body, previousBody)
+	grew := streamingText && appended
 	tabs := logic.BodyTabs(content.ContentType, content.Binary, content.Body, b.enableSSE)
 	if !b.shown || !sameTabs(tabs, b.tabs) {
 		b.active = logic.NextBodyTab(b.active, tabs, b.tabs)
 		b.tabs = tabs
 	}
-	identityChanged := !b.shown || content.Identity != b.content.Identity
 	b.content, b.shown = content, true
 	b.category = logic.ClassifyBody(content.ContentType, content.Binary)
 	if !changed {
 		return
 	}
 	b.bodyText = content.Body
-	if identityChanged {
+	if !appended {
+		// A hidden Hex, SSE, or image tab must not keep the previous body's
+		// payload or accept its queued decode result after replacement.
+		b.release()
+		*b.hex = *NewHexView(b.deps)
+		b.sse.reset()
+		b.sse.identity, b.sse.body, b.sse.binary = 0, "", false
 		b.image.reset()
 	}
 	b.formatted.SetLanguage(logic.EditorLanguage(b.category))
@@ -180,6 +193,7 @@ func (b *BodyViewer) Build(c *ui.Context, theme nui.Theme, content BodyContent) 
 		b.clipboard = nil
 	}
 	if content.Unavailable {
+		b.set(BodyContent{Identity: content.Identity, ContentType: content.ContentType})
 		emptyState(c, theme, lucide.TriangleAlert(), locales.DetailBodyUnavailable())
 		return
 	}

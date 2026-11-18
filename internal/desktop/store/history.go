@@ -47,6 +47,10 @@ type HistoryTraffic struct {
 	ShowDetailPanel bool
 	Highlights      map[uint64]string
 	PendingFocusID  uint64
+	// OnReset releases views of the previous history without waiting for a frame.
+	OnReset func()
+	// OnDetailReset releases caches when the detail body or selection is invalidated.
+	OnDetailReset func()
 
 	loadedBodyEntry uint64
 	bodyToken       uint64
@@ -65,6 +69,9 @@ func (t *HistoryTraffic) clearBody() {
 	}
 	t.BodyViewLoading = false
 	t.loadedBodyEntry = 0
+	if t.OnDetailReset != nil {
+		t.OnDetailReset()
+	}
 }
 
 // Select makes entry the selected one; nil closes the detail panel.
@@ -167,6 +174,9 @@ func (t *HistoryTraffic) Reset() {
 	t.Key, t.Entries, t.Selected, t.SelectedCount, t.ShowDetailPanel, t.PendingFocusID = "", nil, nil, 0, false, 0
 	t.EntriesVersion++
 	t.Highlights = map[uint64]string{}
+	if t.OnReset != nil {
+		t.OnReset()
+	}
 }
 
 // Delete removes entries from the opened history's view. The file itself is
