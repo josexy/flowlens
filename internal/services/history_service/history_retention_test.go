@@ -116,7 +116,7 @@ func TestDeleteExpiredHistoriesDeletesPairsAndPreservesUnreadableFiles(t *testin
 	writeTestHistoryPairWithMetadataKey(t, historyDir, "mismatched-key", "other-key", now.AddDate(0, 0, -2).UnixMilli())
 	writeTestCorruptHistoryPair(t, historyDir, "corrupt")
 
-	service := &HistoryService{indexMap: make(historyIndexMap)}
+	service := &HistoryService{}
 	stats, err := service.deleteExpiredHistories(now, settingservice.HistoryRetentionConfig{
 		Enabled: true,
 		Value:   1,
@@ -140,7 +140,7 @@ func TestDeleteExpiredHistoriesDisabledDoesNotScan(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeTestHistoryPair(t, historyDir, "old", time.Now().AddDate(-10, 0, 0).UnixMilli())
 
-	service := &HistoryService{indexMap: make(historyIndexMap)}
+	service := &HistoryService{}
 	stats, err := service.deleteExpiredHistories(time.Now(), settingservice.HistoryRetentionConfig{
 		Enabled: false,
 		Value:   1,
@@ -178,8 +178,8 @@ func TestRunStartupMaintenanceCleansBeforeInitializingIndexes(t *testing.T) {
 	assertHistoryPairExists(t, historyDir, "fresh", true)
 
 	service.mu.RLock()
-	_, expiredIndexed := service.indexMap["expired"]
-	_, freshIndexed := service.indexMap["fresh"]
+	_, expiredIndexed := service.histories["expired"]
+	_, freshIndexed := service.histories["fresh"]
 	service.mu.RUnlock()
 	if expiredIndexed {
 		t.Fatal("expired history should be deleted before index initialization")

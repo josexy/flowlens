@@ -24,12 +24,10 @@ func (s *HistoryService) ExportHAR(request HARExportRequest) (proxyservice.HARWr
 
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	fileIndex := s.indexMap[request.Key]
-	if fileIndex == nil || fileIndex.entries == nil {
-		return proxyservice.HARWriteResult{}, fmt.Errorf("history not found: %s", request.Key)
+	fileIndex, err := s.historyIndex(request.Key)
+	if err != nil {
+		return proxyservice.HARWriteResult{}, err
 	}
 	indices, err := historyHARIndices(fileIndex.entries, request.TrafficIDs)
 	if err != nil {

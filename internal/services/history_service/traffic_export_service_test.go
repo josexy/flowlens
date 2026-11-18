@@ -17,7 +17,7 @@ func TestHistoryTrafficExportSupportedVersions(t *testing.T) {
 			directory := setupHistoryTestStorage(t)
 			writeHistoryWithVersion(t, directory, "export", version)
 			service := New(nil, nil)
-			if err := service.initializeHistoryIndexMap(); err != nil {
+			if err := service.refreshHistories(); err != nil {
 				t.Fatal(err)
 			}
 			for _, kind := range []proxyservice.TrafficExportKind{proxyservice.TrafficExportRequestMessage, proxyservice.TrafficExportRequestHeaders, proxyservice.TrafficExportRequestBody, proxyservice.TrafficExportResponseBody, proxyservice.TrafficExportCSV} {

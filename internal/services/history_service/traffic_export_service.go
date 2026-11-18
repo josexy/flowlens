@@ -24,11 +24,9 @@ func (s *HistoryService) ExportTraffic(ctx context.Context, request TrafficExpor
 	defer release()
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	fileIndex := s.indexMap[request.Key]
-	if fileIndex == nil || fileIndex.entries == nil {
-		return proxyservice.TrafficExportResult{}, fmt.Errorf("history not found: %s", request.Key)
+	fileIndex, err := s.historyIndex(request.Key)
+	if err != nil {
+		return proxyservice.TrafficExportResult{}, err
 	}
 	if fileIndex.formatVersion < 1 || fileIndex.formatVersion > 3 {
 		return proxyservice.TrafficExportResult{}, fmt.Errorf("hbin: unsupported version %d", fileIndex.formatVersion)

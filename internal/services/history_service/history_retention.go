@@ -96,6 +96,9 @@ func (s *HistoryService) deleteExpiredHistories(now time.Time, config settingser
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("delete expired history %s: %w", key, deleteErr))
 			continue
 		}
+		s.mu.Lock()
+		s.forgetHistoryLocked(key)
+		s.mu.Unlock()
 		stats.Deleted++
 	}
 

@@ -35,7 +35,7 @@ func TestHistoriesFromTheOldBuildLoadUnchanged(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	copyOldBuildHistories(t, historyDir)
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
+	if err := service.refreshHistories(); err != nil {
 		t.Fatal(err)
 	}
 	list, err := service.ListHistoryKeys()

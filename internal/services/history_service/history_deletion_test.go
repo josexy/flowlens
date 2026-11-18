@@ -44,13 +44,13 @@ func TestInitializeHistoryIndexPreservesActiveCommitWindowIndex(t *testing.T) {
 	}
 
 	service := New(nil, &rotatingHistoryProxy{currentKey: knownHistoryKey})
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
 	if _, err := os.Stat(indexPath); err != nil {
 		t.Fatalf("active history index was removed during a data-file commit window: %v", err)
 	}
-	if _, indexed := service.indexMap[knownHistoryKey]; indexed {
+	if _, indexed := service.histories[knownHistoryKey]; indexed {
 		t.Fatal("active history commit window was indexed")
 	}
 }
@@ -73,8 +73,8 @@ func TestInitializeHistoryIndexPreservesPairWhenRecoveryFails(t *testing.T) {
 	}
 
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err == nil {
-		t.Fatal("initializeHistoryIndexMap returned nil for failed recovery")
+	if err := service.refreshHistories(); err == nil {
+		t.Fatal("refreshHistories returned nil for failed recovery")
 	}
 	if _, err := os.Stat(indexPath); err != nil {
 		t.Fatalf("canonical index was deleted after failed data recovery: %v", err)
@@ -89,10 +89,10 @@ func TestInitializeHistoryIndexPreservesPairWhenRecoveryFails(t *testing.T) {
 	if err := os.WriteFile(backupPath, dataContents, fs.PrivateFileMode); err != nil {
 		t.Fatalf("repair history backup fixture: %v", err)
 	}
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("retry initializeHistoryIndexMap: %v", err)
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("retry refreshHistories: %v", err)
 	}
-	if _, indexed := service.indexMap[knownHistoryKey]; !indexed {
+	if _, indexed := service.histories[knownHistoryKey]; !indexed {
 		t.Fatal("recovered history pair was not indexed on retry")
 	}
 	assertHistoryPairExists(t, historyDir, knownHistoryKey, true)
@@ -115,15 +115,13 @@ func TestDeleteHistoryDeletesKnownUUIDPair(t *testing.T) {
 			t.Fatalf("write managed history artifact %s: %v", path, err)
 		}
 	}
-	service := &HistoryService{indexMap: historyIndexMap{
-		knownHistoryKey: {entries: newOrderedIndexList()},
-	}}
+	service := &HistoryService{histories: knownHistories(knownHistoryKey)}
 
 	if err := service.DeleteHistory(knownHistoryKey); err != nil {
 		t.Fatalf("DeleteHistory: %v", err)
 	}
 	assertHistoryPairExists(t, historyDir, knownHistoryKey, false)
-	if _, ok := service.indexMap[knownHistoryKey]; ok {
+	if _, ok := service.histories[knownHistoryKey]; ok {
 		t.Fatal("deleted history remained indexed")
 	}
 	for _, path := range managedArtifacts {
@@ -141,11 +139,7 @@ func TestDeleteHistoryRejectsUnsafeAndUnknownKeys(t *testing.T) {
 	writeHistoryFiles(t, filepath.Dir(absoluteBase), filepath.Base(absoluteBase))
 	writeHistoryFiles(t, historyDir, unknownHistoryKey)
 
-	service := &HistoryService{indexMap: historyIndexMap{
-		"../outside-history": {entries: newOrderedIndexList()},
-		absoluteBase:         {entries: newOrderedIndexList()},
-		"fixture-key":        {entries: newOrderedIndexList()},
-	}}
+	service := &HistoryService{histories: knownHistories("../outside-history", absoluteBase, "fixture-key")}
 	tests := []struct {
 		name string
 		key  string
@@ -172,18 +166,15 @@ func TestClearHistoriesDeletesPairs(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeHistoryFiles(t, historyDir, knownHistoryKey)
 	writeHistoryFiles(t, historyDir, unknownHistoryKey)
-	service := &HistoryService{indexMap: historyIndexMap{
-		knownHistoryKey:   {entries: newOrderedIndexList()},
-		unknownHistoryKey: {entries: newOrderedIndexList()},
-	}}
+	service := &HistoryService{histories: knownHistories(knownHistoryKey, unknownHistoryKey)}
 
 	if err := service.ClearHistories(); err != nil {
 		t.Fatalf("ClearHistories: %v", err)
 	}
 	assertHistoryPairExists(t, historyDir, knownHistoryKey, false)
 	assertHistoryPairExists(t, historyDir, unknownHistoryKey, false)
-	if len(service.indexMap) != 0 {
-		t.Fatalf("indexMap length = %d, want 0", len(service.indexMap))
+	if len(service.histories) != 0 {
+		t.Fatalf("histories = %d, want 0", len(service.histories))
 	}
 }
 
@@ -191,9 +182,7 @@ func TestClearHistoriesPreservesUnindexedUnsupportedFiles(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeHistoryFiles(t, historyDir, knownHistoryKey)
 	writeHistoryFiles(t, historyDir, unsupportedKey)
-	service := &HistoryService{indexMap: historyIndexMap{
-		knownHistoryKey: {entries: newOrderedIndexList()},
-	}}
+	service := &HistoryService{histories: knownHistories(knownHistoryKey)}
 
 	if err := service.ClearHistories(); err != nil {
 		t.Fatalf("ClearHistories: %v", err)
@@ -208,13 +197,12 @@ func TestPreviousCurrentHistoryBecomesVisibleAfterKeyRotation(t *testing.T) {
 	proxy := &rotatingHistoryProxy{currentKey: knownHistoryKey}
 	service := &HistoryService{
 		proxyService: proxy,
-		indexMap:     make(historyIndexMap),
 	}
 
-	if err := service.initializeHistoryIndexMap(); err != nil {
+	if err := service.refreshHistories(); err != nil {
 		t.Fatalf("initialize current history index: %v", err)
 	}
-	if _, ok := service.indexMap[knownHistoryKey]; ok {
+	if _, ok := service.histories[knownHistoryKey]; ok {
 		t.Fatal("active current history should not be indexed")
 	}
 
@@ -251,11 +239,11 @@ func TestInitializeHistoryIndexRecoversInterruptedPairCommit(t *testing.T) {
 		t.Fatalf("write partial hbin fixture: %v", err)
 	}
 
-	service := &HistoryService{indexMap: make(historyIndexMap)}
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	service := &HistoryService{}
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
-	if _, ok := service.indexMap[knownHistoryKey]; !ok {
+	if _, ok := service.histories[knownHistoryKey]; !ok {
 		t.Fatal("recovered history pair was not indexed")
 	}
 	if got, err := os.ReadFile(hbinPath); err != nil {
@@ -290,16 +278,14 @@ func TestClearHistoriesReportsFailureAndRetainsIndex(t *testing.T) {
 		t.Fatalf("create non-empty hbin directory: %v", err)
 	}
 	hidxPath := filepath.Join(historyDir, fs.GetHIdxFileName(knownHistoryKey))
-	service := &HistoryService{indexMap: historyIndexMap{
-		knownHistoryKey: {entries: newOrderedIndexList()},
-	}}
+	service := &HistoryService{histories: knownHistories(knownHistoryKey)}
 
 	err = service.ClearHistories()
 	if err == nil || !strings.Contains(err.Error(), fs.GetHBinFileName(knownHistoryKey)) {
 		t.Fatalf("ClearHistories error = %v, want hbin deletion error", err)
 	}
-	if _, ok := service.indexMap[knownHistoryKey]; !ok {
-		t.Fatal("failed history was removed from indexMap")
+	if _, ok := service.histories[knownHistoryKey]; !ok {
+		t.Fatal("failed history was forgotten")
 	}
 	if _, statErr := os.Stat(hbinPath); statErr != nil {
 		t.Fatalf("failed hbin target should remain: %v", statErr)
@@ -314,11 +300,11 @@ func TestClearHistoriesReportsFailureAndRetainsIndex(t *testing.T) {
 	if err := os.WriteFile(hbinPath, hbinContents, 0o600); err != nil {
 		t.Fatalf("restore hbin fixture: %v", err)
 	}
-	restartedService := &HistoryService{indexMap: make(historyIndexMap)}
-	if err := restartedService.initializeHistoryIndexMap(); err != nil {
+	restartedService := &HistoryService{}
+	if err := restartedService.refreshHistories(); err != nil {
 		t.Fatalf("initialize history after restart: %v", err)
 	}
-	if _, ok := restartedService.indexMap[knownHistoryKey]; !ok {
+	if _, ok := restartedService.histories[knownHistoryKey]; !ok {
 		t.Fatal("preserved history pair was not reindexed after restart")
 	}
 	if err := restartedService.ClearHistories(); err != nil {
@@ -342,9 +328,9 @@ func TestInitializeHistoryIndexTightensExistingStorage(t *testing.T) {
 		}
 	}
 
-	service := &HistoryService{indexMap: make(historyIndexMap)}
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	service := &HistoryService{}
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
 	if info, err := os.Stat(historyDir); err != nil {
 		t.Fatalf("Stat history dir: %v", err)
