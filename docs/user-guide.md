@@ -140,7 +140,7 @@ The HTTP Request Editor can run Python hooks; see [Python Plugins](#python-plugi
 
 ## API Collections
 
-Save an HTTP Request Editor or WebSocket Client tab into a folder from its tab menu. Saving a tab that is already linked to a collection entry updates that entry. Saved requests keep their protocol, redirect limit, TLS verification setting, TLS profile, HTTP/2 fingerprint, ordered headers, body, and Python script source. Script switches are off when a request is reopened.
+Save an HTTP Request Editor or WebSocket Client tab into a folder from its tab menu. Pick the destination in the dialog's folder tree, which opens at the last selected folder and shows the chosen folder's path below it. Saving a tab that is already linked to a collection entry updates that entry. Saved requests keep their protocol, redirect limit, TLS verification setting, TLS profile, HTTP/2 fingerprint, ordered headers, body, and Python script source. Script switches are off when a request is reopened.
 
 **Organize.** **New Folder** in the toolbar and **New Child Folder** in a folder's menu open a name dialog; press Enter or **Create** to save. Drag a row or its grip onto a folder to move it; hovering over a collapsed folder expands it, and holding near the edge scrolls. Nested folders can also move to the top level with **Move to Root**, by menu or by dropping them on the drop zone; requests must stay inside a folder. Press Escape to cancel a drag.
 

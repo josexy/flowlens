@@ -43,6 +43,18 @@ tasks:
     cmds:
       - go test ./...
 
+  # On Windows and Linux the race detector needs cgo and a C compiler. On macOS
+  # it needs neither, but FlowLens builds there with cgo anyway. Pass packages
+  # after -- to narrow the run.
+  test:race:
+    desc: Runs Go tests with the race detector, by default on the concurrency-heavy packages
+    env:
+      CGO_ENABLED: '1'
+    vars:
+      PACKAGES: '{{.CLI_ARGS | default "./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service"}}'
+    cmds:
+      - go test -race {{.PACKAGES}}
+
   fmt:check:
     desc: Fails if any Go file needs formatting
     cmds:
