@@ -198,15 +198,21 @@ func (s *ProxyService) fillEntryProcessFromTuple(
 		lookup.Release()
 		binding = actual.(*trafficProcessBinding)
 	} else {
+		// The lookup may update the entry until its result is final, or until
+		// the binding is deactivated.
+		release := entry.lifecycle.hold()
 		off := lookup.Subscribe(func(result processattribution.Result) {
 			process := mapProcessAttributionResult(result)
 			if binding.update(process) {
 				s.updateTrafficProcess(entry.ID, binding)
 			}
 		})
+		stopFinal := lookup.OnFinal(release)
 		cleanup := func() {
+			stopFinal()
 			off()
 			lookup.Release()
+			release()
 		}
 		if !binding.installOff(cleanup) {
 			cleanup()

@@ -1,6 +1,7 @@
 package proxyservice
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -128,6 +129,17 @@ type ProxyService struct {
 	liveTrafficDetailID           atomic.Uint64
 	bodyCacheMu                   sync.RWMutex
 	bodyCache                     *bodycache.BodyCache
+	// captureSpill holds the session's finished entries that left the
+	// in-memory window. It lives in the body-cache session directory and,
+	// like bodyCache, is replaced under bodyCacheMu.
+	captureSpill *captureSpillStore
+	// spillWake and spillDone belong to the spiller goroutine started by
+	// ServiceStartup.
+	spillWake                     chan struct{}
+	spillDone                     chan struct{}
+	spillDisabledWarned           atomic.Bool
+	spillHeldBackWarned           atomic.Bool
+	spillFailedWarned             atomic.Bool
 	clearDataMu                   sync.Mutex
 	historyCleanerMu              sync.RWMutex
 	historyCleaner                HistoryCleaner
@@ -147,6 +159,16 @@ type ProxyService struct {
 	// storeTrafficPrecheckHook is test-only synchronization used to
 	// deterministically exercise deletion between its two tombstone checks.
 	storeTrafficPrecheckHook func()
+	// historySaveClock and periodicHistorySave are test-only replacements for
+	// the periodic save's clock and save.
+	historySaveClock    historySaveClock
+	periodicHistorySave func()
+	// spillBatchHook is test-only synchronization run after a spill batch is
+	// written and before it replaces the in-memory entries.
+	spillBatchHook func()
+	// captureAttachPrecheckHook is the body and WebSocket capture equivalent:
+	// it runs after the tombstone check and before capture state is attached.
+	captureAttachPrecheckHook func()
 	// removeHistoryFile is test-only failure injection for current-history
 	// pair deletion. Production uses os.Remove.
 	removeHistoryFile func(string) error
@@ -186,8 +208,11 @@ type TrafficBodies struct {
 type TrafficWsMsgs struct {
 	liveState int32
 	lock      sync.RWMutex
+	// Messages hold payloads above the body-cache threshold in spool rather
+	// than in Data.
 	Messages  []*WebSocketMessage
 	Truncated bool
+	spool     *bodycache.AppendFile
 }
 
 type webSocketSession struct {
@@ -261,15 +286,13 @@ func (s *ProxyService) SetEventBus(events serviceruntime.EventBus) { s.events = 
 
 func (s *ProxyService) ServiceStartup(ctx context.Context) error {
 	s.baseCtx, s.baseCancel = context.WithCancel(ctx)
+	// The single-instance lock is held before services start, so no other run
+	// can still be using a session directory, and this run creates its own
+	// only when capture starts.
+	removeStaleBodyCacheSessions()
+	s.startCaptureSpiller(s.baseCtx)
 	s.dnsCacheManager()
-	s.frontendEventBatcher = newBusFrontendEventBatcher(
-		s.events,
-		frontendEventBatcherOptions{
-			FlushInterval:    frontendEventFlushInterval,
-			MaxPendingEvents: frontendEventMaxPending,
-			MaxPendingBytes:  frontendEventMaxBytes,
-		},
-	)
+	s.frontendEventBatcher = newBusFrontendEventBatcher(s.events, defaultFrontendEventBatcherOptions())
 	s.refreshLocalProcessAddresses()
 	s.startBackgroundSyncIfReady()
 	logger.G().Info("Proxy service started")
@@ -315,8 +338,18 @@ func (s *ProxyService) shutdown() error {
 		manager.Drain(drainCtx)
 		cancel()
 	}
+	// The spiller stops with baseCtx; let a batch in progress finish before
+	// the final save.
+	s.waitCaptureSpiller()
 	if err := s.flushOnShutdown(); err != nil {
+		// Keep the session's cached bodies: they are removed at the next start.
 		shutdownErr = errors.Join(shutdownErr, err)
+	} else {
+		s.bodyCacheMu.Lock()
+		s.closeCaptureSpillNoLock()
+		removeBodyCacheSession(s.bodyCache)
+		s.bodyCache = nil
+		s.bodyCacheMu.Unlock()
 	}
 	if manager := s.processManager(); manager != nil {
 		manager.Close()
@@ -733,7 +766,7 @@ func (s *ProxyService) newTrafficEntry(entry TrafficEntry) *TrafficEntry {
 	s.captureLifecycleMu.RLock()
 	entry.ID = atomic.AddUint64(&s.nextID, 1)
 	entry.captureGeneration = s.captureGeneration
-	entry.lifecycle = &trafficEntryLifecycle{}
+	entry.lifecycle = &trafficEntryLifecycle{onSettled: s.wakeSettledCaptureSpiller}
 	s.captureLifecycleMu.RUnlock()
 	return &entry
 }
@@ -742,21 +775,37 @@ func (s *ProxyService) newTrafficEntry(entry TrafficEntry) *TrafficEntry {
 // under the same publication lock. No network or body I/O may run here: later
 // transport callbacks only update this already registered entry.
 func (s *ProxyService) registerTrafficEntry(ctx context.Context, entry TrafficEntry) *TrafficEntry {
+	captured, _ := s.registerTrafficEntryWithProducer(ctx, entry, false)
+	return captured
+}
+
+// registerHeldTrafficEntry registers an entry whose caller keeps producing
+// updates for it, such as an HTTP exchange or a WebSocket frame loop. The hold
+// is taken before the entry is stored; release ends it.
+func (s *ProxyService) registerHeldTrafficEntry(ctx context.Context, entry TrafficEntry) (*TrafficEntry, func()) {
+	return s.registerTrafficEntryWithProducer(ctx, entry, true)
+}
+
+func (s *ProxyService) registerTrafficEntryWithProducer(ctx context.Context, entry TrafficEntry, held bool) (*TrafficEntry, func()) {
 	s.trafficPublishMu.Lock()
 	defer s.trafficPublishMu.Unlock()
 	captured := s.newTrafficEntry(entry)
+	release := func() {}
+	if held {
+		release = captured.lifecycle.hold()
+	}
 	s.fillEntryMetadataFromContext(ctx, captured)
 	if s.storeTrafficEntry(captured) {
 		s.emitTraffic(captured)
 	}
-	return captured
+	return captured, release
 }
 
 func (s *ProxyService) isCurrentTrafficEntryLocked(entry *TrafficEntry) bool {
 	if entry == nil || entry.captureGeneration != s.captureGeneration {
 		return false
 	}
-	return entry.lifecycle == nil || !entry.lifecycle.deleted.Load()
+	return entry.lifecycle == nil || !entry.lifecycle.deleted.Load() && !entry.lifecycle.spilled.Load()
 }
 
 func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.HTTPInterceptor {
@@ -791,9 +840,13 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 			entry.Request.HeaderOrderUnavailable = prepared.orderUnavailable
 		}
 		entry.Request.Metrics = newPendingHTTPMessageMetrics(-1)
-		entry = s.registerTrafficEntry(ctx, *entry)
+		entry, releaseExchange := s.registerHeldTrafficEntry(ctx, *entry)
 		exchange := newCaptureExchange(s, ctx, entry)
+		exchange.release = releaseExchange
 		exchange.deferResponseTiming = hasResponseRewrite(matches)
+		// With rewrite rules, the downstream send observer is the exchange's
+		// last update.
+		exchange.awaitDownstreamSend = len(matches) > 0
 		if len(matches) > 0 {
 			var rewriteResult rewriteResult
 			var rewriteErr error
@@ -848,6 +901,7 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 						exchange.observeRewrittenResponseSent(sent)
 					}
 					abortRewrite()
+					exchange.settle()
 				}); err != nil {
 					abortRewrite()
 					closeRewriteBody(resp.Body)
@@ -985,9 +1039,11 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 		)
 
 		// send websocket basic info immediately
-		entry = s.registerTrafficEntry(ctx, *entry)
+		entry, releaseFrameLoop := s.registerHeldTrafficEntry(ctx, *entry)
+		defer releaseFrameLoop()
 
 		wsMsgs := s.newCaptureWebSocketMessages(entry)
+		defer closeTrafficWsMsgsSpool(wsMsgs)
 
 		for {
 			select {
@@ -1001,11 +1057,13 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 				shouldStoreMessage := s.shouldStoreCaptureWebSocketMessage(entry, wsMsgs)
 				var msg *WebSocketMessage
 				if shouldStoreMessage {
-					payload := frame.DataBuffer().Clone().Bytes()
-					msg = normalizeWebSocketMessage(
+					// Capture before Invoke, which recycles the frame's buffer.
+					msg = s.newCapturedWebSocketMessage(
+						entry.ID,
+						wsMsgs,
 						frame.Direction().String(),
 						formatWebsocketMsgType(frame.MessageType()),
-						payload,
+						frame.DataBuffer().Bytes(),
 					)
 				}
 				if err := frame.Invoke(); err != nil {
@@ -1039,8 +1097,130 @@ func (s *ProxyService) newCaptureWebSocketMessages(entry *TrafficEntry) *Traffic
 	if !s.isCurrentTrafficEntryLocked(entry) {
 		return nil
 	}
+	if s.captureAttachPrecheckHook != nil {
+		s.captureAttachPrecheckHook()
+	}
 	value, _ := s.trafficWsMsgs.LoadOrStore(entry.ID, &TrafficWsMsgs{liveState: 1})
-	return value.(*TrafficWsMsgs)
+	wsMsgs := value.(*TrafficWsMsgs)
+	// See newCaptureObservedStreamBodyReader: recheck the tombstone after the
+	// store so a deletion in between cannot leave the messages behind.
+	if entry.lifecycle != nil && entry.lifecycle.deleted.Load() {
+		s.trafficWsMsgs.CompareAndDelete(entry.ID, wsMsgs)
+		releaseTrafficWsMsgs(wsMsgs)
+		s.deleteTrafficBodyCacheFiles(entry.ID)
+		return nil
+	}
+	return wsMsgs
+}
+
+func releaseTrafficWsMsgs(wsMsgs *TrafficWsMsgs) {
+	atomic.StoreInt32(&wsMsgs.liveState, 0)
+	wsMsgs.lock.Lock()
+	wsMsgs.Messages = nil
+	wsMsgs.Truncated = false
+	if wsMsgs.spool != nil {
+		_ = wsMsgs.spool.Close()
+		wsMsgs.spool = nil
+	}
+	wsMsgs.lock.Unlock()
+}
+
+// closeTrafficWsMsgsSpool releases the payload file handle once the frame loop
+// ends. Spooled payloads stay readable through new handles.
+func closeTrafficWsMsgsSpool(wsMsgs *TrafficWsMsgs) {
+	if wsMsgs == nil {
+		return
+	}
+	wsMsgs.lock.Lock()
+	if wsMsgs.spool != nil {
+		// Keep the closed handle: a new file would truncate the payloads.
+		_ = wsMsgs.spool.Close()
+	}
+	wsMsgs.lock.Unlock()
+}
+
+// newCapturedWebSocketMessage records a captured frame with one copy: a
+// payload above the body-cache threshold is appended to the entry's WebSocket
+// cache file, a smaller one is kept in Data. payload is only valid during the
+// call.
+func (s *ProxyService) newCapturedWebSocketMessage(
+	trafficID uint64,
+	wsMsgs *TrafficWsMsgs,
+	direction, msgType string,
+	payload []byte,
+) *WebSocketMessage {
+	message := &WebSocketMessage{
+		Direction: strings.ToLower(direction),
+		MsgType:   strings.ToLower(msgType),
+		DataSize:  len(payload),
+	}
+	if threshold := s.getCacheThreshold(); threshold > 0 && int64(len(payload)) > threshold {
+		if spooled, err := s.spoolWebSocketPayload(trafficID, wsMsgs, payload); err == nil {
+			message.spooled = spooled
+			return message
+		} else if !errors.Is(err, errWebSocketSpoolUnavailable) {
+			logger.G().Warnf("[%d] WebSocket payload spool failed, keeping it in memory: %v", trafficID, err)
+		}
+	}
+	message.Data = string(payload)
+	return message
+}
+
+var errWebSocketSpoolUnavailable = errors.New("WebSocket payload spool unavailable")
+
+func (s *ProxyService) spoolWebSocketPayload(trafficID uint64, wsMsgs *TrafficWsMsgs, payload []byte) (*spooledWebSocketPayload, error) {
+	if wsMsgs == nil {
+		return nil, errWebSocketSpoolUnavailable
+	}
+	// Hold the cache lease so cache cleanup cannot remove the session
+	// directory while the payload is written.
+	s.bodyCacheMu.RLock()
+	defer s.bodyCacheMu.RUnlock()
+	wsMsgs.lock.Lock()
+	defer wsMsgs.lock.Unlock()
+	if atomic.LoadInt32(&wsMsgs.liveState) == 0 || s.bodyCache == nil {
+		return nil, errWebSocketSpoolUnavailable
+	}
+	if wsMsgs.spool == nil {
+		spool, err := s.bodyCache.AppendFile(trafficID, bodycache.KindWebSocket)
+		if err != nil {
+			return nil, err
+		}
+		wsMsgs.spool = spool
+	}
+	offset, err := wsMsgs.spool.Append(payload)
+	if err != nil {
+		return nil, err
+	}
+	return &spooledWebSocketPayload{file: wsMsgs.spool, offset: offset}, nil
+}
+
+// materializedWebSocketMessage returns message with a spooled payload read
+// back into Data. Other messages are returned as they are.
+func materializedWebSocketMessage(message *WebSocketMessage) *WebSocketMessage {
+	if message == nil || message.spooled == nil {
+		return message
+	}
+	copied := *message
+	copied.spooled = nil
+	data := make([]byte, message.DataSize)
+	if _, err := message.spooled.file.ReadAt(data, message.spooled.offset); err != nil {
+		logger.G().Warnf("Read spooled WebSocket payload failed: %v", err)
+		return &copied
+	}
+	copied.Data = bytes2String(data)
+	return &copied
+}
+
+func materializedWebSocketMessages(messages []*WebSocketMessage) []*WebSocketMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	result := make([]*WebSocketMessage, len(messages))
+	for i, message := range messages {
+		result[i] = materializedWebSocketMessage(message)
+	}
+	return result
 }
 
 func (s *ProxyService) shouldStoreCaptureWebSocketMessage(entry *TrafficEntry, wsMsgs *TrafficWsMsgs) bool {
@@ -1107,11 +1287,14 @@ func (s *ProxyService) appendCapturedWebSocketMessage(trafficID uint64, wsMsgs *
 	wsMsgs.Messages = append(wsMsgs.Messages, msg)
 	wsMsgs.lock.Unlock()
 
+	if s.liveTrafficDetailID.Load() != trafficID {
+		return
+	}
 	s.emitTrafficLiveUpdate(TrafficLiveUpdate{
 		TrafficID:    trafficID,
 		Kind:         TrafficLiveUpdateWebSocketMessage,
 		MessageIndex: &messageIndex,
-		Message:      msg,
+		Message:      materializedWebSocketMessage(msg),
 	})
 }
 
@@ -1425,6 +1608,54 @@ func (s *ProxyService) ensureBodyCacheNoLock() {
 	}
 }
 
+// removeBodyCacheSession removes a capture session's body-cache directory
+// once its data is saved or discarded.
+func removeBodyCacheSession(cache *bodycache.BodyCache) {
+	if cache == nil {
+		return
+	}
+	if err := os.RemoveAll(cache.SessionDir()); err != nil {
+		logger.G().Warnf("body cache: remove session directory failed: %v", err)
+	}
+}
+
+// removeStaleBodyCacheSessions removes body-cache session directories left by
+// earlier runs. Only directories named by a UUID are removed: process icons
+// and any other entries under cache/ stay.
+func removeStaleBodyCacheSessions() {
+	baseDir, err := fs.GetBaseStorageDir()
+	if err != nil {
+		logger.G().Warnf("body cache: get storage dir for stale session cleanup: %v", err)
+		return
+	}
+	cacheRoot := filepath.Join(baseDir, "cache")
+	entries, err := os.ReadDir(cacheRoot)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.G().Warnf("body cache: read %s for stale session cleanup: %v", cacheRoot, err)
+		}
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !isBodyCacheSessionName(entry.Name()) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(cacheRoot, entry.Name())); err != nil {
+			logger.G().Warnf("body cache: remove stale session %s: %v", entry.Name(), err)
+		}
+	}
+}
+
+// isBodyCacheSessionName reports whether name has the canonical UUID form
+// initializeBodyCacheNoLock gives session directories.
+func isBodyCacheSessionName(name string) bool {
+	if len(name) != 36 {
+		return false
+	}
+	_, err := uuid.Parse(name)
+	return err == nil
+}
+
 func (s *ProxyService) initializeBodyCacheNoLock() error {
 	baseDir, err := fs.GetBaseStorageDir()
 	if err != nil {
@@ -1439,7 +1670,30 @@ func (s *ProxyService) initializeBodyCacheNoLock() error {
 		return cacheErr
 	}
 	s.bodyCache = cache
+	s.captureSpill = newCaptureSpillStore(cache.SessionDir())
 	return nil
+}
+
+// closeCaptureSpillNoLock drops the spill store of the current body-cache
+// session. The caller holds bodyCacheMu for writing.
+func (s *ProxyService) closeCaptureSpillNoLock() {
+	if s.captureSpill != nil {
+		if err := s.captureSpill.Close(); err != nil {
+			logger.G().Warnf("Close capture spill store failed: %v", err)
+		}
+		s.captureSpill = nil
+	}
+}
+
+func (s *ProxyService) captureSpillStore() *captureSpillStore {
+	s.bodyCacheMu.RLock()
+	defer s.bodyCacheMu.RUnlock()
+	return s.captureSpill
+}
+
+// captureEntryCount counts the session's entries in memory and on disk.
+func (s *ProxyService) captureEntryCount() int {
+	return s.trafficEntries.Len() + s.captureSpillStore().Len()
 }
 
 func (s *ProxyService) emitWebSocketSessionEvent(event WebSocketSessionEvent) {
@@ -1546,37 +1800,16 @@ func (s *ProxyService) deleteTrafficEntryCaptureLocked(id uint64) {
 		off()
 	}
 	if !exist {
+		s.deleteSpilledTrafficEntry(id)
 		return
 	}
 	if v, loaded := s.trafficBodies.LoadAndDelete(id); loaded {
-		bodies := v.(*TrafficBodies)
-		atomic.StoreInt32(&bodies.liveState, 0)
-		bodies.lockReqBody.Lock()
-		if bodies.requestBody != nil {
-			bodies.requestBody.Abort()
-			bodies.requestBody = nil
-		}
-		bodies.lockReqBody.Unlock()
-		bodies.lockRespBody.Lock()
-		if bodies.responseBody != nil {
-			bodies.responseBody.Abort()
-			bodies.responseBody = nil
-		}
-		bodies.lockRespBody.Unlock()
+		abortTrafficBodies(v.(*TrafficBodies))
 	}
 	if v, loaded := s.trafficWsMsgs.LoadAndDelete(id); loaded {
-		wsMsgs := v.(*TrafficWsMsgs)
-		atomic.StoreInt32(&wsMsgs.liveState, 0)
-		wsMsgs.lock.Lock()
-		wsMsgs.Messages = nil
-		wsMsgs.Truncated = false
-		wsMsgs.lock.Unlock()
+		releaseTrafficWsMsgs(v.(*TrafficWsMsgs))
 	}
-	s.bodyCacheMu.RLock()
-	if s.bodyCache != nil {
-		s.bodyCache.Delete(id)
-	}
-	s.bodyCacheMu.RUnlock()
+	s.deleteTrafficBodyCacheFiles(id)
 	atomic.AddInt64(&s.trafficEntries.Statistics.Total, -1)
 	switch old.Type {
 	case "http", "https":
@@ -1584,6 +1817,25 @@ func (s *ProxyService) deleteTrafficEntryCaptureLocked(id uint64) {
 	case "ws", "wss":
 		atomic.AddInt64(&s.trafficEntries.Statistics.TotalWS, -1)
 	case "tcp":
+		atomic.AddInt64(&s.trafficEntries.Statistics.TotalTCP, -1)
+	}
+	s.markHistoryDirty()
+}
+
+// deleteSpilledTrafficEntry removes an entry that was moved to the spill
+// store. Its cache files were already removed when it was spilled.
+func (s *ProxyService) deleteSpilledTrafficEntry(id uint64) {
+	kind, ok := s.captureSpillStore().Delete(id)
+	if !ok {
+		return
+	}
+	atomic.AddInt64(&s.trafficEntries.Statistics.Total, -1)
+	switch kind {
+	case spillKindHTTP:
+		atomic.AddInt64(&s.trafficEntries.Statistics.TotalHTTP, -1)
+	case spillKindWebSocket:
+		atomic.AddInt64(&s.trafficEntries.Statistics.TotalWS, -1)
+	case spillKindTCP:
 		atomic.AddInt64(&s.trafficEntries.Statistics.TotalTCP, -1)
 	}
 	s.markHistoryDirty()
@@ -1767,8 +2019,25 @@ func (s *ProxyService) getTrafficBodyViewInner(id uint64) (trafficBodyViewInner,
 	return result, bodyErr
 }
 
-// GetTrafficBodyView returns a single entry with bodies
+// GetTrafficBodyView returns the bodies and WebSocket messages of an entry of
+// the current capture, in memory or spilled.
 func (s *ProxyService) GetTrafficBodyView(id uint64) (*TrafficBodyView, error) {
+	ref, ok := s.resolveCaptureEntry(id)
+	if ok && ref.entry != nil {
+		view, err := s.memoryTrafficBodyView(id)
+		if !ref.movedToSpill() {
+			return view, err
+		}
+		// Spilling released the in-memory bodies while they were read.
+		ref, ok = s.resolveCaptureEntry(id)
+	}
+	if !ok || ref.spill == nil {
+		return nil, fmt.Errorf("traffic entry %d not found", id)
+	}
+	return ref.spill.Body(id)
+}
+
+func (s *ProxyService) memoryTrafficBodyView(id uint64) (*TrafficBodyView, error) {
 	bvi, err := s.getTrafficBodyViewInner(id)
 	defer func() {
 		bvi.closeReqBodyReaderSafely()
@@ -1883,15 +2152,17 @@ func (s *ProxyService) clearTrafficWithBodyCache(cache *bodycache.BodyCache) {
 	})
 	s.trafficBodies.Clear()
 	s.trafficWsMsgs.Range(func(key, value any) bool {
-		wsMsgs := value.(*TrafficWsMsgs)
-		atomic.StoreInt32(&wsMsgs.liveState, 0)
-		wsMsgs.lock.Lock()
-		wsMsgs.Messages = nil
-		wsMsgs.Truncated = false
-		wsMsgs.lock.Unlock()
+		releaseTrafficWsMsgs(value.(*TrafficWsMsgs))
+		if id, ok := key.(uint64); ok && cache != nil {
+			cache.DeleteKind(id, bodycache.KindWebSocket)
+		}
 		return true
 	})
 	s.trafficWsMsgs.Clear()
+	// The caller holds bodyCacheMu, which guards the spill store.
+	if err := s.captureSpill.Reset(); err != nil {
+		logger.G().Warnf("Reset capture spill store failed: %v", err)
+	}
 	s.resetStatistics()
 }
 
@@ -2133,28 +2404,9 @@ func waitForResendDelay(ctx context.Context, delay time.Duration) error {
 }
 
 func (s *ProxyService) ResendRequest(callCtx context.Context, id uint64, cfg ResendConfig) (ResendResult, error) {
-	entry, exist := s.trafficEntries.Get(id)
-	if !exist {
-		return ResendResult{}, fmt.Errorf("traffic entry %d not found", id)
-	}
-	// Snapshot request body while holding the lock
-	var reqBodyBytes []byte
-	if v, ok := s.trafficBodies.Load(id); ok {
-		bodies := v.(*TrafficBodies)
-		reqBodyReader, _, err := s.loadBodyBytesAsReader(bodies, id, true)
-		if err != nil {
-			return ResendResult{}, err
-		}
-		if reqBodyReader != nil {
-			reqBodyBytes, err = io.ReadAll(reqBodyReader)
-			closeErr := reqBodyReader.Close()
-			if err != nil {
-				return ResendResult{}, err
-			}
-			if closeErr != nil {
-				return ResendResult{}, closeErr
-			}
-		}
+	entry, reqBodyBytes, err := s.resendRequestSource(id)
+	if err != nil {
+		return ResendResult{}, err
 	}
 
 	result, err := s.ResendRequestWithTrafficEntry(callCtx, cfg, entry, reqBodyBytes)
@@ -2164,6 +2416,52 @@ func (s *ProxyService) ResendRequest(callCtx context.Context, id uint64, cfg Res
 		return result, nil
 	}
 	return result, err
+}
+
+// resendRequestSource returns an entry of the current capture and its decoded
+// request body, from memory or from the spill store.
+func (s *ProxyService) resendRequestSource(id uint64) (*TrafficEntry, []byte, error) {
+	ref, ok := s.resolveCaptureEntry(id)
+	if ok && ref.entry != nil {
+		reqBodyBytes, err := s.memoryRequestBody(id)
+		if !ref.movedToSpill() {
+			return ref.entry, reqBodyBytes, err
+		}
+		ref, ok = s.resolveCaptureEntry(id)
+	}
+	if !ok || ref.spill == nil {
+		return nil, nil, fmt.Errorf("traffic entry %d not found", id)
+	}
+	entry, err := ref.spill.Entry(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	reader, err := ref.spill.BodyReader(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	reqBodyBytes, _, err := DecodeTrafficRequestBody(reader, hbinVersionCurrent)
+	if err != nil {
+		return nil, nil, err
+	}
+	return entry, reqBodyBytes, nil
+}
+
+func (s *ProxyService) memoryRequestBody(id uint64) ([]byte, error) {
+	v, ok := s.trafficBodies.Load(id)
+	if !ok {
+		return nil, nil
+	}
+	reqBodyReader, _, err := s.loadBodyBytesAsReader(v.(*TrafficBodies), id, true)
+	if err != nil || reqBodyReader == nil {
+		return nil, err
+	}
+	reqBodyBytes, err := io.ReadAll(reqBodyReader)
+	closeErr := reqBodyReader.Close()
+	if err != nil {
+		return nil, err
+	}
+	return reqBodyBytes, closeErr
 }
 
 func (s *ProxyService) SendHTTPRequest(
@@ -4276,7 +4574,7 @@ func (s *ProxyService) storeTrafficSnapshot(
 		return nil
 	}
 	if entry.lifecycle == nil {
-		entry.lifecycle = &trafficEntryLifecycle{}
+		entry.lifecycle = &trafficEntryLifecycle{onSettled: s.wakeSettledCaptureSpiller}
 	}
 	// The caller may keep updating its working copy as the exchange advances.
 	// Store an immutable snapshot. Each cloner owns the collections changed at
@@ -4298,6 +4596,7 @@ func (s *ProxyService) storeTrafficSnapshot(
 	s.trafficAttributionMu.Unlock()
 	s.markHistoryDirty()
 	if inserted {
+		s.wakeCaptureSpiller(captureMemoryWindow + captureSpillBatch)
 		atomic.AddInt64(&s.trafficEntries.Statistics.Total, 1)
 		switch entry.Type {
 		case "http", "https":
@@ -4324,7 +4623,7 @@ func (s *ProxyService) UpdateHistoryAlias(alias string) {
 	}
 	s.currentHistoryMetadata.Alias = normalized
 	s.historyMetadataMu.Unlock()
-	if s.trafficEntries.Len() > 0 {
+	if s.captureEntryCount() > 0 {
 		s.markHistoryDirty()
 	}
 	s.emitStatus()
@@ -4350,7 +4649,13 @@ func (s *ProxyService) flushHistoryToDiskCaptureLocked(force bool) error {
 	if !force && !s.historyDirty.Load() && generation == s.lastFlushGeneration.Load() {
 		return nil
 	}
-	if s.trafficEntries.Len() == 0 {
+	// Spilled and in-memory entries are merged in ID order. The caller holds
+	// clearDataMu, so neither set changes while they are written.
+	_, refs, err := s.captureEntryRefsCaptureLocked(nil)
+	if err != nil {
+		return err
+	}
+	if len(refs) == 0 {
 		if err := s.removeCurrentHistoryFiles(s.CurrentHistoryKey()); err != nil {
 			return err
 		}
@@ -4370,39 +4675,37 @@ func (s *ProxyService) flushHistoryToDiskCaptureLocked(force bool) error {
 	historyBinFilePath := filepath.Join(historyStorageDir, fs.GetHBinFileName(md.Key))
 	historyIndexFilePath := filepath.Join(historyStorageDir, fs.GetHIdxFileName(md.Key))
 	nowTs := time.Now()
-	trafficEntries := s.trafficEntries.Values()
 	err = s.writeAndCommitHistoryFilePair(
 		historyFilePairPaths{data: historyBinFilePath, index: historyIndexFilePath},
 		func(hbinFile, hindexFile *os.File) error {
 			if err := encodeHistoryMetadata(hbinFile, md); err != nil {
 				return err
 			}
-			if err := binary.Write(hbinFile, binary.BigEndian, uint32(len(trafficEntries))); err != nil {
+			if err := binary.Write(hbinFile, binary.BigEndian, uint32(len(refs))); err != nil {
 				return err
 			}
 			if err := s.historyFlushCheckpoint(historyFlushStageWriteIndex); err != nil {
 				return fmt.Errorf("history flush checkpoint %s: %w", historyFlushStageWriteIndex, err)
 			}
-			if err := binary.Write(hindexFile, binary.BigEndian, uint32(len(trafficEntries))); err != nil {
+			if err := binary.Write(hindexFile, binary.BigEndian, uint32(len(refs))); err != nil {
 				return err
 			}
-			for _, entry := range trafficEntries {
-				bodyView, bodyViewErr := s.getTrafficBodyViewInner(entry.ID)
-				if bodyViewErr != nil {
-					logger.G().Errorf("Failed to get body view for entry %d: %v", entry.ID, bodyViewErr)
-					// getTrafficBodyViewInner returns any readable side together with
-					// per-side unavailability, so one corrupt cache file must not discard
-					// the other payload while preserving the entry.
-				}
-				encodeErr := encodeTrafficEntry(hindexFile, hbinFile, entry, &bodyView)
-				bodyView.closeReqBodyReaderSafely()
-				bodyView.closeRspBodyReaderSafely()
-				if encodeErr != nil {
-					logger.G().Errorf("Failed to encode traffic entry %d: %v", entry.ID, encodeErr)
-					return encodeErr
+			position, err := hbinFile.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return err
+			}
+			data := newSegmentWriter(hbinFile, position)
+			index := bufio.NewWriterSize(hindexFile, 64<<10)
+			for _, ref := range refs {
+				if err := s.writeHistoryEntry(index, data, ref); err != nil {
+					logger.G().Errorf("Failed to encode traffic entry %d: %v", ref.id, err)
+					return err
 				}
 			}
-			return nil
+			if err := data.Flush(); err != nil {
+				return err
+			}
+			return index.Flush()
 		},
 	)
 	if err != nil {
@@ -4413,10 +4716,44 @@ func (s *ProxyService) flushHistoryToDiskCaptureLocked(force bool) error {
 	logger.G().Infof(
 		"Flushed history to disk: %s, entries: %d, duration: %s",
 		historyBinFilePath,
-		len(trafficEntries),
+		len(refs),
 		time.Since(nowTs),
 	)
 	return nil
+}
+
+// writeHistoryEntry appends one entry to a history pair. A spilled entry is
+// copied as encoded bytes and indexed at its new offsets; an in-memory entry
+// is encoded, streaming bodies still being received from their cache files.
+func (s *ProxyService) writeHistoryEntry(index io.Writer, data *segmentWriter, ref captureEntryRef) error {
+	if ref.entry == nil {
+		header := data.pos
+		bodyRel, _, err := ref.spill.CopyRaw(data, ref.id)
+		if err != nil {
+			return err
+		}
+		body := header + bodyRel
+		if body > int64(^uint32(0)) {
+			return fmt.Errorf("hbin: body offset out of range: %d", body)
+		}
+		if err := binary.Write(index, binary.BigEndian, ref.id); err != nil {
+			return err
+		}
+		if err := binary.Write(index, binary.BigEndian, uint32(header)); err != nil {
+			return err
+		}
+		return binary.Write(index, binary.BigEndian, uint32(body))
+	}
+	bodyView, bodyViewErr := s.getTrafficBodyViewInner(ref.id)
+	if bodyViewErr != nil {
+		// getTrafficBodyViewInner returns any readable side together with
+		// per-side unavailability, so one corrupt cache file must not discard
+		// the other payload while preserving the entry.
+		logger.G().Errorf("Failed to get body view for entry %d: %v", ref.id, bodyViewErr)
+	}
+	defer bodyView.closeReqBodyReaderSafely()
+	defer bodyView.closeRspBodyReaderSafely()
+	return encodeTrafficEntry(index, data, ref.entry, &bodyView)
 }
 
 func (s *ProxyService) removeCurrentHistoryFiles(key string) error {
@@ -4493,6 +4830,7 @@ func (s *ProxyService) flushOnShutdown() error {
 }
 
 func (s *ProxyService) reinitializeBodyCacheNoLock() error {
+	s.closeCaptureSpillNoLock()
 	s.bodyCache = nil
 	if !s.running {
 		return nil
@@ -4512,6 +4850,9 @@ func (s *ProxyService) finalizeCaptureRestartCaptureLocked() {
 	s.resetCurrentHistoryMetadata()
 	s.bodyCacheMu.Lock()
 	s.clearTrafficWithBodyCache(s.bodyCache)
+	// Restart runs only after the session was saved or discarded, so its
+	// cached bodies are no longer needed.
+	removeBodyCacheSession(s.bodyCache)
 	if err := s.reinitializeBodyCacheNoLock(); err != nil {
 		logger.G().Warnf("Capture restart body cache initialization failed: %v", err)
 	}
@@ -4531,7 +4872,7 @@ func (s *ProxyService) RestartCapture(saveCurrent bool) error {
 	s.captureLifecycleMu.Lock()
 	defer s.captureLifecycleMu.Unlock()
 
-	entries := s.trafficEntries.Len()
+	entries := s.captureEntryCount()
 	logger.G().Infof("Capture restart requested: save_current=%t entries=%d", saveCurrent, entries)
 	if saveCurrent {
 		if err := s.flushHistoryToDiskCaptureLocked(true); err != nil {
@@ -4614,6 +4955,7 @@ func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurr
 	s.captureGeneration++
 	s.bodyCacheMu.Lock()
 	s.clearTrafficWithBodyCache(s.bodyCache)
+	s.closeCaptureSpillNoLock()
 	s.bodyCache = nil
 	result.stateCleared = true
 	previousHistoryKey := s.CurrentHistoryKey()
@@ -4680,7 +5022,7 @@ func (s *ProxyService) ClearCacheFiles() error {
 	defer s.lifecycleOpsMu.Unlock()
 	s.runLifecycleOperationHook("clear-cache")
 
-	logger.G().Infof("Clear cache files requested: entries=%d", s.trafficEntries.Len())
+	logger.G().Infof("Clear cache files requested: entries=%d", s.captureEntryCount())
 	s.requestDraftCacheOpsMu.Lock()
 	defer s.requestDraftCacheOpsMu.Unlock()
 	s.runRequestDraftCacheOperationHook("clear")
@@ -4708,7 +5050,7 @@ func (s *ProxyService) ClearCacheAndHistory() error {
 	defer s.requestDraftCacheOpsMu.Unlock()
 	s.runRequestDraftCacheOperationHook("clear")
 
-	logger.G().Infof("Clear cache and history requested: entries=%d", s.trafficEntries.Len())
+	logger.G().Infof("Clear cache and history requested: entries=%d", s.captureEntryCount())
 	result, err := s.clearStoredCaptureDataLocked(true, false)
 	if result.stateCleared {
 		s.emitLocalDataCleared("cache-and-history", result.requestDraftCacheRoot, result.historyCleared)
@@ -4723,18 +5065,46 @@ func (s *ProxyService) ClearCacheAndHistory() error {
 	return nil
 }
 
+// historySaveInterval is the shortest time between periodic saves of the
+// current capture.
+const historySaveInterval = 60 * time.Second
+
+// nextHistorySaveDelay spaces periodic saves by five times the last save's
+// duration, so a slow save of a large capture runs at most a fifth of the time.
+func nextHistorySaveDelay(lastSave time.Duration) time.Duration {
+	return max(historySaveInterval, 5*lastSave)
+}
+
+// historySaveClock is the clock of the periodic save.
+type historySaveClock interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+}
+
+type systemHistorySaveClock struct{}
+
+func (systemHistorySaveClock) Now() time.Time                         { return time.Now() }
+func (systemHistorySaveClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
 func (s *ProxyService) syncHistoriesToDiskPeriodically() error {
-	interval := time.Second * 60
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
+	clock := s.historySaveClock
+	if clock == nil {
+		clock = systemHistorySaveClock{}
+	}
+	save := s.periodicHistorySave
+	if save == nil {
+		save = func() { _ = s.flushHistoryToDisk(false) }
+	}
+	delay := historySaveInterval
 	for {
 		select {
 		case <-s.appContext().Done(): // first context cancellation and then ServiceShutdown be called
 			logger.G().Info("HistoryService context canceled, stopping periodic sync")
 			return nil
-		case <-timer.C:
-			_ = s.flushHistoryToDisk(false)
-			timer.Reset(interval)
+		case <-clock.After(delay):
+			started := clock.Now()
+			save()
+			delay = nextHistorySaveDelay(clock.Now().Sub(started))
 		}
 	}
 }

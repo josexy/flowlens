@@ -1,7 +1,7 @@
 package proxyservice
 
 import (
-	"fmt"
+	"path/filepath"
 
 	appservice "github.com/josexy/flowlens/internal/services/app_service"
 )
@@ -17,7 +17,7 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 		return HARWriteResult{}, err
 	}
 
-	entries, sourceEntries, err := s.harExportSnapshots(request.TrafficIDs)
+	refs, sourceRefs, err := s.harExportSnapshots(request.TrafficIDs)
 	if err != nil {
 		return HARWriteResult{}, err
 	}
@@ -28,11 +28,21 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 	}
 	defer writer.Abort()
 
-	for _, entry := range sourceEntries {
+	// Register the full source, including unselected entries, so a reused
+	// connection is not charged again. Spilled entries are decoded one at a
+	// time, headers only.
+	for _, ref := range sourceRefs {
+		entry, err := ref.Entry()
+		if err != nil {
+			return HARWriteResult{}, err
+		}
 		writer.ObserveConnectionTimings(entry)
 	}
-	for _, entry := range entries {
-		input := s.currentHARExportEntry(entry)
+	for _, ref := range refs {
+		input, err := s.captureHARExportEntry(ref, filepath.Dir(request.Path))
+		if err != nil {
+			return HARWriteResult{}, err
+		}
 		if err := writer.WriteEntry(input); err != nil {
 			return HARWriteResult{}, err
 		}
@@ -40,31 +50,28 @@ func (s *ProxyService) ExportHAR(request HARExportRequest) (HARWriteResult, erro
 	return writer.Close()
 }
 
-func (s *ProxyService) harExportSnapshots(ids []uint64) ([]*TrafficEntry, []*TrafficEntry, error) {
-	s.captureLifecycleMu.RLock()
-	defer s.captureLifecycleMu.RUnlock()
-	source := s.trafficEntries.Values()
-	if len(ids) == 0 {
-		return source, source, nil
+// harExportSnapshots returns the entries to export and the whole capture, in
+// memory or spilled, in ID order.
+func (s *ProxyService) harExportSnapshots(ids []uint64) ([]captureEntryRef, []captureEntryRef, error) {
+	return s.captureEntryRefsLocked(ids)
+}
+
+// captureHARExportEntry prepares one entry of the current capture for the HAR
+// writer, decoding a spilled entry and its bodies only now.
+func (s *ProxyService) captureHARExportEntry(ref captureEntryRef, temporaryDir string) (HARExportEntry, error) {
+	if ref.entry != nil {
+		return s.currentHARExportEntry(ref.entry), nil
 	}
-	byID := make(map[uint64]*TrafficEntry, len(source))
-	for _, entry := range source {
-		byID[entry.ID] = entry
+	entry, err := ref.Entry()
+	if err != nil {
+		return HARExportEntry{}, err
 	}
-	entries := make([]*TrafficEntry, 0, len(ids))
-	seen := make(map[uint64]struct{}, len(ids))
-	for _, id := range ids {
-		if _, duplicate := seen[id]; duplicate {
-			continue
-		}
-		seen[id] = struct{}{}
-		entry, ok := byID[id]
-		if !ok {
-			return nil, nil, fmt.Errorf("traffic entry not found: %d", id)
-		}
-		entries = append(entries, entry)
+	input := HARExportEntry{Entry: entry}
+	if !harSupports(entry) {
+		return input, nil
 	}
-	return entries, source, nil
+	input.RequestBody, input.ResponseBody, err = ref.harBodies(temporaryDir)
+	return input, err
 }
 
 func (s *ProxyService) currentHARExportEntry(entry *TrafficEntry) HARExportEntry {

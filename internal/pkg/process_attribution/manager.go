@@ -53,7 +53,10 @@ type lookupState struct {
 	final       bool
 	nextID      uint64
 	subscribers map[uint64]func(Result)
-	refs        int
+	// finalWaiters run once the result is final, whether or not the final
+	// result is published to subscribers.
+	finalWaiters map[uint64]func()
+	refs         int
 }
 
 type iconWaiter struct {
@@ -335,6 +338,26 @@ func (l *Lookup) Subscribe(callback func(Result)) func() {
 			l.state.unsubscribe(id)
 		})
 	}
+}
+
+// OnFinal calls fn once the lookup has its final result, after subscribers
+// heard about it. It calls fn at once when the result is already final. The
+// returned stop prevents a call that has not started.
+func (l *Lookup) OnFinal(fn func()) (stop func()) {
+	if fn == nil {
+		return func() {}
+	}
+	if l == nil || l.state == nil {
+		fn()
+		return func() {}
+	}
+	id, waiting := l.state.onFinal(fn)
+	if !waiting {
+		fn()
+		return func() {}
+	}
+	var once sync.Once
+	return func() { once.Do(func() { l.state.removeFinalWaiter(id) }) }
 }
 
 func (l *Lookup) Release() {
@@ -845,35 +868,63 @@ func (s *lookupState) unsubscribe(id uint64) {
 	s.mu.Unlock()
 }
 
+func (s *lookupState) onFinal(fn func()) (uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.final {
+		return 0, false
+	}
+	if s.finalWaiters == nil {
+		s.finalWaiters = make(map[uint64]func())
+	}
+	s.nextID++
+	s.finalWaiters[s.nextID] = fn
+	return s.nextID, true
+}
+
+func (s *lookupState) removeFinalWaiter(id uint64) {
+	s.mu.Lock()
+	delete(s.finalWaiters, id)
+	s.mu.Unlock()
+}
+
 func (s *lookupState) publish(result Result) {
-	callbacks := s.update(result, false)
+	callbacks, _ := s.update(result, false)
 	callSubscribers(callbacks, result)
 }
 
 func (s *lookupState) complete(result Result, publish bool) {
-	callbacks := s.update(result, true)
+	callbacks, finalWaiters := s.update(result, true)
 	if publish {
 		callSubscribers(callbacks, result)
 	}
+	for _, waiter := range finalWaiters {
+		waiter()
+	}
 }
 
-func (s *lookupState) update(result Result, final bool) []func(Result) {
+func (s *lookupState) update(result Result, final bool) ([]func(Result), []func()) {
 	s.mu.Lock()
 	if s.final {
 		s.mu.Unlock()
-		return nil
+		return nil, nil
 	}
 	s.result = result
 	callbacks := make([]func(Result), 0, len(s.subscribers))
 	for _, callback := range s.subscribers {
 		callbacks = append(callbacks, callback)
 	}
+	var finalWaiters []func()
 	if final {
 		s.final = true
 		clear(s.subscribers)
+		for _, waiter := range s.finalWaiters {
+			finalWaiters = append(finalWaiters, waiter)
+		}
+		s.finalWaiters = nil
 	}
 	s.mu.Unlock()
-	return callbacks
+	return callbacks, finalWaiters
 }
 
 func callSubscribers(callbacks []func(Result), result Result) {

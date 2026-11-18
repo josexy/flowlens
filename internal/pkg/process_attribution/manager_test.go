@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -599,4 +600,48 @@ func waitForManagerDrain(t *testing.T, manager *Manager) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("timed out waiting for manager drain to start")
+}
+
+func TestLookupOnFinalRunsAfterSubscribersEvenWithoutPublish(t *testing.T) {
+	for _, publish := range []bool{true, false} {
+		state := &lookupState{subscribers: make(map[uint64]func(Result)), refs: 1}
+		lookup := newLookup(state)
+		var order []string
+		lookup.Subscribe(func(Result) { order = append(order, "subscriber") })
+		lookup.OnFinal(func() { order = append(order, "final") })
+		stopped := false
+		stop := lookup.OnFinal(func() { stopped = true })
+		stop()
+		stop()
+
+		state.publish(Result{Status: StatusPending})
+		if len(order) != 1 || order[0] != "subscriber" {
+			t.Fatalf("publish=%t: a non-final result ran %v", publish, order)
+		}
+		state.complete(Result{Status: StatusResolved}, publish)
+		want := []string{"subscriber", "subscriber", "final"}
+		if !publish {
+			want = []string{"subscriber", "final"}
+		}
+		if strings.Join(order, ",") != strings.Join(want, ",") {
+			t.Fatalf("publish=%t: order = %v, want %v", publish, order, want)
+		}
+		if stopped {
+			t.Fatalf("publish=%t: stopped waiter ran", publish)
+		}
+		state.complete(Result{Status: StatusNotFound}, true)
+		if len(order) != len(want) {
+			t.Fatalf("publish=%t: a second completion ran waiters again: %v", publish, order)
+		}
+	}
+}
+
+func TestLookupOnFinalRunsAtOnceForAFinalLookup(t *testing.T) {
+	ran := 0
+	NewCompletedLookup(Result{Status: StatusRemote}).OnFinal(func() { ran++ })
+	var missing *Lookup
+	missing.OnFinal(func() { ran++ })
+	if ran != 2 {
+		t.Fatalf("final waiters ran %d times, want 2", ran)
+	}
 }

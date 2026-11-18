@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
+	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
@@ -1963,5 +1964,76 @@ func TestCategoryStructureFollowsSelections(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
+	f := newHistoryFixture(t, entry(1, "live.test"))
+	var released int
+	f.workspace.ReleaseHistoryDetail = func() { released++ }
+	f.click("session one")
+	opened := released
+	f.requireText("saved.test")
+	f.showCategories = true
+	f.settle()
+	view := &f.workspace.category
+	if len(f.workspace.HistoryTable.Rows()) != 2 || view.context != "history:k1" || len(view.entries) != 2 || len(view.roots) == 0 {
+		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.Rows()), view.context, len(view.entries))
+	}
+
+	f.data.Workspace.CloseTab(logic.HistoryTabKey)
+	f.settle()
+	if released != opened+1 {
+		t.Fatalf("closing history released detail %d times, want once", released-opened)
+	}
+	history := f.data.History
+	if history.Traffic.Key != "" || history.Traffic.Entries != nil || len(history.Filter.Base()) != 0 {
+		t.Fatalf("closed history kept its entries: key %q entries %d", history.Traffic.Key, len(history.Traffic.Entries))
+	}
+	if rows := f.workspace.HistoryTable.Rows(); len(rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
+		t.Fatalf("history table kept %d rows", len(rows))
+	}
+	for _, row := range view.entries {
+		if row.Host == "saved.test" || row.Host == "other.test" {
+			t.Fatal("category view kept the closed history's entries")
+		}
+	}
+	if view.context == "history:k1" {
+		t.Fatal("category view still shows the closed history")
+	}
+	f.requireText("live.test")
+	rendertest.ShootThemes(t, f.tester, "history-closed", f.setDark)
+
+	f.showCategories = false
+	f.settle()
+	f.click("session one")
+	f.requireText("saved.test")
+	if len(f.workspace.HistoryTable.Rows()) != 2 {
+		t.Fatalf("reopened history rows = %d", len(f.workspace.HistoryTable.Rows()))
+	}
+}
+
+func TestReplacingAndClearingHistoryReleaseHiddenDetails(t *testing.T) {
+	f := newHistoryFixture(t)
+	var released int
+	f.workspace.ReleaseHistoryDetail = func() { released++ }
+	f.click("session one")
+	opened := released
+	// Switching histories need not show the previous detail panel again.
+	f.data.History.Traffic.Load("k2", []*logic.TrafficEntry{entry(1, "replacement.test")})
+	f.settle()
+	if released != opened+1 {
+		t.Fatal("replacing a history did not release its details")
+	}
+	// Deletion can clear the store before the tab is closed.
+	f.data.History.CloseOpened()
+	f.settle()
+	if released != opened+2 || len(f.workspace.HistoryTable.Rows()) != 0 {
+		t.Fatal("clearing a history kept hidden view state")
+	}
+	f.data.Workspace.CloseTab(logic.HistoryTabKey)
+	f.settle()
+	if released != opened+2 {
+		t.Fatal("empty frames repeatedly released the detail panel")
 	}
 }

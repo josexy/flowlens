@@ -54,7 +54,7 @@ func TestHistoryHARSelectionKeepsUnselectedConnectionOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := New(nil, nil)
-	if err := svc.initializeHistoryIndexMap(); err != nil {
+	if err := svc.refreshHistories(); err != nil {
 		t.Fatal(err)
 	}
 	for _, ids := range [][]uint64{{9002}, {9002, 9001}} {
@@ -98,7 +98,7 @@ func TestExportHARStreamsV2ConnectionTimings(t *testing.T) {
 	writeHistoryWithVersion(t, historyDir, "export-v2", 2)
 	writeHistoryWithVersion(t, historyDir, "export-v3", 3)
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
+	if err := service.refreshHistories(); err != nil {
 		t.Fatal(err)
 	}
 	exports := map[string][]byte{}
@@ -146,8 +146,8 @@ func TestExportHARStreamsV1(t *testing.T) {
 	writeHistoryWithVersion(t, historyDir, "export-v1", 1)
 
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
 
 	target := filepath.Join(t.TempDir(), "selected.har")

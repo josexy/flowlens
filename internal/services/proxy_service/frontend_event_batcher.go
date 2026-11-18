@@ -38,6 +38,52 @@ type FrontendEvent struct {
 type FrontendEventBatch struct {
 	Events  []FrontendEvent
 	Dropped map[string]uint64
+
+	claim *frontendBatchClaim
+}
+
+// Claim tells the batcher that the batch is still being applied: no further
+// batch is emitted until every claim is released. Shutdown ends the wait
+// without delivering another batch. Events published meanwhile stay within the pending
+// limits or are dropped and counted. Claim must be called while the batch is
+// being emitted. It is safe on a batch the batcher did not emit, and release
+// is safe to call more than once.
+func (b FrontendEventBatch) Claim() (release func()) {
+	claim := b.claim
+	if claim == nil {
+		return func() {}
+	}
+	claim.mu.Lock()
+	claim.active++
+	claim.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			claim.mu.Lock()
+			claim.active--
+			idle := claim.active == 0
+			claim.mu.Unlock()
+			if idle {
+				select {
+				case claim.idle <- struct{}{}:
+				default:
+				}
+			}
+		})
+	}
+}
+
+type frontendBatchClaim struct {
+	mu     sync.Mutex
+	active int
+	// idle is signaled when active drops to zero.
+	idle chan struct{}
+}
+
+func (c *frontendBatchClaim) isActive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.active > 0
 }
 
 type frontendEventBatcherOptions struct {
@@ -87,6 +133,28 @@ func newFrontendEventBatcher(
 	}
 	go batcher.run()
 	return batcher
+}
+
+// FrontendEventPublisher publishes high-frequency events to the interface in
+// bounded batches.
+type FrontendEventPublisher interface {
+	Publish(name string, data any) error
+	Close()
+}
+
+// NewFrontendEventPublisher starts a batcher with the limits ProxyService uses
+// and emits its batches on events as BatchedAppEventName. Interface tests use
+// it to exercise real batching and back-pressure.
+func NewFrontendEventPublisher(events serviceruntime.EventBus) FrontendEventPublisher {
+	return newBusFrontendEventBatcher(events, defaultFrontendEventBatcherOptions())
+}
+
+func defaultFrontendEventBatcherOptions() frontendEventBatcherOptions {
+	return frontendEventBatcherOptions{
+		FlushInterval:    frontendEventFlushInterval,
+		MaxPendingEvents: frontendEventMaxPending,
+		MaxPendingBytes:  frontendEventMaxBytes,
+	}
 }
 
 func newBusFrontendEventBatcher(
@@ -169,6 +237,11 @@ func (b *frontendEventBatcher) Close() {
 		b.mu.Unlock()
 		close(b.stop)
 		<-b.done
+		// An abandoned UI claim must not keep pending payloads alive after
+		// shutdown, or cause one more batch to enter the stalled UI queue.
+		b.mu.Lock()
+		b.pending, b.dropped, b.pendingBytes = nil, nil, 0
+		b.mu.Unlock()
 	})
 }
 
@@ -190,7 +263,9 @@ func (b *frontendEventBatcher) run() {
 			timer := time.NewTimer(b.options.FlushInterval)
 			select {
 			case <-timer.C:
-				b.emitPending()
+				if !b.waitForRelease(b.emitPending()) {
+					return
+				}
 			case <-b.stop:
 				if !timer.Stop() {
 					select {
@@ -214,15 +289,18 @@ func (b *frontendEventBatcher) hasPending() bool {
 	return len(b.pending) != 0 || len(b.dropped) != 0
 }
 
-func (b *frontendEventBatcher) emitPending() {
+// emitPending emits the pending events and returns the batch's claim, or nil
+// when nothing was pending.
+func (b *frontendEventBatcher) emitPending() *frontendBatchClaim {
 	b.mu.Lock()
 	if len(b.pending) == 0 && len(b.dropped) == 0 {
 		b.mu.Unlock()
-		return
+		return nil
 	}
 	batch := FrontendEventBatch{
 		Events:  b.pending,
 		Dropped: b.dropped,
+		claim:   &frontendBatchClaim{idle: make(chan struct{}, 1)},
 	}
 	b.pending = nil
 	b.pendingBytes = 0
@@ -230,6 +308,25 @@ func (b *frontendEventBatcher) emitPending() {
 	b.mu.Unlock()
 
 	b.emit(batch)
+	return batch.claim
+}
+
+// waitForRelease waits until every consumer releases the batch. Only shutdown
+// may abandon a claim; elapsed time does not mean the UI consumed its payload.
+func (b *frontendEventBatcher) waitForRelease(claim *frontendBatchClaim) bool {
+	if claim == nil || !claim.isActive() {
+		return true
+	}
+	for {
+		select {
+		case <-claim.idle:
+			if !claim.isActive() {
+				return true
+			}
+		case <-b.stop:
+			return false
+		}
+	}
 }
 
 // estimateFrontendEventSize approximates the memory a pending payload keeps

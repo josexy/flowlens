@@ -1,6 +1,7 @@
 package proxyservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	bodycache "github.com/josexy/flowlens/internal/pkg/body_cache"
 	"github.com/josexy/flowlens/internal/pkg/fs"
 )
 
@@ -175,6 +177,135 @@ func TestClearStoredCaptureDataRotatesCurrentKeyBeforeIndexingFailedPair(t *test
 	for _, path := range []string{hbinPath, hidxPath} {
 		if _, statErr := os.Stat(path); statErr != nil {
 			t.Fatalf("failed current history pair should remain retryable: %s: %v", path, statErr)
+		}
+	}
+}
+
+// newSessionCacheTestService returns a running service whose capture holds
+// one entry with a body spooled to the session's body-cache directory.
+func newSessionCacheTestService(t *testing.T) (*ProxyService, string) {
+	t.Helper()
+	setTestConfigDir(t)
+	svc := newTestProxyService(t, nil)
+	svc.running = true
+	svc.ensureBodyCacheLocked()
+	if svc.bodyCache == nil {
+		t.Fatal("body cache was not created")
+	}
+	sessionDir := svc.bodyCache.SessionDir()
+	entry := svc.newTrafficEntry(TrafficEntry{Type: "http", Method: "GET", URL: "https://example.com/"})
+	if !svc.storeTrafficEntry(entry) {
+		t.Fatal("traffic entry was rejected")
+	}
+	if err := svc.bodyCache.Write(entry.ID, bodycache.KindResponse, []byte("cached response")); err != nil {
+		t.Fatalf("cache.Write: %v", err)
+	}
+	return svc, sessionDir
+}
+
+func assertDirRemoved(t *testing.T, dir string) {
+	t.Helper()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("session directory %s still exists: %v", dir, err)
+	}
+}
+
+func TestRestartCaptureRemovesPreviousBodyCacheSession(t *testing.T) {
+	for _, save := range []bool{true, false} {
+		t.Run(fmt.Sprintf("save=%t", save), func(t *testing.T) {
+			svc, sessionDir := newSessionCacheTestService(t)
+			savedKey := svc.CurrentHistoryKey()
+
+			if err := svc.RestartCapture(save); err != nil {
+				t.Fatalf("RestartCapture: %v", err)
+			}
+			assertDirRemoved(t, sessionDir)
+			if svc.bodyCache == nil || svc.bodyCache.SessionDir() == sessionDir {
+				t.Fatal("restart did not start a new body-cache session")
+			}
+			if _, err := os.Stat(svc.bodyCache.SessionDir()); err != nil {
+				t.Fatalf("new session directory: %v", err)
+			}
+			historyDir, err := getHistoryStoragePath()
+			if err != nil {
+				t.Fatalf("getHistoryStoragePath: %v", err)
+			}
+			_, statErr := os.Stat(filepath.Join(historyDir, fs.GetHBinFileName(savedKey)))
+			if save && statErr != nil {
+				t.Fatalf("saved history was removed: %v", statErr)
+			}
+			if !save && !os.IsNotExist(statErr) {
+				t.Fatalf("discarded history still exists: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestShutdownRemovesBodyCacheSessionAfterFinalSave(t *testing.T) {
+	svc, sessionDir := newSessionCacheTestService(t)
+	if err := svc.Shutdown(); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	assertDirRemoved(t, sessionDir)
+}
+
+func TestShutdownRemovesBodyCacheSessionWithNothingToSave(t *testing.T) {
+	svc, sessionDir := newSessionCacheTestService(t)
+	svc.historyDirty.Store(false)
+	svc.lastFlushGeneration.Store(svc.flushGeneration.Load())
+	if err := svc.Shutdown(); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	assertDirRemoved(t, sessionDir)
+}
+
+func TestShutdownKeepsBodyCacheSessionWhenFinalSaveFails(t *testing.T) {
+	svc, sessionDir := newSessionCacheTestService(t)
+	wantErr := errors.New("injected final flush failure")
+	svc.historyFlushStageHook = func(string) error { return wantErr }
+
+	if err := svc.Shutdown(); !errors.Is(err, wantErr) {
+		t.Fatalf("Shutdown error = %v, want final flush failure", err)
+	}
+	if _, err := os.Stat(filepath.Join(sessionDir, "1_resp.body")); err != nil {
+		t.Fatalf("cached body of an unsaved session was removed: %v", err)
+	}
+}
+
+func TestServiceStartupRemovesOnlyStaleBodyCacheSessions(t *testing.T) {
+	setTestConfigDir(t)
+	baseDir, err := fs.GetBaseStorageDir()
+	if err != nil {
+		t.Fatalf("GetBaseStorageDir: %v", err)
+	}
+	cacheRoot := filepath.Join(baseDir, "cache")
+	stale := []string{
+		"0b4f8f5e-62a4-4c4f-9a8a-0d2b9e0c1a11",
+		"6f1c2d3e-4b5a-4978-8a6b-5c4d3e2f1a00",
+	}
+	kept := []string{"process-icons", "not-a-session"}
+	for _, name := range append(append([]string{}, stale...), kept...) {
+		dir := filepath.Join(cacheRoot, name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "file"), []byte(name), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	svc := newTestProxyService(t, nil)
+	if err := svc.ServiceStartup(context.Background()); err != nil {
+		t.Fatalf("ServiceStartup: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Shutdown() })
+
+	for _, name := range stale {
+		assertDirRemoved(t, filepath.Join(cacheRoot, name))
+	}
+	for _, name := range kept {
+		if _, err := os.Stat(filepath.Join(cacheRoot, name, "file")); err != nil {
+			t.Fatalf("%s was removed: %v", name, err)
 		}
 	}
 }

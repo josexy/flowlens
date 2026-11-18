@@ -1,6 +1,7 @@
 package bodycache_test
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -260,11 +261,30 @@ func TestWriterPreserveKeepsTmpReadableUntilDelete(t *testing.T) {
 	}
 }
 
-func TestWriterSnapshotReadsActiveBytesAndAllowsFurtherWrites(t *testing.T) {
+func readSnapshot(t *testing.T, w *bodycache.BodyCacheWriter) ([]byte, int64) {
+	t.Helper()
+	reader, size, err := w.SnapshotReader()
+	if err != nil {
+		t.Fatalf("SnapshotReader: %v", err)
+	}
+	data, err := io.ReadAll(reader)
+	if closeErr := reader.Close(); closeErr != nil {
+		t.Fatalf("Close snapshot reader: %v", closeErr)
+	}
+	if err != nil {
+		t.Fatalf("ReadAll snapshot: %v", err)
+	}
+	if int64(len(data)) != size {
+		t.Fatalf("snapshot read %d bytes, size %d", len(data), size)
+	}
+	return data, size
+}
+
+func TestWriterSnapshotReaderIgnoresLaterWrites(t *testing.T) {
 	t.Parallel()
 
 	c := newTestCache(t)
-	w, err := c.Writer(80, bodycache.KindResponse)
+	w, err := c.Writer(81, bodycache.KindResponse)
 	if err != nil {
 		t.Fatalf("Writer: %v", err)
 	}
@@ -273,26 +293,213 @@ func TestWriterSnapshotReadsActiveBytesAndAllowsFurtherWrites(t *testing.T) {
 		t.Fatalf("Write first: %v", err)
 	}
 
-	snapshot, err := w.Snapshot()
+	reader, size, err := w.SnapshotReader()
 	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+		t.Fatalf("SnapshotReader: %v", err)
 	}
-	if string(snapshot) != "first" {
-		t.Fatalf("Snapshot = %q, want first", snapshot)
+	defer reader.Close()
+	if size != int64(len("first")) {
+		t.Fatalf("size = %d, want %d", size, len("first"))
 	}
-
+	// Write after the snapshot was taken and before it is read: the snapshot
+	// must still return exactly the bytes written when it was opened.
 	if _, err := w.Write([]byte(" second")); err != nil {
 		t.Fatalf("Write second: %v", err)
 	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "first" {
+		t.Fatalf("snapshot = %q, want first", got)
 	}
 
-	got, err := c.Read(80, bodycache.KindResponse)
-	if err != nil {
-		t.Fatalf("Read: %v", err)
+	if data, _ := readSnapshot(t, w); string(data) != "first second" {
+		t.Fatalf("second snapshot = %q, want first second", data)
 	}
-	if string(got) != "first second" {
-		t.Fatalf("Read = %q, want first second", got)
+}
+
+func TestWriterSnapshotReaderAfterCloseAndPreserve(t *testing.T) {
+	t.Parallel()
+
+	c := newTestCache(t)
+	committed, err := c.Writer(82, bodycache.KindRequest)
+	if err != nil {
+		t.Fatalf("Writer: %v", err)
+	}
+	if _, err := committed.Write([]byte("committed")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	open, _, err := committed.SnapshotReader()
+	if err != nil {
+		t.Fatalf("SnapshotReader before Close: %v", err)
+	}
+	// An open snapshot reader must not prevent the commit.
+	if err := committed.Close(); err != nil {
+		t.Fatalf("Close with open snapshot reader: %v", err)
+	}
+	if got, err := io.ReadAll(open); err != nil || string(got) != "committed" {
+		t.Fatalf("snapshot opened before Close = %q, %v", got, err)
+	}
+	_ = open.Close()
+	if _, err := os.Stat(filepath.Join(c.SessionDir(), "82_req.body")); err != nil {
+		t.Fatalf("committed file: %v", err)
+	}
+	if data, _ := readSnapshot(t, committed); string(data) != "committed" {
+		t.Fatalf("snapshot after Close = %q", data)
+	}
+
+	preserved, err := c.Writer(83, bodycache.KindResponse)
+	if err != nil {
+		t.Fatalf("Writer: %v", err)
+	}
+	if _, err := preserved.Write([]byte("preserved")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := preserved.Preserve(); err != nil {
+		t.Fatalf("Preserve: %v", err)
+	}
+	if data, _ := readSnapshot(t, preserved); string(data) != "preserved" {
+		t.Fatalf("snapshot after Preserve = %q", data)
+	}
+
+	preserved.Abort()
+	if _, _, err := preserved.SnapshotReader(); err == nil {
+		t.Fatal("SnapshotReader after Abort should fail")
+	}
+}
+
+func TestWriterSnapshotReaderConcurrentWithWrites(t *testing.T) {
+	t.Parallel()
+
+	c := newTestCache(t)
+	w, err := c.Writer(84, bodycache.KindResponse)
+	if err != nil {
+		t.Fatalf("Writer: %v", err)
+	}
+	t.Cleanup(w.Abort)
+
+	const chunks = 200
+	var expected []byte
+	for i := range chunks {
+		expected = append(expected, bytes.Repeat([]byte{byte('a' + i%26)}, 97)...)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range chunks {
+			if _, err := w.Write(expected[i*97 : (i+1)*97]); err != nil {
+				t.Errorf("Write %d: %v", i, err)
+				return
+			}
+		}
+	}()
+
+	var last int64
+	for reading := true; reading; {
+		select {
+		case <-done:
+			reading = false
+		default:
+		}
+		data, size := readSnapshot(t, w)
+		if size < last {
+			t.Fatalf("snapshot size went back from %d to %d", last, size)
+		}
+		if !bytes.Equal(data, expected[:size]) {
+			t.Fatalf("snapshot of %d bytes is not a prefix of the written data", size)
+		}
+		last = size
+	}
+	if data, _ := readSnapshot(t, w); !bytes.Equal(data, expected) {
+		t.Fatalf("final snapshot has %d bytes, want %d", len(data), len(expected))
+	}
+}
+
+func TestAppendFileConcurrentAppendAndRead(t *testing.T) {
+	t.Parallel()
+
+	c := newTestCache(t)
+	f, err := c.AppendFile(90, bodycache.KindWebSocket)
+	if err != nil {
+		t.Fatalf("AppendFile: %v", err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+
+	type record struct {
+		offset int64
+		data   []byte
+	}
+	records := make(chan record, 256)
+	go func() {
+		defer close(records)
+		for i := range 200 {
+			data := bytes.Repeat([]byte{byte(i)}, 1+i*37%4096)
+			offset, err := f.Append(data)
+			if err != nil {
+				t.Errorf("Append %d: %v", i, err)
+				return
+			}
+			records <- record{offset: offset, data: data}
+		}
+	}()
+	var expectedOffset int64
+	for r := range records {
+		if r.offset != expectedOffset {
+			t.Fatalf("offset = %d, want %d", r.offset, expectedOffset)
+		}
+		expectedOffset += int64(len(r.data))
+		got := make([]byte, len(r.data))
+		if _, err := f.ReadAt(got, r.offset); err != nil {
+			t.Fatalf("ReadAt %d: %v", r.offset, err)
+		}
+		if !bytes.Equal(got, r.data) {
+			t.Fatalf("payload at %d changed", r.offset)
+		}
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := f.Append([]byte("late")); err == nil {
+		t.Fatal("Append after Close should fail")
+	}
+	first := make([]byte, 1)
+	if _, err := f.ReadAt(first, 0); err != nil || first[0] != 0 {
+		t.Fatalf("ReadAt after Close = %v, %v", first, err)
+	}
+}
+
+func TestDeleteRemovesAppendFile(t *testing.T) {
+	t.Parallel()
+
+	c := newTestCache(t)
+	if err := c.Write(91, bodycache.KindResponse, []byte("response")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	f, err := c.AppendFile(91, bodycache.KindWebSocket)
+	if err != nil {
+		t.Fatalf("AppendFile: %v", err)
+	}
+	if _, err := f.Append([]byte("payload")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	path := filepath.Join(c.SessionDir(), "91_ws.body")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("append file: %v", err)
+	}
+
+	c.Delete(91)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("append file should be removed with the entry, got %v", err)
+	}
+	if c.Has(91, bodycache.KindResponse) {
+		t.Fatal("response body should be removed with the entry")
+	}
+	if _, err := f.ReadAt(make([]byte, 1), 0); err == nil {
+		t.Fatal("ReadAt of a deleted append file should fail")
 	}
 }

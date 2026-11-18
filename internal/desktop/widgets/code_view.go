@@ -97,7 +97,15 @@ func (v *CodeView) AppendText(text string) {
 		return
 	}
 	buffer := v.state.Buffer
-	buffer.Edit(editor.Edit{Start: buffer.Len(), End: buffer.Len(), Text: text})
+	edit := editor.Edit{Start: buffer.Len(), End: buffer.Len(), Text: text}
+	if v.state.ReadOnly {
+		// Streamed output is not a user edit: preserve the existing text and
+		// selection without retaining an undo step for each received chunk.
+		buffer.EditRemote(edit)
+		buffer.MarkSaved()
+	} else {
+		buffer.Edit(edit)
+	}
 	v.version = buffer.Version()
 	if !v.large && buffer.Len() >= LongLineThreshold && RequiresPlainText(buffer.String()) {
 		v.large = true

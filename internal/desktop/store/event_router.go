@@ -104,13 +104,19 @@ func (r *EventRouter) Dispatch(batch proxyservice.FrontendEventBatch) {
 }
 
 // Connect feeds batches from bus through post, which must run its function on
-// the main thread. One batch causes one redraw.
+// the main thread. One batch causes one redraw. Each batch is claimed until it
+// has been dispatched, so at most one batch waits for the main thread and
+// events published meanwhile stay within the backend's pending bound.
 func (r *EventRouter) Connect(bus serviceruntime.EventBus, post func(func())) (off func()) {
 	return bus.On(proxyservice.BatchedAppEventName, func(event serviceruntime.Event) {
 		batch, ok := event.Data.(proxyservice.FrontendEventBatch)
 		if !ok {
 			return
 		}
-		post(func() { r.Dispatch(batch) })
+		release := batch.Claim()
+		post(func() {
+			defer release()
+			r.Dispatch(batch)
+		})
 	})
 }

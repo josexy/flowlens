@@ -1,6 +1,7 @@
 package historyservice
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -25,17 +26,23 @@ type HistoryService struct {
 	proxyService   historyProxyService
 
 	storageMu sync.RWMutex
-	mu        sync.RWMutex
-	indexMap  historyIndexMap
+	// mu guards histories and indexes.
+	mu sync.RWMutex
+	// histories holds the keys of the saved histories found by storage scans.
+	// It keeps no per-entry data.
+	histories map[string]struct{}
+	// indexes keeps the entry indexes of the most recently opened or exported
+	// histories, loaded on demand.
+	indexes historyIndexCache
 
-	initIndexMapOnce sync.Once
-	maintenanceWG    sync.WaitGroup
-	shutdownOnce     sync.Once
-	importMu         sync.Mutex
-	importWG         sync.WaitGroup
-	imports          map[uint64]context.CancelFunc
-	importSequence   uint64
-	importsClosed    bool
+	startupOnce    sync.Once
+	maintenanceWG  sync.WaitGroup
+	shutdownOnce   sync.Once
+	importMu       sync.Mutex
+	importWG       sync.WaitGroup
+	imports        map[uint64]context.CancelFunc
+	importSequence uint64
+	importsClosed  bool
 }
 
 type historyProxyService interface {
@@ -55,12 +62,11 @@ func New(
 	return &HistoryService{
 		settingService: settingService,
 		proxyService:   proxyService,
-		indexMap:       make(historyIndexMap),
 	}
 }
 
 func (s *HistoryService) ServiceStartup(ctx context.Context) error {
-	s.initIndexMapOnce.Do(func() {
+	s.startupOnce.Do(func() {
 		s.maintenanceWG.Go(func() {
 			s.runStartupMaintenance()
 		})
@@ -84,8 +90,8 @@ func (s *HistoryService) runStartupMaintenance() {
 		}
 	}
 
-	if err := s.initializeHistoryIndexMap(); err != nil && !os.IsNotExist(err) {
-		logger.G().Warnf("Failed to initialize history index map: %v", err)
+	if err := s.refreshHistories(); err != nil && !os.IsNotExist(err) {
+		logger.G().Warnf("Failed to scan saved histories: %v", err)
 	}
 }
 
@@ -107,13 +113,16 @@ func (s *HistoryService) Shutdown() error {
 	return nil
 }
 
-func (s *HistoryService) initializeHistoryIndexMap() error {
+// refreshHistories scans the history directory for saved histories. It reads
+// only each history's metadata; entry indexes load when a history is opened or
+// exported.
+func (s *HistoryService) refreshHistories() error {
 	s.storageMu.Lock()
 	defer s.storageMu.Unlock()
-	return s.initializeHistoryIndexMapStorageLocked()
+	return s.refreshHistoriesStorageLocked()
 }
 
-func (s *HistoryService) initializeHistoryIndexMapStorageLocked() error {
+func (s *HistoryService) refreshHistoriesStorageLocked() error {
 	historyStorageDir, err := getHistoryStoragePath()
 	if err != nil {
 		return err
@@ -180,50 +189,94 @@ func (s *HistoryService) initializeHistoryIndexMapStorageLocked() error {
 			storageErrors = append(storageErrors, fmt.Errorf("secure history data %s: %w", key, err))
 			continue
 		}
-		if err := s.initializeIndexMapLocked(key, path); err != nil {
-			logger.G().Errorf("Failed to initialize index map for %s: %v", key, err)
+		if _, known := s.histories[key]; known {
 			continue
 		}
+		if _, err := loadHistoryMetadata(historyStorageDir, key); err != nil {
+			logger.G().Errorf("Skip history with unreadable metadata: key=%s error=%v", key, err)
+			continue
+		}
+		if err := checkHistoryIndexFile(path); err != nil {
+			logger.G().Errorf("Skip history with an invalid index: key=%s error=%v", key, err)
+			continue
+		}
+		s.addHistoryLocked(key)
 	}
 	return errors.Join(storageErrors...)
 }
 
-func (s *HistoryService) initializeIndexMapLocked(key, path string) error {
-	if s.proxyService != nil && s.proxyService.CurrentHistoryKey() == key {
-		// current capturing history, skip initializing index map to avoid potential concurrent access issue
-		return nil
-	}
-	if existing := s.indexMap[key]; existing != nil {
-		return nil
-	}
-	metadata, err := loadHistoryMetadata(filepath.Dir(path), key)
-	if err != nil {
+// registerHistory makes a newly written history visible after checking that
+// its metadata and index are readable.
+func (s *HistoryService) registerHistory(historyStorageDir, key string) error {
+	if _, err := loadHistoryMetadata(historyStorageDir, key); err != nil {
 		return err
 	}
-	hindexFile, err := os.Open(path)
-	if err != nil {
+	if err := checkHistoryIndexFile(filepath.Join(historyStorageDir, fs.GetHIdxFileName(key))); err != nil {
 		return err
 	}
-	defer hindexFile.Close()
-	entries := newOrderedIndexList()
-	if err := initializeIndexMap(hindexFile, entries); err != nil {
-		return err
-	}
-	s.indexMap[key] = &historyFileIndex{
-		formatVersion: metadata.FormatVersion,
-		entries:       entries,
-	}
+	s.mu.Lock()
+	s.addHistoryLocked(key)
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *HistoryService) addHistoryLocked(key string) {
+	if s.histories == nil {
+		s.histories = make(map[string]struct{})
+	}
+	s.histories[key] = struct{}{}
+}
+
+// forgetHistoryLocked removes a deleted history and its cached index.
+func (s *HistoryService) forgetHistoryLocked(key string) {
+	delete(s.histories, key)
+	s.indexes.evict(key)
+}
+
+// historyIndex returns the entry index of a saved history, loading it when it
+// is not cached. Callers hold storageMu so the history cannot be deleted while
+// they use the index.
+func (s *HistoryService) historyIndex(key string) (*historyFileIndex, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadIndexLocked(key)
+}
+
+func (s *HistoryService) loadIndexLocked(key string) (*historyFileIndex, error) {
+	if _, known := s.histories[key]; !known {
+		return nil, fmt.Errorf("history not found: %s", key)
+	}
+	if index, ok := s.indexes.get(key); ok {
+		return index, nil
+	}
+	historyStorageDir, err := getHistoryStoragePath()
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := loadHistoryMetadata(historyStorageDir, key)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(filepath.Join(historyStorageDir, fs.GetHIdxFileName(key)))
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	entries := newOrderedIndexList()
+	if err := initializeIndexMap(bufio.NewReader(file), entries); err != nil {
+		return nil, fmt.Errorf("load history index %s: %w", key, err)
+	}
+	index := &historyFileIndex{formatVersion: metadata.FormatVersion, entries: entries}
+	s.indexes.put(key, index)
+	return index, nil
 }
 
 func (s *HistoryService) GetHistory(key string) ([]*proxyservice.TrafficEntry, error) {
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	s.mu.RLock()
-	fileIndex := s.indexMap[key]
-	s.mu.RUnlock()
-	if fileIndex == nil || fileIndex.entries == nil {
-		return nil, fmt.Errorf("history not found: %s", key)
+	fileIndex, err := s.historyIndex(key)
+	if err != nil {
+		return nil, err
 	}
 	idxMap := fileIndex.entries
 
@@ -259,11 +312,9 @@ func (s *HistoryService) GetHistory(key string) ([]*proxyservice.TrafficEntry, e
 func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*proxyservice.TrafficBodyView, error) {
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	s.mu.RLock()
-	fileIndex := s.indexMap[key]
-	s.mu.RUnlock()
-	if fileIndex == nil || fileIndex.entries == nil {
-		return nil, fmt.Errorf("history not found: %s", key)
+	fileIndex, err := s.historyIndex(key)
+	if err != nil {
+		return nil, err
 	}
 	idxMap := fileIndex.entries
 	idx, ok := idxMap.Get(id)
@@ -288,11 +339,9 @@ func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*prox
 func (s *HistoryService) getSingleHistoryEntryAndBodyReader(key string, id uint64) (*proxyservice.TrafficEntry, []byte, error) {
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	s.mu.RLock()
-	fileIndex := s.indexMap[key]
-	s.mu.RUnlock()
-	if fileIndex == nil || fileIndex.entries == nil {
-		return nil, nil, fmt.Errorf("history not found: %s", key)
+	fileIndex, err := s.historyIndex(key)
+	if err != nil {
+		return nil, nil, err
 	}
 	idxMap := fileIndex.entries
 
@@ -350,7 +399,7 @@ func (s *HistoryService) DeleteHistory(key string) error {
 	defer s.storageMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.indexMap[key]; !ok {
+	if _, ok := s.histories[key]; !ok {
 		return fmt.Errorf("history not found: %s", key)
 	}
 
@@ -368,7 +417,7 @@ func (s *HistoryService) DeleteHistory(key string) error {
 		logger.G().Warnf("Delete history completed with errors: key=%s files=%d error=%v", key, deletedFiles, deleteErr)
 		return deleteErr
 	}
-	delete(s.indexMap, key)
+	s.forgetHistoryLocked(key)
 	logger.G().Infof("Delete history completed: key=%s files=%d", key, deletedFiles)
 	return nil
 }
@@ -436,10 +485,10 @@ func deleteHistoryFiles(paths ...string) (int, error) {
 func (s *HistoryService) ClearHistories() error {
 	s.storageMu.Lock()
 	defer s.storageMu.Unlock()
-	refreshErr := s.initializeHistoryIndexMapStorageLocked()
+	refreshErr := s.refreshHistoriesStorageLocked()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	keys := slices.Collect(maps.Keys(s.indexMap))
+	keys := slices.Collect(maps.Keys(s.histories))
 
 	logger.G().Infof("Clear histories requested: keys=%d", len(keys))
 	historyStorageDir, err := getHistoryStoragePath()
@@ -464,7 +513,7 @@ func (s *HistoryService) ClearHistories() error {
 			clearErrors = append(clearErrors, fmt.Errorf("clear history %s: %w", key, deleteErr))
 			continue
 		}
-		delete(s.indexMap, key)
+		s.forgetHistoryLocked(key)
 	}
 	clearErr := errors.Join(clearErrors...)
 	if clearErr != nil {
@@ -483,12 +532,12 @@ func (s *HistoryService) ListHistoryKeys() ([]*proxyservice.HistoryMetadata, err
 		return nil, err
 	}
 
-	if err := s.initializeHistoryIndexMapStorageLocked(); err != nil && !os.IsNotExist(err) {
-		logger.G().Warnf("Failed to refresh history index map before listing histories: %v", err)
+	if err := s.refreshHistoriesStorageLocked(); err != nil && !os.IsNotExist(err) {
+		logger.G().Warnf("Failed to refresh saved histories before listing them: %v", err)
 	}
 
 	s.mu.RLock()
-	keys := slices.Collect(maps.Keys(s.indexMap))
+	keys := slices.Collect(maps.Keys(s.histories))
 	s.mu.RUnlock()
 
 	mds := make([]*proxyservice.HistoryMetadata, 0, len(keys))

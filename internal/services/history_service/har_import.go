@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/josexy/flowlens/internal/pkg/fs"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 )
 
@@ -85,9 +84,7 @@ func (s *HistoryService) ImportHAR(callCtx context.Context, request HARImportReq
 	if err != nil || result.Metadata == nil {
 		return result, err
 	}
-	s.mu.Lock()
-	err = s.initializeIndexMapLocked(metadata.Key, filepath.Join(directory, fs.GetHIdxFileName(metadata.Key)))
-	s.mu.Unlock()
+	err = s.registerHistory(directory, metadata.Key)
 	if err != nil {
 		paths, pathErr := historyFilePaths(directory, metadata.Key)
 		_, cleanupErr := deleteHistoryFiles(paths...)

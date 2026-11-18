@@ -188,3 +188,46 @@ func TestImportWithNothingDoesNothing(t *testing.T) {
 		t.Fatal("empty")
 	}
 }
+
+func TestCloseOpenedReleasesTheHistory(t *testing.T) {
+	store, _, settle := newHistoryHarness(t)
+	store.LoadList()
+	settle()
+	store.Select("new")
+	settle()
+	store.Filter.SearchText = "example"
+	store.Traffic.Select(store.Traffic.Entries[0])
+	store.Traffic.SetShowDetailPanel(true)
+	store.Traffic.SetHighlight(1, "red")
+	settle()
+	if len(store.Filter.Base()) == 0 || store.Traffic.BodyView == nil {
+		t.Fatal("history was not opened")
+	}
+
+	store.CloseOpened()
+	if store.Traffic.Key != "" || store.Traffic.Entries != nil || store.Traffic.Selected != nil ||
+		store.Traffic.BodyView != nil || len(store.Traffic.Highlights) != 0 || store.SelectedKey != "" {
+		t.Fatalf("opened history kept after close: %+v", store.Traffic)
+	}
+	if store.Filter.base != nil || store.Filter.filtered != nil ||
+		len(store.Filter.baseMatches) != 0 || len(store.Filter.categoryMatch) != 0 {
+		t.Fatal("filter still references the closed history's entries")
+	}
+	if len(store.Filter.Base()) != 0 || len(store.Metadata) != 2 {
+		t.Fatalf("base %d metadata %d", len(store.Filter.Base()), len(store.Metadata))
+	}
+
+	store.Select("new")
+	settle()
+	requireIDs(t, store.Traffic.Entries, []uint64{1})
+}
+
+func TestCloseOpenedDropsALoadInProgress(t *testing.T) {
+	store, _, settle := newHistoryHarness(t)
+	store.Select("new")
+	store.CloseOpened()
+	settle()
+	if store.Traffic.Key != "" || store.Traffic.Entries != nil || store.LoadingHistory {
+		t.Fatalf("a canceled load opened the history: %+v", store.Traffic)
+	}
+}

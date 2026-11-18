@@ -113,6 +113,16 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 	v.treeDirty = true
 }
 
+// reset drops what the view derived from its source's entries.
+func (v *categoryView) reset() {
+	v.context, v.version, v.computed, v.activeLeaf = "", 0, time.Time{}, ""
+	v.selectedHosts, v.selectedProcessKeys = nil, nil
+	v.entries, v.roots = nil, nil
+	v.tree.SetNodes(nil)
+	v.tree.Selection.Clear()
+	v.treeItems, v.visible, v.treeDirty = nil, nil, true
+}
+
 func toSet(values []string) map[string]bool {
 	set := make(map[string]bool, len(values))
 	for _, value := range values {

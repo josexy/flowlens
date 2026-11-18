@@ -23,24 +23,26 @@ func TestHistoryServiceLoadsV1AndSkipsUnsupportedVersions(t *testing.T) {
 	writeRawTCPHistory(t, historyDir, "v1-raw-tcp")
 
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
 
 	service.mu.RLock()
-	futureIndex := service.indexMap["v4-future"]
-	currentIndex := service.indexMap["v1-current"]
-	invalidIndex := service.indexMap["v0-invalid"]
-	rawTCPIndex := service.indexMap["v1-raw-tcp"]
+	_, future := service.histories["v4-future"]
+	_, current := service.histories["v1-current"]
+	_, invalid := service.histories["v0-invalid"]
+	_, rawTCP := service.histories["v1-raw-tcp"]
 	service.mu.RUnlock()
-	if futureIndex != nil || invalidIndex != nil || currentIndex == nil || rawTCPIndex == nil {
-		t.Fatalf(
-			"history indexes = future %+v, invalid %+v, current %+v, raw TCP %+v",
-			futureIndex,
-			invalidIndex,
-			currentIndex,
-			rawTCPIndex,
-		)
+	if future || invalid || !current || !rawTCP {
+		t.Fatalf("listed histories = future %t, invalid %t, current %t, raw TCP %t", future, invalid, current, rawTCP)
+	}
+	currentIndex, err := service.historyIndex("v1-current")
+	if err != nil {
+		t.Fatalf("historyIndex current: %v", err)
+	}
+	rawTCPIndex, err := service.historyIndex("v1-raw-tcp")
+	if err != nil {
+		t.Fatalf("historyIndex raw TCP: %v", err)
 	}
 	if currentIndex.formatVersion != 1 || rawTCPIndex.formatVersion != 1 {
 		t.Fatalf("format versions = current %d, raw TCP %d", currentIndex.formatVersion, rawTCPIndex.formatVersion)
@@ -131,8 +133,8 @@ func TestHistoryBinaryWebSocketMessageMatchesAcrossV2AndV3(t *testing.T) {
 	writeHistoryFixtureWithBody(t, historyDir, "ws-v3", 3, "https", nil, binaryWebSocketBodyRecord(payload, int32(len(payload))))
 
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
-		t.Fatalf("initializeHistoryIndexMap: %v", err)
+	if err := service.refreshHistories(); err != nil {
+		t.Fatalf("refreshHistories: %v", err)
 	}
 	views := map[string]*proxyservice.TrafficBodyView{}
 	for _, key := range []string{"ws-v2", "ws-v3"} {
@@ -158,7 +160,7 @@ func TestHistoryServiceLoadsV2ConnectionTimingsAndBody(t *testing.T) {
 	historyDir := setupHistoryTestStorage(t)
 	writeHistoryWithVersion(t, historyDir, "v2-timings", 2)
 	service := New(nil, nil)
-	if err := service.initializeHistoryIndexMap(); err != nil {
+	if err := service.refreshHistories(); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := service.GetHistory("v2-timings")

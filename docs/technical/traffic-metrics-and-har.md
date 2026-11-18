@@ -57,3 +57,18 @@ Import maps values into the existing traffic fields without source labels and wi
 ## HBIN History Format
 
 FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection timestamps; v3 stores binary WebSocket messages as their original bytes instead of Base64. v1 and v2 binary WebSocket messages are decoded on read, and v1 histories show connection timings as unavailable. Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted.
+
+**Saving the current capture.** The capture is saved to its history pair every 60 seconds while it changes, and at once on shutdown, restart, and cache cleanup. After a periodic save, the next one waits five times that save's duration, and never less than 60 seconds: a save that takes 30 seconds is followed by one 150 seconds later. Each save rewrites the pair through temporary files and an atomic rename. Spilled entries (see below) are copied as their encoded bytes and indexed at their new offsets; entries in memory are encoded as they are saved, and bodies still being received are read from their cache files up to the bytes received so far, without loading them into memory.
+
+**Size limit.** HBIN v3 indexes entries with 32-bit offsets, so one history holds at most 4 GiB of encoded data. A save that would pass that limit fails and is logged; the capture's cached data stays available for export until the session ends.
+
+## Capture Memory
+
+A capture session keeps in memory only its newest 5000 entries and the entries whose exchange is still in progress: an HTTP exchange until its response ends or fails, a captured body until it is read to its end or closed, a WebSocket entry until its connection closes, and a process lookup until its result is final. These are the entries the interface shows.
+
+Older entries that are finished move to the session's spill store in batches of up to 256. New entries wake the spiller once in-memory entries pass 5000 + 256; the final producer of an exchange also wakes it whenever more than 5000 entries remain, so an old exchange can move to disk after traffic stops. The status bar, saved history, capture-wide exports, and the actions on an entry (details, resend, edit, copy, export, delete) include spilled entries as before.
+
+- **Location.** Spill segments are `spill-NNNN.hbin` files in the session's body-cache directory, `cache/<session-uuid>/`. A new segment starts once the current one reaches 1 GiB.
+- **Encoding.** Each spilled entry is written with the HBIN v3 entry encoding: its header, then its zstd body record with both bodies and its WebSocket messages. An in-memory index of about 24 bytes per entry locates it. Deleting a spilled entry overwrites its bytes with zeros.
+- **WebSocket payloads.** A captured WebSocket message larger than the body-cache threshold is written to `<id>_ws.body` in the same directory as soon as it is captured. Only its metadata stays in memory.
+- **Lifetime.** A deleted entry's data is removed with it, and clearing the capture removes all of it. The whole body-cache directory is removed when capture restarts after Save or Discard, after the final save at shutdown succeeds, and at the next start after a crash or a failed final save. If the body cache is unavailable, the capture keeps every entry in memory.
