@@ -1191,7 +1191,7 @@ func newTestProxyService(t *testing.T, proxyCfg *settingservice.ProxyConfig) *Pr
 		t.Fatalf("update settings: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &ProxyService{
+	svc := &ProxyService{
 		baseCtx:        ctx,
 		baseCancel:     cancel,
 		settingService: settingsSvc,
@@ -1205,6 +1205,16 @@ func newTestProxyService(t *testing.T, proxyCfg *settingservice.ProxyConfig) *Pr
 			CreatedAt: time.Now().UnixMilli(),
 		},
 	}
+	// Local connections start process attribution, which writes icons under
+	// the configuration directory in the background. Stop() leaves it running,
+	// so wait for it here, before an earlier t.TempDir cleanup removes that
+	// directory.
+	t.Cleanup(func() {
+		if manager := svc.processManager(); manager != nil {
+			manager.Close()
+		}
+	})
+	return svc
 }
 
 func writeTempFile(t *testing.T, pattern string, content []byte) string {
