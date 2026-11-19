@@ -71,6 +71,7 @@ Without Task, run `go tool mygo dev`. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 | [HTTP Rewrite Rules](docs/technical/http-rewrite-rules.md) | Rule execution, limits, and lifecycle |
 | [Traffic Metrics and HAR](docs/technical/traffic-metrics-and-har.md) | Timing and size definitions, HAR mapping, and the HBIN history format |
 | [Building and Packaging](docs/technical/building.md) | Cgo, packages, signed updates, and releases |
+| [Memory Diagnostics](docs/technical/memory-diagnostics.md) | Memory after heavy use, what FlowLens keeps, and profiling a running instance |
 | [Contributing](CONTRIBUTING.md) · [Engineering Guidelines](AGENTS.md) | Development workflow and repository rules |
 | [Changelog](CHANGELOG.md) · [Security Policy](SECURITY.md) | Release notes and vulnerability reporting |
 
