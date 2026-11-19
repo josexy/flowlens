@@ -57,7 +57,9 @@ const (
 type startupSteps struct {
 	enableBootstrapLogging func()
 	acquireInstanceLock    func() bool
-	openDatabase           func() (*sql.DB, error)
+	// startProfiling, when set, serves profiles until the returned stop runs.
+	startProfiling func() (stop func())
+	openDatabase   func() (*sql.DB, error)
 	// startServices returns a *startupError naming the failed step, or another
 	// error for one of the services.
 	startServices func(*sql.DB) (*launched, error)
@@ -74,6 +76,9 @@ func (s startupSteps) run() {
 	s.enableBootstrapLogging()
 	if !s.acquireInstanceLock() {
 		return
+	}
+	if s.startProfiling != nil {
+		defer s.startProfiling()()
 	}
 	started, failure := s.attempt()
 	s.serve(started, failure, func() (*launched, *startupError) {
@@ -121,6 +126,7 @@ func Run() {
 	startupSteps{
 		enableBootstrapLogging: enableBootstrapLogging,
 		acquireInstanceLock:    mygo.App.RequestSingleInstanceLock,
+		startProfiling:         startProfiling,
 		openDatabase:           appdatabase.Open,
 		startServices:          startServices,
 		reportFailure:          reportStartupFailure,
