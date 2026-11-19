@@ -184,7 +184,9 @@ func (p *Panel) cookieAttributes(c *ui.Context, theme nui.Theme, index int, cook
 	anchor.FontFeatures("tnum").OnClick(func() { *open = !*open })
 	nui.Tooltip(c, theme, anchor, locales.DetailCookieAttributes(), nui.TooltipOptions{})
 	nui.Popover(c.Key("popover"), theme, anchor, open, nui.PopoverOptions{Label: label, Placement: nui.BottomEnd, Width: nui.Set[float32](384), MaxHeight: nui.Set[float32](420)}, func(palette nui.Theme) {
-		ui.Column(c).FillWidth().Children(func() {
+		// Shrinks with the panel, which is no taller than the room the window
+		// has, so that the body scrolls within it.
+		ui.Column(c).FillWidth().MinHeight(0).Children(func() {
 			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 12).BorderWidth(0, 0, 1, 0).BorderColor(palette.Border).Children(func() {
 				ui.Text(c, name).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(palette.Text).Grow(1).Basis(0).MinWidth(0).Selectable()
 				ui.Text(c, locales.DetailCookieAttributeCount(count)).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).Shrink(0)
