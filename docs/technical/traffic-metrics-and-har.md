@@ -56,7 +56,7 @@ Import maps values into the existing traffic fields without source labels and wi
 
 ## HBIN History Format
 
-FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection timestamps; v3 stores binary WebSocket messages as their original bytes instead of Base64. v1 and v2 binary WebSocket messages are decoded on read, and v1 histories show connection timings as unavailable. Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted.
+FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection timestamps; v3 stores binary WebSocket messages as their original bytes instead of Base64. v1 and v2 binary WebSocket messages are decoded on read, and v1 histories show connection timings as unavailable. Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted. Body records are zstd frames, written with a 1 MiB window; frames with any window are read, including the 8 MiB ones earlier builds wrote.
 
 **Saving the current capture.** The capture is saved to its history pair every 60 seconds while it changes, and at once on shutdown, restart, and cache cleanup. After a periodic save, the next one waits five times that save's duration, and never less than 60 seconds: a save that takes 30 seconds is followed by one 150 seconds later. Each save rewrites the pair through temporary files and an atomic rename. Spilled entries (see below) are copied as their encoded bytes and indexed at their new offsets; entries in memory are encoded as they are saved, and bodies still being received are read from their cache files up to the bytes received so far, without loading them into memory.
 
