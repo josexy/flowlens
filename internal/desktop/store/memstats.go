@@ -9,7 +9,7 @@ import (
 )
 
 // MaxMemStatsSamples bounds the samples kept for the chart.
-const MaxMemStatsSamples = 60
+const MaxMemStatsSamples = 600
 
 // DefaultMemStatsInterval is the sampling interval until one is chosen.
 const DefaultMemStatsInterval int64 = 2000

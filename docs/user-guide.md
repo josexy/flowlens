@@ -65,7 +65,7 @@ In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on
 
 Enter, a double-click, or the row menu's **Show** opens the detail panel. **Close details** hides it, keeps the selection, and returns focus to the table. Changing the selection updates an open panel but does not reopen a closed one.
 
-Clearing or restarting a capture releases its detail-view, table, filter, and category caches, including hidden views. Closing details or selecting another record releases the previous record's viewer caches; opening details again reloads the selected record. Stopping the proxy keeps the captured records available. Memory can decrease after garbage collection; the Go `Sys` statistic also includes address space whose physical memory has already been returned to the operating system.
+Clearing or restarting a capture releases its detail-view, table, filter, and category caches, including hidden views. Closing details or selecting another record releases the previous record's viewer caches; opening details again reloads the selected record. Stopping the proxy keeps the captured records available. Freed memory is returned to the operating system gradually; see [Check FlowLens Memory Use](#check-flowlens-memory-use).
 
 Capture, history, and row context menus export all or selected entries as CSV or HAR. Row menus can also export a request, response, headers, body, or the combined exchange.
 
@@ -234,6 +234,24 @@ FlowLens keeps `flowlens.db`, history, API Collection files (`api_collections/fi
 Bodies cached during a capture session are removed once they are no longer needed: after **Save and Restart** or **Discard and Restart**, after the final save when FlowLens quits, and at the next start if FlowLens did not quit cleanly or the final save failed. Saved histories and cached process icons stay.
 
 Storage cleanup removes either caches alone, or caches together with the current capture and readable saved history. Cache-only cleanup first saves a non-empty current capture to history. History files in unsupported or unknown formats are kept. Cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
+
+### Check FlowLens Memory Use
+
+Select **Memory** in the sidebar (`Primary+6`). The first time you open it in a run, FlowLens takes one sample. **Start** samples at the chosen interval until you pause, **Refresh** takes one sample, and **Clear** empties the chart until you refresh or start again.
+
+**Memory** is the FlowLens process's own memory, measured the way your system's process tool measures it. The two figures can differ by one sampling interval and by rounding.
+
+| System | Compare Memory with |
+| --- | --- |
+| Windows | The Memory column of the FlowLens process row in Task Manager. Expand the FlowLens group: the group total also counts Python Workers and other child processes |
+| macOS | The Memory column in Activity Monitor |
+| Linux | `RES` in `top` or `htop` (`RSS` in `ps`) |
+
+Memory never includes Python Workers, which run as separate processes. If the system value cannot be read, Memory shows `-` and says that it is not available.
+
+**Heap in use** is the memory held by Go objects such as captured traffic and caches. It rises between garbage collections and drops after each one.
+
+Memory can stay high after you clear a capture or close a history. The Go runtime keeps freed memory for reuse and returns it to the operating system gradually. Expand **Go runtime details** to see how much the Go runtime holds, how much is **Kept for reuse**, and how much has been **Returned to the OS**. Memory also counts the interface renderer, fonts, and system libraries, which Go does not track.
 
 ## Security
 

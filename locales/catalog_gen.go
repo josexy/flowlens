@@ -4008,24 +4008,24 @@ func (msgs Messages) MemstatsClear() string {
 	return Catalog.Format(msgs.locale, "memstatsClear", nil)
 }
 
-// MemstatsForcedGcCount says "Forced GC"
+// MemstatsDetails says "Go runtime details"
 // in the language the app shows.
-func MemstatsForcedGcCount() string { return In(i18n.Locale()).MemstatsForcedGcCount() }
+func MemstatsDetails() string { return In(i18n.Locale()).MemstatsDetails() }
 
-// MemstatsForcedGcCount says "Forced GC"
+// MemstatsDetails says "Go runtime details"
 // in the language of msgs.
-func (msgs Messages) MemstatsForcedGcCount() string {
-	return Catalog.Format(msgs.locale, "memstatsForcedGcCount", nil)
+func (msgs Messages) MemstatsDetails() string {
+	return Catalog.Format(msgs.locale, "memstatsDetails", nil)
 }
 
-// MemstatsFrees says "Total frees"
+// MemstatsDetailsNote says "Memory also counts the interface renderer, fonts, and system libraries, which Go does not track."
 // in the language the app shows.
-func MemstatsFrees() string { return In(i18n.Locale()).MemstatsFrees() }
+func MemstatsDetailsNote() string { return In(i18n.Locale()).MemstatsDetailsNote() }
 
-// MemstatsFrees says "Total frees"
+// MemstatsDetailsNote says "Memory also counts the interface renderer, fonts, and system libraries, which Go does not track."
 // in the language of msgs.
-func (msgs Messages) MemstatsFrees() string {
-	return Catalog.Format(msgs.locale, "memstatsFrees", nil)
+func (msgs Messages) MemstatsDetailsNote() string {
+	return Catalog.Format(msgs.locale, "memstatsDetailsNote", nil)
 }
 
 // MemstatsGcCount says "GC cycles"
@@ -4038,24 +4038,44 @@ func (msgs Messages) MemstatsGcCount() string {
 	return Catalog.Format(msgs.locale, "memstatsGcCount", nil)
 }
 
-// MemstatsGcCpu says "GC CPU fraction"
+// MemstatsHeapInuse says "Heap in use"
 // in the language the app shows.
-func MemstatsGcCpu() string { return In(i18n.Locale()).MemstatsGcCpu() }
+func MemstatsHeapInuse() string { return In(i18n.Locale()).MemstatsHeapInuse() }
 
-// MemstatsGcCpu says "GC CPU fraction"
+// MemstatsHeapInuse says "Heap in use"
 // in the language of msgs.
-func (msgs Messages) MemstatsGcCpu() string {
-	return Catalog.Format(msgs.locale, "memstatsGcCpu", nil)
+func (msgs Messages) MemstatsHeapInuse() string {
+	return Catalog.Format(msgs.locale, "memstatsHeapInuse", nil)
 }
 
-// MemstatsGoVersion says "Go Version"
+// MemstatsHeapInuseCaption says "Go objects such as captured traffic and caches"
 // in the language the app shows.
-func MemstatsGoVersion() string { return In(i18n.Locale()).MemstatsGoVersion() }
+func MemstatsHeapInuseCaption() string { return In(i18n.Locale()).MemstatsHeapInuseCaption() }
 
-// MemstatsGoVersion says "Go Version"
+// MemstatsHeapInuseCaption says "Go objects such as captured traffic and caches"
 // in the language of msgs.
-func (msgs Messages) MemstatsGoVersion() string {
-	return Catalog.Format(msgs.locale, "memstatsGoVersion", nil)
+func (msgs Messages) MemstatsHeapInuseCaption() string {
+	return Catalog.Format(msgs.locale, "memstatsHeapInuseCaption", nil)
+}
+
+// MemstatsHeapReleased says "Returned to the OS"
+// in the language the app shows.
+func MemstatsHeapReleased() string { return In(i18n.Locale()).MemstatsHeapReleased() }
+
+// MemstatsHeapReleased says "Returned to the OS"
+// in the language of msgs.
+func (msgs Messages) MemstatsHeapReleased() string {
+	return Catalog.Format(msgs.locale, "memstatsHeapReleased", nil)
+}
+
+// MemstatsHeld says "Held by Go runtime"
+// in the language the app shows.
+func MemstatsHeld() string { return In(i18n.Locale()).MemstatsHeld() }
+
+// MemstatsHeld says "Held by Go runtime"
+// in the language of msgs.
+func (msgs Messages) MemstatsHeld() string {
+	return Catalog.Format(msgs.locale, "memstatsHeld", nil)
 }
 
 // MemstatsInterval says "Sampling interval"
@@ -4068,104 +4088,86 @@ func (msgs Messages) MemstatsInterval() string {
 	return Catalog.Format(msgs.locale, "memstatsInterval", nil)
 }
 
-// MemstatsHeapAlloc says "Heap Alloc"
+// MemstatsKeptForReuse says "Kept for reuse"
 // in the language the app shows.
-func MemstatsHeapAlloc() string { return In(i18n.Locale()).MemstatsHeapAlloc() }
+func MemstatsKeptForReuse() string { return In(i18n.Locale()).MemstatsKeptForReuse() }
 
-// MemstatsHeapAlloc says "Heap Alloc"
+// MemstatsKeptForReuse says "Kept for reuse"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapAlloc() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapAlloc", nil)
+func (msgs Messages) MemstatsKeptForReuse() string {
+	return Catalog.Format(msgs.locale, "memstatsKeptForReuse", nil)
 }
 
-// MemstatsHeapAllocDesc says "Heap Allocated"
+// MemstatsLastGc says "Last GC"
 // in the language the app shows.
-func MemstatsHeapAllocDesc() string { return In(i18n.Locale()).MemstatsHeapAllocDesc() }
+func MemstatsLastGc() string { return In(i18n.Locale()).MemstatsLastGc() }
 
-// MemstatsHeapAllocDesc says "Heap Allocated"
+// MemstatsLastGc says "Last GC"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapAllocDesc() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapAllocDesc", nil)
+func (msgs Messages) MemstatsLastGc() string {
+	return Catalog.Format(msgs.locale, "memstatsLastGc", nil)
 }
 
-// MemstatsHeapIdle says "Heap idle"
+// MemstatsLastGcValue says "{time} · {pause} pause"
 // in the language the app shows.
-func MemstatsHeapIdle() string { return In(i18n.Locale()).MemstatsHeapIdle() }
-
-// MemstatsHeapIdle says "Heap idle"
-// in the language of msgs.
-func (msgs Messages) MemstatsHeapIdle() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapIdle", nil)
+func MemstatsLastGcValue(pause string, time_ string) string {
+	return In(i18n.Locale()).MemstatsLastGcValue(pause, time_)
 }
 
-// MemstatsHeapInuse says "Heap in use"
-// in the language the app shows.
-func MemstatsHeapInuse() string { return In(i18n.Locale()).MemstatsHeapInuse() }
-
-// MemstatsHeapInuse says "Heap in use"
+// MemstatsLastGcValue says "{time} · {pause} pause"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapInuse() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapInuse", nil)
+func (msgs Messages) MemstatsLastGcValue(pause string, time_ string) string {
+	return Catalog.Format(msgs.locale, "memstatsLastGcValue", map[string]any{"pause": pause, "time": time_})
 }
 
-// MemstatsHeapObjects says "Live objects"
+// MemstatsMemory says "Memory"
 // in the language the app shows.
-func MemstatsHeapObjects() string { return In(i18n.Locale()).MemstatsHeapObjects() }
+func MemstatsMemory() string { return In(i18n.Locale()).MemstatsMemory() }
 
-// MemstatsHeapObjects says "Live objects"
+// MemstatsMemory says "Memory"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapObjects() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapObjects", nil)
+func (msgs Messages) MemstatsMemory() string {
+	return Catalog.Format(msgs.locale, "memstatsMemory", nil)
 }
 
-// MemstatsHeapReleased says "Returned to OS"
+// MemstatsMemoryLinux says "Resident memory, as RES in top"
 // in the language the app shows.
-func MemstatsHeapReleased() string { return In(i18n.Locale()).MemstatsHeapReleased() }
+func MemstatsMemoryLinux() string { return In(i18n.Locale()).MemstatsMemoryLinux() }
 
-// MemstatsHeapReleased says "Returned to OS"
+// MemstatsMemoryLinux says "Resident memory, as RES in top"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapReleased() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapReleased", nil)
+func (msgs Messages) MemstatsMemoryLinux() string {
+	return Catalog.Format(msgs.locale, "memstatsMemoryLinux", nil)
 }
 
-// MemstatsHeapSys says "Heap from OS"
+// MemstatsMemoryMacos says "As in Activity Monitor's Memory column"
 // in the language the app shows.
-func MemstatsHeapSys() string { return In(i18n.Locale()).MemstatsHeapSys() }
+func MemstatsMemoryMacos() string { return In(i18n.Locale()).MemstatsMemoryMacos() }
 
-// MemstatsHeapSys says "Heap from OS"
+// MemstatsMemoryMacos says "As in Activity Monitor's Memory column"
 // in the language of msgs.
-func (msgs Messages) MemstatsHeapSys() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapSys", nil)
+func (msgs Messages) MemstatsMemoryMacos() string {
+	return Catalog.Format(msgs.locale, "memstatsMemoryMacos", nil)
 }
 
-// MemstatsLastGcTime says "Last GC time"
+// MemstatsMemoryUnavailable says "Not available on this system"
 // in the language the app shows.
-func MemstatsLastGcTime() string { return In(i18n.Locale()).MemstatsLastGcTime() }
+func MemstatsMemoryUnavailable() string { return In(i18n.Locale()).MemstatsMemoryUnavailable() }
 
-// MemstatsLastGcTime says "Last GC time"
+// MemstatsMemoryUnavailable says "Not available on this system"
 // in the language of msgs.
-func (msgs Messages) MemstatsLastGcTime() string {
-	return Catalog.Format(msgs.locale, "memstatsLastGcTime", nil)
+func (msgs Messages) MemstatsMemoryUnavailable() string {
+	return Catalog.Format(msgs.locale, "memstatsMemoryUnavailable", nil)
 }
 
-// MemstatsLiveObjects says "Live objects"
+// MemstatsMemoryWindows says "FlowLens process, as in Task Manager's Memory column"
 // in the language the app shows.
-func MemstatsLiveObjects() string { return In(i18n.Locale()).MemstatsLiveObjects() }
+func MemstatsMemoryWindows() string { return In(i18n.Locale()).MemstatsMemoryWindows() }
 
-// MemstatsLiveObjects says "Live objects"
+// MemstatsMemoryWindows says "FlowLens process, as in Task Manager's Memory column"
 // in the language of msgs.
-func (msgs Messages) MemstatsLiveObjects() string {
-	return Catalog.Format(msgs.locale, "memstatsLiveObjects", nil)
-}
-
-// MemstatsMallocs says "Total mallocs"
-// in the language the app shows.
-func MemstatsMallocs() string { return In(i18n.Locale()).MemstatsMallocs() }
-
-// MemstatsMallocs says "Total mallocs"
-// in the language of msgs.
-func (msgs Messages) MemstatsMallocs() string {
-	return Catalog.Format(msgs.locale, "memstatsMallocs", nil)
+func (msgs Messages) MemstatsMemoryWindows() string {
+	return Catalog.Format(msgs.locale, "memstatsMemoryWindows", nil)
 }
 
 // MemstatsNextGc says "Next GC target"
@@ -4198,26 +4200,6 @@ func (msgs Messages) MemstatsNoGc() string {
 	return Catalog.Format(msgs.locale, "memstatsNoGc", nil)
 }
 
-// MemstatsNumCpu says "CPU Cores"
-// in the language the app shows.
-func MemstatsNumCpu() string { return In(i18n.Locale()).MemstatsNumCpu() }
-
-// MemstatsNumCpu says "CPU Cores"
-// in the language of msgs.
-func (msgs Messages) MemstatsNumCpu() string {
-	return Catalog.Format(msgs.locale, "memstatsNumCpu", nil)
-}
-
-// MemstatsNumGc says "GC Count"
-// in the language the app shows.
-func MemstatsNumGc() string { return In(i18n.Locale()).MemstatsNumGc() }
-
-// MemstatsNumGc says "GC Count"
-// in the language of msgs.
-func (msgs Messages) MemstatsNumGc() string {
-	return Catalog.Format(msgs.locale, "memstatsNumGc", nil)
-}
-
 // MemstatsNumGoroutine says "Goroutines"
 // in the language the app shows.
 func MemstatsNumGoroutine() string { return In(i18n.Locale()).MemstatsNumGoroutine() }
@@ -4228,34 +4210,14 @@ func (msgs Messages) MemstatsNumGoroutine() string {
 	return Catalog.Format(msgs.locale, "memstatsNumGoroutine", nil)
 }
 
-// MemstatsOsArch says "OS / Arch"
+// MemstatsOverhead says "Runtime overhead"
 // in the language the app shows.
-func MemstatsOsArch() string { return In(i18n.Locale()).MemstatsOsArch() }
+func MemstatsOverhead() string { return In(i18n.Locale()).MemstatsOverhead() }
 
-// MemstatsOsArch says "OS / Arch"
+// MemstatsOverhead says "Runtime overhead"
 // in the language of msgs.
-func (msgs Messages) MemstatsOsArch() string {
-	return Catalog.Format(msgs.locale, "memstatsOsArch", nil)
-}
-
-// MemstatsPauseLast says "Last GC pause"
-// in the language the app shows.
-func MemstatsPauseLast() string { return In(i18n.Locale()).MemstatsPauseLast() }
-
-// MemstatsPauseLast says "Last GC pause"
-// in the language of msgs.
-func (msgs Messages) MemstatsPauseLast() string {
-	return Catalog.Format(msgs.locale, "memstatsPauseLast", nil)
-}
-
-// MemstatsPauseTotal says "Total GC pause"
-// in the language the app shows.
-func MemstatsPauseTotal() string { return In(i18n.Locale()).MemstatsPauseTotal() }
-
-// MemstatsPauseTotal says "Total GC pause"
-// in the language of msgs.
-func (msgs Messages) MemstatsPauseTotal() string {
-	return Catalog.Format(msgs.locale, "memstatsPauseTotal", nil)
+func (msgs Messages) MemstatsOverhead() string {
+	return Catalog.Format(msgs.locale, "memstatsOverhead", nil)
 }
 
 // MemstatsRefresh says "Refresh"
@@ -4278,64 +4240,24 @@ func (msgs Messages) MemstatsSectionGc() string {
 	return Catalog.Format(msgs.locale, "memstatsSectionGc", nil)
 }
 
-// MemstatsSectionHeap says "Heap Memory"
+// MemstatsSectionMemory says "Go memory"
 // in the language the app shows.
-func MemstatsSectionHeap() string { return In(i18n.Locale()).MemstatsSectionHeap() }
+func MemstatsSectionMemory() string { return In(i18n.Locale()).MemstatsSectionMemory() }
 
-// MemstatsSectionHeap says "Heap Memory"
+// MemstatsSectionMemory says "Go memory"
 // in the language of msgs.
-func (msgs Messages) MemstatsSectionHeap() string {
-	return Catalog.Format(msgs.locale, "memstatsSectionHeap", nil)
+func (msgs Messages) MemstatsSectionMemory() string {
+	return Catalog.Format(msgs.locale, "memstatsSectionMemory", nil)
 }
 
-// MemstatsSectionOverall says "Overall"
+// MemstatsStacks says "Stacks"
 // in the language the app shows.
-func MemstatsSectionOverall() string { return In(i18n.Locale()).MemstatsSectionOverall() }
+func MemstatsStacks() string { return In(i18n.Locale()).MemstatsStacks() }
 
-// MemstatsSectionOverall says "Overall"
+// MemstatsStacks says "Stacks"
 // in the language of msgs.
-func (msgs Messages) MemstatsSectionOverall() string {
-	return Catalog.Format(msgs.locale, "memstatsSectionOverall", nil)
-}
-
-// MemstatsSectionRuntime says "Runtime"
-// in the language the app shows.
-func MemstatsSectionRuntime() string { return In(i18n.Locale()).MemstatsSectionRuntime() }
-
-// MemstatsSectionRuntime says "Runtime"
-// in the language of msgs.
-func (msgs Messages) MemstatsSectionRuntime() string {
-	return Catalog.Format(msgs.locale, "memstatsSectionRuntime", nil)
-}
-
-// MemstatsSectionStack says "Stack Memory"
-// in the language the app shows.
-func MemstatsSectionStack() string { return In(i18n.Locale()).MemstatsSectionStack() }
-
-// MemstatsSectionStack says "Stack Memory"
-// in the language of msgs.
-func (msgs Messages) MemstatsSectionStack() string {
-	return Catalog.Format(msgs.locale, "memstatsSectionStack", nil)
-}
-
-// MemstatsStackInuse says "Stack in use"
-// in the language the app shows.
-func MemstatsStackInuse() string { return In(i18n.Locale()).MemstatsStackInuse() }
-
-// MemstatsStackInuse says "Stack in use"
-// in the language of msgs.
-func (msgs Messages) MemstatsStackInuse() string {
-	return Catalog.Format(msgs.locale, "memstatsStackInuse", nil)
-}
-
-// MemstatsStackSys says "Stack from OS"
-// in the language the app shows.
-func MemstatsStackSys() string { return In(i18n.Locale()).MemstatsStackSys() }
-
-// MemstatsStackSys says "Stack from OS"
-// in the language of msgs.
-func (msgs Messages) MemstatsStackSys() string {
-	return Catalog.Format(msgs.locale, "memstatsStackSys", nil)
+func (msgs Messages) MemstatsStacks() string {
+	return Catalog.Format(msgs.locale, "memstatsStacks", nil)
 }
 
 // MemstatsStart says "Start"
@@ -4358,26 +4280,6 @@ func (msgs Messages) MemstatsStop() string {
 	return Catalog.Format(msgs.locale, "memstatsStop", nil)
 }
 
-// MemstatsSubtitle says "Go Backend Runtime"
-// in the language the app shows.
-func MemstatsSubtitle() string { return In(i18n.Locale()).MemstatsSubtitle() }
-
-// MemstatsSubtitle says "Go Backend Runtime"
-// in the language of msgs.
-func (msgs Messages) MemstatsSubtitle() string {
-	return Catalog.Format(msgs.locale, "memstatsSubtitle", nil)
-}
-
-// MemstatsSys says "Total Sys"
-// in the language the app shows.
-func MemstatsSys() string { return In(i18n.Locale()).MemstatsSys() }
-
-// MemstatsSys says "Total Sys"
-// in the language of msgs.
-func (msgs Messages) MemstatsSys() string {
-	return Catalog.Format(msgs.locale, "memstatsSys", nil)
-}
-
 // MemstatsTitle says "Memory Stats"
 // in the language the app shows.
 func MemstatsTitle() string { return In(i18n.Locale()).MemstatsTitle() }
@@ -4386,16 +4288,6 @@ func MemstatsTitle() string { return In(i18n.Locale()).MemstatsTitle() }
 // in the language of msgs.
 func (msgs Messages) MemstatsTitle() string {
 	return Catalog.Format(msgs.locale, "memstatsTitle", nil)
-}
-
-// MemstatsTotalAlloc says "Cumulative alloc"
-// in the language the app shows.
-func MemstatsTotalAlloc() string { return In(i18n.Locale()).MemstatsTotalAlloc() }
-
-// MemstatsTotalAlloc says "Cumulative alloc"
-// in the language of msgs.
-func (msgs Messages) MemstatsTotalAlloc() string {
-	return Catalog.Format(msgs.locale, "memstatsTotalAlloc", nil)
 }
 
 // MenuApiCollection says "API Collection"

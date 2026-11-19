@@ -3,9 +3,10 @@ package memstats
 
 import (
 	"fmt"
-	"strconv"
+	"math"
 	"time"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/store"
@@ -29,59 +30,56 @@ type View struct {
 	// Select shows the section.
 	Select func()
 
-	interval int64
-	chart    nui.ChartState
-	charted  uint64
-	drawn    bool
+	interval    int64
+	chart       nui.ChartState
+	charted     uint64
+	chartLocale string
+	drawn       bool
+	// viewed is set by the first Content call, which takes one sample if none
+	// exists. Showing the section again never samples.
+	viewed      bool
+	detailsOpen bool
 }
 
 // New returns the section's content.
 func New(data *store.MemStatsStore) *View { return &View{Data: data} }
 
-func formatBytes(bytes uint64) string {
-	return logic.FormatFileSizeWith(int64(bytes), logic.FileSizeOptions{Precision: 2, UnknownValue: unknown})
+func formatBytes(bytes int64) string {
+	return logic.FormatFileSizeWith(bytes, logic.FileSizeOptions{Precision: 1, UnknownValue: unknown})
 }
 
-func formatNs(ns uint64) string {
-	switch {
-	case ns == 0:
-		return "0"
-	case ns >= 1_000_000:
-		return strconv.FormatFloat(float64(ns)/1_000_000, 'f', 3, 64) + " ms"
-	case ns >= 1_000:
-		return strconv.FormatFloat(float64(ns)/1_000, 'f', 1, 64) + " μs"
-	}
-	return strconv.FormatUint(ns, 10) + " ns"
+func formatPause(ns int64) string {
+	return logic.FormatDurationMicros(0, ns/int64(time.Microsecond))
 }
 
-func formatPercent(fraction float64) string {
-	return strconv.FormatFloat(fraction*100, 'f', 4, 64) + "%"
-}
-
-func formatLastGC(milliseconds int64) string {
-	if milliseconds == 0 {
+func formatLastGC(memory memstatsservice.RuntimeMemory) string {
+	if memory.LastGC == 0 {
 		return locales.MemstatsNoGc()
 	}
-	return time.UnixMilli(milliseconds).Local().Format("2006-01-02 15:04:05")
+	return locales.MemstatsLastGcValue(formatPause(memory.LastPauseNs), logic.FormatTimeLocal(time.UnixMilli(memory.LastGC)))
 }
 
-// groupDigits writes a count with thousands separators.
-func groupDigits(value uint64) string {
-	digits := strconv.FormatUint(value, 10)
-	for index := len(digits) - 3; index > 0; index -= 3 {
-		digits = digits[:index] + "," + digits[index:]
+// processCaption names the platform tool whose figure Memory matches.
+func processCaption(memory memstatsservice.ProcessMemory) string {
+	if memory.Available() {
+		switch memory.Measure {
+		case memstatsservice.MeasurePrivateWorkingSet:
+			return locales.MemstatsMemoryWindows()
+		case memstatsservice.MeasurePhysFootprint:
+			return locales.MemstatsMemoryMacos()
+		case memstatsservice.MeasureResident:
+			return locales.MemstatsMemoryLinux()
+		}
 	}
-	return digits
+	return locales.MemstatsMemoryUnavailable()
 }
 
-func liveObjects(sample *memstatsservice.MemSnapshot) string {
-	if sample.Frees > sample.Mallocs {
-		return "0"
-	}
-	return groupDigits(sample.Mallocs - sample.Frees)
+// metric is a row of a details table. A total row is emphasized, and its
+// parts are indented under it.
+type metric struct {
+	label, value string
+	total, part  bool
 }
-
-type metric struct{ label, value string }
 
 // value reads a sample, or shows the unknown mark before the first one.
 func value(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.MemSnapshot) string) string {
@@ -91,24 +89,18 @@ func value(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.MemSn
 	return read(sample)
 }
 
-func bytesOf(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.MemSnapshot) uint64) string {
-	return value(sample, func(s *memstatsservice.MemSnapshot) string { return formatBytes(read(s)) })
+func bytesOf(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.RuntimeMemory) uint64) string {
+	return value(sample, func(s *memstatsservice.MemSnapshot) string { return formatBytes(int64(read(&s.Runtime))) })
 }
 
-func countOf[T int | uint32 | uint64](sample *memstatsservice.MemSnapshot, read func(*memstatsservice.MemSnapshot) T) string {
-	return value(sample, func(s *memstatsservice.MemSnapshot) string { return fmt.Sprint(read(s)) })
+func countOf(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.RuntimeMemory) uint64) string {
+	return value(sample, func(s *memstatsservice.MemSnapshot) string { return fmt.Sprint(read(&s.Runtime)) })
 }
 
 func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	data := v.Data
 	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Row(c.Key("title")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
-			ui.Text(c, locales.MemstatsTitle()).SingleLine().FontSize(apptheme.TextSize(c, 15.2)).FontWeight(600).TextColor(theme.Text)
-			nui.Badge(c.Key("subtitle"), theme, locales.MemstatsSubtitle(), nui.BadgeOptions{
-				Color: nui.Info, Variant: nui.Subtle, Size: nui.MD,
-				UI: nui.Styles{nui.Root: {FontSize: nui.Set(apptheme.TextSize(c, 14)), Weight: nui.Set(600), PaddingX: nui.Set[float32](8), PaddingY: nui.Set[float32](2)}},
-			})
-		})
+		ui.Text(c.Key("title"), locales.MemstatsTitle()).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 15.2)).FontWeight(600).TextColor(theme.Text)
 		ui.Row(c.Key("actions")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
 			label, icon, color := locales.MemstatsStart(), lucide.Play(), nui.Primary
 			if data.Monitoring {
@@ -132,35 +124,40 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	})
 }
 
+// summaryCard is a headline figure with a caption that says what it measures.
+type summaryCard struct {
+	key, label, value, caption string
+	color                      ui.Color
+}
+
 func (v *View) summary(c *ui.Context, theme nui.Theme, sample *memstatsservice.MemSnapshot) {
-	cards := []metric{
-		{locales.MemstatsHeapAlloc(), bytesOf(sample, func(s *memstatsservice.MemSnapshot) uint64 { return s.HeapAlloc })},
-		{locales.MemstatsSys(), bytesOf(sample, func(s *memstatsservice.MemSnapshot) uint64 { return s.Sys })},
-		{locales.MemstatsNumGc(), countOf(sample, func(s *memstatsservice.MemSnapshot) uint32 { return s.NumGC })},
-		{locales.MemstatsNumGoroutine(), countOf(sample, func(s *memstatsservice.MemSnapshot) int { return s.NumGoroutine })},
+	memory := summaryCard{key: "process", label: locales.MemstatsMemory(), value: unknown, color: theme.Primary}
+	heap := summaryCard{key: "heap", label: locales.MemstatsHeapInuse(), value: unknown, caption: locales.MemstatsHeapInuseCaption(), color: theme.Text}
+	if sample != nil {
+		// An unreadable process value shows the unknown mark, never a Go value.
+		memory.value, memory.caption = formatBytes(sample.Process.Bytes), processCaption(sample.Process)
+		heap.value = formatBytes(int64(sample.Runtime.HeapInUse))
 	}
-	ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).Children(func() {
-		for index, card := range cards {
-			panelCard(c, theme, index, 6, func() {
+	ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).AlignItems(ui.Stretch).Children(func() {
+		for _, card := range []summaryCard{memory, heap} {
+			panelCard(c, theme, card.key, 4, func() {
 				ui.Text(c, card.label).SingleLine().AlignSelf(ui.Center).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.5).TextColor(theme.Muted)
-				ui.Text(c, card.value).SingleLine().AlignSelf(ui.Center).FontSize(apptheme.TextSize(c, 17.6)).LineHeight(1.5).FontWeight(600).TextColor(theme.Primary)
-			}).Grow(1).Basis(180)
+				ui.Text(c, card.value).SingleLine().AlignSelf(ui.Center).FontSize(apptheme.TextSize(c, 17.6)).LineHeight(1.5).FontWeight(600).TextColor(card.color)
+				if card.caption != "" {
+					ui.Text(c, card.caption).FillWidth().TextAlign(ui.Center).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.4).TextColor(theme.Muted)
+				}
+			}).Grow(1).Basis(240)
 		}
 	})
 }
 
-// syncChart gives the chart the samples, once per change. Samples taken within
-// one millisecond, or by Refresh during monitoring, cannot share a position.
-func (v *View) syncChart() {
-	if v.drawn && v.charted == v.Data.Version {
-		return
-	}
-	v.drawn, v.charted = true, v.Data.Version
-	samples := v.Data.Samples
-	times := make([]time.Time, 0, len(samples))
-	heap := make([]float64, 0, len(samples))
-	sys := make([]float64, 0, len(samples))
-	stack := make([]float64, 0, len(samples))
+// chartValues returns the chart's times and values. Samples that cannot follow
+// the previous one in time are skipped, and a sample without process memory
+// leaves a gap (NaN) in Memory.
+func chartValues(samples []memstatsservice.MemSnapshot) (times []time.Time, process, heap []float64) {
+	times = make([]time.Time, 0, len(samples))
+	process = make([]float64, 0, len(samples))
+	heap = make([]float64, 0, len(samples))
 	for index := range samples {
 		sample := &samples[index]
 		at := time.UnixMilli(sample.Timestamp)
@@ -168,14 +165,32 @@ func (v *View) syncChart() {
 			continue
 		}
 		times = append(times, at)
-		heap = append(heap, float64(sample.HeapAlloc))
-		sys = append(sys, float64(sample.Sys))
-		stack = append(stack, float64(sample.StackInuse))
+		memory := math.NaN()
+		if sample.Process.Available() {
+			memory = float64(sample.Process.Bytes)
+		}
+		process = append(process, memory)
+		heap = append(heap, float64(sample.Runtime.HeapInUse))
 	}
+	return times, process, heap
+}
+
+// syncChart gives the chart the samples, once per change of samples or
+// language. Samples taken within one millisecond, or by Refresh during
+// monitoring, cannot share a position.
+func (v *View) syncChart() {
+	locale := i18n.Locale()
+	if v.drawn && v.charted == v.Data.Version && v.chartLocale == locale {
+		return
+	}
+	v.drawn, v.charted, v.chartLocale = true, v.Data.Version, locale
+	times, process, heap := chartValues(v.Data.Samples)
+	// The process series is listed even when every value is a gap, so the
+	// legend does not change between samples.
 	_ = v.chart.SetTimeData(times, []nui.ChartSeries{
-		{ID: "heap", Label: "HeapAlloc", Values: heap, Color: nui.Success},
-		{ID: "sys", Label: "Sys", Values: sys, Color: nui.Info},
-		{ID: "stack", Label: "StackInuse", Values: stack, Color: nui.Warning},
+		{ID: "process", Label: locales.MemstatsMemory(), Values: process, Color: nui.Primary},
+		// Neutral stays distinct from every primary color a user can choose.
+		{ID: "heap", Label: locales.MemstatsHeapInuse(), Values: heap, Color: nui.Neutral},
 	})
 }
 
@@ -189,7 +204,12 @@ func (v *View) chartCard(c *ui.Context, theme nui.Theme) {
 		v.syncChart()
 		nui.Chart(c.Key("plot"), theme, &v.chart, nui.ChartOptions{
 			Label: locales.MemstatsChartTitle(), Kind: nui.ChartLine, Height: 220, Legend: nui.Set(true), Grid: nui.Set(true), Tooltip: nui.Set(false),
-			Animate: nui.Set(false), FormatY: func(value float64) string { return formatBytes(uint64(max(value, 0))) },
+			Animate: nui.Set(false), FormatY: func(value float64) string {
+				if math.IsNaN(value) || value < 0 {
+					return unknown
+				}
+				return formatBytes(int64(value))
+			},
 			FormatTime: func(at time.Time) string { return at.Local().Format("15:04:05") },
 		}).FillWidth()
 	}).FillWidth()
@@ -213,8 +233,15 @@ func metrics(c *ui.Context, theme nui.Theme, key string, items []metric) {
 				line.BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
 			}
 			line.Children(func() {
-				ui.Text(c, item.label).WidthPercent(38).MinWidth(120).Shrink(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Muted).Background(theme.Elevated)
-				ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Text).Selectable()
+				label := ui.Text(c, item.label).WidthPercent(38).MinWidth(120).Shrink(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Muted).Background(theme.Elevated)
+				value := ui.Text(c, item.value).Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 12)).LineHeight(1.35).Padding(7, 9).TextColor(theme.Text).Selectable()
+				switch {
+				case item.total:
+					label.FontWeight(600).TextColor(theme.Text)
+					value.FontWeight(600)
+				case item.part:
+					label.Padding(7, 9, 7, 21)
+				}
 			})
 		}
 	})
@@ -224,62 +251,38 @@ func heading(c *ui.Context, theme nui.Theme, title string) {
 	ui.Text(c.Key(title), title).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
 }
 
-// divider names a group inside a card, with a rule after the name.
-func divider(c *ui.Context, theme nui.Theme, title string) {
-	ui.Row(c.Key(title)).FillWidth().AlignItems(ui.Center).Gap(8).Margin(12, 0, 12, 0).Children(func() {
-		ui.Text(c, title).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
-		ui.Box(c).Grow(1).Height(1).Background(theme.Border)
-	})
-}
-
+// details holds the Go runtime values, collapsed until the user expands them.
 func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSnapshot) {
-	type snapshot = memstatsservice.MemSnapshot
-	ui.Row(c.Key("details")).FillWidth().Wrap().Gap(12).AlignItems(ui.Start).Children(func() {
-		panelCard(c, theme, "left", 0, func() {
-			heading(c, theme, locales.MemstatsSectionHeap())
-			ui.Box(c).Height(12)
-			metrics(c, theme, "heap", []metric{
-				{locales.MemstatsHeapAllocDesc(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapAlloc })},
-				{locales.MemstatsHeapSys(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapSys })},
-				{locales.MemstatsHeapInuse(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapInuse })},
-				{locales.MemstatsHeapIdle(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapIdle })},
-				{locales.MemstatsHeapReleased(), bytesOf(s, func(s *snapshot) uint64 { return s.HeapReleased })},
-				{locales.MemstatsHeapObjects(), countOf(s, func(s *snapshot) uint64 { return s.HeapObjects })},
+	type memory = memstatsservice.RuntimeMemory
+	panelCard(c, theme, "details", 0, func() {
+		nui.Collapsible(c.Key("collapsible"), theme, &v.detailsOpen, nui.CollapsibleOptions{Label: locales.MemstatsDetails()}, func(theme nui.Theme) {
+			ui.Column(c.Key("body")).FillWidth().Gap(12).Children(func() {
+				ui.Text(c, locales.MemstatsDetailsNote()).FillWidth().FontSize(apptheme.TextSize(c, 12)).LineHeight(1.4).TextColor(theme.Muted)
+				ui.Row(c.Key("tables")).FillWidth().Wrap().Gap(12).AlignItems(ui.Start).Children(func() {
+					ui.Column(c.Key("memory")).Grow(1).Basis(300).MinWidth(0).Gap(8).Children(func() {
+						heading(c, theme, locales.MemstatsSectionMemory())
+						metrics(c, theme, "memory", []metric{
+							{label: locales.MemstatsHeld(), value: bytesOf(s, func(m *memory) uint64 { return m.Held }), total: true},
+							{label: locales.MemstatsHeapInuse(), value: bytesOf(s, func(m *memory) uint64 { return m.HeapInUse }), part: true},
+							{label: locales.MemstatsKeptForReuse(), value: bytesOf(s, func(m *memory) uint64 { return m.KeptForReuse }), part: true},
+							{label: locales.MemstatsStacks(), value: bytesOf(s, func(m *memory) uint64 { return m.Stacks }), part: true},
+							{label: locales.MemstatsOverhead(), value: bytesOf(s, func(m *memory) uint64 { return m.Overhead }), part: true},
+							{label: locales.MemstatsHeapReleased(), value: bytesOf(s, func(m *memory) uint64 { return m.Released })},
+						})
+					})
+					ui.Column(c.Key("gc")).Grow(1).Basis(300).MinWidth(0).Gap(8).Children(func() {
+						heading(c, theme, locales.MemstatsSectionGc())
+						metrics(c, theme, "gc", []metric{
+							{label: locales.MemstatsNextGc(), value: bytesOf(s, func(m *memory) uint64 { return m.NextGC })},
+							{label: locales.MemstatsGcCount(), value: countOf(s, func(m *memory) uint64 { return m.GCCycles })},
+							{label: locales.MemstatsLastGc(), value: value(s, func(s *memstatsservice.MemSnapshot) string { return formatLastGC(s.Runtime) })},
+							{label: locales.MemstatsNumGoroutine(), value: countOf(s, func(m *memory) uint64 { return m.Goroutines })},
+						})
+					})
+				})
 			})
-			divider(c, theme, locales.MemstatsSectionStack())
-			metrics(c, theme, "stack", []metric{
-				{locales.MemstatsStackInuse(), bytesOf(s, func(s *snapshot) uint64 { return s.StackInuse })},
-				{locales.MemstatsStackSys(), bytesOf(s, func(s *snapshot) uint64 { return s.StackSys })},
-			})
-		}).Grow(1).Basis(360)
-		panelCard(c, theme, "right", 0, func() {
-			heading(c, theme, locales.MemstatsSectionGc())
-			ui.Box(c).Height(12)
-			metrics(c, theme, "gc", []metric{
-				{locales.MemstatsGcCount(), countOf(s, func(s *snapshot) uint32 { return s.NumGC })},
-				{locales.MemstatsForcedGcCount(), countOf(s, func(s *snapshot) uint32 { return s.NumForcedGC })},
-				{locales.MemstatsGcCpu(), value(s, func(s *snapshot) string { return formatPercent(s.GCCPUFraction) })},
-				{locales.MemstatsPauseTotal(), value(s, func(s *snapshot) string { return formatNs(s.PauseTotalNs) })},
-				{locales.MemstatsPauseLast(), value(s, func(s *snapshot) string { return formatNs(s.PauseNs) })},
-				{locales.MemstatsNextGc(), bytesOf(s, func(s *snapshot) uint64 { return s.NextGC })},
-				{locales.MemstatsLastGcTime(), value(s, func(s *snapshot) string { return formatLastGC(s.LastGC) })},
-			})
-			divider(c, theme, locales.MemstatsSectionOverall())
-			metrics(c, theme, "overall", []metric{
-				{locales.MemstatsTotalAlloc(), bytesOf(s, func(s *snapshot) uint64 { return s.TotalAlloc })},
-				{locales.MemstatsMallocs(), countOf(s, func(s *snapshot) uint64 { return s.Mallocs })},
-				{locales.MemstatsFrees(), countOf(s, func(s *snapshot) uint64 { return s.Frees })},
-				{locales.MemstatsLiveObjects(), value(s, liveObjects)},
-			})
-			divider(c, theme, locales.MemstatsSectionRuntime())
-			metrics(c, theme, "runtime", []metric{
-				{locales.MemstatsGoVersion(), value(s, func(s *snapshot) string { return s.GoVersion })},
-				{locales.MemstatsOsArch(), value(s, func(s *snapshot) string { return s.GOOS + " / " + s.GOARCH })},
-				{locales.MemstatsNumCpu(), countOf(s, func(s *snapshot) int { return s.NumCPU })},
-				{locales.MemstatsNumGoroutine(), countOf(s, func(s *snapshot) int { return s.NumGoroutine })},
-			})
-		}).Grow(1).Basis(360)
-	})
+		})
+	}).FillWidth()
 }
 
 // Sidebar shows the section's single entry.
@@ -299,6 +302,12 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 
 // Content shows the section.
 func (v *View) Content(c *ui.Context, theme nui.Theme) {
+	if !v.viewed {
+		v.viewed = true
+		if len(v.Data.Samples) == 0 && !v.Data.Monitoring {
+			v.Data.FetchOnce()
+		}
+	}
 	ui.Column(c.Key("memstats")).Fill().Children(func() {
 		v.toolbar(c, theme)
 		ui.Scroll(c.Key("body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {

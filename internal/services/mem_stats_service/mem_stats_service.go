@@ -2,7 +2,6 @@ package memstatsservice
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"time"
 
@@ -13,48 +12,11 @@ import (
 // MemStatsEventName names the event that carries each sample.
 const MemStatsEventName = "memstats:update"
 
-// MemSnapshot holds a point-in-time snapshot of Go runtime memory statistics.
+// MemSnapshot holds one sample of FlowLens's memory.
 type MemSnapshot struct {
-	Timestamp    int64  `json:"timestamp"` // Unix milliseconds
-	GoVersion    string `json:"goVersion"`
-	GOOS         string `json:"goos"`
-	GOARCH       string `json:"goarch"`
-	NumGoroutine int    `json:"numGoroutine"`
-	NumCPU       int    `json:"numCPU"`
-
-	// Heap
-	HeapAlloc    uint64 `json:"heapAlloc"`
-	HeapSys      uint64 `json:"heapSys"`
-	HeapInuse    uint64 `json:"heapInuse"`
-	HeapIdle     uint64 `json:"heapIdle"`
-	HeapReleased uint64 `json:"heapReleased"`
-	HeapObjects  uint64 `json:"heapObjects"`
-
-	// Stack
-	StackInuse uint64 `json:"stackInuse"`
-	StackSys   uint64 `json:"stackSys"`
-
-	// Overall
-	Sys        uint64 `json:"sys"`
-	Alloc      uint64 `json:"alloc"`
-	TotalAlloc uint64 `json:"totalAlloc"`
-	Mallocs    uint64 `json:"mallocs"`
-	Frees      uint64 `json:"frees"`
-
-	// GC
-	NumGC         uint32  `json:"numGC"`
-	NumForcedGC   uint32  `json:"numForcedGC"`
-	GCCPUFraction float64 `json:"gcCPUFraction"`
-	PauseTotalNs  uint64  `json:"pauseTotalNs"`
-	PauseNs       uint64  `json:"pauseNs"` // last GC pause
-	NextGC        uint64  `json:"nextGC"`
-	LastGC        int64   `json:"lastGC"` // Unix ms; 0 if no GC yet
-
-	// Other system memory
-	GCSys     uint64 `json:"gcSys"`
-	MSpanSys  uint64 `json:"mspanSys"`
-	MCacheSys uint64 `json:"mcacheSys"`
-	OtherSys  uint64 `json:"otherSys"`
+	Timestamp int64         `json:"timestamp"` // Unix milliseconds
+	Process   ProcessMemory `json:"process"`   // Bytes is -1 when unavailable
+	Runtime   RuntimeMemory `json:"runtime"`
 }
 
 // MonitoringStatus describes the current state of memory monitoring.
@@ -63,9 +25,10 @@ type MonitoringStatus struct {
 	IntervalMs int64 `json:"intervalMs"`
 }
 
-// MemStatsService exposes Go runtime memory monitoring to the interface.
+// MemStatsService exposes memory monitoring to the interface.
 type MemStatsService struct {
 	mu           sync.Mutex
+	sampler      *runtimeSampler
 	baseCtx      context.Context
 	baseCancel   context.CancelFunc
 	shutdownOnce sync.Once
@@ -79,6 +42,7 @@ type MemStatsService struct {
 
 func New() *MemStatsService {
 	return &MemStatsService{
+		sampler:    newRuntimeSampler(),
 		intervalMs: 2000,
 	}
 }
@@ -118,7 +82,7 @@ func (s *MemStatsService) Shutdown() error {
 
 // GetMemStats returns a one-time snapshot without affecting monitoring state.
 func (s *MemStatsService) GetMemStats() MemSnapshot {
-	return buildSnapshot()
+	return s.snapshot()
 }
 
 // GetMonitoringStatus returns current monitoring state.
@@ -176,12 +140,12 @@ func (s *MemStatsService) monitorLoop(intervalMs int64, stopCh chan struct{}) {
 	defer ticker.Stop()
 
 	// Emit immediately on start so the frontend gets data right away.
-	s.emit(buildSnapshot())
+	s.emit(s.snapshot())
 
 	for {
 		select {
 		case <-ticker.C:
-			s.emit(buildSnapshot())
+			s.emit(s.snapshot())
 		case <-s.baseCtx.Done():
 			return
 		case <-stopCh:
@@ -197,50 +161,12 @@ func (s *MemStatsService) emit(snapshot MemSnapshot) {
 	_ = s.events.Emit(MemStatsEventName, snapshot)
 }
 
-func buildSnapshot() MemSnapshot {
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-
-	pauseNs := uint64(0)
-	if ms.NumGC > 0 {
-		pauseNs = ms.PauseNs[(ms.NumGC+255)%256]
-	}
-	lastGC := int64(0)
-	if ms.LastGC > 0 {
-		lastGC = time.Unix(0, int64(ms.LastGC)).UnixMilli()
-	}
-
+// snapshot samples the process and the Go runtime without stopping the world.
+func (s *MemStatsService) snapshot() MemSnapshot {
 	return MemSnapshot{
-		Timestamp:     time.Now().UnixMilli(),
-		GoVersion:     runtime.Version(),
-		GOOS:          runtime.GOOS,
-		GOARCH:        runtime.GOARCH,
-		NumGoroutine:  runtime.NumGoroutine(),
-		NumCPU:        runtime.NumCPU(),
-		HeapAlloc:     ms.HeapAlloc,
-		HeapSys:       ms.HeapSys,
-		HeapInuse:     ms.HeapInuse,
-		HeapIdle:      ms.HeapIdle,
-		HeapReleased:  ms.HeapReleased,
-		HeapObjects:   ms.HeapObjects,
-		StackInuse:    ms.StackInuse,
-		StackSys:      ms.StackSys,
-		Sys:           ms.Sys,
-		Alloc:         ms.Alloc,
-		TotalAlloc:    ms.TotalAlloc,
-		Mallocs:       ms.Mallocs,
-		Frees:         ms.Frees,
-		NumGC:         ms.NumGC,
-		NumForcedGC:   ms.NumForcedGC,
-		GCCPUFraction: ms.GCCPUFraction,
-		PauseTotalNs:  ms.PauseTotalNs,
-		PauseNs:       pauseNs,
-		NextGC:        ms.NextGC,
-		LastGC:        lastGC,
-		GCSys:         ms.GCSys,
-		MSpanSys:      ms.MSpanSys,
-		MCacheSys:     ms.MCacheSys,
-		OtherSys:      ms.OtherSys,
+		Timestamp: time.Now().UnixMilli(),
+		Process:   readProcessMemory(),
+		Runtime:   s.sampler.read(),
 	}
 }
 

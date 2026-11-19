@@ -22,14 +22,18 @@ func TestContentWidthLayoutAndSamplingSurviveResize(t *testing.T) {
 			f.emit(1000)
 			f.emit(2000)
 			f.view.chart.SetSeriesVisible("heap", false)
+			f.expand()
 			samples := slices.Clone(f.data.Samples)
-			starts, stops := len(f.service.starts), f.service.stops
+			starts, stops, fetches := len(f.service.starts), f.service.stops, f.service.fetches.Load()
 			for _, width := range []int{558, 770, 820, 1360, 558} {
 				f.tester.SetSize(width, 768)
 				f.settle()
 				checkControls(t, f.tester, width, running)
-				if !slices.Equal(samples, f.data.Samples) || f.data.Monitoring != running || f.data.IntervalMs != 2000 || len(f.service.starts) != starts || f.service.stops != stops || f.view.chart.SeriesVisible("heap") {
+				if !slices.Equal(samples, f.data.Samples) || f.data.Monitoring != running || f.data.IntervalMs != 2000 || len(f.service.starts) != starts || f.service.stops != stops || f.service.fetches.Load() != fetches || f.view.chart.SeriesVisible("heap") {
 					t.Fatal("layout change reset sampling or chart visibility")
+				}
+				if !f.view.detailsOpen || !f.has(locales.MemstatsHeld()) {
+					t.Fatal("layout change collapsed Go runtime details")
 				}
 			}
 		})
@@ -48,10 +52,15 @@ func TestContentLayoutLocalesThemesAndMaximumFont(t *testing.T) {
 				f.tester.SetSize(558, 2000)
 				f.tester.SetScale(1.5)
 				f.settle()
+				f.expand()
 				checkControls(t, f.tester, 558, false)
-				// Distinct labels and values of the lower metrics remain in
-				// separate columns even when the two cards stack.
-				for _, pair := range [][2]string{{locales.MemstatsGoVersion(), "go1.26"}, {locales.MemstatsOsArch(), "linux / arm64"}, {locales.MemstatsLiveObjects(), "1,034,567"}} {
+				// Labels and values of the details remain in separate columns
+				// even when the two tables stack.
+				for _, pair := range [][2]string{
+					{locales.MemstatsHeld(), formatBytes(120 * mib)},
+					{locales.MemstatsLastGc(), formatLastGC(sample(1_700_000_000_000).Runtime)},
+					{locales.MemstatsNumGoroutine(), "23"},
+				} {
 					label, a := f.tester.Find(pair[0])
 					value, b := f.tester.Find(pair[1])
 					if !a || !b || value.X < label.X+label.W-1 || value.X+value.W > 558 || label.H <= 0 || value.H <= 0 {
@@ -86,7 +95,7 @@ func checkControls(t *testing.T, tester *ui.Tester, width int, running bool) {
 		}
 		boxes = append(boxes, a.Bounds)
 	}
-	for _, label := range []string{locales.MemstatsHeapAlloc(), locales.MemstatsSys(), locales.MemstatsNumGc(), locales.MemstatsNumGoroutine()} {
+	for _, label := range []string{locales.MemstatsMemory(), locales.MemstatsHeapInuse()} {
 		b, ok := tester.Find(label)
 		if !ok || b.W <= 0 || b.X < 0 || b.X+b.W > float32(width)+1 {
 			t.Fatalf("summary %q overflows: %v", label, b)
