@@ -1,8 +1,11 @@
 package inspect
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	"github.com/josexy/flowlens/locales"
@@ -78,6 +81,47 @@ func TestCookieRawHeaderCopies(t *testing.T) {
 	f.tester.ClickAt(head.X+head.W-12, raw.Y+raw.H/2)
 	f.settle()
 	if got := f.tester.Clipboard(); got != "Set-Cookie: b=2; HttpOnly" {
+		t.Fatalf("copied %q", got)
+	}
+}
+
+// MyGo keeps the popover no taller than the room on its side of the button. In
+// a short window its body must shrink and scroll so that the raw header and
+// its copy button can still be reached.
+func TestCookieAttributesFitShortWindow(t *testing.T) {
+	attributes := make([]string, 14)
+	for i := range attributes {
+		attributes[i] = fmt.Sprintf("X%02d=value%02d", i, i)
+	}
+	header := "sid=abc; " + strings.Join(attributes, "; ")
+	f := cookieFixture(t, header)
+	const width, height = 1400, 420
+	f.tester.SetSize(width, height)
+	f.settle()
+	f.openAttributes("sid", "14")
+	label := locales.DetailCookieViewAttributes("14", "sid")
+	trigger, _ := f.tester.Find(label)
+	popup, ok := f.tester.AccessByRole(ui.RolePopup, label)
+	if !ok {
+		t.Fatalf("no popover %q", label)
+	}
+	panel := popup.Bounds
+	if panel.Y < 0 || panel.Y+panel.H > height || panel.Y+panel.H > trigger.Y {
+		t.Fatalf("panel %+v leaves the %dx%d window or covers its button %+v", panel, width, height, trigger)
+	}
+	head, _ := f.tester.Find(locales.DetailCookieAttributeCount("14"))
+	for range 6 {
+		f.tester.Scroll(head.X, head.Y+head.H+40, 0, 2000)
+		f.settle()
+	}
+	raw, ok := f.tester.Find("Set-Cookie: " + header)
+	if !ok || raw.H <= 0 || raw.Y < panel.Y || raw.Y+raw.H > panel.Y+panel.H {
+		t.Fatalf("raw header %+v is not inside panel %+v after scrolling to the end", raw, panel)
+	}
+	title, _ := f.tester.Find(locales.DetailCookieRawHeader())
+	f.tester.ClickAt(head.X+head.W-12, title.Y+title.H/2)
+	f.settle()
+	if got := f.tester.Clipboard(); got != "Set-Cookie: "+header {
 		t.Fatalf("copied %q", got)
 	}
 }
