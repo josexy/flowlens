@@ -12,6 +12,14 @@ var (
 	zstdEncoderPool sync.Pool
 )
 
+// zstdEncoderWindow bounds what a pooled encoder keeps once it has written a
+// body over one 128 KiB block: a history buffer twice the window. With the
+// library's 8 MiB default, each such encoder held about 19 MiB while pooled;
+// with 1 MiB it holds about 5 MiB, at the same ratio for ordinary bodies.
+// Only repeats more than 1 MiB apart compress less. Decoders read frames of
+// either window.
+const zstdEncoderWindow = 1 << 20
+
 func AcquireZstdDecoder(r io.Reader) (*zstd.Decoder, error) {
 	if value := zstdDecoderPool.Get(); value != nil {
 		dec := value.(*zstd.Decoder)
@@ -39,7 +47,7 @@ func AcquireZstdEncoder(w io.Writer) (*zstd.Encoder, error) {
 		enc.Reset(w)
 		return enc, nil
 	}
-	return zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.SpeedDefault))
+	return zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithWindowSize(zstdEncoderWindow))
 }
 
 func ReleaseZstdEncoder(enc *zstd.Encoder) {

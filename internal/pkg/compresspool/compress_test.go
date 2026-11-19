@@ -7,7 +7,9 @@ import (
 	stdgzip "compress/gzip"
 	stdzlib "compress/zlib"
 	"encoding/hex"
+	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -253,6 +255,86 @@ func TestAcquireZstdEncoderCanBeReused(t *testing.T) {
 	}
 	if !bytes.Equal(gotSecond, second) {
 		t.Fatalf("second decoded payload mismatch: got %q, want %q", string(gotSecond), string(second))
+	}
+}
+
+// zstdTestBody returns compressible JSON lines of at least size bytes.
+func zstdTestBody(size int) []byte {
+	var b bytes.Buffer
+	for i := 0; b.Len() < size; i++ {
+		fmt.Fprintf(&b, "{\"id\":%d,\"name\":\"user-%d\",\"score\":%d},\n", i, i*7919%100003, i*31%9973)
+	}
+	return b.Bytes()
+}
+
+func TestPooledZstdEncoderUsesBoundedWindow(t *testing.T) {
+	t.Parallel()
+
+	body := zstdTestBody(3 << 20)
+	// The second encoder can come back from the pool.
+	for round := range 2 {
+		encoded := mustEncodeForTest(t, encodeZstdWithPool, body)
+		var header zstd.Header
+		if err := header.Decode(encoded); err != nil {
+			t.Fatalf("round %d: decode frame header: %v", round, err)
+		}
+		if header.WindowSize == 0 || header.WindowSize > zstdEncoderWindow {
+			t.Fatalf("round %d: frame window %d, want at most %d", round, header.WindowSize, zstdEncoderWindow)
+		}
+		if got := readDecodedPayload(t, NewPooledZstdReadCloser, encoded); !bytes.Equal(got, body) {
+			t.Fatalf("round %d: decoded %d bytes, want the %d-byte body", round, len(got), len(body))
+		}
+	}
+
+	// Earlier builds wrote frames with the library's 8 MiB default window.
+	var legacy bytes.Buffer
+	enc, err := zstd.NewWriter(&legacy, zstd.WithEncoderLevel(zstd.SpeedDefault))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var header zstd.Header
+	if err := header.Decode(legacy.Bytes()); err != nil || header.WindowSize != 8<<20 {
+		t.Fatalf("legacy frame window %d (%v), want 8 MiB", header.WindowSize, err)
+	}
+	if got := readDecodedPayload(t, NewPooledZstdReadCloser, legacy.Bytes()); !bytes.Equal(got, body) {
+		t.Fatalf("legacy frame decoded %d bytes, want the %d-byte body", len(got), len(body))
+	}
+}
+
+// An idle pooled encoder stays in memory until the second collection after
+// its release, so what it keeps after a large body matters.
+func TestZstdEncoderRetainsBoundedMemoryAfterLargeBody(t *testing.T) {
+	body := zstdTestBody(2 << 20)
+	// Two collections empty the pool, so the encoder below is new.
+	runtime.GC()
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	enc, err := AcquireZstdEncoder(io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for offset := 0; offset < len(body); offset += 32 << 10 {
+		if _, err := enc.Write(body[offset:min(offset+32<<10, len(body))]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(enc)
+	ReleaseZstdEncoder(enc)
+	// About 5 MiB with the 1 MiB window; the 8 MiB default kept about 19 MiB.
+	if retained := int64(after.HeapAlloc) - int64(before.HeapAlloc); retained > 8<<20 {
+		t.Fatalf("encoder retained %.1f MiB after a %d-byte body, want at most 8 MiB", float64(retained)/(1<<20), len(body))
 	}
 }
 
