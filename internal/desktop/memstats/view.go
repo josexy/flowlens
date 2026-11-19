@@ -59,17 +59,10 @@ func formatLastGC(memory memstatsservice.RuntimeMemory) string {
 	return locales.MemstatsLastGcValue(formatPause(memory.LastPauseNs), logic.FormatTimeLocal(time.UnixMilli(memory.LastGC)))
 }
 
-// processCaption names the platform tool whose figure Memory matches.
+// processCaption says when Memory cannot be read; a readable value needs none.
 func processCaption(memory memstatsservice.ProcessMemory) string {
 	if memory.Available() {
-		switch memory.Measure {
-		case memstatsservice.MeasurePrivateWorkingSet:
-			return locales.MemstatsMemoryWindows()
-		case memstatsservice.MeasurePhysFootprint:
-			return locales.MemstatsMemoryMacos()
-		case memstatsservice.MeasureResident:
-			return locales.MemstatsMemoryLinux()
-		}
+		return ""
 	}
 	return locales.MemstatsMemoryUnavailable()
 }
@@ -124,7 +117,8 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	})
 }
 
-// summaryCard is a headline figure with a caption that says what it measures.
+// summaryCard is a headline figure. Memory has a caption only when it cannot
+// be read.
 type summaryCard struct {
 	key, label, value, caption string
 	color                      ui.Color
@@ -132,7 +126,7 @@ type summaryCard struct {
 
 func (v *View) summary(c *ui.Context, theme nui.Theme, sample *memstatsservice.MemSnapshot) {
 	memory := summaryCard{key: "process", label: locales.MemstatsMemory(), value: unknown, color: theme.Primary}
-	heap := summaryCard{key: "heap", label: locales.MemstatsHeapInuse(), value: unknown, caption: locales.MemstatsHeapInuseCaption(), color: theme.Text}
+	heap := summaryCard{key: "heap", label: locales.MemstatsHeapInuse(), value: unknown, color: theme.Text}
 	if sample != nil {
 		// An unreadable process value shows the unknown mark, never a Go value.
 		memory.value, memory.caption = formatBytes(sample.Process.Bytes), processCaption(sample.Process)
@@ -257,7 +251,6 @@ func (v *View) details(c *ui.Context, theme nui.Theme, s *memstatsservice.MemSna
 	panelCard(c, theme, "details", 0, func() {
 		nui.Collapsible(c.Key("collapsible"), theme, &v.detailsOpen, nui.CollapsibleOptions{Label: locales.MemstatsDetails()}, func(theme nui.Theme) {
 			ui.Column(c.Key("body")).FillWidth().Gap(12).Children(func() {
-				ui.Text(c, locales.MemstatsDetailsNote()).FillWidth().FontSize(apptheme.TextSize(c, 12)).LineHeight(1.4).TextColor(theme.Muted)
 				ui.Row(c.Key("tables")).FillWidth().Wrap().Gap(12).AlignItems(ui.Start).Children(func() {
 					ui.Column(c.Key("memory")).Grow(1).Basis(300).MinWidth(0).Gap(8).Children(func() {
 						heading(c, theme, locales.MemstatsSectionMemory())

@@ -205,7 +205,7 @@ func TestNoDataAfterClearUntilRefreshOrStart(t *testing.T) {
 	f := openFixture(t, memstatsservice.MonitoringStatus{}, sample(1000))
 	f.click(locales.MemstatsClear())
 	f.want(locales.MemstatsNoData(), locales.MemstatsStart(), locales.MemstatsTitle())
-	if got := f.summaryTexts(); !slices.Equal(got, []string{locales.MemstatsMemory(), unknown, locales.MemstatsHeapInuse(), unknown, locales.MemstatsHeapInuseCaption()}) {
+	if got := f.summaryTexts(); !slices.Equal(got, []string{locales.MemstatsMemory(), unknown, locales.MemstatsHeapInuse(), unknown}) {
 		t.Fatalf("summary without samples = %q", got)
 	}
 	f.tester.SetSize(558, 900)
@@ -224,16 +224,16 @@ func TestNoDataAfterClearUntilRefreshOrStart(t *testing.T) {
 	}
 }
 
-func TestMemoryCaptionFollowsTheMeasure(t *testing.T) {
+func TestOnlyUnavailableMemoryHasACaption(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		process memstatsservice.ProcessMemory
 		value   string
 		caption string
 	}{
-		{"windows", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasurePrivateWorkingSet}, formatBytes(300 * mib), locales.MemstatsMemoryWindows()},
-		{"macos", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasurePhysFootprint}, formatBytes(300 * mib), locales.MemstatsMemoryMacos()},
-		{"linux", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasureResident}, formatBytes(300 * mib), locales.MemstatsMemoryLinux()},
+		{"windows", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasurePrivateWorkingSet}, formatBytes(300 * mib), ""},
+		{"macos", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasurePhysFootprint}, formatBytes(300 * mib), ""},
+		{"linux", memstatsservice.ProcessMemory{Bytes: 300 * mib, Measure: memstatsservice.MeasureResident}, formatBytes(300 * mib), ""},
 		{"unavailable", memstatsservice.ProcessMemory{Bytes: -1, Measure: memstatsservice.MeasureUnavailable}, unknown, locales.MemstatsMemoryUnavailable()},
 		{"unread", memstatsservice.ProcessMemory{Bytes: -1, Measure: memstatsservice.MeasureResident}, unknown, locales.MemstatsMemoryUnavailable()},
 	} {
@@ -244,7 +244,11 @@ func TestMemoryCaptionFollowsTheMeasure(t *testing.T) {
 			f.data.Add(value)
 			f.settle()
 			// Exactly two figures; an unavailable Memory never shows a Go value.
-			want := []string{locales.MemstatsMemory(), test.value, test.caption, locales.MemstatsHeapInuse(), formatBytes(40 * mib), locales.MemstatsHeapInuseCaption()}
+			want := []string{locales.MemstatsMemory(), test.value}
+			if test.caption != "" {
+				want = append(want, test.caption)
+			}
+			want = append(want, locales.MemstatsHeapInuse(), formatBytes(40*mib))
 			if got := f.summaryTexts(); !slices.Equal(got, want) {
 				t.Fatalf("summary = %q, want %q", got, want)
 			}
@@ -372,7 +376,7 @@ func TestSampleFillsTheMetrics(t *testing.T) {
 	if f.has(locales.MemstatsNoData()) {
 		t.Fatal("chart replaces the empty state")
 	}
-	f.want(formatBytes(300*mib), formatBytes(40*mib), locales.MemstatsMemoryLinux(), locales.MemstatsChartTitle())
+	f.want(formatBytes(300*mib), formatBytes(40*mib), locales.MemstatsChartTitle())
 	f.expand()
 	for _, text := range []string{formatBytes(120 * mib), formatBytes(50 * mib), formatBytes(2 * mib), formatBytes(28 * mib), formatBytes(9 * mib), formatBytes(80 * mib), "37", "23", formatLastGC(sample(1_700_000_000_000).Runtime)} {
 		if !f.shows(text) {
@@ -384,14 +388,13 @@ func TestSampleFillsTheMetrics(t *testing.T) {
 func TestDetailsAreCollapsedByDefault(t *testing.T) {
 	f := newFixture(t, memstatsservice.MonitoringStatus{})
 	f.emit(1_700_000_000_000)
-	if f.view.detailsOpen || f.has(locales.MemstatsHeld()) || f.has(locales.MemstatsDetailsNote()) {
+	if f.view.detailsOpen || f.has(locales.MemstatsHeld()) {
 		t.Fatalf("details are expanded by default: %v", f.tester.Texts())
 	}
 	f.want(locales.MemstatsDetails(), formatBytes(300*mib), locales.MemstatsChartTitle())
 
 	f.expand()
 	want := []string{
-		locales.MemstatsDetailsNote(),
 		locales.MemstatsSectionMemory(),
 		locales.MemstatsHeld(), formatBytes(120 * mib),
 		locales.MemstatsHeapInuse(), formatBytes(40 * mib),

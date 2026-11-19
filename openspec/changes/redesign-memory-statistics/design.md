@@ -46,7 +46,7 @@ The details group starts collapsed. The summary and chart answer "how much memor
 
 ### 2. Platform process measure
 
-`ProcessMemory{Bytes int64, Measure ProcessMeasure}` holds `Bytes = -1` when the value is unavailable. That follows the project's convention for unknown values. `Measure` names what was read, and the view picks its caption from `Measure` rather than from `runtime.GOOS`.
+`ProcessMemory{Bytes int64, Measure ProcessMeasure}` holds `Bytes = -1` when the value is unavailable. That follows the project's convention for unknown values. `Measure` names what was read; the view shows a caption only when the value is unavailable.
 
 | Platform | Measure | Source | Matches |
 | --- | --- | --- | --- |
@@ -80,7 +80,7 @@ A metric whose `Kind` is `KindBad` (unsupported) reads as 0 and is logged once. 
 
 ### 4. No derived "native/other" figure
 
-Memory (resident or private-resident) and Held by Go runtime (mapped minus released) measure different things. Part of Go's held memory may not be resident, and Windows' private working set excludes paged-out pages, so `Memory − Held` can be negative or wrong. The details show a one-line note instead: Memory also counts the interface renderer, fonts, and system libraries, which Go does not track.
+Memory (resident or private-resident) and Held by Go runtime (mapped minus released) measure different things. Part of Go's held memory may not be resident, and Windows' private working set excludes paged-out pages, so `Memory − Held` can be negative or wrong. The user guide explains instead that Memory also counts the interface renderer, fonts, and system libraries, which Go does not track.
 
 ### 5. Snapshot model and store
 
@@ -99,9 +99,9 @@ The old flat fields are removed. The event name, `GetMemStats`, `GetMonitoringSt
 ### 6. View structure
 
 - **Toolbar:** unchanged controls. The "Go Backend Runtime" badge is removed.
-- **Summary:** two cards (`Grow(1).Basis(240)`). Each shows a label, a value, and a muted wrapping caption. Memory's value uses `theme.Primary`, and Heap in use's uses `theme.Text`.
+- **Summary:** two cards (`Grow(1).Basis(240)`). Each shows a label and a value; what they match is explained in the user guide, not on the page. Memory adds a muted caption only when its value is unavailable. Memory's value uses `theme.Primary`, and Heap in use's uses `theme.Text`.
 - **Chart:** the series are `process` (Memory, `nui.Primary`) and `heap` (Heap in use, `nui.Neutral`), both with localized labels. `nui.Info` is blue, the same as the default primary color, while Neutral is never a primary choice. Keeping the `heap` ID keeps existing visibility state and tests working. An unknown `Process.Bytes` becomes `math.NaN()` (a gap). If no retained sample has a process value, the `process` series is still listed, so the legend does not jump between samples.
-- **Details:** `nui.Collapsible` bound to `v.detailsOpen` (default `false`) with the title "Go runtime details". The content starts with the note from Decision 4, followed by two `metrics` tables in a wrapping row:
+- **Details:** `nui.Collapsible` bound to `v.detailsOpen` (default `false`) with the title "Go runtime details". The content is two `metrics` tables in a wrapping row, with no note:
   - **Go memory:** Held by Go runtime (the total row, emphasized), followed by Heap in use, Kept for reuse, Stacks, and Runtime overhead as indented part rows, then Returned to the OS.
   - **Garbage collection:** Next GC target, GC cycles, Last GC (`<local time> · <pause>`, or the no-GC-yet copy), and Goroutines.
 - **Formatting:** bytes use `logic.FormatFileSizeWith` with precision 1 everywhere on the page. Times use `logic.FormatTimeLocal`. Pauses reuse a `logic` duration helper, adding one for nanosecond input only if none fits. The local `formatPercent`, `groupDigits`, and `liveObjects` helpers are deleted.
@@ -111,14 +111,9 @@ The old flat fields are removed. The event name, `GetMemStats`, `GetMonitoringSt
 | Key purpose | en | zh-Hans |
 | --- | --- | --- |
 | Memory | Memory | 内存 |
-| Caption, Windows | FlowLens process, as in Task Manager's Memory column | FlowLens 进程，与任务管理器“内存”列一致 |
-| Caption, macOS | As in Activity Monitor's Memory column | 与活动监视器“内存”列一致 |
-| Caption, Linux | Resident memory, as RES in top | 常驻内存，与 top 的 RES 列一致 |
 | Caption, unavailable | Not available on this system | 此系统无法读取 |
 | Heap in use | Heap in use | 已用堆内存 |
-| Caption, heap | Go objects such as captured traffic and caches | 抓包数据、缓存等 Go 对象 |
 | Details title | Go runtime details | Go 运行时详情 |
-| Details note | Memory also counts the interface renderer, fonts, and system libraries, which Go does not track. | “内存”还包括界面渲染、字体和系统库，这些不由 Go 统计。 |
 | Held by Go runtime | Held by Go runtime | Go 运行时占用 |
 | Kept for reuse | Kept for reuse | 保留待复用 |
 | Stacks | Stacks | 栈 |
@@ -133,8 +128,8 @@ Existing keys are reused where the wording still fits (title, toolbar, no data, 
 ## Risks / Trade-offs
 
 - [`PROCESS_MEMORY_COUNTERS_EX2` is missing on older Windows 10 builds] → The `QueryWorkingSet` fallback measures the same quantity. Its cost grows with the working set (about 8 bytes per resident page, or about 1 MiB of buffer at 512 MiB), which is acceptable at a 500 ms minimum interval. The fallback is used only when EX2 fails.
-- [Task Manager groups child processes under the app row, so the group total includes Python Workers] → The Windows caption says "FlowLens process", and the user guide says to compare with the FlowLens process row, not the group total.
-- [Heap in use rises and falls with GC cycles (a sawtooth)] → This is expected. Its caption describes contents rather than claiming it is "live data", and the chart keeps 600 samples, so the trend is visible.
+- [Task Manager groups child processes under the app row, so the group total includes Python Workers] → The user guide says to compare with the FlowLens process row, not the group total.
+- [Heap in use rises and falls with GC cycles (a sawtooth)] → This is expected. The user guide describes its contents rather than calling it "live data", and the chart keeps 600 samples, so the trend is visible.
 - [Memory does not drop right after a capture is cleared] → The details show Kept for reuse and Returned to the OS, and the user guide explains that the Go runtime returns freed memory gradually.
 - [A future Go release renames or removes a metric] → `KindBad` reads as 0 and is logged once. Overhead is a remainder, so the breakdown still adds up, and a test fails when a name stops being supported.
 - [The first-view sample changes the empty state that existing render and layout tests expect] → Fixtures provide `GetMemStats` and the tests are updated. The spec's no-data scenario still holds after Clear or when the first sample fails.

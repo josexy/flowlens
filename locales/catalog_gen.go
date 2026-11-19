@@ -4018,16 +4018,6 @@ func (msgs Messages) MemstatsDetails() string {
 	return Catalog.Format(msgs.locale, "memstatsDetails", nil)
 }
 
-// MemstatsDetailsNote says "Memory also counts the interface renderer, fonts, and system libraries, which Go does not track."
-// in the language the app shows.
-func MemstatsDetailsNote() string { return In(i18n.Locale()).MemstatsDetailsNote() }
-
-// MemstatsDetailsNote says "Memory also counts the interface renderer, fonts, and system libraries, which Go does not track."
-// in the language of msgs.
-func (msgs Messages) MemstatsDetailsNote() string {
-	return Catalog.Format(msgs.locale, "memstatsDetailsNote", nil)
-}
-
 // MemstatsGcCount says "GC cycles"
 // in the language the app shows.
 func MemstatsGcCount() string { return In(i18n.Locale()).MemstatsGcCount() }
@@ -4046,16 +4036,6 @@ func MemstatsHeapInuse() string { return In(i18n.Locale()).MemstatsHeapInuse() }
 // in the language of msgs.
 func (msgs Messages) MemstatsHeapInuse() string {
 	return Catalog.Format(msgs.locale, "memstatsHeapInuse", nil)
-}
-
-// MemstatsHeapInuseCaption says "Go objects such as captured traffic and caches"
-// in the language the app shows.
-func MemstatsHeapInuseCaption() string { return In(i18n.Locale()).MemstatsHeapInuseCaption() }
-
-// MemstatsHeapInuseCaption says "Go objects such as captured traffic and caches"
-// in the language of msgs.
-func (msgs Messages) MemstatsHeapInuseCaption() string {
-	return Catalog.Format(msgs.locale, "memstatsHeapInuseCaption", nil)
 }
 
 // MemstatsHeapReleased says "Returned to the OS"
@@ -4130,26 +4110,6 @@ func (msgs Messages) MemstatsMemory() string {
 	return Catalog.Format(msgs.locale, "memstatsMemory", nil)
 }
 
-// MemstatsMemoryLinux says "Resident memory, as RES in top"
-// in the language the app shows.
-func MemstatsMemoryLinux() string { return In(i18n.Locale()).MemstatsMemoryLinux() }
-
-// MemstatsMemoryLinux says "Resident memory, as RES in top"
-// in the language of msgs.
-func (msgs Messages) MemstatsMemoryLinux() string {
-	return Catalog.Format(msgs.locale, "memstatsMemoryLinux", nil)
-}
-
-// MemstatsMemoryMacos says "As in Activity Monitor's Memory column"
-// in the language the app shows.
-func MemstatsMemoryMacos() string { return In(i18n.Locale()).MemstatsMemoryMacos() }
-
-// MemstatsMemoryMacos says "As in Activity Monitor's Memory column"
-// in the language of msgs.
-func (msgs Messages) MemstatsMemoryMacos() string {
-	return Catalog.Format(msgs.locale, "memstatsMemoryMacos", nil)
-}
-
 // MemstatsMemoryUnavailable says "Not available on this system"
 // in the language the app shows.
 func MemstatsMemoryUnavailable() string { return In(i18n.Locale()).MemstatsMemoryUnavailable() }
@@ -4158,16 +4118,6 @@ func MemstatsMemoryUnavailable() string { return In(i18n.Locale()).MemstatsMemor
 // in the language of msgs.
 func (msgs Messages) MemstatsMemoryUnavailable() string {
 	return Catalog.Format(msgs.locale, "memstatsMemoryUnavailable", nil)
-}
-
-// MemstatsMemoryWindows says "FlowLens process, as in Task Manager's Memory column"
-// in the language the app shows.
-func MemstatsMemoryWindows() string { return In(i18n.Locale()).MemstatsMemoryWindows() }
-
-// MemstatsMemoryWindows says "FlowLens process, as in Task Manager's Memory column"
-// in the language of msgs.
-func (msgs Messages) MemstatsMemoryWindows() string {
-	return Catalog.Format(msgs.locale, "memstatsMemoryWindows", nil)
 }
 
 // MemstatsNextGc says "Next GC target"

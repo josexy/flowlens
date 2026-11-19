@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Process memory
-The first summary figure, Memory, SHALL show the FlowLens process's own memory, measured the way the platform's standard process tool measures it: private working set on Windows, physical footprint on macOS, and resident memory on Linux. A caption SHALL name the matching tool and column. Memory SHALL NOT include other processes, including Python Workers.
+The first summary figure, Memory, SHALL show the FlowLens process's own memory, measured the way the platform's standard process tool measures it: private working set on Windows, physical footprint on macOS, and resident memory on Linux. A readable value SHALL show no caption; the user guide names the matching tool and column. Memory SHALL NOT include other processes, including Python Workers.
 
 #### Scenario: Comparing with the OS tool
 - **WHEN** the user compares Memory with FlowLens's own process in Task Manager's Memory column (Windows), Activity Monitor's Memory column (macOS), or the `RES` column of `top`/`htop` (Linux)
@@ -27,6 +27,10 @@ The second summary figure SHALL show heap in use: the memory held by Go objects,
 #### Scenario: Before the first sample
 - **WHEN** no sample exists
 - **THEN** both figures show the unknown mark
+
+#### Scenario: No explanatory text
+- **WHEN** a sample is shown or Go runtime details are expanded
+- **THEN** Heap in use, a readable Memory value, and the details show no caption or note
 
 ### Requirement: Go runtime details
 The section SHALL group Go runtime values in a collapsible "Go runtime details" group that starts collapsed. The group SHALL show exactly these values: held by Go runtime, heap in use, kept for reuse, stacks, runtime overhead, returned to the OS, next GC target, GC cycles, last GC with its pause, and goroutines.
