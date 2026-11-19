@@ -37,6 +37,10 @@ func (r *startupRecorder) steps() startupSteps {
 			r.calls = append(r.calls, "lock")
 			return r.locked
 		},
+		startProfiling: func() func() {
+			r.calls = append(r.calls, "profiling")
+			return func() { r.calls = append(r.calls, "profiling stopped") }
+		},
 		openDatabase: func() (*sql.DB, error) {
 			r.calls = append(r.calls, "database")
 			if r.dbErr != nil {
@@ -62,7 +66,7 @@ func (r *startupRecorder) steps() startupSteps {
 func TestStartupOrder(t *testing.T) {
 	recorder := &startupRecorder{locked: true}
 	recorder.steps().run()
-	if want := []string{"log", "lock", "database", "services", "serve"}; !slices.Equal(recorder.calls, want) {
+	if want := []string{"log", "lock", "profiling", "database", "services", "serve", "profiling stopped"}; !slices.Equal(recorder.calls, want) {
 		t.Fatalf("calls %v, want %v", recorder.calls, want)
 	}
 	if recorder.first == nil || recorder.failure != nil {
@@ -73,7 +77,7 @@ func TestStartupOrder(t *testing.T) {
 func TestSecondInstanceNeverOpensTheDatabase(t *testing.T) {
 	recorder := &startupRecorder{locked: false}
 	recorder.steps().run()
-	if slices.Contains(recorder.calls, "database") || recorder.served {
+	if slices.Contains(recorder.calls, "database") || slices.Contains(recorder.calls, "profiling") || recorder.served {
 		t.Fatalf("calls %v", recorder.calls)
 	}
 }
