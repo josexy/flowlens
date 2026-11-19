@@ -12,10 +12,10 @@ require (
 	github.com/gen2brain/gav1d v0.2.7
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
-	github.com/josexy/mitmproxy-go/v2 v2.0.2-0.20261024062624-9a3b2cf7565d
+	github.com/josexy/mitmproxy-go/v2 v2.0.3
 	github.com/josexy/nuxt-ui-go v0.1.2-0.20261119040559-42aa9b196036
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
-	github.com/josexy/xhttp v0.0.0-20261024062155-5f478641bbf0
+	github.com/josexy/xhttp v0.0.0-20261112014454-6087dd9bc960
 	github.com/klauspost/compress v1.19.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
