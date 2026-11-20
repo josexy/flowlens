@@ -3,7 +3,6 @@ package appservice
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -48,7 +47,7 @@ func TestUpdateControllerCheckFindsManualRelease(t *testing.T) {
 	if snapshot.Release.ReleaseURL != "https://github.com/josexy/flowlens/releases/tag/v1.1.0" {
 		t.Fatalf("ReleaseURL = %q", snapshot.Release.ReleaseURL)
 	}
-	if err := controller.Download(); !errors.Is(err, errUpdateManualOnly) {
+	if err := controller.Download(false); !errors.Is(err, errUpdateManualOnly) {
 		t.Fatalf("manual Download error = %v, want %v", err, errUpdateManualOnly)
 	}
 }
@@ -78,7 +77,7 @@ func TestUpdateControllerCancelCheckReturnsToIdle(t *testing.T) {
 	}
 }
 
-func TestUpdateControllerDownloadTracksFrameworkPhases(t *testing.T) {
+func TestUpdateControllerInstallTracksBytes(t *testing.T) {
 	downloadStarted := make(chan struct{})
 	downloadDone := make(chan struct{})
 	engine := &fakeUpdateEngine{
@@ -96,10 +95,13 @@ func TestUpdateControllerDownloadTracksFrameworkPhases(t *testing.T) {
 		},
 	}
 	var eventsMu sync.Mutex
-	var events []string
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, func(name string, _ ...any) bool {
+	var events []UpdateSnapshot
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, func(name string, data ...any) bool {
+		if name != UpdateStateChangedEventName {
+			return false
+		}
 		eventsMu.Lock()
-		events = append(events, name)
+		events = append(events, data[0].(UpdateSnapshot))
 		eventsMu.Unlock()
 		return true
 	})
@@ -108,7 +110,7 @@ func TestUpdateControllerDownloadTracksFrameworkPhases(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 	waitForUpdatePhase(t, controller, UpdatePhaseAvailable)
-	if err := controller.Download(); err != nil {
+	if err := controller.Download(false); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	<-downloadStarted
@@ -116,19 +118,30 @@ func TestUpdateControllerDownloadTracksFrameworkPhases(t *testing.T) {
 	if progress := controller.Snapshot().Progress; progress == nil || progress.Written != 25 {
 		t.Fatalf("progress = %#v", progress)
 	}
-	controller.FrameworkPhase(UpdatePhaseVerifying)
-	if snapshot := controller.Snapshot(); snapshot.Phase != UpdatePhaseVerifying || snapshot.CanCancel {
-		t.Fatalf("verifying snapshot = %#v", snapshot)
+	controller.FrameworkProgress(Progress{Written: 100, Total: 100})
+	if snapshot := controller.Snapshot(); snapshot.Phase != UpdatePhaseInstalling || snapshot.CanCancel {
+		t.Fatalf("finishing snapshot = %#v", snapshot)
 	}
-	controller.FrameworkPhase(UpdatePhasePreparing)
+	if err := controller.Cancel(); !errors.Is(err, errUpdateCannotBeCanceled) {
+		t.Fatalf("cancel during finishing: %v", err)
+	}
+	controller.FrameworkProgress(Progress{Written: 5, Total: 200})
+	if !controller.Snapshot().CanCancel {
+		t.Fatal("full download fallback must allow cancellation")
+	}
 	close(downloadDone)
 	waitForUpdatePhase(t, controller, UpdatePhaseReady)
 
 	eventsMu.Lock()
 	defer eventsMu.Unlock()
-	foundProgress := slices.Contains(events, UpdateProgressEventName)
+	foundProgress := false
+	for _, event := range events {
+		if event.Progress != nil && event.Progress.Written == 25 && event.Phase == UpdatePhaseInstalling && event.CanCancel {
+			foundProgress = true
+		}
+	}
 	if !foundProgress {
-		t.Fatalf("events did not include %q: %v", UpdateProgressEventName, events)
+		t.Fatal("no complete snapshot with download progress", events)
 	}
 }
 
@@ -153,7 +166,7 @@ func TestUpdateControllerCancelDownloadKeepsRelease(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 	waitForUpdatePhase(t, controller, UpdatePhaseAvailable)
-	if err := controller.Download(); err != nil {
+	if err := controller.Download(false); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	<-downloadStarted
@@ -202,4 +215,87 @@ func waitForUpdatePhase(t *testing.T, controller *updateController, phase Update
 	}
 	t.Fatalf("timed out waiting for update phase %q; last snapshot: %#v", phase, controller.Snapshot())
 	return UpdateSnapshot{}
+}
+
+func TestUpdateControllerAutomaticRestartOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		auto, cancel, shutdown bool
+		err                    error
+		phase                  UpdatePhase
+		restarts               int
+	}{
+		{"automatic", true, false, false, nil, UpdatePhaseReady, 1},
+		{"later", false, false, false, nil, UpdatePhaseReady, 0},
+		{"bad signature", true, false, false, errors.New("invalid signature"), UpdatePhaseError, 0},
+		{"canceled", true, true, false, context.Canceled, UpdatePhaseAvailable, 0},
+		{"install wins cancel race", true, true, false, nil, UpdatePhaseReady, 0},
+		{"shutdown", true, false, true, context.Canceled, UpdatePhaseAvailable, 0},
+		{"install wins shutdown race", true, false, true, nil, UpdatePhaseReady, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			started, release := make(chan struct{}), make(chan struct{})
+			engine := &fakeUpdateEngine{
+				check: func(context.Context) (*Release, error) { return &Release{Version: "2.0.0"}, nil },
+				download: func(ctx context.Context) error {
+					close(started)
+					if tc.cancel || tc.shutdown {
+						<-ctx.Done()
+					} else {
+						<-release
+					}
+					return tc.err
+				},
+			}
+			var controller *updateController
+			restarts := 0
+			controller = newUpdateController(engine, "1.0.0", UpdateApplyModeSelf, func(name string, _ ...any) bool {
+				if name == UpdateUserRestartEventName {
+					// The event must be emitted without the state lock and only
+					// once the service can honor the guarded restart request.
+					if controller.Snapshot().Phase != UpdatePhaseReady {
+						t.Error("restart before ready")
+					}
+					restarts++
+				}
+				return true
+			})
+			if err := controller.Check(); err != nil {
+				t.Fatal(err)
+			}
+			waitForUpdatePhase(t, controller, UpdatePhaseAvailable)
+			if err := controller.Download(tc.auto); err != nil {
+				t.Fatal(err)
+			}
+			<-started
+			controller.mu.Lock()
+			done := controller.operation.done
+			controller.mu.Unlock()
+			switch {
+			case tc.cancel:
+				if err := controller.Cancel(); err != nil {
+					t.Fatal(err)
+				}
+			case tc.shutdown:
+				controller.Shutdown()
+			default:
+				close(release)
+			}
+			<-done
+			snapshot := controller.Snapshot()
+			if snapshot.Phase != tc.phase || restarts != tc.restarts || snapshot.RestartAfterInstall != tc.auto {
+				t.Fatalf("snapshot %+v, restart requests %d", snapshot, restarts)
+			}
+			// Merely reading state (including reopening a window) cannot
+			// repeat an automatic request that the user may have declined.
+			controller.Snapshot()
+			if restarts != tc.restarts {
+				t.Fatal("automatic restart repeated")
+			}
+			controller.Shutdown()
+			if err := controller.Restart(); err == nil {
+				t.Fatal("restart accepted during shutdown")
+			}
+		})
+	}
 }

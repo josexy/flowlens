@@ -14,9 +14,8 @@ import (
 
 // updateWindowController opens the single Software Update window.
 type updateWindowController struct {
-	data     *store.Store
-	canClose func() bool
-	blocked  func() bool
+	data    *store.Store
+	blocked func() bool
 
 	window *mygo.Window
 	view   *update.View
@@ -49,11 +48,6 @@ func (s *updateWindowController) open() {
 	window := mygo.NewWindow(options)
 	s.window = window
 	s.data.Runtime.Dispatcher.Register(updaterWindowName, window)
-	window.OnClose(func(event *mygo.CloseEvent) {
-		if !s.canClose() && !s.view.CloseRequested() {
-			event.PreventDefault()
-		}
-	})
 	window.OnClosed(func() {
 		s.data.Runtime.Dispatcher.Unregister(updaterWindowName)
 		s.window, s.view = nil, nil

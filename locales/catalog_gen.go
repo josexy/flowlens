@@ -10058,11 +10058,11 @@ func (msgs Messages) StatusUpdateFailed(error string) string {
 	return Catalog.Format(msgs.locale, "statusUpdateFailed", map[string]any{"error": error})
 }
 
-// StatusUpdateReady says "Restart and update"
+// StatusUpdateReady says "Restart now"
 // in the language the app shows.
 func StatusUpdateReady() string { return In(i18n.Locale()).StatusUpdateReady() }
 
-// StatusUpdateReady says "Restart and update"
+// StatusUpdateReady says "Restart now"
 // in the language of msgs.
 func (msgs Messages) StatusUpdateReady() string {
 	return Catalog.Format(msgs.locale, "statusUpdateReady", nil)
@@ -11042,11 +11042,11 @@ func (msgs Messages) TrayOpenMainWindow() string {
 	return Catalog.Format(msgs.locale, "trayOpenMainWindow", nil)
 }
 
-// UpdaterActionBackground says "Continue in background"
+// UpdaterActionBackground says "Hide"
 // in the language the app shows.
 func UpdaterActionBackground() string { return In(i18n.Locale()).UpdaterActionBackground() }
 
-// UpdaterActionBackground says "Continue in background"
+// UpdaterActionBackground says "Hide"
 // in the language of msgs.
 func (msgs Messages) UpdaterActionBackground() string {
 	return Catalog.Format(msgs.locale, "updaterActionBackground", nil)
@@ -11060,16 +11060,6 @@ func UpdaterActionCancel() string { return In(i18n.Locale()).UpdaterActionCancel
 // in the language of msgs.
 func (msgs Messages) UpdaterActionCancel() string {
 	return Catalog.Format(msgs.locale, "updaterActionCancel", nil)
-}
-
-// UpdaterActionCancelAndClose says "Cancel task and close"
-// in the language the app shows.
-func UpdaterActionCancelAndClose() string { return In(i18n.Locale()).UpdaterActionCancelAndClose() }
-
-// UpdaterActionCancelAndClose says "Cancel task and close"
-// in the language of msgs.
-func (msgs Messages) UpdaterActionCancelAndClose() string {
-	return Catalog.Format(msgs.locale, "updaterActionCancelAndClose", nil)
 }
 
 // UpdaterActionCheck says "Check for updates"
@@ -11092,11 +11082,11 @@ func (msgs Messages) UpdaterActionClose() string {
 	return Catalog.Format(msgs.locale, "updaterActionClose", nil)
 }
 
-// UpdaterActionDownload says "Download and prepare"
+// UpdaterActionDownload says "Install update"
 // in the language the app shows.
 func UpdaterActionDownload() string { return In(i18n.Locale()).UpdaterActionDownload() }
 
-// UpdaterActionDownload says "Download and prepare"
+// UpdaterActionDownload says "Install update"
 // in the language of msgs.
 func (msgs Messages) UpdaterActionDownload() string {
 	return Catalog.Format(msgs.locale, "updaterActionDownload", nil)
@@ -11110,6 +11100,16 @@ func UpdaterActionFailed(error string) string { return In(i18n.Locale()).Updater
 // in the language of msgs.
 func (msgs Messages) UpdaterActionFailed(error string) string {
 	return Catalog.Format(msgs.locale, "updaterActionFailed", map[string]any{"error": error})
+}
+
+// UpdaterActionInstallRestart says "Install and restart"
+// in the language the app shows.
+func UpdaterActionInstallRestart() string { return In(i18n.Locale()).UpdaterActionInstallRestart() }
+
+// UpdaterActionInstallRestart says "Install and restart"
+// in the language of msgs.
+func (msgs Messages) UpdaterActionInstallRestart() string {
+	return Catalog.Format(msgs.locale, "updaterActionInstallRestart", nil)
 }
 
 // UpdaterActionLater says "Restart later"
@@ -11152,55 +11152,35 @@ func (msgs Messages) UpdaterActionRetry() string {
 	return Catalog.Format(msgs.locale, "updaterActionRetry", nil)
 }
 
-// UpdaterActionReturn says "Go back"
+// UpdaterAutoRestartDescription says "FlowLens will restart when finished. Unsaved changes will be checked first."
 // in the language the app shows.
-func UpdaterActionReturn() string { return In(i18n.Locale()).UpdaterActionReturn() }
+func UpdaterAutoRestartDescription() string { return In(i18n.Locale()).UpdaterAutoRestartDescription() }
 
-// UpdaterActionReturn says "Go back"
+// UpdaterAutoRestartDescription says "FlowLens will restart when finished. Unsaved changes will be checked first."
 // in the language of msgs.
-func (msgs Messages) UpdaterActionReturn() string {
-	return Catalog.Format(msgs.locale, "updaterActionReturn", nil)
+func (msgs Messages) UpdaterAutoRestartDescription() string {
+	return Catalog.Format(msgs.locale, "updaterAutoRestartDescription", nil)
 }
 
-// UpdaterActionUnderstood says "Got it"
-// in the language the app shows.
-func UpdaterActionUnderstood() string { return In(i18n.Locale()).UpdaterActionUnderstood() }
-
-// UpdaterActionUnderstood says "Got it"
-// in the language of msgs.
-func (msgs Messages) UpdaterActionUnderstood() string {
-	return Catalog.Format(msgs.locale, "updaterActionUnderstood", nil)
-}
-
-// UpdaterArtifact says "Update file"
-// in the language the app shows.
-func UpdaterArtifact() string { return In(i18n.Locale()).UpdaterArtifact() }
-
-// UpdaterArtifact says "Update file"
-// in the language of msgs.
-func (msgs Messages) UpdaterArtifact() string {
-	return Catalog.Format(msgs.locale, "updaterArtifact", nil)
-}
-
-// UpdaterAvailableManualDescription says "This installation must be updated from the release page."
+// UpdaterAvailableManualDescription says "Download the package for your platform from the release page and follow its installation instructions."
 // in the language the app shows.
 func UpdaterAvailableManualDescription() string {
 	return In(i18n.Locale()).UpdaterAvailableManualDescription()
 }
 
-// UpdaterAvailableManualDescription says "This installation must be updated from the release page."
+// UpdaterAvailableManualDescription says "Download the package for your platform from the release page and follow its installation instructions."
 // in the language of msgs.
 func (msgs Messages) UpdaterAvailableManualDescription() string {
 	return Catalog.Format(msgs.locale, "updaterAvailableManualDescription", nil)
 }
 
-// UpdaterAvailableSelfDescription says "This update can be downloaded and prepared inside the app."
+// UpdaterAvailableSelfDescription says "Install this update to use the new version of FlowLens."
 // in the language the app shows.
 func UpdaterAvailableSelfDescription() string {
 	return In(i18n.Locale()).UpdaterAvailableSelfDescription()
 }
 
-// UpdaterAvailableSelfDescription says "This update can be downloaded and prepared inside the app."
+// UpdaterAvailableSelfDescription says "Install this update to use the new version of FlowLens."
 // in the language of msgs.
 func (msgs Messages) UpdaterAvailableSelfDescription() string {
 	return Catalog.Format(msgs.locale, "updaterAvailableSelfDescription", nil)
@@ -11238,68 +11218,26 @@ func (msgs Messages) UpdaterCheckingTitle() string {
 	return Catalog.Format(msgs.locale, "updaterCheckingTitle", nil)
 }
 
-// UpdaterCloseBlockedDescription says "FlowLens is verifying or preparing the update. Wait for this stage to finish so the staged files remain valid."
+// UpdaterCurrentVersion says "Current version: {version}"
 // in the language the app shows.
-func UpdaterCloseBlockedDescription() string {
-	return In(i18n.Locale()).UpdaterCloseBlockedDescription()
+func UpdaterCurrentVersion(version string) string {
+	return In(i18n.Locale()).UpdaterCurrentVersion(version)
 }
 
-// UpdaterCloseBlockedDescription says "FlowLens is verifying or preparing the update. Wait for this stage to finish so the staged files remain valid."
+// UpdaterCurrentVersion says "Current version: {version}"
 // in the language of msgs.
-func (msgs Messages) UpdaterCloseBlockedDescription() string {
-	return Catalog.Format(msgs.locale, "updaterCloseBlockedDescription", nil)
+func (msgs Messages) UpdaterCurrentVersion(version string) string {
+	return Catalog.Format(msgs.locale, "updaterCurrentVersion", map[string]any{"version": version})
 }
 
-// UpdaterCloseBlockedTitle says "This window cannot close yet"
+// UpdaterDownloadProgress says "Download progress"
 // in the language the app shows.
-func UpdaterCloseBlockedTitle() string { return In(i18n.Locale()).UpdaterCloseBlockedTitle() }
+func UpdaterDownloadProgress() string { return In(i18n.Locale()).UpdaterDownloadProgress() }
 
-// UpdaterCloseBlockedTitle says "This window cannot close yet"
+// UpdaterDownloadProgress says "Download progress"
 // in the language of msgs.
-func (msgs Messages) UpdaterCloseBlockedTitle() string {
-	return Catalog.Format(msgs.locale, "updaterCloseBlockedTitle", nil)
-}
-
-// UpdaterCloseConfirmDescription says "Hide this window and keep the task running, or cancel the current task before closing it."
-// in the language the app shows.
-func UpdaterCloseConfirmDescription() string {
-	return In(i18n.Locale()).UpdaterCloseConfirmDescription()
-}
-
-// UpdaterCloseConfirmDescription says "Hide this window and keep the task running, or cancel the current task before closing it."
-// in the language of msgs.
-func (msgs Messages) UpdaterCloseConfirmDescription() string {
-	return Catalog.Format(msgs.locale, "updaterCloseConfirmDescription", nil)
-}
-
-// UpdaterCloseConfirmTitle says "The update task is still running"
-// in the language the app shows.
-func UpdaterCloseConfirmTitle() string { return In(i18n.Locale()).UpdaterCloseConfirmTitle() }
-
-// UpdaterCloseConfirmTitle says "The update task is still running"
-// in the language of msgs.
-func (msgs Messages) UpdaterCloseConfirmTitle() string {
-	return Catalog.Format(msgs.locale, "updaterCloseConfirmTitle", nil)
-}
-
-// UpdaterDownloadingDescription says "You can hide this window and let the download continue in the background."
-// in the language the app shows.
-func UpdaterDownloadingDescription() string { return In(i18n.Locale()).UpdaterDownloadingDescription() }
-
-// UpdaterDownloadingDescription says "You can hide this window and let the download continue in the background."
-// in the language of msgs.
-func (msgs Messages) UpdaterDownloadingDescription() string {
-	return Catalog.Format(msgs.locale, "updaterDownloadingDescription", nil)
-}
-
-// UpdaterDownloadingTitle says "Downloading the update"
-// in the language the app shows.
-func UpdaterDownloadingTitle() string { return In(i18n.Locale()).UpdaterDownloadingTitle() }
-
-// UpdaterDownloadingTitle says "Downloading the update"
-// in the language of msgs.
-func (msgs Messages) UpdaterDownloadingTitle() string {
-	return Catalog.Format(msgs.locale, "updaterDownloadingTitle", nil)
+func (msgs Messages) UpdaterDownloadProgress() string {
+	return Catalog.Format(msgs.locale, "updaterDownloadProgress", nil)
 }
 
 // UpdaterErrorDescription says "The update encountered an error. Try again."
@@ -11322,21 +11260,21 @@ func (msgs Messages) UpdaterErrorTitle() string {
 	return Catalog.Format(msgs.locale, "updaterErrorTitle", nil)
 }
 
-// UpdaterEyebrow says "FlowLens update center"
+// UpdaterFinishingDescription says "Finishing the update. Wait for installation to complete; you can hide this window."
 // in the language the app shows.
-func UpdaterEyebrow() string { return In(i18n.Locale()).UpdaterEyebrow() }
+func UpdaterFinishingDescription() string { return In(i18n.Locale()).UpdaterFinishingDescription() }
 
-// UpdaterEyebrow says "FlowLens update center"
+// UpdaterFinishingDescription says "Finishing the update. Wait for installation to complete; you can hide this window."
 // in the language of msgs.
-func (msgs Messages) UpdaterEyebrow() string {
-	return Catalog.Format(msgs.locale, "updaterEyebrow", nil)
+func (msgs Messages) UpdaterFinishingDescription() string {
+	return Catalog.Format(msgs.locale, "updaterFinishingDescription", nil)
 }
 
-// UpdaterIdleDescription says "Manually check GitHub Releases for a newer version for this platform."
+// UpdaterIdleDescription says "Check for a newer version of FlowLens for this platform."
 // in the language the app shows.
 func UpdaterIdleDescription() string { return In(i18n.Locale()).UpdaterIdleDescription() }
 
-// UpdaterIdleDescription says "Manually check GitHub Releases for a newer version for this platform."
+// UpdaterIdleDescription says "Check for a newer version of FlowLens for this platform."
 // in the language of msgs.
 func (msgs Messages) UpdaterIdleDescription() string {
 	return Catalog.Format(msgs.locale, "updaterIdleDescription", nil)
@@ -11352,16 +11290,24 @@ func (msgs Messages) UpdaterIdleTitle() string {
 	return Catalog.Format(msgs.locale, "updaterIdleTitle", nil)
 }
 
-// UpdaterInitializationFailed says "Failed to initialize the update window: {error}"
+// UpdaterInstallingDescription says "Downloading the update. You can hide this window and continue working."
 // in the language the app shows.
-func UpdaterInitializationFailed(error string) string {
-	return In(i18n.Locale()).UpdaterInitializationFailed(error)
+func UpdaterInstallingDescription() string { return In(i18n.Locale()).UpdaterInstallingDescription() }
+
+// UpdaterInstallingDescription says "Downloading the update. You can hide this window and continue working."
+// in the language of msgs.
+func (msgs Messages) UpdaterInstallingDescription() string {
+	return Catalog.Format(msgs.locale, "updaterInstallingDescription", nil)
 }
 
-// UpdaterInitializationFailed says "Failed to initialize the update window: {error}"
+// UpdaterInstallingTitle says "Updating FlowLens"
+// in the language the app shows.
+func UpdaterInstallingTitle() string { return In(i18n.Locale()).UpdaterInstallingTitle() }
+
+// UpdaterInstallingTitle says "Updating FlowLens"
 // in the language of msgs.
-func (msgs Messages) UpdaterInitializationFailed(error string) string {
-	return Catalog.Format(msgs.locale, "updaterInitializationFailed", map[string]any{"error": error})
+func (msgs Messages) UpdaterInstallingTitle() string {
+	return Catalog.Format(msgs.locale, "updaterInstallingTitle", nil)
 }
 
 // UpdaterInvalidReleaseUrl says "The release page address is invalid"
@@ -11374,106 +11320,16 @@ func (msgs Messages) UpdaterInvalidReleaseUrl() string {
 	return Catalog.Format(msgs.locale, "updaterInvalidReleaseUrl", nil)
 }
 
-// UpdaterManualNoticeDescription says "The GitHub Release page will open. Download the package for this platform and follow the operating system prompts to …"
+// UpdaterManualRestartDescription says "You can restart when you are ready after installation finishes."
 // in the language the app shows.
-func UpdaterManualNoticeDescription() string {
-	return In(i18n.Locale()).UpdaterManualNoticeDescription()
+func UpdaterManualRestartDescription() string {
+	return In(i18n.Locale()).UpdaterManualRestartDescription()
 }
 
-// UpdaterManualNoticeDescription says "The GitHub Release page will open. Download the package for this platform and follow the operating system prompts to …"
+// UpdaterManualRestartDescription says "You can restart when you are ready after installation finishes."
 // in the language of msgs.
-func (msgs Messages) UpdaterManualNoticeDescription() string {
-	return Catalog.Format(msgs.locale, "updaterManualNoticeDescription", nil)
-}
-
-// UpdaterManualNoticeTitle says "Manual installation required"
-// in the language the app shows.
-func UpdaterManualNoticeTitle() string { return In(i18n.Locale()).UpdaterManualNoticeTitle() }
-
-// UpdaterManualNoticeTitle says "Manual installation required"
-// in the language of msgs.
-func (msgs Messages) UpdaterManualNoticeTitle() string {
-	return Catalog.Format(msgs.locale, "updaterManualNoticeTitle", nil)
-}
-
-// UpdaterModeManual says "Manual install"
-// in the language the app shows.
-func UpdaterModeManual() string { return In(i18n.Locale()).UpdaterModeManual() }
-
-// UpdaterModeManual says "Manual install"
-// in the language of msgs.
-func (msgs Messages) UpdaterModeManual() string {
-	return Catalog.Format(msgs.locale, "updaterModeManual", nil)
-}
-
-// UpdaterModeSelf says "In-app update"
-// in the language the app shows.
-func UpdaterModeSelf() string { return In(i18n.Locale()).UpdaterModeSelf() }
-
-// UpdaterModeSelf says "In-app update"
-// in the language of msgs.
-func (msgs Messages) UpdaterModeSelf() string {
-	return Catalog.Format(msgs.locale, "updaterModeSelf", nil)
-}
-
-// UpdaterPhaseCheck says "Check"
-// in the language the app shows.
-func UpdaterPhaseCheck() string { return In(i18n.Locale()).UpdaterPhaseCheck() }
-
-// UpdaterPhaseCheck says "Check"
-// in the language of msgs.
-func (msgs Messages) UpdaterPhaseCheck() string {
-	return Catalog.Format(msgs.locale, "updaterPhaseCheck", nil)
-}
-
-// UpdaterPhaseDownload says "Download"
-// in the language the app shows.
-func UpdaterPhaseDownload() string { return In(i18n.Locale()).UpdaterPhaseDownload() }
-
-// UpdaterPhaseDownload says "Download"
-// in the language of msgs.
-func (msgs Messages) UpdaterPhaseDownload() string {
-	return Catalog.Format(msgs.locale, "updaterPhaseDownload", nil)
-}
-
-// UpdaterPhasePrepare says "Prepare"
-// in the language the app shows.
-func UpdaterPhasePrepare() string { return In(i18n.Locale()).UpdaterPhasePrepare() }
-
-// UpdaterPhasePrepare says "Prepare"
-// in the language of msgs.
-func (msgs Messages) UpdaterPhasePrepare() string {
-	return Catalog.Format(msgs.locale, "updaterPhasePrepare", nil)
-}
-
-// UpdaterPhaseVerify says "Verify"
-// in the language the app shows.
-func UpdaterPhaseVerify() string { return In(i18n.Locale()).UpdaterPhaseVerify() }
-
-// UpdaterPhaseVerify says "Verify"
-// in the language of msgs.
-func (msgs Messages) UpdaterPhaseVerify() string {
-	return Catalog.Format(msgs.locale, "updaterPhaseVerify", nil)
-}
-
-// UpdaterPreparingDescription says "Unpacking and staging the new version. This window cannot be closed during this stage."
-// in the language the app shows.
-func UpdaterPreparingDescription() string { return In(i18n.Locale()).UpdaterPreparingDescription() }
-
-// UpdaterPreparingDescription says "Unpacking and staging the new version. This window cannot be closed during this stage."
-// in the language of msgs.
-func (msgs Messages) UpdaterPreparingDescription() string {
-	return Catalog.Format(msgs.locale, "updaterPreparingDescription", nil)
-}
-
-// UpdaterPreparingTitle says "Preparing the update"
-// in the language the app shows.
-func UpdaterPreparingTitle() string { return In(i18n.Locale()).UpdaterPreparingTitle() }
-
-// UpdaterPreparingTitle says "Preparing the update"
-// in the language of msgs.
-func (msgs Messages) UpdaterPreparingTitle() string {
-	return Catalog.Format(msgs.locale, "updaterPreparingTitle", nil)
+func (msgs Messages) UpdaterManualRestartDescription() string {
+	return Catalog.Format(msgs.locale, "updaterManualRestartDescription", nil)
 }
 
 // UpdaterProgress says "{written} / {total}"
@@ -11488,16 +11344,6 @@ func (msgs Messages) UpdaterProgress(total string, written string) string {
 	return Catalog.Format(msgs.locale, "updaterProgress", map[string]any{"total": total, "written": written})
 }
 
-// UpdaterProgressLabel says "Update progress"
-// in the language the app shows.
-func UpdaterProgressLabel() string { return In(i18n.Locale()).UpdaterProgressLabel() }
-
-// UpdaterProgressLabel says "Update progress"
-// in the language of msgs.
-func (msgs Messages) UpdaterProgressLabel() string {
-	return Catalog.Format(msgs.locale, "updaterProgressLabel", nil)
-}
-
 // UpdaterProgressWithRate says "{written} / {total} · {rate}"
 // in the language the app shows.
 func UpdaterProgressWithRate(rate string, total string, written string) string {
@@ -11510,31 +11356,31 @@ func (msgs Messages) UpdaterProgressWithRate(rate string, total string, written 
 	return Catalog.Format(msgs.locale, "updaterProgressWithRate", map[string]any{"rate": rate, "total": total, "written": written})
 }
 
-// UpdaterPublishedAt says "Published"
+// UpdaterPublishedAt says "Release date"
 // in the language the app shows.
 func UpdaterPublishedAt() string { return In(i18n.Locale()).UpdaterPublishedAt() }
 
-// UpdaterPublishedAt says "Published"
+// UpdaterPublishedAt says "Release date"
 // in the language of msgs.
 func (msgs Messages) UpdaterPublishedAt() string {
 	return Catalog.Format(msgs.locale, "updaterPublishedAt", nil)
 }
 
-// UpdaterReadyDescription says "Restart FlowLens to apply the new version."
+// UpdaterReadyDescription says "The update is ready for the next launch. Restart now, or keep working and restart later."
 // in the language the app shows.
 func UpdaterReadyDescription() string { return In(i18n.Locale()).UpdaterReadyDescription() }
 
-// UpdaterReadyDescription says "Restart FlowLens to apply the new version."
+// UpdaterReadyDescription says "The update is ready for the next launch. Restart now, or keep working and restart later."
 // in the language of msgs.
 func (msgs Messages) UpdaterReadyDescription() string {
 	return Catalog.Format(msgs.locale, "updaterReadyDescription", nil)
 }
 
-// UpdaterReadyTitle says "The update is ready"
+// UpdaterReadyTitle says "Ready to restart"
 // in the language the app shows.
 func UpdaterReadyTitle() string { return In(i18n.Locale()).UpdaterReadyTitle() }
 
-// UpdaterReadyTitle says "The update is ready"
+// UpdaterReadyTitle says "Ready to restart"
 // in the language of msgs.
 func (msgs Messages) UpdaterReadyTitle() string {
 	return Catalog.Format(msgs.locale, "updaterReadyTitle", nil)
@@ -11560,14 +11406,36 @@ func (msgs Messages) UpdaterReleaseNotesEmpty() string {
 	return Catalog.Format(msgs.locale, "updaterReleaseNotesEmpty", nil)
 }
 
-// UpdaterReleaseVersion says "New version"
+// UpdaterRestartAfterInstall says "Restart automatically when finished"
 // in the language the app shows.
-func UpdaterReleaseVersion() string { return In(i18n.Locale()).UpdaterReleaseVersion() }
+func UpdaterRestartAfterInstall() string { return In(i18n.Locale()).UpdaterRestartAfterInstall() }
 
-// UpdaterReleaseVersion says "New version"
+// UpdaterRestartAfterInstall says "Restart automatically when finished"
 // in the language of msgs.
-func (msgs Messages) UpdaterReleaseVersion() string {
-	return Catalog.Format(msgs.locale, "updaterReleaseVersion", nil)
+func (msgs Messages) UpdaterRestartAfterInstall() string {
+	return Catalog.Format(msgs.locale, "updaterRestartAfterInstall", nil)
+}
+
+// UpdaterRestartAfterInstallHint says "Unsaved changes will be checked before restarting."
+// in the language the app shows.
+func UpdaterRestartAfterInstallHint() string {
+	return In(i18n.Locale()).UpdaterRestartAfterInstallHint()
+}
+
+// UpdaterRestartAfterInstallHint says "Unsaved changes will be checked before restarting."
+// in the language of msgs.
+func (msgs Messages) UpdaterRestartAfterInstallHint() string {
+	return Catalog.Format(msgs.locale, "updaterRestartAfterInstallHint", nil)
+}
+
+// UpdaterRestartErrorTitle says "Could not restart FlowLens"
+// in the language the app shows.
+func UpdaterRestartErrorTitle() string { return In(i18n.Locale()).UpdaterRestartErrorTitle() }
+
+// UpdaterRestartErrorTitle says "Could not restart FlowLens"
+// in the language of msgs.
+func (msgs Messages) UpdaterRestartErrorTitle() string {
+	return Catalog.Format(msgs.locale, "updaterRestartErrorTitle", nil)
 }
 
 // UpdaterUnknownSize says "Unknown size"
@@ -11598,26 +11466,6 @@ func UpdaterUpToDateTitle() string { return In(i18n.Locale()).UpdaterUpToDateTit
 // in the language of msgs.
 func (msgs Messages) UpdaterUpToDateTitle() string {
 	return Catalog.Format(msgs.locale, "updaterUpToDateTitle", nil)
-}
-
-// UpdaterVerifyingDescription says "Checking SHA-256 integrity. This window cannot be closed during this stage."
-// in the language the app shows.
-func UpdaterVerifyingDescription() string { return In(i18n.Locale()).UpdaterVerifyingDescription() }
-
-// UpdaterVerifyingDescription says "Checking SHA-256 integrity. This window cannot be closed during this stage."
-// in the language of msgs.
-func (msgs Messages) UpdaterVerifyingDescription() string {
-	return Catalog.Format(msgs.locale, "updaterVerifyingDescription", nil)
-}
-
-// UpdaterVerifyingTitle says "Verifying the download"
-// in the language the app shows.
-func UpdaterVerifyingTitle() string { return In(i18n.Locale()).UpdaterVerifyingTitle() }
-
-// UpdaterVerifyingTitle says "Verifying the download"
-// in the language of msgs.
-func (msgs Messages) UpdaterVerifyingTitle() string {
-	return Catalog.Format(msgs.locale, "updaterVerifyingTitle", nil)
 }
 
 // UpdaterWindowTitle says "Software Update"

@@ -253,6 +253,16 @@ Memory never includes Python Workers, which run as separate processes. If the sy
 
 Memory can stay high after you clear a capture or close a history. The Go runtime keeps freed memory for reuse and returns it to the operating system gradually. Expand **Go runtime details** to see how much the Go runtime holds, how much is **Kept for reuse**, and how much has been **Returned to the OS**. Memory also counts the interface renderer, fonts, and system libraries, which Go does not track.
 
+## Update FlowLens
+
+Open **Software Update** from the status bar and select **Check for updates**. Review the new version and release notes, then select **Install and restart**. **Restart automatically when finished** is on by default; clear it to install now and choose when to restart. This choice lasts for the current session, including when you close and reopen the update window.
+
+During an update, **Hide** or the window's close button lets it continue in the background. **Cancel** stops a check or requests download cancellation while available. Once the download finishes, FlowLens waits for installation to finish and no longer offers cancellation. If an installation completes before cancellation takes effect, it remains ready for a later restart.
+
+Automatic restart happens only after installation succeeds. Unsaved settings, editor work, and rewrite-rule drafts still require your decision before restarting. Canceling that decision keeps FlowLens open; use the status bar to reopen the window and restart later. A restart error can be retried without downloading again. **Restart later** leaves the update ready for the next launch.
+
+For development builds or installations that cannot update themselves, select **Open release page** and install the package for your platform manually.
+
 ## Security
 
 - Use FlowLens only for traffic you own or are authorized to inspect.

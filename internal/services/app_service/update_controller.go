@@ -9,7 +9,6 @@ import (
 
 const (
 	UpdateStateChangedEventName  = "app:update-state-changed"
-	UpdateProgressEventName      = "app:update-progress"
 	UpdateRestartFailedEventName = "app:update-restart-failed"
 	// UpdateUserRestartEventName asks the application to restart for a staged
 	// update, through the same unsaved-work guards as quitting.
@@ -19,15 +18,13 @@ const (
 type UpdatePhase string
 
 const (
-	UpdatePhaseIdle        UpdatePhase = "idle"
-	UpdatePhaseChecking    UpdatePhase = "checking"
-	UpdatePhaseUpToDate    UpdatePhase = "up-to-date"
-	UpdatePhaseAvailable   UpdatePhase = "available"
-	UpdatePhaseDownloading UpdatePhase = "downloading"
-	UpdatePhaseVerifying   UpdatePhase = "verifying"
-	UpdatePhasePreparing   UpdatePhase = "preparing"
-	UpdatePhaseReady       UpdatePhase = "ready"
-	UpdatePhaseError       UpdatePhase = "error"
+	UpdatePhaseIdle       UpdatePhase = "idle"
+	UpdatePhaseChecking   UpdatePhase = "checking"
+	UpdatePhaseUpToDate   UpdatePhase = "up-to-date"
+	UpdatePhaseAvailable  UpdatePhase = "available"
+	UpdatePhaseInstalling UpdatePhase = "installing"
+	UpdatePhaseReady      UpdatePhase = "ready"
+	UpdatePhaseError      UpdatePhase = "error"
 )
 
 type UpdateApplyMode string
@@ -59,19 +56,15 @@ type UpdateFailure struct {
 }
 
 type UpdateSnapshot struct {
-	Revision       uint64          `json:"revision"`
-	Phase          UpdatePhase     `json:"phase"`
-	CurrentVersion string          `json:"currentVersion"`
-	ApplyMode      UpdateApplyMode `json:"applyMode"`
-	Release        *UpdateRelease  `json:"release,omitempty"`
-	Progress       *UpdateProgress `json:"progress,omitempty"`
-	Failure        *UpdateFailure  `json:"failure,omitempty"`
-	CanCancel      bool            `json:"canCancel"`
-}
-
-type UpdateProgressEvent struct {
-	Revision uint64          `json:"revision"`
-	Progress *UpdateProgress `json:"progress"`
+	Revision            uint64          `json:"revision"`
+	Phase               UpdatePhase     `json:"phase"`
+	CurrentVersion      string          `json:"currentVersion"`
+	ApplyMode           UpdateApplyMode `json:"applyMode"`
+	Release             *UpdateRelease  `json:"release,omitempty"`
+	Progress            *UpdateProgress `json:"progress,omitempty"`
+	Failure             *UpdateFailure  `json:"failure,omitempty"`
+	CanCancel           bool            `json:"canCancel"`
+	RestartAfterInstall bool            `json:"restartAfterInstall"`
 }
 
 var (
@@ -168,7 +161,7 @@ func (c *updateController) Check() error {
 		c.mu.Unlock()
 		return errUpdateBusy
 	}
-	if c.snapshot.Phase == UpdatePhaseReady {
+	if c.readyLocked() {
 		c.mu.Unlock()
 		return errUpdateReady
 	}
@@ -188,6 +181,8 @@ func (c *updateController) Check() error {
 }
 
 func (c *updateController) runCheck(op *updateOperation) {
+	defer close(op.done)
+	defer op.cancel()
 	release, err := c.engine.Check(op.ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || op.ctx.Err() != nil {
@@ -222,7 +217,7 @@ func (c *updateController) runCheck(op *updateOperation) {
 	})
 }
 
-func (c *updateController) Download() error {
+func (c *updateController) Download(restartAfterInstall bool) error {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -236,13 +231,14 @@ func (c *updateController) Download() error {
 		c.mu.Unlock()
 		return errUpdateManualOnly
 	}
-	if c.snapshot.Release == nil || (c.snapshot.Phase != UpdatePhaseAvailable && c.snapshot.Phase != UpdatePhaseError) {
+	if c.readyLocked() || c.snapshot.Release == nil || (c.snapshot.Phase != UpdatePhaseAvailable && c.snapshot.Phase != UpdatePhaseError) {
 		c.mu.Unlock()
 		return errUpdateUnavailable
 	}
 
 	op := c.newOperationLocked(updateOperationDownload)
-	c.snapshot.Phase = UpdatePhaseDownloading
+	c.snapshot.Phase = UpdatePhaseInstalling
+	c.snapshot.RestartAfterInstall = restartAfterInstall
 	c.snapshot.Progress = &UpdateProgress{Total: c.snapshot.Release.ArtifactSize}
 	c.snapshot.Failure = nil
 	c.snapshot.CanCancel = true
@@ -255,6 +251,8 @@ func (c *updateController) Download() error {
 }
 
 func (c *updateController) runDownload(op *updateOperation) {
+	defer close(op.done)
+	defer op.cancel()
 	err := c.engine.DownloadAndInstall(op.ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || op.ctx.Err() != nil {
@@ -265,15 +263,49 @@ func (c *updateController) runDownload(op *updateOperation) {
 			})
 			return
 		}
-		c.finishWithError(op, c.currentFailureStage(op), err)
+		c.finishWithError(op, UpdatePhaseInstalling, err)
 		return
 	}
 
+	var restart bool
 	c.finishOperation(op, func(snapshot *UpdateSnapshot) {
 		snapshot.Phase = UpdatePhaseReady
 		snapshot.Progress = nil
 		snapshot.Failure = nil
+		// A successful Install may win a cancellation race. Keep the
+		// installed update, but do not turn cancellation or quit into restart.
+		restart = snapshot.RestartAfterInstall && op.ctx.Err() == nil && !c.closed
 	})
+	if restart {
+		_ = c.Restart()
+	}
+}
+
+// readyLocked includes a failed restart: installation has still succeeded.
+func (c *updateController) readyLocked() bool {
+	return c.snapshot.Phase == UpdatePhaseReady || (c.snapshot.Phase == UpdatePhaseError && c.snapshot.Failure != nil && c.snapshot.Failure.Stage == UpdatePhaseReady)
+}
+
+// Restart routes both explicit and automatic restarts through the app's guards.
+func (c *updateController) Restart() error {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return errors.New("update controller is shutting down")
+	}
+	if c.snapshot.ApplyMode != UpdateApplyModeSelf || !c.readyLocked() {
+		c.mu.Unlock()
+		return errUpdateNotReady
+	}
+	c.snapshot.Phase = UpdatePhaseReady
+	c.snapshot.Failure = nil
+	snapshot := c.reviseLocked()
+	c.mu.Unlock()
+	c.emitState(snapshot)
+	if c.emit != nil {
+		c.emit(UpdateUserRestartEventName)
+	}
+	return nil
 }
 
 func (c *updateController) Cancel() error {
@@ -283,7 +315,7 @@ func (c *updateController) Cancel() error {
 		c.mu.Unlock()
 		return nil
 	}
-	if c.snapshot.Phase != UpdatePhaseChecking && c.snapshot.Phase != UpdatePhaseDownloading {
+	if !c.snapshot.CanCancel {
 		c.mu.Unlock()
 		return errUpdateCannotBeCanceled
 	}
@@ -317,31 +349,10 @@ func (c *updateController) Shutdown() {
 	}
 }
 
-func (c *updateController) FrameworkPhase(phase UpdatePhase) {
-	c.mu.Lock()
-	op := c.operation
-	if op == nil || op.kind != updateOperationDownload || op.ctx.Err() != nil {
-		c.mu.Unlock()
-		return
-	}
-	if c.snapshot.Phase == phase {
-		c.mu.Unlock()
-		return
-	}
-	c.snapshot.Phase = phase
-	c.snapshot.CanCancel = phase == UpdatePhaseDownloading
-	if phase != UpdatePhaseDownloading {
-		c.snapshot.Progress = nil
-	}
-	snapshot := c.reviseLocked()
-	c.mu.Unlock()
-	c.emitState(snapshot)
-}
-
 func (c *updateController) FrameworkProgress(progress Progress) {
 	c.mu.Lock()
 	op := c.operation
-	if op == nil || op.kind != updateOperationDownload || op.ctx.Err() != nil || c.snapshot.Phase != UpdatePhaseDownloading {
+	if op == nil || op.kind != updateOperationDownload || op.ctx.Err() != nil || c.snapshot.Phase != UpdatePhaseInstalling {
 		c.mu.Unlock()
 		return
 	}
@@ -350,20 +361,17 @@ func (c *updateController) FrameworkProgress(progress Progress) {
 		Total:   progress.Total,
 		Rate:    progress.Rate,
 	}
-	c.snapshot.Revision++
-	event := UpdateProgressEvent{
-		Revision: c.snapshot.Revision,
-		Progress: cloneUpdateProgress(c.snapshot.Progress),
-	}
+	c.snapshot.CanCancel = progress.Total <= 0 || progress.Written < progress.Total
+	// Progress carries the complete state too: an initial snapshot or a
+	// slower publisher must never leave a newer byte count with old controls.
+	snapshot := c.reviseLocked()
 	c.mu.Unlock()
-	if c.emit != nil {
-		c.emit(UpdateProgressEventName, event)
-	}
+	c.emitState(snapshot)
 }
 
 func (c *updateController) RestartFailed(message string) {
 	c.mu.Lock()
-	if c.snapshot.ApplyMode != UpdateApplyModeSelf || c.snapshot.Release == nil {
+	if c.closed || c.operation != nil || !c.readyLocked() {
 		c.mu.Unlock()
 		return
 	}
@@ -399,7 +407,6 @@ func (c *updateController) finishOperation(op *updateOperation, update func(*Upd
 	update(&c.snapshot)
 	c.snapshot.CanCancel = false
 	c.operation = nil
-	close(op.done)
 	snapshot := c.reviseLocked()
 	c.mu.Unlock()
 	c.emitState(snapshot)
@@ -416,24 +423,9 @@ func (c *updateController) finishWithError(op *updateOperation, stage UpdatePhas
 	c.snapshot.Failure = &UpdateFailure{Stage: stage, Message: err.Error()}
 	c.snapshot.CanCancel = false
 	c.operation = nil
-	close(op.done)
 	snapshot := c.reviseLocked()
 	c.mu.Unlock()
 	c.emitState(snapshot)
-}
-
-func (c *updateController) currentFailureStage(op *updateOperation) UpdatePhase {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.operation != op {
-		return UpdatePhaseDownloading
-	}
-	switch c.snapshot.Phase {
-	case UpdatePhaseVerifying, UpdatePhasePreparing:
-		return c.snapshot.Phase
-	default:
-		return UpdatePhaseDownloading
-	}
 }
 
 func (c *updateController) reviseLocked() UpdateSnapshot {

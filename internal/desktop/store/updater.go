@@ -12,16 +12,17 @@ import (
 type UpdaterBackend interface {
 	GetUpdateSnapshot() appservice.UpdateSnapshot
 	CheckForUpdates() error
-	DownloadUpdate() error
+	DownloadUpdate(restartAfterInstall bool) error
 	CancelUpdate() error
 	RestartForUpdate() error
 }
 
 // UpdaterStore mirrors the state of the update service for every window.
 type UpdaterStore struct {
-	Snapshot      appservice.UpdateSnapshot
-	ActionPending bool
-	Initialized   bool
+	Snapshot            appservice.UpdateSnapshot
+	ActionPending       bool
+	RestartAfterInstall bool
+	Initialized         bool
 
 	rt      Runtime
 	backend UpdaterBackend
@@ -30,7 +31,7 @@ type UpdaterStore struct {
 
 // NewUpdaterStore returns an empty store.
 func NewUpdaterStore(rt Runtime, backend UpdaterBackend) *UpdaterStore {
-	return &UpdaterStore{rt: rt, backend: backend, Snapshot: appservice.UpdateSnapshot{Phase: appservice.UpdatePhaseIdle, ApplyMode: appservice.UpdateApplyModeManual}}
+	return &UpdaterStore{rt: rt, backend: backend, RestartAfterInstall: true, Snapshot: appservice.UpdateSnapshot{Phase: appservice.UpdatePhaseIdle, ApplyMode: appservice.UpdateApplyModeManual}}
 }
 
 // Phase is the current phase.
@@ -39,7 +40,7 @@ func (s *UpdaterStore) Phase() appservice.UpdatePhase { return s.Snapshot.Phase 
 // Busy reports whether an operation is running.
 func (s *UpdaterStore) Busy() bool {
 	switch s.Snapshot.Phase {
-	case appservice.UpdatePhaseChecking, appservice.UpdatePhaseDownloading, appservice.UpdatePhaseVerifying, appservice.UpdatePhasePreparing:
+	case appservice.UpdatePhaseChecking, appservice.UpdatePhaseInstalling:
 		return true
 	}
 	return false
@@ -58,15 +59,6 @@ func (s *UpdaterStore) ApplySnapshot(next appservice.UpdateSnapshot) {
 	s.Snapshot = next
 }
 
-// ApplyProgress takes download progress that is not older than the state.
-func (s *UpdaterStore) ApplyProgress(event appservice.UpdateProgressEvent) {
-	if event.Revision < s.Snapshot.Revision {
-		return
-	}
-	s.Snapshot.Revision = event.Revision
-	s.Snapshot.Progress = event.Progress
-}
-
 // Initialize subscribes to the service and reads its state.
 func (s *UpdaterStore) Initialize(bus serviceruntime.EventBus, post func(func())) {
 	if s.Initialized || s.offs != nil {
@@ -76,11 +68,6 @@ func (s *UpdaterStore) Initialize(bus serviceruntime.EventBus, post func(func())
 		bus.On(appservice.UpdateStateChangedEventName, func(event serviceruntime.Event) {
 			if snapshot, ok := event.Data.(appservice.UpdateSnapshot); ok {
 				post(func() { s.ApplySnapshot(snapshot) })
-			}
-		}),
-		bus.On(appservice.UpdateProgressEventName, func(event serviceruntime.Event) {
-			if progress, ok := event.Data.(appservice.UpdateProgressEvent); ok {
-				post(func() { s.ApplyProgress(progress) })
 			}
 		}),
 	}
@@ -119,7 +106,10 @@ func (s *UpdaterStore) run(action func() error, done func(error)) {
 func (s *UpdaterStore) Check(done func(error)) { s.run(s.backend.CheckForUpdates, done) }
 
 // Download downloads, verifies, and stages the version found.
-func (s *UpdaterStore) Download(done func(error)) { s.run(s.backend.DownloadUpdate, done) }
+func (s *UpdaterStore) Download(done func(error)) {
+	restart := s.RestartAfterInstall
+	s.run(func() error { return s.backend.DownloadUpdate(restart) }, done)
+}
 
 // Cancel stops the running operation.
 func (s *UpdaterStore) Cancel(done func(error)) { s.run(s.backend.CancelUpdate, done) }

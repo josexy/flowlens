@@ -227,15 +227,13 @@ func TestStatusBarFollowsUpdateState(t *testing.T) {
 	t.Cleanup(rt.Close)
 	f.data.Updater = store.NewUpdaterStore(rt, nil)
 	cases := map[appservice.UpdatePhase]string{
-		appservice.UpdatePhaseIdle:        locales.StatusActionUpdate(),
-		appservice.UpdatePhaseUpToDate:    locales.StatusActionUpdate(),
-		appservice.UpdatePhaseChecking:    locales.StatusUpdateChecking(),
-		appservice.UpdatePhaseAvailable:   locales.StatusUpdateAvailable(),
-		appservice.UpdatePhaseDownloading: locales.UpdaterDownloadingTitle(),
-		appservice.UpdatePhaseVerifying:   locales.UpdaterVerifyingTitle(),
-		appservice.UpdatePhasePreparing:   locales.UpdaterPreparingTitle(),
-		appservice.UpdatePhaseReady:       locales.StatusUpdateReady(),
-		appservice.UpdatePhaseError:       locales.StatusUpdateError(),
+		appservice.UpdatePhaseIdle:       locales.StatusActionUpdate(),
+		appservice.UpdatePhaseUpToDate:   locales.StatusActionUpdate(),
+		appservice.UpdatePhaseChecking:   locales.StatusUpdateChecking(),
+		appservice.UpdatePhaseAvailable:  locales.StatusUpdateAvailable(),
+		appservice.UpdatePhaseInstalling: locales.UpdaterInstallingTitle(),
+		appservice.UpdatePhaseReady:      locales.StatusUpdateReady(),
+		appservice.UpdatePhaseError:      locales.StatusUpdateError(),
 	}
 	for phase, label := range cases {
 		f.data.Updater.Snapshot.Phase = phase
