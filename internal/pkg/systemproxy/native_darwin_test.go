@@ -118,6 +118,40 @@ func TestDarwinProxyMissingBindings(t *testing.T) {
 	}
 }
 
+func TestDarwinProxyNativeCandidateOrdering(t *testing.T) {
+	a := nativeProxyForTest(t)
+	const http = `<key>HTTPEnable</key><true/><key>HTTPProxy</key><string>http.test</string><key>HTTPPort</key><integer>8080</integer>`
+	const https = `<key>HTTPSEnable</key><true/><key>HTTPSProxy</key><string>https.test</string><key>HTTPSPort</key><integer>8443</integer>`
+	const socks = `<key>SOCKSEnable</key><true/><key>SOCKSProxy</key><string>socks.test</string><key>SOCKSPort</key><integer>1080</integer>`
+	for _, tc := range []struct{ name, fields, want string }{
+		{"httpFirst", socks + https + http, "http://http.test:8080"},
+		{"httpsBeforeSOCKS", socks + https, "http://https.test:8443"},
+		{"disabledHTTP", `<key>HTTPEnable</key><false/><key>HTTPProxy</key><string>http.test</string>` + https + socks, "http://https.test:8443"},
+		{"missingHost", `<key>HTTPEnable</key><true/>` + https, "http://https.test:8443"},
+		{"wrongHostType", `<key>HTTPEnable</key><true/><key>HTTPProxy</key><integer>42</integer>` + https, "http://https.test:8443"},
+		{"missingEnable", `<key>HTTPProxy</key><string>http.test</string>` + socks, "socks5://socks.test:1080"},
+		{"empty", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := a.dictionary([]byte(`<plist version="1.0"><dict>` + tc.fields + `</dict></plist>`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer a.release(config)
+			if got := a.proxyURL(config); got != tc.want {
+				t.Fatalf("native proxy URL = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	wrongType := a.string("not a dictionary")
+	defer a.release(wrongType)
+	for _, config := range []uintptr{0, wrongType} {
+		if got := a.proxyURL(config); got != "" {
+			t.Fatalf("invalid configuration produced proxy %q", got)
+		}
+	}
+}
+
 func TestDarwinProxyReadOnlySmoke(t *testing.T) {
 	a := nativeProxyForTest(t)
 	proxies := a.copyProxies(0)
@@ -146,24 +180,37 @@ func TestDarwinProxyReadOnlySmoke(t *testing.T) {
 
 func TestDarwinProxyPrimaryServiceFallback(t *testing.T) {
 	base := nativeProxyForTest(t)
-	state, err := base.dictionary([]byte(`<plist version="1.0"><dict><key>PrimaryService</key><string>ipv6-service</string></dict></plist>`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer base.release(state)
-	a := *base
-	a.copyValue = func(_ uintptr, key uintptr) uintptr {
-		if a.text(key) == "State:/Network/Global/IPv6" {
-			return base.retain(state)
-		}
-		return 0
-	}
-	if id := a.primaryService(); id != "ipv6-service" {
-		t.Fatalf("IPv6 fallback: %s", id)
-	}
-	a.copyValue = func(uintptr, uintptr) uintptr { return 0 }
-	if id := a.primaryService(); id != "" {
-		t.Fatalf("fabricated service: %s", id)
+	for _, tc := range []struct{ name, ipv4, ipv6, want string }{
+		{"ipv4First", `<string>ipv4-service</string>`, `<string>ipv6-service</string>`, "ipv4-service"},
+		{"ipv6Fallback", "", `<string>ipv6-service</string>`, "ipv6-service"},
+		{"invalidIPv4Service", `<integer>42</integer>`, `<string>ipv6-service</string>`, "ipv6-service"},
+		{"emptyIPv4Service", `<string></string>`, `<string>ipv6-service</string>`, "ipv6-service"},
+		{"missingServices", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			states := make(map[string]uintptr)
+			for key, value := range map[string]string{"State:/Network/Global/IPv4": tc.ipv4, "State:/Network/Global/IPv6": tc.ipv6} {
+				if value == "" {
+					continue
+				}
+				state, err := base.dictionary([]byte(`<plist version="1.0"><dict><key>PrimaryService</key>` + value + `</dict></plist>`))
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { base.release(state) })
+				states[key] = state
+			}
+			a := *base
+			a.copyValue = func(_ uintptr, key uintptr) uintptr {
+				if state := states[a.text(key)]; state != 0 {
+					return base.retain(state)
+				}
+				return 0
+			}
+			if id := a.primaryService(); id != tc.want {
+				t.Fatalf("primary service = %q, want %q", id, tc.want)
+			}
+		})
 	}
 }
 

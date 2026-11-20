@@ -1,6 +1,7 @@
 # Implementation and verification record
 
-Date: 2026-11-20. Toolchain: Go 1.27.3; purego remains v0.11.1.
+Date: 2026-11-20. Initial and CI toolchain: Go 1.27.3. Local macOS follow-up:
+Go 1.27.4; `go.mod` still declares 1.27.3 and purego remains v0.11.1.
 
 ## Approved implementation decisions
 
@@ -59,21 +60,112 @@ itself was not run: Linux tests/UI vet/catalog/tidy ran directly, formatting ran
 on the shared source in Windows, and Linux-target lint ran on the Windows host.
 The native Linux Task invocation remains part of task 6.1's acceptance record.
 
-## Pending macOS acceptance
+## macOS follow-up and CI evidence
 
-No macOS hardware or remote session was available, and no macOS test binary,
-AppKit fixture, CI workflow, authorization transaction, bundle or DMG was run
-here. Compilation/static analysis cannot verify the native ABI or lifetimes.
+The follow-up ran on an Apple M1 with macOS 15.7.4 (24G517), with arm64
+execution and amd64 execution under Rosetta. All Go commands below used
+`CGO_ENABLED=0`. The original lack of macOS access above describes the first
+implementation session; it no longer describes the available native evidence.
 
-Run [the macOS verification procedure](../../../docs/technical/macos-native-verification.md)
-on arm64 and amd64 (record Rosetta if used). It includes native libproc/loopback
-and AppKit metadata/icons; real CoreFoundation encoding plus injected transaction
-failure/ownership tests; positive footprint and 64 MiB memory growth; cross-module
-regressions; disposable-network authorization, external edits and restoration;
-arm64/universal packaging, both Mach-O slices, macOS 13.0 launch, signed update
-artifacts, and light/dark inspection.
+The [CI run for commit 1151780](https://github.com/josexy/flowlens/actions/runs/44693930436)
+was inspected, including its logs and individual step results:
 
-Seven task checkboxes are verified locally. The other 21 include native or
-packaging acceptance; their source implementations and test paths are present,
-but they are intentionally not marked passed. Do not archive or treat this
-migration as release-accepted until the pending evidence is recorded.
+| Runner | Runtime evidence |
+| --- | --- |
+| `macos-latest`, macOS 26.7.2 (25G332), darwin/arm64 | Module tidy, formatting, UI vet, catalogs, `go test ./...`, and the separate AppKit main-loop fixture passed on the native arm64 runner |
+| `macos-15-intel`, macOS 15.7.9 (24G830), darwin/amd64 | The same checks passed on the Intel runner; this is separate from local Rosetta execution |
+| `ubuntu-latest`, Ubuntu 26.04, linux/amd64 | Module tidy, formatting, UI vet, catalogs, and all Go tests passed; this workflow does not invoke Task or golangci-lint |
+| Linux executable-build job | All six targets passed ordinary/production builds, no-cgo dependency selection, and Darwin minimum-version checks |
+
+These logs cover the existing implementation. The additional native proxy
+regressions added during this follow-up were run locally on both architectures.
+
+| Local command/check | Result |
+| --- | --- |
+| `PATH="/tmp/flowlens-cgo-tools:$PATH" CGO_ENABLED=0 task verify` | Pass: formatting, golangci-lint 2.14.0 (0 issues), UI vet, 1,334 messages, all Go packages |
+| `CGO_ENABLED=0 go mod tidy -diff` | Pass, no module changes |
+| Cross-module command from task 6.2, with `-count=1 -json` | All ten packages passed; 1,278 test/subtest passes. The AppKit fixture was deliberately skipped here and passed separately; the opt-in `TestCaptureSoak` was not requested |
+| `CGO_ENABLED=0 FLOWLENS_APPKIT_TEST=1 go test ./internal/pkg/process_attribution -run TestDarwinAppKit -count=1 -timeout=2m -json` | Both tests passed: known bundle name/ID, 20 metadata iterations with bundle/executable PNG fallback, and representation ownership on success/failure |
+| `CGO_ENABLED=0 GOARCH=amd64 go test ./internal/pkg/process_attribution ./internal/pkg/systemproxy ./internal/services/mem_stats_service -count=1 -json` | Passed under Rosetta: 141 test/subtest passes, with only the separately executed main-loop fixture skipped |
+| Same AppKit command with `GOARCH=amd64` | Both tests passed under Rosetta, no skips |
+| `CGO_ENABLED=0 go test ./internal/pkg/systemproxy -count=1 -json`, then with `GOARCH=amd64` after adding regressions | 59 test/subtest passes on each architecture, no skips. Real CF dictionaries now explicitly cover HTTP/HTTPS/SOCKS precedence, absent/invalid host and enable fields, invalid configuration types, IPv4 priority, IPv6 fallback, and invalid/missing service IDs |
+| `CGO_ENABLED=0 /tmp/flowlens-cgo-tools/golangci-lint run ./internal/pkg/systemproxy` after the test changes | Pass, 0 issues |
+| Source audit | No FlowLens `import "C"`, `#cgo`, cgo build constraints, `.m` or `.h` bridge files |
+
+The system golangci-lint was too old to parse the version-2 configuration, so
+the first Task invocation stopped at config validation. Version 2.14.0 was
+installed into `/tmp/flowlens-cgo-tools` for this check without replacing the
+user's executable; the complete Task rerun passed. The final code changes are
+test-only and received the focused two-architecture rerun and lint above.
+
+The native suites exercise `proc_bsdinfo` offsets and libproc failures, current
+and exited process identities, real IPv4/IPv6 loopback lookup, PID reuse, queue
+cancellation/late callbacks and Manager replacement. Proxy tests distinguish
+CF pointer constants from callback-structure addresses, preserve complete
+binary dictionaries, and count owned references through injected authorization,
+lock, service, serialization, commit, apply and recovery failures. Real system
+proxy discovery/snapshot was read-only; no native network configuration was
+mutated. Mach tests returned positive physical footprint and passed the 64 MiB
+touched-memory growth check on both architectures, plus invalid-response cases.
+
+## Package and interface follow-up
+
+Built without upload using:
+
+```sh
+CGO_ENABLED=0 MYGO_LDFLAGS=-macos=13.0 go tool mygo build \
+  -platform darwin/arm64,darwin/universal -o /tmp/flowlens-cgo-packages
+```
+
+Both `.app` bundles and DMGs were generated successfully. `lipo -archs`
+reported arm64 for the first bundle and arm64/x86_64 for universal. `otool
+-arch all -l` reported `LC_BUILD_VERSION minos 13.0` in all slices, and
+`PlistBuddy` reported `LSMinimumSystemVersion=13.0` in both bundles.
+`codesign --verify --deep --strict` passed for both ad hoc signatures;
+`hdiutil verify` passed for both DMGs. Every generated file named by
+`SHA256SUMS` matched its checksum in the target directories, including both
+copies of `install.sh`. An initial `shasum -c` from the parent directory could
+not locate the target-local files; checking the actual target paths passed.
+
+The build reported that no update private key was configured. It therefore
+did not generate signed update archives/manifests. Ad hoc bundle signing is
+not evidence of update signature or Developer ID/notarization acceptance.
+
+Both bundles launched on this macOS 15.7.4 arm64 host and exited normally with
+Command-Q; process checks confirmed their termination. The arm64 bundle showed
+positive Memory values (about 79 MiB) separately from Go heap and a live chart
+in light/dark themes. A delayed local HTTP fixture requested through the
+loopback proxy by `/usr/bin/curl` returned 200; the capture table showed `curl`
+with its executable fallback icon in both themes. The managed-system-proxy
+indicator correctly showed disabled throughout. Universal launch also showed
+positive Memory (about 79 MiB). No layout or locale changes were needed for
+these observed states.
+
+The inspection used the local profile and added one capture history containing
+`/flowlens-native-verification`. The theme was restored to light, sampling was
+paused, the proxy was stopped, and both validation apps were closed. System
+network settings were not changed.
+
+## Remaining acceptance
+
+24 of 28 tasks now have their stated evidence. The remaining tasks are:
+
+- **6.1:** Local macOS `task verify` and tidy passed; earlier Windows checks and
+  Linux CI remain valid. The exact native Linux Task/lint invocation is still
+  missing, and the earlier WSL environment is not available in this session.
+- **6.4:** The user confirmed no disposable macOS network environment is
+  available. Real authorization denial, service removal, auxiliary-key edits,
+  compensation and owned restoration on shutdown remain untested there.
+  Injected transaction tests do not replace this acceptance.
+- **6.5:** Bundle/DMG integrity, both architecture slices and current-host launch
+  passed. No macOS 13.0 runtime environment or configured update-signing key is
+  available; minimum-OS feature execution and signed update artifacts remain
+  pending. Universal was launched as arm64, not as an amd64 application.
+- **6.6:** Positive Memory, process names/icons, and the disabled managed-proxy
+  indicator were inspected in light/dark themes. Packaged active/conflict proxy
+  states and unavailable/placeholder states have not been exercised; existing
+  automated view tests passing does not count as their packaged visual review.
+
+Continue with [the native verification procedure](../../../docs/technical/macos-native-verification.md)
+when the missing environments are available. Keep this change unarchived and
+the PR in draft until the remaining acceptance is complete.
