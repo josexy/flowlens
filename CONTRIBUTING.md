@@ -48,7 +48,7 @@ Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#
 task verify
 ```
 
-Changes to Python Workers must run the integration tests with a real Python 3 interpreter rather than skipping them. Concurrency-sensitive changes should also run the race detector. On Windows and Linux it needs cgo and a C compiler; on macOS it needs nothing beyond the usual build toolchain:
+Changes to Python Workers must run the integration tests with a real Python 3 interpreter rather than skipping them. For concurrency-sensitive changes, run `task test:race` with a supported C compiler installed. This task enables cgo on all desktop platforms.
 
 ```shell
 task test:race                                       # desktop, process attribution, proxy service

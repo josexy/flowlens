@@ -8,7 +8,7 @@ Task, CI, release verification, and packaging select `CGO_ENABLED=0` on Windows,
 
 Executable cross-compilation needs no macOS SDK. macOS application signing and DMG creation still run on macOS and use `codesign` and `hdiutil` (install the Xcode Command Line Tools when required by the packaging tools). Frameworks remain runtime dependencies. Compile success alone does not verify native behavior.
 
-Optional `task test:race` is separate: the pinned Go 1.27 toolchain supports Darwin race checks with cgo disabled; Windows/Linux race checks enable cgo and need a supported C compiler. Pass package names after `--` to narrow the run.
+The optional `task test:race` sets `CGO_ENABLED=1` on all desktop platforms and uses a supported C compiler. Pass package names after `--` to narrow the run.
 
 `mygo.json` explicitly sets `macos.minimumSystemVersion` to `13.0`. The pinned Go 1.27 toolchain requires macOS 13 or later; it no longer supports macOS 12 ([release notes](https://go.dev/doc/go1.27#darwin)). Task and release packaging pass `MYGO_LDFLAGS=-macos=13.0`; this sets Mach-O deployment metadata without C compiler flags. For a direct MyGo invocation, supply the same environment variable. Plain Darwin `go build` uses `-ldflags=-macos=13.0`. This metadata setting does not establish runtime compatibility: launching and testing both slices on macOS 13.0 remains a required acceptance check.
 

@@ -42,12 +42,10 @@ tasks:
     cmds:
       - go test ./...
 
-  # Go 1.27's Darwin race detector works without cgo. Windows/Linux require
-  # cgo and a supported C compiler for this optional check only.
   test:race:
     desc: Runs Go tests with the race detector, by default on the concurrency-heavy packages
     env:
-      CGO_ENABLED: '{{if eq OS "darwin"}}0{{else}}1{{end}}'
+      CGO_ENABLED: '1'
     vars:
       PACKAGES: '{{.CLI_ARGS | default "./internal/desktop/... ./internal/pkg/process_attribution ./internal/services/proxy_service"}}'
     cmds:
