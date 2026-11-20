@@ -217,6 +217,6 @@ compiled for Darwin arm64 and amd64 with cgo disabled. Target-specific
   states and unavailable/placeholder states have not been exercised; existing
   automated view tests passing does not count as their packaged visual review.
 
-Continue with [the native verification procedure](../../../docs/technical/macos-native-verification.md)
-when the missing environments are available. Keep this change unarchived and
-the PR in draft until the remaining acceptance is complete.
+Archived on 2026-11-20 with tasks 6.1 and 6.3–6.6 open. Use the
+[native verification procedure](../../../../docs/technical/macos-native-verification.md)
+to complete the remaining checks when the required environments are available.
