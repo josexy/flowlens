@@ -1,32 +1,59 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+context: |
+  Follow AGENTS.md for module ownership, engineering contracts, and verification.
+  Read affected openspec/specs/ and docs/technical/ documents before drafting;
+  report discrepancies with code instead of silently redefining behavior.
+  Write artifacts in English and follow the existing flat capability layout.
+  Keep code, specs, tasks, and affected documentation consistent as decisions evolve.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - >-
+      State scope, non-goals, and completion criteria. Assess affected owners,
+      Windows/macOS/Linux behavior, persistence, protocols, and documentation;
+      group unaffected areas briefly.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  specs:
+    - >-
+      Preserve the applicable contract's units, ordering, unknown-value semantics,
+      compatibility, and security boundaries unless explicitly changed.
+    - >-
+      Cover relevant failures and boundaries, including empty versus missing data,
+      limits, cancellation, stale results, shutdown, and platform differences.
+
+  design:
+    - >-
+      Assign responsibilities to existing owners. For asynchronous work, explain
+      thread/state ownership, cancellation, stale-result rejection, and cleanup.
+    - >-
+      Trace data changes through storage/codecs, services, and views; state
+      compatibility, migration needs, rollback, and failure recovery.
+    - >-
+      For UI changes, cover affected windows, interaction states, focus/shortcuts,
+      light/dark themes, and both UI languages using existing MyGo/nui conventions.
+
+  tasks:
+    - >-
+      Select scope-appropriate checks from AGENTS.md with exact commands, including
+      required UI/Python/native checks and documentation/localization updates.
+      Use CGO_ENABLED=0 for ordinary checks; distinguish compilation from runtime acceptance.
+    - >-
+      Include openspec validate <change-name> --strict --no-interactive and a final
+      comparison of implementation, specs, and acceptance evidence.
+
+operations:
+  apply:
+    guidance:
+      - >-
+        Complete checkboxes only after implementation and stated verification.
+        Record commands, results, platform, and remaining risks; leave unavailable
+        acceptance checks open with a reason.
+  archive:
+    guidance:
+      - >-
+        Check acceptance evidence and strictly validate the change before archiving.
+        Synchronize intended deltas, preserving unrelated requirements and scenarios.
+      - >-
+        Run openspec validate --specs --strict --no-interactive after synchronization.
+        Report the archive path, synchronized capabilities, and remaining limitations.
