@@ -822,6 +822,7 @@ func TestClickWhileDetailsAreOpenMovesThem(t *testing.T) {
 func TestClickingTheOnlySelectedRowKeepsIt(t *testing.T) {
 	f := newFixture(t, manyEntries(3)...)
 	f.openDetails("host2.test")
+	f.tester.Advance(time.Second)
 	f.clickRow(0, "host2.test")
 	f.requireSelection([]uint64{2}, 2, true)
 }

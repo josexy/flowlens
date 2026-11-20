@@ -63,7 +63,7 @@ The globe control beside the HTTP cache control opens the DNS cache settings. En
 
 In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. With the table focused, the arrow keys move the selection, Shift+arrows extend it, and `Primary+A` selects all.
 
-Enter, a double-click, or the row menu's **Show** opens the detail panel. **Close details** hides it, keeps the selection, and returns focus to the table. Changing the selection updates an open panel but does not reopen a closed one.
+Double-click a row without modifiers to open or hide the detail panel. Enter or the row menu's **Show** opens it. **Close details** hides it, keeps the selection, and returns focus to the table. Ctrl-click (Cmd-click on macOS) only changes selection; removing the last selected row closes details. Changing the selection updates an open panel but does not reopen a closed one.
 
 Clearing or restarting a capture releases its detail-view, table, filter, and category caches, including hidden views. Closing details or selecting another record releases the previous record's viewer caches; opening details again reloads the selected record. Stopping the proxy keeps the captured records available. Freed memory is returned to the operating system gradually; see [Check FlowLens Memory Use](#check-flowlens-memory-use).
 

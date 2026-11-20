@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -32,17 +33,80 @@ func TestNativeSelectionFollowsIdentityAndDisplayedRange(t *testing.T) {
 	f.requireSelection(nil, 0, false)
 }
 
-func TestNativeDoubleClickAndModifierClicks(t *testing.T) {
-	f := newFixture(t, manyEntries(3)...)
-	f.clickRow(0, "host2.test")
-	f.clickRow(0, "host2.test")
-	f.requireSelection([]uint64{2}, 2, true)
-	f.workspace.Table.CloseDetails()
-	f.settle()
-	f.tester.Advance(time.Second)
-	f.clickRow(ui.Cmd, "host3.test")
-	f.clickRow(ui.Cmd, "host3.test")
-	f.requireSelection([]uint64{2}, 2, false)
+func TestNativeDoubleClickTogglesDetails(t *testing.T) {
+	for _, history := range []bool{false, true} {
+		for _, dark := range []bool{false, true} {
+			name := map[bool]string{false: "live", true: "history"}[history] + "/" + map[bool]string{false: "light", true: "dark"}[dark]
+			t.Run(name, func(t *testing.T) {
+				f := newHistoryFixture(t, manyEntries(3)...).fixture
+				f.setDark(dark)
+				table := f.workspace.Table
+				var data inspect.Data = inspect.LiveData{Traffic: f.data.Traffic}
+				if history {
+					f.click("session one")
+					table = f.workspace.HistoryTable
+					data = store.HistoryDetailData{History: f.data.History}
+				}
+				panel := inspect.NewPanel(data, inspect.Dependencies{Runtime: f.data.Runtime, Settings: f.data.Settings, Notifier: f.notifier})
+				panel.OnClose = table.CloseDetails
+				if history {
+					f.workspace.HistoryDetail = panel.Build
+				} else {
+					f.workspace.Detail = panel.Build
+				}
+				f.settle()
+				first, second := table.Rows()[0], table.Rows()[1]
+				check := func(ids []uint64, focused uint64, visible bool) {
+					t.Helper()
+					entry := table.source.SelectedEntry()
+					if got := selectedIDs(table); !slices.Equal(got, ids) || entry == nil || entry.ID != focused || table.source.ShowDetail() != visible {
+						t.Fatalf("selected %v focused %+v detail %v, want %v %d %v", got, entry, table.source.ShowDetail(), ids, focused, visible)
+					}
+					if !f.tester.Focused(locales.TrafficColumns()) {
+						t.Fatal("table lost keyboard focus")
+					}
+				}
+				for _, visible := range []bool{true, false, true} {
+					f.tester.Advance(time.Second)
+					f.clickRow(0, first.Host)
+					check([]uint64{first.ID}, first.ID, !visible)
+					f.clickRow(0, first.Host)
+					check([]uint64{first.ID}, first.ID, visible)
+				}
+				// Enter opens details even after a double-click; it never hides them.
+				for range 2 {
+					f.tester.Key(0, ui.KeyEnter)
+					f.settle()
+					check([]uint64{first.ID}, first.ID, true)
+				}
+				// Modifier clicks only change selection, even when repeated quickly.
+				for _, visible := range []bool{true, false} {
+					if !visible {
+						table.CloseDetails()
+						f.settle()
+					}
+					f.tester.Advance(time.Second)
+					f.clickRow(ui.Cmd, second.Host)
+					check([]uint64{first.ID, second.ID}, second.ID, visible)
+					f.clickRow(ui.Cmd, second.Host)
+					check([]uint64{first.ID}, first.ID, visible)
+				}
+				// Restore the native cursor from the deselected second row.
+				f.tester.Advance(time.Second)
+				f.clickRow(0, first.Host)
+				check([]uint64{first.ID}, first.ID, false)
+				f.tester.Key(0, ui.KeyEnter)
+				f.settle()
+				check([]uint64{first.ID}, first.ID, true)
+				// The first click changes the inspected row; the second hides details.
+				f.tester.Advance(time.Second)
+				f.clickRow(0, second.Host)
+				check([]uint64{second.ID}, second.ID, true)
+				f.clickRow(0, second.Host)
+				check([]uint64{second.ID}, second.ID, false)
+			})
+		}
+	}
 }
 
 func TestDetailCloseRetainsSelectionAndReturnsFocus(t *testing.T) {
