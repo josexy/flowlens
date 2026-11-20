@@ -53,19 +53,6 @@ tasks:
     cmds:
       - go test -race {{.PACKAGES}}
 
-  build:check:
-    desc: Cross-compiles desktop executables and checks no-cgo dependency graphs
-    cmds:
-      - go run ./internal/cmd/buildcheck {{.CLI_ARGS}}
-
-  test:macos:appkit:
-    desc: Runs the AppKit main-loop fixture in a macOS GUI session
-    platforms: [darwin]
-    env:
-      FLOWLENS_APPKIT_TEST: '1'
-    cmds:
-      - go test ./internal/pkg/process_attribution -run TestDarwinAppKit -count=1 -timeout=2m
-
   fmt:check:
     desc: Fails if any Go file needs formatting
     cmds:

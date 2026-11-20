@@ -28,7 +28,7 @@ MyGo's pinned `macos.minimumSystemVersion` default is 12.0, but this migration e
 - Darwin attribution tests cover IPv4/IPv6 tuple matching, snapshot refresh, current-process metadata, exited processes, loopback ownership, and C allocation balance. They currently require cgo. The portable PCB parser and Manager tests remain useful unchanged.
 - System proxy tests exercise URL selection and a fake `platformDriver`, including external-change conflicts. There is no dedicated Darwin native driver test, so they cannot validate CoreFoundation ownership, authorization, or a real preferences transaction.
 - The memory-growth test touches 64 MiB and expects a substantial increase in the platform measure. Its Darwin build constraint currently requires cgo.
-- The existing CI verification does not perform the cross-target builds described by the main build spec. This change adds executable compile checks without turning pull-request CI into release packaging.
+- CI runs the tests for its host platform. Release packaging builds the supported desktop targets.
 
 ## Goals / Non-Goals
 
@@ -95,7 +95,7 @@ After all three modules have functional replacements, remove their no-cgo stubs,
 
 Keep macOS 13.0 explicit in packaging configuration/documentation as needed and verify both bundle metadata and Mach-O deployment information. The existing MyGo default is 12.0; the explicit 13.0 setting matches Go 1.27 and the user-approved baseline change; an ignored `MACOSX_DEPLOYMENT_TARGET` environment variable must not be treated as proof for internal Go linking. No application version bump is part of this work. During implementation, the user approved raising the original 12.0 target to 13.0 because Go 1.27 has discontinued macOS 12 support; changing Mach-O metadata alone cannot restore that support.
 
-Add ordinary executable compile checks, including production tags, for supported desktop targets. Run functional macOS tests with cgo disabled; use actual arm64 and amd64 execution (an x86_64 process under Rosetta can supplement hardware testing, with that environment recorded). Continue native Linux/Windows regression coverage. Package arm64 and universal on macOS using the existing signing and update mechanisms.
+Run `go test ./...` on Linux and macOS with cgo disabled. Enable the AppKit main loop in the macOS test step. Verify amd64 during native migration acceptance, recording Intel or Rosetta execution. Package arm64 and universal on macOS using the existing signing and update mechanisms.
 
 Alternatives considered: changing only the Taskfile would leave releases on a different implementation path; accepting no-cgo stub tests or cross-builds would validate compilation while missing feature loss and ABI defects.
 
@@ -113,7 +113,7 @@ Alternatives considered: changing only the Taskfile would leave releases on a di
 
 1. Implement bindings and their module tests without changing shared models, storage, or service APIs. Retain the old release guard until functional replacements for all affected modules are present.
 2. Complete attribution/AppKit, proxy transaction, and Mach-memory coverage. Replace cgo-dependent tests and remove obsolete bridge/stub files.
-3. Switch build/workflow policy, add compile checks, reconcile module metadata, and update README, build documentation, and AGENTS.md. Recheck task-oriented user documentation for accidental behavior changes.
+3. Switch the build and workflow settings, reconcile module metadata, and update README, build documentation, and AGENTS.md. Recheck task-oriented user documentation for accidental behavior changes.
 4. Run the verification matrix and record interactive/macOS evidence. Inspect both slices of the universal application, its OS minimum, and signed update compatibility. Do not publish a release as part of implementation verification.
 5. Archive the OpenSpec change only after implementation and required verification are complete. No database, settings, history, or icon-cache migration is needed. If rollback is required, revert the native implementations, build policy, and matching documentation together to the previous cgo-based revision; do not ship the old no-cgo stubs as rollback.
 

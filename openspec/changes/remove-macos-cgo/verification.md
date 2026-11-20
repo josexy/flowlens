@@ -183,13 +183,27 @@ All commands used `CGO_ENABLED=0`.
 
 ## Remaining acceptance
 
-24 of 28 tasks now have their stated evidence. The remaining tasks are:
+The [CI run for 0582321](https://github.com/josexy/flowlens/actions/runs/44713425982)
+passed the ordinary suite on both macOS architectures, including the reviewed
+system proxy changes. The separate Intel AppKit test timed out while loading an
+icon. The log does not identify which native operation exceeded the deadline.
+
+The follow-up uses a typed string argument for AppKit and falls back to the
+recorded path when a process exits before or during icon loading. CI and release
+verification now enable the AppKit test within `go test ./...` on `macos-latest`.
+Earlier Intel runs and cross-compilation commands above describe the previous
+workflow.
+
+On Windows amd64, `task verify` passed. The updated attribution test binary
+compiled for Darwin arm64 and amd64 with cgo disabled. Target-specific
+`go vet` and golangci-lint passed for the package on both architectures.
 
 - **6.1:** Local macOS `task verify` and tidy passed before the review fix; earlier
   Windows checks and Linux CI remain valid. Native Linux `task verify` now runs
   every stage. Its test stage fails only on a pre-existing, font-dependent theme
-  test that fails on `main` as well, so it is not a pass. The systemproxy
-  change from the review needs a native macOS rerun on both architectures.
+  test that fails on `main` as well, so it is not a pass.
+- **6.3:** Native execution of the updated AppKit and process-exit cases is
+  pending on both macOS architectures.
 - **6.4:** The user confirmed no disposable macOS network environment is
   available. Real authorization denial, service removal, auxiliary-key edits,
   compensation and owned restoration on shutdown remain untested there.

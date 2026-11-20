@@ -14,9 +14,7 @@ Optional `task test:race` is separate: the pinned Go 1.27 toolchain supports Dar
 
 ## CI verification
 
-CI and release verification run ordinary tests with cgo disabled on Linux and both macOS architectures (`macos-latest` for arm64, `macos-15-intel` for amd64). They run formatting, UI lifecycle, message catalog, and Go tests. The dedicated AppKit fixture pumps the main run loop in a separate test process. Native proxy tests read real settings and inject write/authorization calls; they never change the host's network settings.
-
-CI also checks tidy consistency and runs `go run ./internal/cmd/buildcheck` on Linux. Locally, use `task build:check`; `task build:check -- -targets=darwin/arm64,darwin/amd64` narrows the targets. The command builds Windows, Linux, and Darwin amd64/arm64 executables in ordinary and `mygo_noinspector` modes, rejects any selected `CgoFiles`, and checks Darwin Mach-O deployment metadata. It uses temporary outputs and does not package, launch, or publish them.
+CI and release verification run formatting, UI lifecycle checks, message catalog checks, and `go test ./...` with cgo disabled on `ubuntu-latest` and `macos-latest`. The macOS test step sets `FLOWLENS_APPKIT_TEST=1` to run the AppKit main-loop fixture as part of the ordinary suite. CI also checks module tidy consistency. The release workflow builds the supported desktop packages, including the universal macOS application.
 
 Local `task verify` also includes golangci-lint. Native macOS validation commands, including Intel/Rosetta execution and manual proxy/package checks, are in [macOS native verification](macos-native-verification.md). The migration remains pending native acceptance until those results are recorded; Windows checks and cross-compilation do not count as macOS runtime passes.
 

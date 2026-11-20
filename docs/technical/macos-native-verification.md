@@ -11,20 +11,16 @@ test binary, an unavailable feature, or a skipped fixture as a native pass.
 export CGO_ENABLED=0
 go env GOOS GOARCH GOVERSION
 sw_vers
-task verify
+FLOWLENS_APPKIT_TEST=1 task verify
 go mod tidy
 git diff --exit-code -- go.mod go.sum
-go test ./internal/pkg/process_attribution ./internal/pkg/systemproxy ./internal/services/mem_stats_service ./internal/services/proxy_service ./internal/services/history_service ./internal/services/setting_service ./internal/app ./internal/services/app_service ./internal/desktop/update ./internal/desktop/shell -count=1
-task test:macos:appkit
-task build:check -- -targets=darwin/arm64,darwin/amd64
 ```
 
-The ordinary attribution tests use libproc/sysctl without AppKit enrichment.
-`test:macos:appkit` starts a separate process whose initial OS thread pumps the
-main CF run loop while Go tests run on a worker. It creates a temporary bundle,
-checks its name/identifier, and decodes bundle and executable fallback icons.
-Use a logged-in graphical session. Production uses MyGo's existing main loop;
-there is no additional application thread or window lifecycle hook.
+In a logged-in graphical session, `FLOWLENS_APPKIT_TEST=1 go test ./...` includes
+the AppKit fixture. The attribution package's test binary pumps the main run
+loop while its tests read a temporary bundle's name, identifier, and icons.
+For a headless run, omit the variable. The GUI test skips and the libproc,
+socket, and provider tests still run.
 
 The AppKit adapter retains only opaque callback IDs in libdispatch. Cancellation
 releases waiting workers and Go requests immediately. A canceled ID remains a
@@ -37,13 +33,8 @@ On Apple Silicon with Rosetta installed, compile and execute Intel tests as a
 separate step (run arm64 tests above as well):
 
 ```sh
-GOARCH=amd64 go test -c -o /tmp/flowlens-attribution-amd64.test ./internal/pkg/process_attribution
-GOARCH=amd64 go test -c -o /tmp/flowlens-proxy-amd64.test ./internal/pkg/systemproxy
-GOARCH=amd64 go test -c -o /tmp/flowlens-memory-amd64.test ./internal/services/mem_stats_service
-arch -x86_64 /tmp/flowlens-attribution-amd64.test -test.v
-FLOWLENS_APPKIT_TEST=1 arch -x86_64 /tmp/flowlens-attribution-amd64.test -test.run TestDarwinAppKit -test.v
-arch -x86_64 /tmp/flowlens-proxy-amd64.test -test.v
-arch -x86_64 /tmp/flowlens-memory-amd64.test -test.v
+GOARCH=amd64 FLOWLENS_APPKIT_TEST=1 go test -count=1 \
+  ./internal/pkg/process_attribution ./internal/pkg/systemproxy ./internal/services/mem_stats_service
 ```
 
 ## Disposable network configuration

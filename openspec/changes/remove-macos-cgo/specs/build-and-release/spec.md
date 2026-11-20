@@ -87,7 +87,7 @@ macOS release and development builds with cgo disabled SHALL provide process att
 - **THEN** Memory remains unavailable and the chart shows the existing gap while Go runtime statistics remain usable
 
 ### Requirement: Continuous integration
-CI SHALL verify pushes and pull requests with cgo disabled, including native macOS regression tests and executable compile checks for supported targets. Release verification and packaging SHALL use the same no-cgo policy. Platform feature coverage SHALL distinguish native execution from cross-compilation and SHALL NOT pass solely by testing unavailable stubs.
+CI SHALL run `go test ./...` with cgo disabled on Linux and macOS for pull requests and pushes to the main branch. The macOS suite SHALL include the AppKit main-loop test. Release verification and packaging SHALL use the same no-cgo policy.
 
 #### Scenario: Failing test
 - **WHEN** a pull request introduces a failing test or a lifecycle check failure

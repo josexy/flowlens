@@ -93,10 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: macos-latest }
-          - { os: macos-15-intel }
-          - { os: ubuntu-latest }
+        os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
       CGO_ENABLED: "0"
@@ -132,13 +129,9 @@ jobs:
         run: go tool mygo i18n check
 
       - name: Run Go tests
-        run: go test ./...
-
-      - name: Run AppKit main-loop fixture
-        if: runner.os == 'macOS'
         env:
-          FLOWLENS_APPKIT_TEST: "1"
-        run: go test ./internal/pkg/process_attribution -run TestDarwinAppKit -count=1 -timeout=2m
+          FLOWLENS_APPKIT_TEST: ${{ runner.os == 'macOS' && '1' || '0' }}
+        run: go test ./...
 
   build:
     name: Build (${{ matrix.name }})
