@@ -61,8 +61,9 @@ complete binary property-list snapshots, including unknown and auxiliary keys.
    confirm the external configuration survives and a conflict is reported.
 4. Change the service/configuration between a controller check and the write;
    confirm the comparison inside the preferences lock prevents overwriting it.
-5. Remove the managed network service; confirm failure and no write to another
-   service. Exercise commit/apply failure on the disposable configuration.
+5. Remove the managed network service; confirm a conflict is reported, managed
+   ownership is cleared, and nothing is written to another service. Exercise
+   commit/apply failure on the disposable configuration.
    Compensation may restore only a dictionary still equal to FlowLens's write.
 6. Quit normally while still owning the configuration, and confirm restoration
    and upstream-proxy selection after restarting.

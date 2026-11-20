@@ -15,6 +15,10 @@ const cfUTF8 = 0x08000100
 const cfInt32 = 3 // kCFNumberSInt32Type
 const maxProxyPropertyBytes = 16 << 20
 
+// The snapshotted service no longer exists in preferences. FlowLens therefore
+// no longer owns its configuration; callers report an external change.
+var errDarwinServiceMissing = errors.New("macOS network service disappeared")
+
 // CF/SC references are opaque uintptrs. CFIndex/CFOptionFlags/CFTypeID are
 // 64-bit on both targets; Boolean is uint8, OSStatus is int32. Create/Copy
 // return owned references; Get returns a borrowed value. Callers release owned
@@ -265,7 +269,7 @@ func (a *darwinProxyAPI) copyProtocol(prefs uintptr, id string, create bool) (ui
 		}
 		return protocol, nil
 	}
-	return 0, errors.New("macOS network service disappeared")
+	return 0, errDarwinServiceMissing
 }
 
 // Returns an OWNED dictionary, including the historical nil -> empty convention.

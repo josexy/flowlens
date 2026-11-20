@@ -89,6 +89,9 @@ func (d *darwinPlatformDriver) Matches(Endpoint) (bool, error) {
 	}
 	defer a.release(expected)
 	current, err := a.readConfiguration(d.serviceID)
+	if errors.Is(err, errDarwinServiceMissing) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
@@ -201,6 +204,9 @@ func (a *darwinProxyAPI) writeConfiguration(id string, expectedData []byte, repl
 	}
 	defer a.unlock(prefs)
 	protocol, err := a.copyProtocol(prefs, id, false)
+	if errors.Is(err, errDarwinServiceMissing) {
+		return nil, fmt.Errorf("%w: %w", ErrChangedExternally, err)
+	}
 	if err != nil {
 		return nil, err
 	}

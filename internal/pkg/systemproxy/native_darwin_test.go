@@ -312,6 +312,7 @@ func transactionFixture(t *testing.T) *proxyTransactionFixture {
 		}
 		return own(2)
 	}
+	f.api.prefsCreate = func(uintptr, uintptr, uintptr) uintptr { return own(6) }
 	f.api.lock = func(uintptr, uint8) uint8 {
 		if f.fail == "lock" {
 			return 0
@@ -401,6 +402,10 @@ func TestDarwinProxyTransactionFailures(t *testing.T) {
 				t.Fatal("failure reported success")
 			}
 			switch failure {
+			case "service":
+				if !errors.Is(err, ErrChangedExternally) || f.commits != 0 || f.base.equal(f.current, original) == 0 {
+					t.Fatalf("missing service was not an external change: %v", err)
+				}
 			case "externalBeforeLock", "externalAfterCommit":
 				if !errors.Is(err, ErrChangedExternally) || f.current != f.external {
 					t.Fatalf("external edit overwritten: %v", err)
@@ -440,5 +445,33 @@ func TestDarwinProxyTransactionRestore(t *testing.T) {
 				t.Fatal("restore not committed/applied")
 			}
 		})
+	}
+}
+
+// A removed network service ends ownership: Matches reports a mismatch so the
+// controller clears its state, and restore never writes another service.
+func TestDarwinProxyMissingServiceEndsOwnership(t *testing.T) {
+	f := transactionFixture(t)
+	original, err := f.base.serialize(f.current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &darwinPlatformDriver{api: &f.api, serviceID: "fixture-service", originalConfig: original}
+	if err := d.Apply(Endpoint{Mode: ModeHTTP, Host: "127.0.0.1", Port: 8080}); err != nil {
+		t.Fatal(err)
+	}
+	if matches, err := d.Matches(Endpoint{}); err != nil || !matches {
+		t.Fatalf("Matches before removal = %v, %v", matches, err)
+	}
+	f.fail = "service"
+	if matches, err := d.Matches(Endpoint{}); err != nil || matches {
+		t.Fatalf("Matches after removal = %v, %v; want false, nil", matches, err)
+	}
+	commits := f.commits
+	if err := d.Restore(darwinProxySnapshot{ServiceID: d.serviceID, Config: original}); !errors.Is(err, ErrChangedExternally) {
+		t.Fatalf("Restore after removal = %v, want ErrChangedExternally", err)
+	}
+	if f.commits != commits {
+		t.Fatal("restore wrote after the service disappeared")
 	}
 }
