@@ -439,15 +439,25 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 		column.MinWidth = max(width, column.MinWidth) + spare
 	}
 	t.menuSpans = t.menuSpans[:0]
+	var doubleClicked bool
 	var element ui.Element
 	ui.Box(c.Key("traffic-table-pane")).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		element = widgets.Table(c.Key("traffic-table"), theme, &t.state, columns, nui.TableOptions{
 			Label: locales.TrafficColumns(), ManualSorting: true,
 			BuildEmpty: func(*ui.Context, nui.Theme) {},
+			Style: func(slot nui.Slot, cell ui.Element) {
+				if slot == nui.Item && cell.RowDoubleClicked() {
+					doubleClicked = true
+				}
+			},
 		}).ObserveInput(t.observer).OnSubmit(func() {
 			// Modifier double-clicks only change selection.
 			if c.Modifiers() == 0 {
-				t.openFocusedDetails()
+				if doubleClicked && t.source.ShowDetail() {
+					t.CloseDetails()
+				} else {
+					t.openFocusedDetails()
+				}
 			}
 		})
 		if live := t.source.Live(); live != nil && live.PendingLiveEntryCount() > 0 {

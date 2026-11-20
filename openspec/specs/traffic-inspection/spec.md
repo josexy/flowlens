@@ -258,7 +258,7 @@ A WebSocket message stream with no messages to show, in the detail panel or the 
 - **THEN** the WebSocket tab shows the stream's toolbar and "No messages"
 
 ### Requirement: Explicit traffic detail panel
-The panel SHALL show the focused entry with applicable request tabs Overview, Raw, Headers, Query, Cookies, Body and response tabs Raw, Headers, Cookies, Trailers, Body. Enter, an unmodified double-click in a traffic table, or its Show action SHALL open details. Selection alone SHALL NOT open a closed panel. A visible, keyboard-operable close action SHALL hide details without clearing row selection and return focus to the originating table.
+The panel SHALL show the focused entry with applicable request tabs Overview, Raw, Headers, Query, Cookies, Body and response tabs Raw, Headers, Cookies, Trailers, Body. Enter or Show SHALL open details. An unmodified row double-click SHALL toggle details in capture and history. Selection alone SHALL NOT open a closed panel. A visible, keyboard-operable close action SHALL hide details without clearing selection and return focus to the originating table.
 
 #### Scenario: Failed exchange
 - **WHEN** the selected exchange failed before a response arrived
@@ -274,7 +274,7 @@ The panel SHALL show the focused entry with applicable request tabs Overview, Ra
 
 #### Scenario: Opening from the keyboard
 - **WHEN** a traffic table has focus and the user presses Enter with a valid selected focus row
-- **THEN** the panel opens for that row, including when other rows are selected
+- **THEN** the panel opens for that row, including when other rows are selected; pressing Enter again keeps it open
 
 #### Scenario: Enter while editing text
 - **WHEN** an input, editor, or modal owns keyboard focus
@@ -305,8 +305,16 @@ The panel SHALL show the focused entry with applicable request tabs Overview, Ra
 - **THEN** no stale entry remains displayed and the panel closes
 
 #### Scenario: Native double-click opens details
-- **WHEN** the user double-clicks a traffic row without modifiers
-- **THEN** details open for that row; rapid repeated modifier clicks only change selection
+- **WHEN** details are closed and the user double-clicks a traffic row without modifiers
+- **THEN** details open for that row in capture or history; rapid repeated modifier clicks only change selection
+
+#### Scenario: Native double-click hides details
+- **WHEN** details are open and the user double-clicks a traffic row without modifiers
+- **THEN** details hide, the clicked row stays selected, and focus remains in the table
+
+#### Scenario: Reopening with a double-click
+- **WHEN** details were hidden by double-click and the user double-clicks a traffic row again without modifiers
+- **THEN** details open and load the selected row normally
 
 ### Requirement: Byte-exact body viewing
 The body viewer SHALL show, copy, and save a captured or historical body as its exact stored bytes. As before, a body SHALL be treated as binary when it has a binary or multipart content type, an unsupported content encoding, or invalid UTF-8: its Raw view shows the binary hint, and its Hex view and saved file hold its bytes.
