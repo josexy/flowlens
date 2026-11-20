@@ -59,6 +59,12 @@ Store the contents of `mygo-update.key` in the repository Actions secret `MYGO_U
 
 Development builds and installations without write access, including package-managed installs, use the release page instead of in-app installation.
 
+FlowLens uses MyGo's `Updater.Check` and `Update.Install` with its own native window. Installation is one operation: download byte counts are measured, while signature verification and file replacement have no separate framework progress callbacks. The window therefore shows download progress followed by an indeterminate finishing state, without timed verification or preparation stages. A delta fallback restarts byte progress and makes download cancellation available again.
+
+The window defaults **Restart automatically when finished** on for the current session. Starting installation captures that choice; successful installation requests one restart through FlowLens's existing unsaved-work guards and normal service shutdown, even if the update window has closed. Cancellation, installation failure, or shutdown suppresses automatic restart. If installation succeeds despite a concurrent cancellation, the installed update remains ready for a later restart. Declining a guard leaves it ready without repeating the prompt; a failed restart can be retried without reinstalling.
+
+MyGo replaces program files during installation on Windows and Linux; macOS stages an application bundle and replaces it after the running process exits. **Restart later** postpones launching the new version, not installation. Hiding or closing the update window never cancels installation. Explicit cancellation is available during checks and incomplete downloads; quitting the application requests cancellation and waits for the framework call to finish. MyGo's file-replacement recovery is not a health-check rollback after launching the new version.
+
 ## Releasing
 
 `mygo.json` is the single source of the application version. `go tool mygo dev` and `go tool mygo build` embed it, and FlowLens reads it through `mygo.App.Version()` for environment details, update checks, and HAR exports. Plain `go run` or `go build` without MyGo metadata uses `0.0.0-dev`. `go tool mygo version` prints the framework CLI version; it does not change the application version.

@@ -26,6 +26,14 @@ func FormatTimeLocal(t time.Time) string {
 	return formatLocalTime(t)
 }
 
+// FormatDateLocal formats a calendar date in local time, without time precision.
+func FormatDateLocal(t time.Time) string {
+	if t.IsZero() {
+		return UnknownValue
+	}
+	return t.Local().Format(time.DateOnly)
+}
+
 // FormatTimeRFC3339 formats a timestamp in local time as RFC 3339 with
 // milliseconds, as exported text shows it.
 func FormatTimeRFC3339(t time.Time) string {

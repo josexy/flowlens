@@ -94,7 +94,7 @@ func TestRestartForUpdatePublishesGuardedRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseAvailable)
-	if err := service.DownloadUpdate(); err != nil {
+	if err := service.DownloadUpdate(false); err != nil {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseReady)
@@ -112,7 +112,7 @@ func TestRestartFailureEventIsRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseAvailable)
-	if err := service.DownloadUpdate(); err != nil {
+	if err := service.DownloadUpdate(false); err != nil {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseReady)
@@ -120,6 +120,21 @@ func TestRestartFailureEventIsRecorded(t *testing.T) {
 	snapshot := service.GetUpdateSnapshot()
 	if snapshot.Phase != UpdatePhaseError || snapshot.Failure == nil || snapshot.Failure.Message != "cannot relaunch" {
 		t.Fatalf("snapshot = %#v", snapshot)
+	}
+	if err := service.DownloadUpdate(true); err == nil {
+		t.Fatal("a failed restart must not reinstall the already installed update")
+	}
+	if err := service.CheckForUpdates(); err == nil {
+		t.Fatal("a failed restart must retain the installed release")
+	}
+	if err := service.RestartForUpdate(); err != nil {
+		t.Fatalf("retry restart: %v", err)
+	}
+	if got := service.GetUpdateSnapshot(); got.Phase != UpdatePhaseReady || got.Failure != nil {
+		t.Fatalf("retry snapshot: %+v", got)
+	}
+	if len(bus.Named(UpdateUserRestartEventName)) != 1 {
+		t.Fatal("retry did not request a guarded restart")
 	}
 }
 
@@ -145,14 +160,19 @@ func TestReportedProgressReachesSubscribers(t *testing.T) {
 	var received sync.WaitGroup
 	received.Add(1)
 	var once sync.Once
-	off := bus.On(UpdateProgressEventName, func(serviceruntime.Event) { once.Do(received.Done) })
+	off := bus.On(UpdateStateChangedEventName, func(event serviceruntime.Event) {
+		snapshot := event.Data.(UpdateSnapshot)
+		if snapshot.Progress != nil && snapshot.Progress.Written == 5 {
+			once.Do(received.Done)
+		}
+	})
 	defer off()
 
 	if err := service.CheckForUpdates(); err != nil {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseAvailable)
-	if err := service.DownloadUpdate(); err != nil {
+	if err := service.DownloadUpdate(false); err != nil {
 		t.Fatal(err)
 	}
 	<-blocked

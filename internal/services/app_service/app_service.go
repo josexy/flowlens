@@ -89,13 +89,6 @@ func (a *AppService) ServiceStartup(ctx context.Context) error {
 	return nil
 }
 
-// ReportUpdatePhase records a phase an UpdateEngine has reached.
-func (a *AppService) ReportUpdatePhase(phase UpdatePhase) {
-	if a.updates != nil {
-		a.updates.FrameworkPhase(phase)
-	}
-}
-
 // ReportUpdateProgress records how far an UpdateEngine's download has come.
 func (a *AppService) ReportUpdateProgress(progress Progress) {
 	if a.updates != nil {
@@ -143,11 +136,11 @@ func (a *AppService) CheckForUpdates() error {
 
 // DownloadUpdate downloads, verifies, and stages the release found by the
 // latest successful check.
-func (a *AppService) DownloadUpdate() error {
+func (a *AppService) DownloadUpdate(restartAfterInstall bool) error {
 	if a.updates == nil {
 		return errors.New("application is not ready")
 	}
-	return a.updates.Download()
+	return a.updates.Download(restartAfterInstall)
 }
 
 // CancelUpdate cancels the active check or download and waits for cleanup.
@@ -164,16 +157,7 @@ func (a *AppService) RestartForUpdate() error {
 	if a.updates == nil {
 		return errors.New("application is not ready")
 	}
-	if a.updates.Snapshot().ApplyMode != UpdateApplyModeSelf {
-		return errors.New("self-update is unavailable for this installation")
-	}
-	if a.updates.Snapshot().Phase != UpdatePhaseReady {
-		return errUpdateNotReady
-	}
-	if a.events != nil {
-		a.events.Emit(UpdateUserRestartEventName)
-	}
-	return nil
+	return a.updates.Restart()
 }
 
 // GetEnvironmentInfo returns build environment details for the running application.

@@ -12,14 +12,19 @@ import (
 type fakeUpdater struct {
 	initial                              appservice.UpdateSnapshot
 	checks, downloads, cancels, restarts int
+	restartAfterInstall                  bool
 	fail                                 error
 }
 
 func (f *fakeUpdater) GetUpdateSnapshot() appservice.UpdateSnapshot { return f.initial }
 func (f *fakeUpdater) CheckForUpdates() error                       { f.checks++; return f.fail }
-func (f *fakeUpdater) DownloadUpdate() error                        { f.downloads++; return f.fail }
-func (f *fakeUpdater) CancelUpdate() error                          { f.cancels++; return f.fail }
-func (f *fakeUpdater) RestartForUpdate() error                      { f.restarts++; return f.fail }
+func (f *fakeUpdater) DownloadUpdate(restart bool) error {
+	f.downloads++
+	f.restartAfterInstall = restart
+	return f.fail
+}
+func (f *fakeUpdater) CancelUpdate() error     { f.cancels++; return f.fail }
+func (f *fakeUpdater) RestartForUpdate() error { f.restarts++; return f.fail }
 
 type countingBus struct {
 	*serviceruntime.Bus
@@ -69,7 +74,7 @@ func TestUpdaterKeepsTheNewestRevision(t *testing.T) {
 	initial.Release = &appservice.UpdateRelease{Version: "1.1.0", ArtifactName: "update.exe", ArtifactSize: 100}
 	f := newUpdaterFixture(t, initial)
 	f.initialize()
-	if f.store.Phase() != appservice.UpdatePhaseAvailable || f.bus.listeners != 2 {
+	if f.store.Phase() != appservice.UpdatePhaseAvailable || f.bus.listeners != 1 {
 		t.Fatal(f.store.Phase(), f.bus.listeners)
 	}
 	f.bus.Emit(appservice.UpdateStateChangedEventName, updaterSnapshot(1, appservice.UpdatePhaseIdle))
@@ -77,17 +82,20 @@ func TestUpdaterKeepsTheNewestRevision(t *testing.T) {
 	if f.store.Phase() != appservice.UpdatePhaseAvailable {
 		t.Fatal("older snapshots must not roll state back")
 	}
-	f.bus.Emit(appservice.UpdateProgressEventName, appservice.UpdateProgressEvent{Revision: 3, Progress: &appservice.UpdateProgress{Written: 25, Total: 100, Rate: 50}})
+	progress := updaterSnapshot(3, appservice.UpdatePhaseInstalling)
+	progress.CanCancel = true
+	progress.Progress = &appservice.UpdateProgress{Written: 25, Total: 100, Rate: 50}
+	f.bus.Emit(appservice.UpdateStateChangedEventName, progress)
 	f.settle()
-	if f.store.Snapshot.Revision != 3 || f.store.Snapshot.Progress.Written != 25 {
+	if f.store.Snapshot.Revision != 3 || f.store.Snapshot.Progress.Written != 25 || !f.store.Snapshot.CanCancel || f.store.Phase() != appservice.UpdatePhaseInstalling {
 		t.Fatalf("%+v", f.store.Snapshot)
 	}
-	f.bus.Emit(appservice.UpdateStateChangedEventName, updaterSnapshot(4, appservice.UpdatePhaseVerifying))
+	f.bus.Emit(appservice.UpdateStateChangedEventName, updaterSnapshot(4, appservice.UpdatePhaseInstalling))
 	f.settle()
-	if f.store.Phase() != appservice.UpdatePhaseVerifying {
+	if f.store.Phase() != appservice.UpdatePhaseInstalling {
 		t.Fatal(f.store.Phase())
 	}
-	f.bus.Emit(appservice.UpdateProgressEventName, appservice.UpdateProgressEvent{Revision: 3, Progress: &appservice.UpdateProgress{Written: 50, Total: 100, Rate: 50}})
+	f.bus.Emit(appservice.UpdateStateChangedEventName, progress)
 	f.settle()
 	if f.store.Snapshot.Progress != nil {
 		t.Fatal("stale progress must not overwrite a newer phase")
@@ -123,6 +131,24 @@ func TestUpdaterRunsOneActionAtATime(t *testing.T) {
 	}
 }
 
+func TestUpdaterCapturesRestartChoiceBeforeStartingJob(t *testing.T) {
+	f := newUpdaterFixture(t, updaterSnapshot(1, appservice.UpdatePhaseAvailable))
+	if !f.store.RestartAfterInstall {
+		t.Fatal("automatic restart defaults on")
+	}
+	f.store.Download(nil)
+	f.store.RestartAfterInstall = false
+	f.settle()
+	if !f.backend.restartAfterInstall {
+		t.Fatal("job read a later UI choice")
+	}
+	f.store.Download(nil)
+	f.settle()
+	if f.backend.restartAfterInstall {
+		t.Fatal("disabled automatic restart was ignored")
+	}
+}
+
 func TestUpdaterReportsActionFailure(t *testing.T) {
 	f := newUpdaterFixture(t, updaterSnapshot(1, appservice.UpdatePhaseIdle))
 	f.backend.fail = errors.New("no")
@@ -139,12 +165,12 @@ func TestUpdaterInitializeIsIdempotent(t *testing.T) {
 	f.store.Initialize(f.bus, f.rt.Dispatcher.Post)
 	f.store.Initialize(f.bus, f.rt.Dispatcher.Post)
 	f.settle()
-	if f.bus.listeners != 2 {
+	if f.bus.listeners != 1 {
 		t.Fatal(f.bus.listeners)
 	}
 	f.store.Cleanup()
 	f.initialize()
-	if f.bus.listeners != 2 {
+	if f.bus.listeners != 1 {
 		t.Fatal(f.bus.listeners)
 	}
 	f.store.Cleanup()

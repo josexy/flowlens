@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -11,8 +12,71 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
+	"github.com/josexy/flowlens/internal/serviceruntime"
+	appservice "github.com/josexy/flowlens/internal/services/app_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
+
+func TestAutomaticUpdateRestartUsesLifecycleWithoutAWindow(t *testing.T) {
+	for _, blocked := range []bool{false, true} {
+		t.Run(map[bool]string{false: "restart", true: "unsaved work"}[blocked], func(t *testing.T) {
+			guarded := false
+			f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, func(reason string, _ func()) bool {
+				guarded = reason == quitReasonUpdate
+				return blocked
+			})
+			service, bus := appservice.New(), serviceruntime.NewBus()
+			engine := newEngineFixture(func(_ context.Context, progress func(int64, int64)) error {
+				progress(100, 100)
+				return nil
+			}).engine
+			engine.reporter = service
+			service.SetEventBus(bus)
+			service.SetUpdateEngine(engine, appservice.UpdateApplyModeSelf)
+			if err := service.ServiceStartup(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(service.ShutdownUpdater)
+			var failed []error
+			handler := restartHandler(f, &failed)
+			requested := make(chan struct{}, 2)
+			off := bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) {
+				handler.request()
+				requested <- struct{}{}
+			})
+			t.Cleanup(off)
+			if err := service.CheckForUpdates(); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(time.Second)
+			for service.GetUpdateSnapshot().Phase != appservice.UpdatePhaseAvailable && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			if err := service.DownloadUpdate(true); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-requested:
+			case <-time.After(time.Second):
+				t.Fatal("no automatic restart request")
+			}
+			if !guarded || len(failed) != 0 || f.lifecycle.relaunch.Load() == blocked {
+				t.Fatalf("guarded=%v, blocked=%v, relaunch=%v, failures=%v", guarded, blocked, f.lifecycle.relaunch.Load(), failed)
+			}
+			if blocked {
+				if service.GetUpdateSnapshot().Phase != appservice.UpdatePhaseReady {
+					t.Fatal("declining a restart must retain the installed update")
+				}
+			} else {
+				f.lifecycle.coordinator.UIReady()
+				f.waitForQuit(t)
+				if f.prepared.Load() != 1 {
+					t.Fatal("restart skipped normal shutdown")
+				}
+			}
+		})
+	}
+}
 
 func restartHandler(f *lifecycleFixture, failed *[]error) *updateRestartHandler {
 	return &updateRestartHandler{

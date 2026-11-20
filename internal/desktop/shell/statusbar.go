@@ -91,12 +91,8 @@ func (a *App) updateStatus() (string, *ui.SVG, nui.Color) {
 		return locales.StatusUpdateError(), lucide.CircleAlert(), nui.Error
 	case appservice.UpdatePhaseChecking:
 		return locales.StatusUpdateChecking(), lucide.LoaderCircle(), nui.Neutral
-	case appservice.UpdatePhaseDownloading:
-		return locales.UpdaterDownloadingTitle(), lucide.LoaderCircle(), nui.Primary
-	case appservice.UpdatePhaseVerifying:
-		return locales.UpdaterVerifyingTitle(), lucide.LoaderCircle(), nui.Primary
-	case appservice.UpdatePhasePreparing:
-		return locales.UpdaterPreparingTitle(), lucide.LoaderCircle(), nui.Primary
+	case appservice.UpdatePhaseInstalling:
+		return locales.UpdaterInstallingTitle(), lucide.LoaderCircle(), nui.Primary
 	case appservice.UpdatePhaseAvailable:
 		return locales.StatusUpdateAvailable(), lucide.Download(), nui.Primary
 	}

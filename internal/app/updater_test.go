@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -15,14 +14,7 @@ import (
 
 type recordingReporter struct {
 	mu       sync.Mutex
-	phases   []appservice.UpdatePhase
 	progress []appservice.Progress
-}
-
-func (r *recordingReporter) ReportUpdatePhase(phase appservice.UpdatePhase) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.phases = append(r.phases, phase)
 }
 
 func (r *recordingReporter) ReportUpdateProgress(progress appservice.Progress) {
@@ -35,8 +27,6 @@ type engineFixture struct {
 	engine   *mygoEngine
 	reporter *recordingReporter
 	clock    time.Time
-	timers   []func()
-	stopped  int
 }
 
 func newEngineFixture(install func(context.Context, func(int64, int64)) error) *engineFixture {
@@ -47,10 +37,6 @@ func newEngineFixture(install func(context.Context, func(int64, int64)) error) *
 		},
 		reporter: f.reporter,
 		now:      func() time.Time { return f.clock },
-		after: func(_ time.Duration, run func()) func() {
-			f.timers = append(f.timers, run)
-			return func() { f.stopped++ }
-		},
 	}
 	return f
 }
@@ -63,7 +49,7 @@ func TestMygoEngineMapsTheRelease(t *testing.T) {
 	}
 }
 
-func TestMygoEngineInfersPhases(t *testing.T) {
+func TestMygoEngineMeasuresDownload(t *testing.T) {
 	var f *engineFixture
 	f = newEngineFixture(func(_ context.Context, progress func(int64, int64)) error {
 		progress(10, 100)
@@ -71,7 +57,6 @@ func TestMygoEngineInfersPhases(t *testing.T) {
 		progress(50, 100)
 		f.clock = f.clock.Add(time.Second)
 		progress(100, 100)
-		f.timers[0]()
 		return nil
 	})
 	if _, err := f.engine.Check(context.Background()); err != nil {
@@ -79,10 +64,6 @@ func TestMygoEngineInfersPhases(t *testing.T) {
 	}
 	if err := f.engine.DownloadAndInstall(context.Background()); err != nil {
 		t.Fatal(err)
-	}
-	want := []appservice.UpdatePhase{appservice.UpdatePhaseVerifying, appservice.UpdatePhasePreparing}
-	if !slices.Equal(f.reporter.phases, want) {
-		t.Fatal(f.reporter.phases)
 	}
 	if len(f.reporter.progress) != 3 || f.reporter.progress[2].Written != 100 || f.reporter.progress[1].Written != 50 {
 		t.Fatalf("%+v", f.reporter.progress)
@@ -103,16 +84,8 @@ func TestMygoEngineReturnsToDownloadWhenDeltaFallsBack(t *testing.T) {
 	if err := f.engine.DownloadAndInstall(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	want := []appservice.UpdatePhase{appservice.UpdatePhaseVerifying, appservice.UpdatePhaseDownloading, appservice.UpdatePhaseVerifying}
-	if !slices.Equal(f.reporter.phases, want) {
-		t.Fatal(f.reporter.phases)
-	}
-	f.timers[0]() // the stale step to Prepare from before the restart
-	if slices.Contains(f.reporter.phases, appservice.UpdatePhasePreparing) {
-		t.Fatal("a superseded verification must not advance", f.reporter.phases)
-	}
-	if f.stopped == 0 {
-		t.Fatal("timer is stopped")
+	if len(f.reporter.progress) != 3 || f.reporter.progress[1].Written != 5 || f.reporter.progress[1].Total != 100 || f.reporter.progress[1].Rate != 0 {
+		t.Fatalf("fallback progress: %+v", f.reporter.progress)
 	}
 }
 
@@ -127,9 +100,6 @@ func TestMygoEngineCancelStopsInstall(t *testing.T) {
 	_, _ = f.engine.Check(context.Background())
 	if err := f.engine.DownloadAndInstall(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
-	}
-	if len(f.reporter.phases) != 0 {
-		t.Fatal(f.reporter.phases)
 	}
 }
 

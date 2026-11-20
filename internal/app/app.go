@@ -571,13 +571,14 @@ func openMainWindow(started *launched, shown func()) {
 		},
 	})
 	settingsWindow.blocked, updateWindow.blocked = lifecycle.coordinator.InProgress, lifecycle.coordinator.InProgress
-	settingsWindow.canClose, updateWindow.canClose = lifecycle.coordinator.CanQuit, lifecycle.coordinator.CanQuit
+	settingsWindow.canClose = lifecycle.coordinator.CanQuit
 	restartForUpdate := &updateRestartHandler{
 		blocked: func(proceed func()) bool { return lifecycle.blockedByGuards(quitReasonUpdate, proceed) },
 		restart: lifecycle.restartForUpdate,
 		failed:  func(err error) { all.bus.Emit(appservice.UpdateRestartFailedEventName, err.Error()) },
 	}
-	all.bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) { go restartForUpdate.request() })
+	offUpdateRestart := all.bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) { go restartForUpdate.request() })
+	mygo.App.OnQuit(offUpdateRestart)
 	data.Updater.Initialize(all.bus, data.Runtime.Dispatcher.Post)
 	data.MemStats.Initialize(all.bus, data.Runtime.Dispatcher.Post)
 	app.Host.ShutdownUIReady = func() { lifecycle.coordinator.UIReady() }
