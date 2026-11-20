@@ -52,7 +52,7 @@ Start the proxy and point your client at `127.0.0.1:8080`. New installations gen
 
 ## Build from Source
 
-Requirements: Go 1.27.3 or newer, [Task](https://taskfile.dev) (recommended), and the Xcode Command Line Tools on macOS. Python 3 is needed only for Python request hooks; FlowLens detects installed interpreters but does not install one.
+Requirements: Go 1.27.3 or newer and [Task](https://taskfile.dev) (recommended). Ordinary builds and tests use `CGO_ENABLED=0` on every desktop platform, with no C/Objective-C compiler. macOS signing and DMG packaging still need the platform tools; see [Building and Packaging](docs/technical/building.md). Python 3 is needed only for Python request hooks; FlowLens detects installed interpreters but does not install one.
 
 ```shell
 git clone https://github.com/josexy/flowlens.git

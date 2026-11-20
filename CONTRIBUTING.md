@@ -11,13 +11,13 @@ Thank you for helping improve FlowLens. This guide covers the contribution path.
 
 ## Development Setup
 
-You need Go 1.27.3 or newer and, preferably, [Task](https://taskfile.dev). macOS also needs the Xcode Command Line Tools. Python 3 is needed only to test Python plugins. There is no JavaScript toolchain.
+You need Go 1.27.3 or newer and, preferably, [Task](https://taskfile.dev). Ordinary builds and tests need no C/Objective-C compiler. macOS requires version 13.0 or later; signing and DMG packaging still use macOS platform tools. Python 3 is needed only to test Python plugins. There is no JavaScript toolchain.
 
 ```shell
 task dev
 ```
 
-Without Task, run `go tool mygo dev`. The Taskfile builds Windows and Linux with `CGO_ENABLED=0` and macOS with `CGO_ENABLED=1`.
+Without Task, run `go tool mygo dev` with `CGO_ENABLED=0`. The Taskfile selects this mode on Windows, Linux, and macOS. See [Building and Packaging](docs/technical/building.md) for the macOS linker and packaging configuration.
 
 | Command | Purpose |
 | --- | --- |

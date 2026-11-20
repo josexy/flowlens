@@ -1,29 +1,42 @@
-//go:build darwin && cgo
-
 package memstatsservice
 
-/*
-#include <mach/mach.h>
-#include <stdint.h>
+import (
+	"fmt"
+	"sync"
+	"unsafe"
 
-// phys_footprint is part of TASK_VM_INFO on every macOS release Go supports.
-static int64_t flowlens_phys_footprint(void) {
-	task_vm_info_data_t info;
-	mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-	if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) {
-		return -1;
+	"github.com/ebitengine/purego"
+)
+
+var loadDarwinMach = sync.OnceValues(func() (*machMemoryAPI, error) {
+	return bindDarwinMach(purego.Dlopen, purego.Dlsym)
+})
+
+func bindDarwinMach(open func(string, int) (uintptr, error), symbol func(uintptr, string) (uintptr, error)) (*machMemoryAPI, error) {
+	// Registered addresses and the libSystem handle live for the whole process.
+	handle, err := open("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_LOCAL)
+	if err != nil {
+		return nil, fmt.Errorf("load Mach memory API: %w", err)
 	}
-	return (int64_t)info.phys_footprint;
+	info, err := symbol(handle, "task_info")
+	if err != nil || info == 0 {
+		return nil, fmt.Errorf("resolve task_info: %v", err)
+	}
+	self, err := symbol(handle, "mach_task_self_")
+	if err != nil || self == 0 {
+		return nil, fmt.Errorf("resolve mach_task_self_: %v", err)
+	}
+	// mach_task_self() expands to this exported uint32_t port variable, not
+	// a function. This borrowed task port must not be deallocated.
+	api := &machMemoryAPI{task: **(**uint32)(unsafe.Pointer(&self))}
+	purego.RegisterFunc(&api.taskInfo, info)
+	return api, nil
 }
-*/
-import "C"
 
-// readProcessMemory reads the physical footprint, as Activity Monitor's Memory
-// column shows it.
 func readProcessMemory() ProcessMemory {
-	bytes := int64(C.flowlens_phys_footprint())
-	if bytes <= 0 {
+	api, err := loadDarwinMach()
+	if err != nil {
 		return unavailableProcessMemory()
 	}
-	return ProcessMemory{Bytes: bytes, Measure: MeasurePhysFootprint}
+	return api.read()
 }

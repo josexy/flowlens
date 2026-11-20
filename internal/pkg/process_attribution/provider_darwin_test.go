@@ -1,9 +1,10 @@
-//go:build darwin && cgo
+//go:build darwin
 
 package processattribution
 
 import (
 	"context"
+	"image"
 	"net"
 	"net/netip"
 	"os"
@@ -66,6 +67,7 @@ func TestDarwinProviderRefreshesCachedSnapshotAfterTupleMiss(t *testing.T) {
 	}
 
 	provider := newDarwinProvider()
+	provider.enrich = nil // Headless tests do not pump the AppKit main queue.
 	now := time.Now()
 	provider.now = func() time.Time { return now }
 	loadCalls := 0
@@ -99,36 +101,36 @@ func TestDarwinProviderRefreshesCachedSnapshotAfterTupleMiss(t *testing.T) {
 	}
 }
 
-func TestDarwinBridgeHandlesExitedProcess(t *testing.T) {
+func TestDarwinHandlesExitedProcess(t *testing.T) {
 	command := exec.Command("/usr/bin/true")
 	if err := command.Run(); err != nil {
-		t.Fatalf("run exited-process fixture: %v", err)
+		t.Fatal(err)
 	}
-	pid := uint32(command.ProcessState.Pid())
-	before := darwinBridgeOutstandingAllocations()
-	_, _ = lookupDarwinProcessIdentity(pid)
-	if got := darwinBridgeOutstandingAllocations(); got != before {
-		t.Fatalf("outstanding bridge allocations = %d, want %d", got, before)
+	identity, err := lookupDarwinProcessIdentity(uint32(command.ProcessState.Pid()))
+	if err == nil || identity.startToken != "" {
+		t.Fatalf("exited process: %+v, %v", identity, err)
 	}
 }
 
-func TestDarwinBridgeReleasesReturnedBuffers(t *testing.T) {
-	before := darwinBridgeOutstandingAllocations()
+func TestDarwinCurrentProcessIdentity(t *testing.T) {
 	identity, err := lookupDarwinProcessIdentity(uint32(os.Getpid()))
 	if err != nil {
-		t.Fatalf("lookupDarwinProcessIdentity: %v", err)
+		t.Fatal(err)
 	}
 	if identity.startToken == "" || identity.executablePath == "" || identity.processName == "" {
-		t.Fatalf("current process identity is incomplete: %+v", identity)
-	}
-	_, _ = loadDarwinProcessIcon(context.Background(), uint32(os.Getpid()), identity.executablePath)
-	if got := darwinBridgeOutstandingAllocations(); got != before {
-		t.Fatalf("outstanding bridge allocations = %d, want %d", got, before)
+		t.Fatalf("incomplete identity: %+v", identity)
 	}
 }
 
 func TestDarwinProviderFindsCurrentLoopbackProcess(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	for _, address := range []string{"127.0.0.1:0", "[::1]:0"} {
+		t.Run(address, func(t *testing.T) { testDarwinLoopbackProcess(t, address) })
+	}
+}
+
+func testDarwinLoopbackProcess(t *testing.T, address string) {
+	t.Helper()
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -149,6 +151,7 @@ func TestDarwinProviderFindsCurrentLoopbackProcess(t *testing.T) {
 		Proxy:  normalizeAddrPort(client.RemoteAddr().(*net.TCPAddr).AddrPort()),
 	}
 	provider := newDarwinProvider()
+	provider.enrich = nil // Headless tests do not pump the AppKit main queue.
 	deadline := time.Now().Add(time.Second)
 	var result Result
 	for time.Now().Before(deadline) {
@@ -162,4 +165,37 @@ func TestDarwinProviderFindsCurrentLoopbackProcess(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("loopback lookup result = %+v, want current PID %d", result, os.Getpid())
+}
+
+func TestDarwinProviderRejectsPIDReuseAfterEnrichment(t *testing.T) {
+	tuple := EndpointTuple{Client: netip.MustParseAddrPort("127.0.0.1:43000"), Proxy: netip.MustParseAddrPort("127.0.0.1:8080")}
+	p := newDarwinProvider()
+	p.loadRows = func() ([]darwinSocketOwnerRow, error) {
+		return []darwinSocketOwnerRow{{local: tuple.Client, remote: tuple.Proxy, pid: 42}}, nil
+	}
+	token := "123:456"
+	p.identity = func(uint32) (darwinProcessIdentity, error) { return darwinProcessIdentity{startToken: token}, nil }
+	p.enrich = func(_ context.Context, _ uint32, value darwinProcessIdentity) darwinProcessIdentity {
+		token = "789:1"
+		value.appID = "stale"
+		return value
+	}
+	result := p.Lookup(context.Background(), tuple)
+	if result.StartToken != "" || result.AppID != "" {
+		t.Fatalf("stale process metadata: %+v", result)
+	}
+}
+
+func TestDarwinProviderRejectsPIDReuseDuringIcon(t *testing.T) {
+	p := newDarwinProvider()
+	token := "123:456"
+	p.identity = func(uint32) (darwinProcessIdentity, error) { return darwinProcessIdentity{startToken: token}, nil }
+	p.loadIcon = func(context.Context, uint32, string) (image.Image, error) {
+		token = "789:1"
+		return image.NewRGBA(image.Rect(0, 0, 1, 1)), nil
+	}
+	icon, err := p.LoadIcon(context.Background(), Result{PID: 42, StartToken: token})
+	if err == nil || icon != nil {
+		t.Fatal("stale icon published")
+	}
 }

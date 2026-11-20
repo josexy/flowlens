@@ -20,14 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, cgo: "1" }
-          - { os: ubuntu-latest, cgo: "0" }
+          - { os: macos-latest }
+          - { os: macos-15-intel }
+          - { os: ubuntu-latest }
     runs-on: ${{ matrix.os }}
     env:
-      CGO_ENABLED: ${{ matrix.cgo }}
-      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
+      CGO_ENABLED: "0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -66,3 +64,24 @@ jobs:
 
       - name: Run Go tests
         run: go test ./...
+
+      - name: Run AppKit main-loop fixture
+        if: runner.os == 'macOS'
+        env:
+          FLOWLENS_APPKIT_TEST: "1"
+        run: go test ./internal/pkg/process_attribution -run TestDarwinAppKit -count=1 -timeout=2m
+
+  compile:
+    name: Compile desktop executables
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go run ./internal/cmd/buildcheck

@@ -120,11 +120,26 @@ func TestProxyURLFromSystemProxyCandidates(t *testing.T) {
 }
 
 func TestFromEnvironmentNormalizesBareHost(t *testing.T) {
+	// x/net prefers lowercase variables on Unix; inherited desktop proxies
+	// must not override this test's explicit environment.
+	t.Setenv("http_proxy", "")
+	t.Setenv("https_proxy", "")
 	t.Setenv("HTTP_PROXY", "127.0.0.1:8888")
 	t.Setenv("HTTPS_PROXY", "")
 	t.Setenv("REQUEST_METHOD", "")
 
 	if got := FromEnvironment(); got != "http://127.0.0.1:8888" {
 		t.Fatalf("FromEnvironment() = %q, want %q", got, "http://127.0.0.1:8888")
+	}
+}
+
+func TestGetPrefersEnvironmentToPlatform(t *testing.T) {
+	t.Setenv("http_proxy", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("HTTP_PROXY", "proxy.example:9000")
+	t.Setenv("HTTPS_PROXY", "secure.example:9443")
+	t.Setenv("REQUEST_METHOD", "")
+	if got := Get(); got != "http://proxy.example:9000" {
+		t.Fatalf("environment override = %q", got)
 	}
 }
