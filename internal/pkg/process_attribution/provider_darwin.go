@@ -1,26 +1,12 @@
-//go:build darwin && cgo
-
 package processattribution
 
-/*
-#cgo LDFLAGS: -framework AppKit -framework Foundation
-#include "bridge_darwin.h"
-#include <stdlib.h>
-*/
-import "C"
-
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"image"
-	"image/png"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -57,6 +43,8 @@ type darwinProvider struct {
 	now      func() time.Time
 	loadRows func() ([]darwinSocketOwnerRow, error)
 	identity func(uint32) (darwinProcessIdentity, error)
+	enrich   func(context.Context, uint32, darwinProcessIdentity) darwinProcessIdentity
+	loadIcon func(context.Context, uint32, string) (image.Image, error)
 }
 
 func init() {
@@ -68,6 +56,8 @@ func newDarwinProvider() *darwinProvider {
 		now:      time.Now,
 		loadRows: captureDarwinSocketRows,
 		identity: lookupDarwinProcessIdentity,
+		enrich:   enrichDarwinProcessIdentity,
+		loadIcon: loadDarwinProcessIcon,
 	}
 }
 
@@ -103,14 +93,47 @@ func (p *darwinProvider) Lookup(ctx context.Context, tuple EndpointTuple) Result
 	case 0:
 		return Result{Status: StatusNotFound, Source: "darwin_pcb_sysctl", Reason: "socket_owner_not_found"}
 	case 1:
-		return darwinResultForPID(pids[0], p.identity)
+		return darwinResultForPID(pids[0], func(pid uint32) (darwinProcessIdentity, error) {
+			identity, err := p.identity(pid)
+			if err != nil || p.enrich == nil {
+				return identity, err
+			}
+			enriched := p.enrich(ctx, pid, identity)
+			current, err := p.identity(pid)
+			if err != nil || current.startToken != identity.startToken {
+				return darwinProcessIdentity{}, syscall.ESRCH
+			}
+			if err := ctx.Err(); err != nil {
+				return darwinProcessIdentity{}, err
+			}
+			return enriched, nil
+		})
 	default:
 		return Result{Status: StatusAmbiguous, Source: "darwin_pcb_sysctl", Reason: "multiple_socket_owners"}
 	}
 }
 
 func (p *darwinProvider) LoadIcon(ctx context.Context, result Result) (image.Image, error) {
-	return loadDarwinProcessIcon(ctx, result.PID, result.ExecutablePath)
+	if result.PID == 0 || result.StartToken == "" {
+		return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
+	}
+	identity, err := p.identity(result.PID)
+	if err == nil && identity.startToken == result.StartToken {
+		icon, loadErr := p.loadIcon(ctx, result.PID, result.ExecutablePath)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		identity, err = p.identity(result.PID)
+		if err == nil && identity.startToken == result.StartToken {
+			return icon, loadErr
+		}
+	}
+	if errors.Is(err, syscall.ESRCH) && result.ExecutablePath != "" {
+		// The attributed process exited. Use only its recorded path, even if
+		// another process acquires the PID before the main queue runs.
+		return p.loadIcon(ctx, 0, result.ExecutablePath)
+	}
+	return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
 }
 
 func (p *darwinProvider) socketRows(
@@ -172,57 +195,4 @@ func darwinResultForPID(pid uint32, identityLookup func(uint32) (darwinProcessId
 		result.Reason = "metadata_denied"
 	}
 	return result
-}
-
-func lookupDarwinProcessIdentity(pid uint32) (darwinProcessIdentity, error) {
-	var copied C.flowlens_darwin_process_identity
-	if code := C.flowlens_darwin_copy_process_identity(C.int32_t(pid), &copied); code != 0 {
-		return darwinProcessIdentity{}, syscall.Errno(code)
-	}
-	defer C.flowlens_darwin_free_process_identity(&copied)
-	identity := darwinProcessIdentity{
-		startToken:         strconv.FormatUint(uint64(copied.start_seconds), 10) + ":" + strconv.FormatUint(uint64(copied.start_microseconds), 10),
-		displayName:        C.GoString(copied.display_name),
-		processName:        C.GoString(copied.process_name),
-		executablePath:     C.GoString(copied.executable_path),
-		appID:              C.GoString(copied.bundle_id),
-		identityConfidence: "none",
-		metadataDenied:     copied.metadata_denied != 0,
-	}
-	if identity.displayName != "" && (identity.appID != "" || identity.displayName != identity.processName) {
-		identity.identityConfidence = "exact"
-	}
-	return identity, nil
-}
-
-func loadDarwinProcessIcon(ctx context.Context, pid uint32, executablePath string) (image.Image, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	path := C.CString(executablePath)
-	defer C.free(unsafe.Pointer(path))
-	var copied C.flowlens_darwin_buffer
-	if code := C.flowlens_darwin_copy_process_icon(C.int32_t(pid), path, &copied); code != 0 {
-		return nil, &IconUnavailableError{Reason: fmt.Sprintf("darwin_icon_%d", int(code))}
-	}
-	defer C.flowlens_darwin_free_buffer(&copied)
-	if copied.bytes == nil || copied.length == 0 {
-		return nil, &IconUnavailableError{Reason: "darwin_icon_empty"}
-	}
-	if uint64(copied.length) > uint64(1<<31-1) {
-		return nil, &IconUnavailableError{Reason: "darwin_icon_too_large"}
-	}
-	data := C.GoBytes(unsafe.Pointer(copied.bytes), C.int(copied.length))
-	decoded, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("decode Darwin process icon: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return decoded, nil
-}
-
-func darwinBridgeOutstandingAllocations() uint64 {
-	return uint64(C.flowlens_darwin_outstanding_allocations())
 }

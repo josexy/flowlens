@@ -1,12 +1,11 @@
 version: "3"
 
-# macOS keeps its cgo integrations (process attribution and the managed system
-# proxy). Windows and Linux build without cgo.
+# Ordinary compilation uses Go bindings to platform APIs on every desktop OS.
 env:
-  CGO_ENABLED: '{{if eq OS "darwin"}}1{{else}}0{{end}}'
-  CGO_CFLAGS: '{{if eq OS "darwin"}}-mmacosx-version-min=12.0{{end}}'
-  CGO_LDFLAGS: '{{if eq OS "darwin"}}-mmacosx-version-min=12.0{{end}}'
-  MACOSX_DEPLOYMENT_TARGET: '{{if eq OS "darwin"}}12.0{{end}}'
+  CGO_ENABLED: '0'
+  # MyGo supplies its own -ldflags, so GOFLAGS cannot set this build metadata.
+  # The Go linker ignores -macos for non-Darwin executables.
+  MYGO_LDFLAGS: '-macos=13.0 {{.MYGO_LDFLAGS}}'
 
 tasks:
   default:
@@ -43,9 +42,6 @@ tasks:
     cmds:
       - go test ./...
 
-  # On Windows and Linux the race detector needs cgo and a C compiler. On macOS
-  # it needs neither, but FlowLens builds there with cgo anyway. Pass packages
-  # after -- to narrow the run.
   test:race:
     desc: Runs Go tests with the race detector, by default on the concurrency-heavy packages
     env:

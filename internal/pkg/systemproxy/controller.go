@@ -20,6 +20,9 @@ var (
 	ErrUnsupported       = errors.New("system proxy is not supported on this platform")
 	ErrUnsupportedMode   = errors.New("system proxy mode is not supported on this platform")
 	ErrChangedExternally = errors.New("system proxy was changed outside FlowLens")
+	// A native write may commit before application fails. Failed compensation
+	// invalidates active ownership even if this was an update of an active proxy.
+	errProxyOwnershipLost = errors.New("system proxy ownership could not be preserved")
 )
 
 type Endpoint struct {
@@ -130,7 +133,7 @@ func (c *Controller) Apply(endpoint Endpoint, originalUpstreamProxy string) erro
 			return nil
 		}
 		if err := c.driver.Apply(endpoint); err != nil {
-			if errors.Is(err, ErrChangedExternally) {
+			if errors.Is(err, ErrChangedExternally) || errors.Is(err, errProxyOwnershipLost) {
 				c.clearLocked()
 			}
 			return err
@@ -144,7 +147,7 @@ func (c *Controller) Apply(endpoint Endpoint, originalUpstreamProxy string) erro
 		return err
 	}
 	if err := c.driver.Apply(endpoint); err != nil {
-		if errors.Is(err, ErrChangedExternally) {
+		if errors.Is(err, ErrChangedExternally) || errors.Is(err, errProxyOwnershipLost) {
 			return err
 		}
 		if restoreErr := c.driver.Restore(snapshot); restoreErr != nil {
@@ -176,7 +179,7 @@ func (c *Controller) Restore() error {
 		return ErrChangedExternally
 	}
 	if err := c.driver.Restore(c.snapshot); err != nil {
-		if errors.Is(err, ErrChangedExternally) {
+		if errors.Is(err, ErrChangedExternally) || errors.Is(err, errProxyOwnershipLost) {
 			c.clearLocked()
 		}
 		return err

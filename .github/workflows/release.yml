@@ -93,15 +93,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: macos-latest, cgo: "1" }
-          - { os: ubuntu-latest, cgo: "0" }
+        os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
-      CGO_ENABLED: ${{ matrix.cgo }}
-      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
+      CGO_ENABLED: "0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -134,6 +129,8 @@ jobs:
         run: go tool mygo i18n check
 
       - name: Run Go tests
+        env:
+          FLOWLENS_APPKIT_TEST: ${{ runner.os == 'macOS' && '1' || '0' }}
         run: go test ./...
 
   build:
@@ -147,17 +144,14 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - { name: macOS, os: macos-latest, platform: "darwin/arm64,darwin/universal", cgo: "1" }
-          - { name: Windows, os: windows-latest, platform: "windows/amd64,windows/arm64", cgo: "0" }
-          - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64", cgo: "0" }
+          - { name: macOS, os: macos-latest, platform: "darwin/arm64,darwin/universal" }
+          - { name: Windows, os: windows-latest, platform: "windows/amd64,windows/arm64" }
+          - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64" }
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     env:
-      CGO_ENABLED: ${{ matrix.cgo }}
-      CGO_CFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      CGO_LDFLAGS: ${{ matrix.os == 'macos-latest' && '-mmacosx-version-min=12.0' || '' }}
-      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '12.0' || '' }}
+      CGO_ENABLED: "0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -173,6 +167,7 @@ jobs:
       # MyGo downloads NSIS on Windows when it is not already installed.
       - name: Build and upload
         env:
+          MYGO_LDFLAGS: "-macos=13.0"
           GH_TOKEN: ${{ github.token }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: go tool mygo build -platform "${{ matrix.platform }}" -upload

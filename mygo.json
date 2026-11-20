@@ -5,7 +5,8 @@
   "version": "2.0.0",
   "out": "build",
   "macos": {
-    "icon": "assets/macos/app-icon.icns"
+    "icon": "assets/macos/app-icon.icns",
+    "minimumSystemVersion": "13.0"
   },
   "updates": {
     "publicKey": "/8YOLq4hDt7zrhJ7+Gpa+OaEwazlLC32Bi1PKIr7nto=",

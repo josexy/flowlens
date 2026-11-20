@@ -17,6 +17,23 @@ type fakePlatformDriver struct {
 	restoreErr     error
 }
 
+func TestControllerClearsOwnershipAfterFailedNativeRecovery(t *testing.T) {
+	driver := &fakePlatformDriver{supported: true, snapshot: "original", matches: true}
+	controller := newController(driver)
+	endpoint := Endpoint{Mode: ModeHTTP, Host: "127.0.0.1", Port: 8080}
+	if err := controller.Apply(endpoint, ""); err != nil {
+		t.Fatal(err)
+	}
+	driver.applyErr = errProxyOwnershipLost
+	endpoint.Port++
+	if err := controller.Apply(endpoint, ""); !errors.Is(err, errProxyOwnershipLost) {
+		t.Fatal(err)
+	}
+	if controller.State().Active {
+		t.Fatal("failed recovery still reports active ownership")
+	}
+}
+
 func (f *fakePlatformDriver) Supported() bool { return f.supported }
 
 func (f *fakePlatformDriver) Supports(mode Mode) bool {

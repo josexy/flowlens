@@ -1,21 +1,22 @@
 # Building and Packaging
 
-FlowLens is a Go application. Building it needs Go, the MyGo CLI that `go.mod` pins as a tool (`go tool mygo`), and preferably Task. Nothing else is required on Windows or Linux; macOS also needs the Xcode Command Line Tools.
+FlowLens compilation needs Go, the MyGo CLI pinned in `go.mod` (`go tool mygo`), and preferably Task. No C/Objective-C compiler, Node.js, or npm is needed for ordinary builds or Go tests. Python request hooks use an external Python 3 interpreter.
 
-## Cgo
+## Cgo and platform tools
 
-| Target | `CGO_ENABLED` | Why |
-| --- | --- | --- |
-| Windows, Linux | `0` | Neither MyGo nor FlowLens needs cgo there, so one machine can build every target |
-| macOS | `1` | Process attribution with icons and the managed system proxy use Objective-C |
+Task, CI, release verification, and packaging select `CGO_ENABLED=0` on Windows, Linux, and macOS. macOS process attribution/icons, system proxy discovery/control, and physical-footprint sampling call system frameworks through the pinned purego dependency. No helper dylib or generated cgo wrapper is built.
 
-The Taskfile sets this from the host system. A production `mygo build` for macOS with cgo disabled fails on purpose (`cgo_guard_darwin.go`), rather than producing an application without those features. Because one `mygo build` applies one `CGO_ENABLED` to all its targets, build macOS separately from Windows and Linux.
+Executable cross-compilation needs no macOS SDK. macOS application signing and DMG creation still run on macOS and use `codesign` and `hdiutil` (install the Xcode Command Line Tools when required by the packaging tools). Frameworks remain runtime dependencies. Compile success alone does not verify native behavior.
 
-## CI Verification
+The optional `task test:race` sets `CGO_ENABLED=1` on all desktop platforms and uses a supported C compiler. Pass package names after `--` to narrow the run.
 
-CI and release verification run on `ubuntu-latest` with `CGO_ENABLED=0` and `macos-latest` with `CGO_ENABLED=1`. macOS keeps the deployment target at 12.0. They invoke `gofmt`, `go tool mygo vet .`, `go tool mygo i18n check`, and `go test ./...` directly, without installing Task or golangci-lint. CI also checks that `go mod tidy` leaves `go.mod` and `go.sum` unchanged on both platforms. Verification uses a separate Go cache from release packaging.
+`mygo.json` explicitly sets `macos.minimumSystemVersion` to `13.0`. The pinned Go 1.27 toolchain requires macOS 13 or later; it no longer supports macOS 12 ([release notes](https://go.dev/doc/go1.27#darwin)). Task and release packaging pass `MYGO_LDFLAGS=-macos=13.0`; this sets Mach-O deployment metadata without C compiler flags. For a direct MyGo invocation, supply the same environment variable. Plain Darwin `go build` uses `-ldflags=-macos=13.0`. This metadata setting does not establish runtime compatibility: launching and testing both slices on macOS 13.0 remains a required acceptance check.
 
-Local `task verify` still includes golangci-lint. Run platform-specific tests locally when changing Windows or macOS behavior. Pull requests and main-branch pushes do not cross-compile release targets; the release workflow builds Windows, Linux, and macOS packages.
+## CI verification
+
+CI and release verification run formatting, UI lifecycle checks, message catalog checks, and `go test ./...` with cgo disabled on `ubuntu-latest` and `macos-latest`. The macOS test step sets `FLOWLENS_APPKIT_TEST=1` to run the AppKit main-loop fixture as part of the ordinary suite. CI also checks module tidy consistency. The release workflow builds the supported desktop packages, including the universal macOS application.
+
+Local `task verify` also includes golangci-lint. Native macOS validation commands, including Intel/Rosetta execution and manual proxy/package checks, are in [macOS native verification](macos-native-verification.md). The migration remains pending native acceptance until those results are recorded; Windows checks and cross-compilation do not count as macOS runtime passes.
 
 ## Common Builds
 
@@ -47,7 +48,7 @@ All platforms use the same shield-and-nodes artwork. Its sources are `assets/ico
 | macOS application bundle (`macos.icon` in `mygo.json`) | `assets/macos/app-icon.icns` |
 | macOS menu bar | `resources/trayicon-template.png` |
 
-After editing the SVG sources, run `task icons:generate` (or `go run ./assets/icons/generate.go`) to export all three with supersampled anti-aliasing. The ICNS holds several resolutions rendered from the SVG and works with the macOS 12.0 deployment target, without Icon Composer or a newer Xcode.
+After editing the SVG sources, run `task icons:generate` (or `go run ./assets/icons/generate.go`) to export all three with supersampled anti-aliasing. The ICNS holds several resolutions rendered from the SVG and works with the macOS 13.0 deployment target, without Icon Composer or a newer Xcode.
 
 The menu-bar icon is a 72-pixel template image shown at 18 points with `IconIsTemplate`, so AppKit colors it for the menu bar's appearance and selection state. Check the packaged ICNS with `task run` or `task package` on macOS: Finder and Dock at small sizes, and the tray in light, dark, and selected states on 1× and Retina displays.
 
@@ -73,7 +74,7 @@ MyGo replaces program files during installation on Windows and Linux; macOS stag
 2. Set `version` in `mygo.json` to the same version, such as `1.2.3`, then commit.
 3. Push the matching tag `v1.2.3`.
 
-`.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows amd64/arm64 on `windows-latest`, Linux amd64/arm64 on `ubuntu-latest`, and macOS arm64/universal on `macos-latest`, with cgo enabled only on macOS. `darwin/universal` combines arm64 and amd64 in one application; listing `darwin/arm64,darwin/amd64` would produce two separate applications.
+`.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows amd64/arm64 on `windows-latest`, Linux amd64/arm64 on `ubuntu-latest`, and macOS arm64/universal on `macos-latest`, with cgo disabled on every platform. `darwin/universal` combines arm64 and amd64 in one application; listing `darwin/arm64,darwin/amd64` would produce two separate applications.
 
 Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, all six platform update archives, both Debian architectures, and their checksum entries. It also requires all six `update-<target>.json` manifests, which MyGo excludes from `SHA256SUMS`. The draft is created before the build checks.
 
