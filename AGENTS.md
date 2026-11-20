@@ -116,5 +116,6 @@ Run the smallest checks that match the risk; `task verify` is the full check and
 - Update docs with behavior: the user guide stays task-oriented, and details go in `docs/technical/` (such as `traffic-metrics-and-har.md` and `http-rewrite-rules.md`). Python hook/scope/order/limit/security/console changes also update both plugin guides, the examples, README, and `internal/desktop/pythonapi/data`.
 - Change specified behavior through an OpenSpec change, archived once implemented.
 - Commits are English Conventional Commits, `<type>(<scope>): <summary>`, one class of change each, with only verified in-scope files.
+- Every `git commit` message should describe the actual changes as concretely as possible. For fixes, explain the problem and how the change resolves it; use the commit body when the summary cannot capture the relevant details.
 - The version lives only in `mygo.json`; releases need a matching tag and a `## <version>` section in `CHANGELOG.md`. All ordinary builds keep `CGO_ENABLED=0`. macOS packaging keeps the 13.0 bundle and Mach-O deployment metadata (`MYGO_LDFLAGS=-macos=13.0`); runtime acceptance still requires native tests on both architectures. See [Building and Packaging](docs/technical/building.md).
 - Report the result, checks run, and unresolved risks. If verification was unavailable, say why; feasibility alone is not completion.
