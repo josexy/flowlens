@@ -146,13 +146,50 @@ The inspection used the local profile and added one capture history containing
 paused, the proxy was stopped, and both validation apps were closed. System
 network settings were not changed.
 
+## Review follow-up (2026-11-20, Linux arm64)
+
+A branch review found one regression against the cgo driver. When the managed
+network service disappeared, the original `Matches` compared the current empty
+configuration with FlowLens's write and returned a mismatch, so the controller
+reported `ErrChangedExternally` and cleared ownership. The port returned a
+"service disappeared" error instead, which the controller passes through without
+clearing: management stayed active and could not be disabled until restart.
+
+The fix adds `errDarwinServiceMissing`. `Matches` maps it to a mismatch, and the
+locked write transaction maps it to `ErrChangedExternally` before any write.
+Snapshot still fails when the primary service is absent from preferences.
+`TestDarwinProxyMissingServiceEndsOwnership` covers `Matches` and `Restore`
+after removal, and the `service` transaction failure now asserts
+`ErrChangedExternally` with no commit. The fixture fakes unauthorized
+`SCPreferencesCreate` so read paths stay under reference counting. The native
+procedure's service-removal step now expects a conflict and cleared ownership.
+
+These Darwin changes were **compiled, vetted and linted only**; they were not
+executed. Rerun `CGO_ENABLED=0 go test ./internal/pkg/systemproxy -count=1` on
+arm64 and amd64 macOS (or the CI runners) before accepting them.
+
+Host: Debian 13, Linux 6.12 arm64, Go 1.27.3, Task 3.54.0, golangci-lint 2.15.0.
+All commands used `CGO_ENABLED=0`.
+
+| Command/check | Result |
+| --- | --- |
+| `task verify` | Formatting, golangci-lint (0 issues), UI vet and catalogs passed. `go test ./...` failed only `internal/desktop/theme` `TestCustomTextMatchesControlsAcrossSizesAndDPI` |
+| The same theme test on an unmodified `main` worktree | Fails the same way. The host has no Arial (`fc-match` substitutes DejaVu Sans), so hinted widths do not scale exactly. Pre-existing and unrelated; the branch changes no `internal/desktop` file |
+| `go mod tidy -diff` | No diff |
+| `go run ./internal/cmd/buildcheck` | All six targets, ordinary and `mygo_noinspector`, no selected CgoFiles, Darwin Mach-O minimum 13.0 |
+| `GOOS=darwin GOARCH=arm64/amd64` vet, `go test -c` and golangci-lint for systemproxy, attribution and memory | Pass, 0 issues; compile-only |
+| `go build -ldflags=-macos=13.0` for windows/amd64 and linux/arm64 | Pass; the release workflow's global `MYGO_LDFLAGS` does not break non-Darwin builds |
+| Source audit, `git diff --check`, `openspec validate remove-macos-cgo --strict` | Pass |
+
 ## Remaining acceptance
 
 24 of 28 tasks now have their stated evidence. The remaining tasks are:
 
-- **6.1:** Local macOS `task verify` and tidy passed; earlier Windows checks and
-  Linux CI remain valid. The exact native Linux Task/lint invocation is still
-  missing, and the earlier WSL environment is not available in this session.
+- **6.1:** Local macOS `task verify` and tidy passed before the review fix; earlier
+  Windows checks and Linux CI remain valid. Native Linux `task verify` now runs
+  every stage. Its test stage fails only on a pre-existing, font-dependent theme
+  test that fails on `main` as well, so it is not a pass. The systemproxy
+  change from the review needs a native macOS rerun on both architectures.
 - **6.4:** The user confirmed no disposable macOS network environment is
   available. Real authorization denial, service removal, auxiliary-key edits,
   compensation and owned restoration on shutdown remain untested there.
