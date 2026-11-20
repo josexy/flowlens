@@ -53,6 +53,7 @@ macOS release and development builds with cgo disabled SHALL provide process att
 #### Scenario: Process metadata or icon unavailable
 - **WHEN** a process exits, access is denied, or its metadata or icon cannot be read
 - **THEN** existing unavailable or partial-result behavior is preserved without fabricating identity or attaching a stale icon to another process
+- **AND** when an attributed process exits before its icon is ready, the provider can load the icon from the recorded bundle or executable path
 
 #### Scenario: Attribution canceled during shutdown
 - **WHEN** the application shuts down with attribution or icon work queued

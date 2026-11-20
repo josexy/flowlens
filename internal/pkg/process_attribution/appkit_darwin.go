@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/png"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"unsafe"
@@ -24,6 +23,7 @@ type darwinAppKitAPI struct {
 	selector  func(string) uintptr
 	msg0      func(uintptr, uintptr) uintptr
 	msgBytes  func(uintptr, uintptr) *byte
+	msgString func(uintptr, uintptr, string) uintptr
 	msg1      func(uintptr, uintptr, uintptr) uintptr
 	msg2      func(uintptr, uintptr, uintptr, uintptr) uintptr
 	msg3      func(uintptr, uintptr, uintptr, uintptr, uintptr) uintptr
@@ -53,7 +53,8 @@ func bindDarwinAppKit(open func(string, int) (uintptr, error), symbol func(uintp
 		target any
 	}{
 		{"objc_getClass", &api.class}, {"sel_registerName", &api.selector},
-		{"objc_msgSend", &api.msg0}, {"objc_msgSend", &api.msgBytes}, {"objc_msgSend", &api.msg1}, {"objc_msgSend", &api.msg2}, {"objc_msgSend", &api.msg3},
+		{"objc_msgSend", &api.msg0}, {"objc_msgSend", &api.msgBytes}, {"objc_msgSend", &api.msgString},
+		{"objc_msgSend", &api.msg1}, {"objc_msgSend", &api.msg2}, {"objc_msgSend", &api.msg3},
 		{"objc_autoreleasePoolPush", &api.poolPush}, {"objc_autoreleasePoolPop", &api.poolPop},
 		{"pthread_main_np", &api.isMain}, {"dispatch_async_f", &api.async},
 	} {
@@ -99,10 +100,7 @@ func (a *darwinAppKitAPI) send(object uintptr, name string, arg uintptr) uintptr
 }
 
 func (a *darwinAppKitAPI) nsString(value string) uintptr {
-	buffer := append([]byte(value), 0)
-	result := a.send(a.classes["NSString"], "stringWithUTF8String:", uintptr(unsafe.Pointer(&buffer[0])))
-	runtime.KeepAlive(buffer)
-	return result
+	return a.msgString(a.classes["NSString"], a.selectors["stringWithUTF8String:"], value)
 }
 
 func (a *darwinAppKitAPI) goString(object uintptr) string {
@@ -180,10 +178,13 @@ func enrichDarwinProcessIdentity(ctx context.Context, pid uint32, identity darwi
 }
 
 func (a *darwinAppKitAPI) iconPNG(pid uint32, path string) ([]byte, error) {
-	running := a.send(a.classes["NSRunningApplication"], "runningApplicationWithProcessIdentifier:", uintptr(pid))
-	icon := a.get(running, "icon")
-	if runningPath := a.goString(a.get(a.get(running, "executableURL"), "path")); runningPath != "" {
-		path = runningPath
+	var icon uintptr
+	if pid != 0 {
+		running := a.send(a.classes["NSRunningApplication"], "runningApplicationWithProcessIdentifier:", uintptr(pid))
+		icon = a.get(running, "icon")
+		if runningPath := a.goString(a.get(a.get(running, "executableURL"), "path")); runningPath != "" {
+			path = runningPath
+		}
 	}
 	if icon == 0 {
 		bundlePath := a.get(a.bundle(path), "bundlePath")

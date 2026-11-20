@@ -114,19 +114,26 @@ func (p *darwinProvider) Lookup(ctx context.Context, tuple EndpointTuple) Result
 }
 
 func (p *darwinProvider) LoadIcon(ctx context.Context, result Result) (image.Image, error) {
+	if result.PID == 0 || result.StartToken == "" {
+		return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
+	}
 	identity, err := p.identity(result.PID)
-	if err != nil || identity.startToken != result.StartToken || result.StartToken == "" {
-		return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
+	if err == nil && identity.startToken == result.StartToken {
+		icon, loadErr := p.loadIcon(ctx, result.PID, result.ExecutablePath)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		identity, err = p.identity(result.PID)
+		if err == nil && identity.startToken == result.StartToken {
+			return icon, loadErr
+		}
 	}
-	icon, err := p.loadIcon(ctx, result.PID, result.ExecutablePath)
-	if err != nil {
-		return nil, err
+	if errors.Is(err, syscall.ESRCH) && result.ExecutablePath != "" {
+		// The attributed process exited. Use only its recorded path, even if
+		// another process acquires the PID before the main queue runs.
+		return p.loadIcon(ctx, 0, result.ExecutablePath)
 	}
-	current, err := p.identity(result.PID)
-	if err != nil || current.startToken != result.StartToken {
-		return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
-	}
-	return icon, nil
+	return nil, &IconUnavailableError{Reason: "darwin_process_changed"}
 }
 
 func (p *darwinProvider) socketRows(

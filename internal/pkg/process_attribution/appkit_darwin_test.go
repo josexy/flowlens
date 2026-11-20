@@ -1,12 +1,11 @@
 package processattribution
 
 import (
-	"bytes"
 	"context"
-	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -56,7 +55,7 @@ func TestMain(m *testing.M) {
 
 func TestDarwinAppKitMainLoop(t *testing.T) {
 	if os.Getenv("FLOWLENS_APPKIT_TEST") != "1" {
-		t.Skip("run task test:macos:appkit in a macOS GUI session")
+		t.Skip("set FLOWLENS_APPKIT_TEST=1 in a macOS GUI session")
 	}
 	api, err := loadDarwinAppKit()
 	if err != nil {
@@ -74,6 +73,8 @@ func TestDarwinAppKitMainLoop(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundle, "Info.plist"), []byte(plist), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	provider := newDarwinProvider()
+	provider.identity = func(uint32) (darwinProcessIdentity, error) { return darwinProcessIdentity{}, syscall.ESRCH }
 	for i := 0; i < 20; i++ {
 		value, err := api.queue.invoke(context.Background(), func() (any, error) {
 			if api.isMain() == 0 {
@@ -89,13 +90,12 @@ func TestDarwinAppKitMainLoop(t *testing.T) {
 			t.Fatalf("bundle metadata: %+v", identity)
 		}
 		for _, path := range []string{executable, "/bin/sh"} {
-			value, err := api.queue.invoke(context.Background(), func() (any, error) { return api.iconPNG(0, path) })
+			icon, err := provider.LoadIcon(t.Context(), Result{PID: 42, StartToken: "fixture", ExecutablePath: path})
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("load icon for %q (iteration %d): %v", path, i+1, err)
 			}
-			icon, err := png.Decode(bytes.NewReader(value.([]byte)))
-			if err != nil || icon.Bounds().Empty() {
-				t.Fatalf("invalid AppKit PNG for %s: %v", path, err)
+			if icon == nil || icon.Bounds().Empty() {
+				t.Fatalf("empty AppKit image for %s", path)
 			}
 		}
 	}

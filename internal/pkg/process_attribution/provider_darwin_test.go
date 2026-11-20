@@ -4,12 +4,14 @@ package processattribution
 
 import (
 	"context"
+	"errors"
 	"image"
 	"net"
 	"net/netip"
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -107,7 +109,7 @@ func TestDarwinHandlesExitedProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	identity, err := lookupDarwinProcessIdentity(uint32(command.ProcessState.Pid()))
-	if err == nil || identity.startToken != "" {
+	if !errors.Is(err, syscall.ESRCH) || identity.startToken != "" {
 		t.Fatalf("exited process: %+v, %v", identity, err)
 	}
 }
@@ -194,8 +196,41 @@ func TestDarwinProviderRejectsPIDReuseDuringIcon(t *testing.T) {
 		token = "789:1"
 		return image.NewRGBA(image.Rect(0, 0, 1, 1)), nil
 	}
-	icon, err := p.LoadIcon(context.Background(), Result{PID: 42, StartToken: token})
+	icon, err := p.LoadIcon(context.Background(), Result{PID: 42, StartToken: token, ExecutablePath: "/bin/sh"})
 	if err == nil || icon != nil {
 		t.Fatal("stale icon published")
+	}
+}
+
+func TestDarwinProviderUsesRecordedIconPathAfterExit(t *testing.T) {
+	result := Result{PID: 42, StartToken: "123:456", ExecutablePath: "/bin/sh"}
+	for _, exit := range []string{"before icon lookup", "during icon lookup"} {
+		t.Run(exit, func(t *testing.T) {
+			p := newDarwinProvider()
+			exited := exit == "before icon lookup"
+			p.identity = func(uint32) (darwinProcessIdentity, error) {
+				if exited {
+					return darwinProcessIdentity{}, syscall.ESRCH
+				}
+				return darwinProcessIdentity{startToken: result.StartToken}, nil
+			}
+			pathIcon := image.NewRGBA(image.Rect(0, 0, 1, 1))
+			p.loadIcon = func(_ context.Context, pid uint32, path string) (image.Image, error) {
+				if path != result.ExecutablePath {
+					t.Fatalf("icon path = %q, want %q", path, result.ExecutablePath)
+				}
+				if !exited && pid == result.PID {
+					exited = true
+					return image.NewRGBA(image.Rect(0, 0, 2, 2)), nil
+				}
+				if !exited || pid != 0 {
+					t.Fatalf("icon lookup used PID %d, exited = %t", pid, exited)
+				}
+				return pathIcon, nil
+			}
+			if icon, err := p.LoadIcon(t.Context(), result); err != nil || icon != pathIcon {
+				t.Fatalf("icon = %v, err = %v, want recorded-path icon", icon, err)
+			}
+		})
 	}
 }
