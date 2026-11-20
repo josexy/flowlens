@@ -289,7 +289,6 @@ func logLevelOptions() []nui.Option[string] {
 
 func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 	state := &v.logs
-	ui.Text(c.Key("immediate"), locales.SettingsLogImmediateNotice()).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
 	if state.status == nil {
 		v.loadLogs()
 		return
@@ -632,7 +631,6 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 			}}})
 		})
 	})
-	ui.Text(c.Key("note"), locales.ShortcutsGlobalNote()).FontSize(apptheme.TextSize(c, 12)).TextColor(palette.Muted).FillWidth()
 	for index, warning := range warnings {
 		nui.Alert(c.Key(fmt.Sprintf("warning-%d", index)), palette, nui.AlertOptions{Title: message("shortcutsWarnings" + camel(warning)), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
 	}

@@ -7442,16 +7442,6 @@ func (msgs Messages) SettingsLogErrorToggle(error string) string {
 	return Catalog.Format(msgs.locale, "settingsLogErrorToggle", map[string]any{"error": error})
 }
 
-// SettingsLogImmediateNotice says "Logging changes apply immediately. No save needed."
-// in the language the app shows.
-func SettingsLogImmediateNotice() string { return In(i18n.Locale()).SettingsLogImmediateNotice() }
-
-// SettingsLogImmediateNotice says "Logging changes apply immediately. No save needed."
-// in the language of msgs.
-func (msgs Messages) SettingsLogImmediateNotice() string {
-	return Catalog.Format(msgs.locale, "settingsLogImmediateNotice", nil)
-}
-
 // SettingsLogLevelDebug says "Debug"
 // in the language the app shows.
 func SettingsLogLevelDebug() string { return In(i18n.Locale()).SettingsLogLevelDebug() }
@@ -9564,16 +9554,6 @@ func ShortcutsEmptySearch() string { return In(i18n.Locale()).ShortcutsEmptySear
 // in the language of msgs.
 func (msgs Messages) ShortcutsEmptySearch() string {
 	return Catalog.Format(msgs.locale, "shortcutsEmptySearch", nil)
-}
-
-// ShortcutsGlobalNote says "App shortcuts require focus; global shortcuts require a binding."
-// in the language the app shows.
-func ShortcutsGlobalNote() string { return In(i18n.Locale()).ShortcutsGlobalNote() }
-
-// ShortcutsGlobalNote says "App shortcuts require focus; global shortcuts require a binding."
-// in the language of msgs.
-func (msgs Messages) ShortcutsGlobalNote() string {
-	return Catalog.Format(msgs.locale, "shortcutsGlobalNote", nil)
 }
 
 // ShortcutsNotSet says "Not set"

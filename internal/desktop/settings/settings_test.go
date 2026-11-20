@@ -995,9 +995,6 @@ func TestUnsavedShortcutIsDiscarded(t *testing.T) {
 func TestLogLevelAppliesImmediately(t *testing.T) {
 	f := newFixture(t)
 	f.open(locales.SettingsTabLogs())
-	if !f.has(locales.SettingsLogImmediateNotice()) {
-		t.Fatalf("%v", f.tester.Texts())
-	}
 	f.view.logs.level = "debug"
 	f.settle()
 	if !f.called("level:debug") || f.log.Level != logger.LogLevelDebug || f.view.Dirty() {
