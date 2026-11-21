@@ -21,8 +21,8 @@ import (
 // asyncParseThreshold is how much new text is parsed off the main thread.
 const asyncParseThreshold = 256 * 1024
 
-// sseRowHeight matches the console's row height, including cell padding.
-const sseRowHeight = 40
+// sseRowHeight matches the shared compact table at the default font size.
+const sseRowHeight = 28
 
 // sseColumnIDs are the message list's columns in the order columns gives
 // them.
@@ -181,7 +181,7 @@ func (s *SSEView) Build(c *ui.Context, theme nui.Theme, content BodyContent) {
 // cell builds a message row's column on one line, as 1.0.5 did: the ID in
 // muted figures, the event type, and the data preview.
 func (s *SSEView) cell(c *ui.Context, theme nui.Theme, event *logic.SSEEvent, col int) {
-	ui.Row(c).FillWidth().MinWidth(0).Height(sseRowHeight - 12).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Children(func() {
 		switch sseColumnIDs[col] {
 		case "id":
 			ui.Text(c, orDash(event.LastEventID)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontFeatures("tnum").TextColor(theme.Muted)

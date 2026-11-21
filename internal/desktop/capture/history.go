@@ -121,7 +121,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 	if history == nil {
 		return
 	}
-	header := ui.Row(c).FillWidth().MinHeight(38).Shrink(0).Margin(6, 0, 0, 0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(0, 8, 0, 10).Background(theme.Elevated)
+	header := ui.Row(c).FillWidth().MinHeight(32).Shrink(0).Margin(4, 0, 0, 0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(0, 6, 0, 8).Background(theme.Elevated)
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	header.Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
@@ -160,7 +160,7 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyservice.HistoryMetadata) {
 	key := metadata.Key
 	active := w.Data.Workbench.CaptureSelection == historyItemPrefix+key
-	row := ui.ButtonBase(c.Key(key)).MinHeight(44).Justify(ui.Start).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
+	row := ui.ButtonBase(c.Key(key)).MinHeight(38).Justify(ui.Start).Gap(6).PaddingX(8).Margin(2, 6, 0, 6).Radius(6).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
 	switch {
 	case active:
 		row.Background(selectionBackground(theme)).Border(1, theme.Border)

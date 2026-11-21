@@ -50,11 +50,11 @@ func PillTabs(c *ui.Context, theme nui.Theme, value *string, items []PillTab, la
 	}
 	root.Children(func() {
 		parts := ui.TabsBase(c, &memory.index, len(items))
-		list := parts.List.Label(label).AlignItems(ui.Center).Padding(4).Radius(8).Background(theme.Elevated)
+		list := parts.List.Label(label).AlignItems(ui.Center).Padding(2).Radius(6).Background(theme.Elevated)
 		list.Children(func() {
 			for i, item := range items {
 				active := i == memory.index
-				tab := parts.Tab(i).Label(item.Label).PaddingX(8).PaddingY(4).Radius(6).AlignItems(ui.Center).FocusRing(true)
+				tab := parts.Tab(i).Label(item.Label).PaddingX(6).PaddingY(3).Radius(4).AlignItems(ui.Center).FocusRing(true)
 				foreground := theme.Muted
 				switch {
 				case active:

@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	tabBarHeight  float32 = 34
-	tabMinWidth   float32 = 124
+	tabBarHeight  float32 = 30
+	tabMinWidth   float32 = 108
 	tabMaxWidth   float32 = 220
 	tabScrollStep float32 = 220
 )
@@ -39,7 +39,7 @@ func (e *Editor) TabBar(c *ui.Context, theme nui.Theme) {
 	e.declareShortcuts()
 	e.prune()
 	workspace := e.Data.Workspace
-	bar := ui.Row(c.Key("workspace-tabs")).FillWidth().Height(tabBarHeight).Shrink(0).AlignItems(ui.Stretch)
+	bar := ui.Row(c.Key("workspace-tabs")).FillWidth().Height(max(tabBarHeight, apptheme.TextSize(c, 14)*1.5+8)).Shrink(0).AlignItems(ui.Stretch)
 	bar.Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	bar.Children(func() {
 		if e.tabScroll.X > 0 {
@@ -136,7 +136,7 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 		if active {
 			iconColor = theme.Toned
 		}
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(6).PaddingX(12).Children(func() {
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(6).PaddingX(8).Children(func() {
 			ui.Icon(c, tabIcon(tab.Type)).Size(14, 14).Shrink(0).TextColor(iconColor)
 			ui.Text(c, title).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(500).TextColor(theme.Toned)
 		})

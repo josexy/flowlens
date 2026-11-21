@@ -19,8 +19,8 @@ import (
 
 const consolePreviewLength = 240
 
-// consoleRowHeight is 1.0.5's console row: 40 px, with the cells' padding.
-const consoleRowHeight = 40
+// consoleRowHeight matches the shared compact table at the default font size.
+const consoleRowHeight = 28
 
 // File names 1.0.5 suggested for the console and for one entry.
 const (
@@ -249,10 +249,9 @@ func (v *consoleView) status(c *ui.Context, theme nui.Theme, running bool, count
 	})
 }
 
-// cell builds a console row's column on one line, 40 px high with the
-// cell's padding.
+// cell builds a console row's column on one line within the shared table row.
 func (v *consoleView) cell(c *ui.Context, theme nui.Theme, entry *logic.PluginLogEntry, col int) {
-	ui.Row(c).FillWidth().MinWidth(0).Height(consoleRowHeight - 12).AlignItems(ui.Center).Gap(6).Children(func() {
+	ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 		switch consoleColumnIDs[col] {
 		case consoleColumnTime:
 			ui.Text(c, logic.FormatUnixMicrosLocal(entry.Timestamp)).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontFeatures("tnum").TextColor(theme.Toned)

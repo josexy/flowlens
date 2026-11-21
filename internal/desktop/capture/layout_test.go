@@ -19,14 +19,14 @@ func TestSidebarItemsKeepRightInset(t *testing.T) {
 	f := newHistoryFixture(t)
 	for _, label := range []string{"session one", "old format"} {
 		row, ok := f.tester.Access(label)
-		if !ok || row.Bounds.X != 8 || row.Bounds.X+row.Bounds.W != 232 {
-			t.Fatalf("%q must leave 8px on both sides of the 240px sidebar: %+v", label, row)
+		if !ok || row.Bounds.X != 6 || row.Bounds.X+row.Bounds.W != 234 {
+			t.Fatalf("%q must leave 6px on both sides of the 240px sidebar: %+v", label, row)
 		}
 	}
 	// Capture's count is its rightmost child; it must have the same
 	// internal padding and outer margin as the saved-session rows.
 	count, ok := f.tester.Find("0")
-	if !ok || count.X+count.W > 232-10 {
+	if !ok || count.X+count.W > 234-8 {
 		t.Fatalf("capture count overflows the right inset: %v", count)
 	}
 }

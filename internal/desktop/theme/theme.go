@@ -102,6 +102,8 @@ func Resolve(appearance Appearance) Resolved {
 		theme.Font = resolved.AppFont
 		theme.MonoFont = resolved.CodeFont
 		theme.FontSize = float32(resolved.AppFontSize) * interfaceTextRatio
+		// Compact control padding without reducing text or accessibility scaling.
+		theme.Density = 0.8
 		theme = theme.WithComponent(nui.ComponentModal, nui.ComponentTheme{UI: nui.Styles{
 			nui.Header: {BorderColor: nui.Set(theme.BorderMuted)},
 			nui.Footer: {BorderColor: nui.Set(theme.BorderMuted)},

@@ -10,9 +10,9 @@ import (
 // PaneToolbar keeps the content at the same height across traffic and editor tabs.
 func PaneToolbar(c *ui.Context, leading, actions func()) {
 	// Fit one line of pill tabs, their padding, and 2 DIP above and below.
-	ui.Row(c).FillWidth().Shrink(0).Height(apptheme.TextSize(c, 16)+20).AlignItems(ui.Center).Justify(ui.End).Gap(8).Padding(2, 10).Children(func() {
+	ui.Row(c).FillWidth().Shrink(0).MinHeight(apptheme.TextSize(c, 16)+16).AlignItems(ui.Center).Justify(ui.End).Gap(6).Padding(2, 8).Children(func() {
 		if leading != nil {
-			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(8).Children(leading)
+			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(leading)
 		}
 		if actions != nil {
 			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(actions)
@@ -29,7 +29,7 @@ func PaneTitle(c *ui.Context, theme nui.Theme, title string, actions func()) {
 
 // PaneContent fills the space below a toolbar with common side and bottom insets.
 func PaneContent(c *ui.Context, content func()) {
-	ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 10, 10, 10).Children(content)
+	ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Padding(0, 8, 8, 8).Children(content)
 }
 
 // PaneWarning shows a notice below the content so it does not shift its top edge.
@@ -37,7 +37,7 @@ func PaneWarning(c *ui.Context, theme nui.Theme, message string) {
 	if message == "" {
 		return
 	}
-	ui.Box(c).FillWidth().Shrink(0).Padding(0, 10, 8, 10).Children(func() {
+	ui.Box(c).FillWidth().Shrink(0).Padding(0, 8, 6, 8).Children(func() {
 		nui.Alert(c, theme, nui.AlertOptions{Description: message, Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
 	})
 }

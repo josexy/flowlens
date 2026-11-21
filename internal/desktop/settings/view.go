@@ -380,11 +380,11 @@ func (v *View) Build(c *ui.Context) {
 }
 
 func (v *View) nav(c *ui.Context, theme nui.Theme) {
-	ui.Column(c.Key("settings-nav")).Width(160).Shrink(0).FillHeight().Gap(2).Padding(16, 8).Background(theme.Background).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
+	ui.Column(c.Key("settings-nav")).Width(148).Shrink(0).FillHeight().Gap(2).Padding(10, 6).Background(theme.Background).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
 		ui.Text(c, strings.ToUpper(locales.MenuSettings())).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).LetterSpacing(0.84).TextColor(theme.Muted).Padding(0, 8, 10, 8)
 		for _, item := range navItems() {
 			active := v.tab == item.key
-			row := ui.ButtonBase(c.Key(item.key)).FillWidth().Justify(ui.Start).Gap(8).Padding(7, 10).Radius(6).FocusRing(true).AccessSelected(active).Label(item.label)
+			row := ui.ButtonBase(c.Key(item.key)).FillWidth().Justify(ui.Start).Gap(6).Padding(5, 8).Radius(6).FocusRing(true).AccessSelected(active).Label(item.label)
 			color, weight := theme.Toned, 400
 			switch {
 			case active:
@@ -420,8 +420,8 @@ func (v *View) page(c *ui.Context, theme nui.Theme) {
 	draft := v.Data.Settings.Draft
 	v.sections = 0
 	ui.Scroll(c.Key(v.tab)).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Column(c.Key("page")).FillWidth().MaxWidth(1040+2*28).Padding(0, 28, 20, 28).Children(func() {
-			title := ui.Row(c.Key("title")).FillWidth().Padding(20, 0, 16, 0).Margin(0, 0, 24, 0).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
+		ui.Column(c.Key("page")).FillWidth().MaxWidth(1040+2*16).Padding(0, 16, 12, 16).Children(func() {
+			title := ui.Row(c.Key("title")).FillWidth().Padding(12, 0, 10, 0).Margin(0, 0, 14, 0).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 			title.Children(func() {
 				ui.Text(c, v.tabTitle()).FontSize(apptheme.TextSize(c, 18)).LineHeight(1.35).Bold().TextColor(theme.Text)
 			})
@@ -471,7 +471,7 @@ func (v *View) footer(c *ui.Context, theme nui.Theme) {
 	if v.tab == tabLogs && !settings.Dirty() && !settings.Saving {
 		return
 	}
-	ui.Row(c.Key("footer")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.End).Gap(10).Padding(10, 28).Background(theme.Elevated).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+	ui.Row(c.Key("footer")).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.End).Gap(8).Padding(6, 16).Background(theme.Elevated).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 		if v.tab == tabLogs && settings.Dirty() {
 			ui.Text(c, locales.SettingsOtherUnsavedNotice()).Grow(1).Basis(0).FontSize(apptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Muted)
 		}
@@ -493,11 +493,11 @@ func (v *View) section(c *ui.Context, theme nui.Theme, key, title string, danger
 	v.sections++
 	group := ui.Column(c.Key(key)).FillWidth()
 	if v.sections > 1 {
-		group.Margin(24, 0, 0, 0).Padding(20, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
+		group.Margin(14, 0, 0, 0).Padding(12, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
 	}
 	group.Children(func() {
 		if title != "" || actions != nil {
-			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(16).Margin(0, 0, 12, 0).Children(func() {
+			ui.Row(c.Key("head")).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(10).Margin(0, 0, 8, 0).Children(func() {
 				color := theme.Text
 				if danger {
 					color = theme.Error
@@ -513,7 +513,7 @@ func (v *View) section(c *ui.Context, theme nui.Theme, key, title string, danger
 }
 
 func row(c *ui.Context, theme nui.Theme, key, label, hint string, body func()) {
-	line := ui.Row(c.Key(key)).FillWidth().Gap(12).MinHeight(38).PaddingY(2)
+	line := ui.Row(c.Key(key)).FillWidth().Gap(10).MinHeight(32).PaddingY(2)
 	if hint != "" {
 		line.AlignItems(ui.Start)
 	} else {

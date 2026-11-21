@@ -92,7 +92,7 @@ func countOf(sample *memstatsservice.MemSnapshot, read func(*memstatsservice.Run
 
 func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 	data := v.Data
-	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Padding(10, 14).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	ui.Row(c.Key("toolbar")).FillWidth().Shrink(0).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Padding(6, 10).Background(theme.Background).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Text(c.Key("title"), locales.MemstatsTitle()).SingleLine().MinWidth(0).FontSize(apptheme.TextSize(c, 15.2)).FontWeight(600).TextColor(theme.Text)
 		ui.Row(c.Key("actions")).Wrap().Gap(8).AlignItems(ui.Center).MinWidth(0).Children(func() {
 			label, icon, color := locales.MemstatsStart(), lucide.Play(), nui.Primary
@@ -304,7 +304,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 	ui.Column(c.Key("memstats")).Fill().Children(func() {
 		v.toolbar(c, theme)
 		ui.Scroll(c.Key("body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
-			ui.Column(c.Key("content")).FillWidth().Gap(12).Padding(12).Children(func() {
+			ui.Column(c.Key("content")).FillWidth().Gap(8).Padding(8).Children(func() {
 				v.summary(c, theme, v.Data.Latest)
 				v.chartCard(c, theme)
 				v.details(c, theme, v.Data.Latest)
