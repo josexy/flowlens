@@ -178,6 +178,9 @@ jobs:
       - prepare
       - build
     runs-on: ubuntu-latest
+    permissions:
+      # GitHub requires write access to read draft releases and their assets.
+      contents: write
     steps:
       - name: Confirm every artifact reached the draft
         env:
