@@ -1,6 +1,7 @@
 package inspect
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -64,6 +65,11 @@ func decodeImage(body string, svg bool) (decodedImage, error) {
 			return decodedImage{}, err
 		}
 		return decodedImage{svg: parsed}, nil
+	}
+	if bytes.HasPrefix(data, []byte("\x00\x00\x01\x00")) {
+		if err := validateICO(data); err != nil {
+			return decodedImage{}, err
+		}
 	}
 	bitmap, err := ui.DecodeBitmap(data)
 	if err != nil {

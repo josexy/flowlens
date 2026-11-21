@@ -184,6 +184,7 @@ var (
 		"text/javascript": {".js", ".mjs", ".cjs"}, "text/css": {".css"}, "image/svg+xml": {".svg"},
 		"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg"}, "image/gif": {".gif"},
 		"image/webp": {".webp"}, "image/avif": {".avif"},
+		"image/x-icon": {".ico"}, "image/vnd.microsoft.icon": {".ico"},
 	}
 	unsafeFilenamePattern = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
 )
