@@ -12,12 +12,6 @@ import (
 // cellPaddingX is the table's horizontal cell padding, Space(2.5).
 const cellPaddingX float32 = 10
 
-// selectedRowColor is 1.0.5's --app-accent-selected: the primary color at 12%
-// over the accented background.
-func selectedRowColor(theme nui.Theme) ui.Color {
-	return theme.Primary.Alpha(0.12).Over(theme.Accented)
-}
-
 func trafficStripeColor(theme nui.Theme) ui.Color {
 	return theme.Accented.Alpha(0.4)
 }

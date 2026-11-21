@@ -259,7 +259,7 @@ func TestInspectedRowHasMarkerAndOutline(t *testing.T) {
 	foundOutline := false
 	for dy := float32(-2); dy <= 2; dy++ {
 		got := pixel(f.tester, rect.X+20, top+dy)
-		want := rgba(theme.Primary.Alpha(0.22).Over(selectedRowColor(theme)))
+		want := rgba(theme.Primary.Alpha(0.22).Over(selectionBackground(theme)))
 		wantPlain := rgba(theme.Primary.Alpha(0.22).Over(theme.Background))
 		wantStripe := rgba(theme.Primary.Alpha(0.22).Over(trafficStripeColor(theme).Over(theme.Background)))
 		if near(got, want) || near(got, wantPlain) || near(got, wantStripe) {
@@ -284,7 +284,8 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 		if dark {
 			alpha = 0.35
 		}
-		line := rgba(theme.Primary.Alpha(alpha).Over(selectedRowColor(theme)))
+		background := theme.Primary.Alpha(0.12).Over(theme.Background)
+		line := rgba(theme.Primary.Alpha(alpha).Over(background))
 		for _, scale := range []float32{1, 1.25, 1.5, 2} {
 			f.tester.SetScale(scale)
 			for _, zoom := range []float32{1, 1.19} {
@@ -298,6 +299,12 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 				left, right := pixelEdge(row.Bounds.X), pixelEdge(row.Bounds.X+row.Bounds.W)
 				top, bottom := pixelEdge(row.Bounds.Y), pixelEdge(row.Bounds.Y+row.Bounds.H)
 				frame := f.tester.Image()
+				idColumn := headerRect(t, f, locales.TrafficId())
+				x := pixelEdge(idColumn.X + idColumn.W - 6*zoom)
+				y := top + (bottom-top)/2
+				if got, want := frame.RGBAAt(x, y), rgba(background); !near(got, want) {
+					t.Fatalf("dark=%v scale=%v zoom=%v: selected background = %v, want %v", dark, scale, zoom, got, want)
+				}
 				// Skip the accent marker at the start of the row.
 				for x := left + pixelEdge(4*zoom); x < right; x++ {
 					for _, y := range []int{top, bottom - 1} {

@@ -161,7 +161,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).MinHeight(40).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(10).Margin(4, 8, 0, 8).Radius(10)
 	switch {
 	case active:
-		row.Background(SidebarSelectedColor(theme)).Border(1, theme.BorderAccented)
+		row.Background(selectionBackground(theme)).Border(1, theme.Border)
 	case row.Hovered():
 		row.Background(theme.Elevated).Border(1, ui.Transparent)
 	default:
@@ -198,10 +198,9 @@ func (w *Workspace) captureMenuItems() []nui.MenuItem {
 	return append(items, nui.MenuItem{ID: "set-alias", Label: locales.CaptureSetAlias(), Icon: lucide.Tag(), OnSelect: w.ShowAliasDialog})
 }
 
-// SidebarSelectedColor fills the chosen item of a sidebar list: a tint of the
-// accent over the accented background.
-func SidebarSelectedColor(theme nui.Theme) ui.Color {
-	return theme.Primary.Alpha(0.12).Over(theme.Accented)
+// selectionBackground tints the base surface shared by the sidebar and table.
+func selectionBackground(theme nui.Theme) ui.Color {
+	return theme.Primary.Alpha(0.12).Over(theme.Background)
 }
 
 // CountPill is the rounded count at the end of a sidebar item, in the accent

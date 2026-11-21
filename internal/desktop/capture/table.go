@@ -512,7 +512,7 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 	background := theme.Background
 	switch {
 	case chosen:
-		background = selectedRowColor(theme)
+		background = selectionBackground(theme)
 	case highlight != "":
 		alpha := float32(0.15)
 		if theme.Dark {
