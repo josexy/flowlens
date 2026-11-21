@@ -150,7 +150,7 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 	}
 	source := w.categoryDataset()
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		header := ui.Row(c.Key("category-header")).FillWidth().Shrink(0).MinHeight(40).AlignItems(ui.Center).PaddingX(12).Background(theme.Elevated)
+		header := ui.Row(c.Key("category-header")).FillWidth().Shrink(0).MinHeight(32).AlignItems(ui.Center).PaddingX(8).Background(theme.Elevated)
 		header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			if source != nil {
 				ui.Text(c, source.label).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
@@ -159,7 +159,7 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 		ui.Column(c.Key("category-body")).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
 			w.categoryBody(c, theme, view, source)
 		})
-		search := ui.Box(c.Key("category-search")).FillWidth().Shrink(0).Padding(10).Background(theme.Elevated)
+		search := ui.Box(c.Key("category-search")).FillWidth().Shrink(0).Padding(6, 8).Background(theme.Elevated)
 		search.BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 			nui.Input(c, theme, &view.search, nui.InputOptions{
 				Label: locales.CategorySearchPlaceholder(), Placeholder: locales.CategorySearchPlaceholder(),

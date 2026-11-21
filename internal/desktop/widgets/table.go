@@ -12,6 +12,9 @@ import (
 // Nuxt's layout root, so input notices, focus and context menus target the table.
 // Like any Element, the returned panel is valid only during this build.
 func Table[T any](c *ui.Context, theme nui.Theme, state *nui.TableState[T], columns []nui.TableColumn[T], options nui.TableOptions) ui.Element {
+	// Fixed native row heights omit vertical cell padding. Grow with the
+	// interface font so compact rows also fit accessibility-sized text.
+	state.List.RowHeight = max(28, theme.Native().FontSize*1.5+6)
 	// Nuxt's header rule and MyGo's column dividers both use BorderAccented.
 	// Match the page border within this table's theme snapshot.
 	theme.BorderAccented = theme.Border
@@ -33,8 +36,8 @@ func Table[T any](c *ui.Context, theme nui.Theme, state *nui.TableState[T], colu
 		case nui.Item:
 			// Extend Nuxt's cell content over the native padding so row
 			// backgrounds and hit-test bounds still cover the entire cell.
-			y, x := c.Theme().Space(1.5), c.Theme().Space(2.5)
-			element.Grow(1).AlignSelf(ui.Stretch).Margin(-y, -x).Padding(y, x)
+			x := c.Theme().Space(2.5)
+			element.Grow(1).AlignSelf(ui.Stretch).Margin(0, -x).PaddingX(x)
 		case nui.Panel:
 			panel = element
 		}

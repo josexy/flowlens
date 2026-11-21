@@ -6,15 +6,13 @@ import (
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
-// EditableGrid measurements, from FlowLens 1.0.5's EditableKeyValueTable:
-// h-10 rows, 46 px enable and action columns, p-1.5 cells, and the key
-// column's limits.
+// EditableGrid measurements keep rows compact while leaving room for controls.
 const (
-	EditableGridRowHeight     float32 = 40
-	EditableGridSideColumn    float32 = 46
+	EditableGridRowHeight     float32 = 32
+	EditableGridSideColumn    float32 = 34
 	EditableGridKeyMinWidth   float32 = 140
 	EditableGridValueMinWidth float32 = 160
-	editableGridCellPadding   float32 = 6
+	editableGridCellPadding   float32 = 4
 )
 
 // EditableGridField names a text cell of a row.
@@ -148,7 +146,7 @@ func editableGridRow(c *ui.Context, theme nui.Theme, state *editableGridState, o
 	if index == 0 {
 		top = 1
 	}
-	row := ui.Row(c.Key(editableGridRowKey(o, index))).FillWidth().Height(max(EditableGridRowHeight, apptheme.TextSize(c, 14)*1.45+12)).AlignItems(ui.Stretch).Background(theme.Background)
+	row := ui.Row(c.Key(editableGridRowKey(o, index))).FillWidth().Height(max(EditableGridRowHeight, apptheme.TextSize(c, 14)*1.45+11)).AlignItems(ui.Stretch).Background(theme.Background)
 	row.BorderWidth(top, 1, 1, 1).BorderColor(theme.Border)
 	if row.Hovered() {
 		row.Background(theme.Elevated)

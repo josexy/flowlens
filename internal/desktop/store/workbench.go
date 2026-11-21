@@ -53,7 +53,7 @@ func NewWorkbenchStore() *WorkbenchStore {
 		ActiveSection:           WorkspaceCapture,
 		ActiveContent:           ContentTraffic,
 		SecondarySidebarVisible: true,
-		SecondarySidebarPercent: 20,
+		SecondarySidebarPercent: 17,
 		CaptureSelection:        CaptureItemLive,
 	}
 }

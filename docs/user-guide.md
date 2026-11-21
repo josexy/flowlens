@@ -4,6 +4,8 @@ This guide covers day-to-day use of FlowLens. For installation, start with the [
 
 Capture, history, categories, API Collections, rewrite rules, Python plugins, and memory statistics share one workbench window. Settings open in a separate window.
 
+The interface uses compact controls, toolbars, and data rows to keep more content visible. Drag the sidebar divider to adjust its width, or click the active navigation icon to collapse it. Interface and code font sizes remain independently adjustable in **Settings > General**.
+
 ## Set Up Capture
 
 Start the proxy from the toolbar and configure your client to use it. Defaults:

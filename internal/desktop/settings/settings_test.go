@@ -260,12 +260,16 @@ func (f *fixture) clickAction(label string) {
 	if !ok {
 		f.t.Fatalf("no %q in %v", label, f.tester.Texts())
 	}
-	// Pages are at most 1040 wide after the 160-wide navigation and their
-	// 28-wide margin, so the button ends near x = 1218.
-	x, y := float32(1200), rect.Y+rect.H/2
-	f.tester.Press(x, y)
-	f.tester.Release(x, y)
-	f.settle()
+	y := rect.Y + rect.H/2
+	for _, node := range f.tester.AccessAll() {
+		bounds := node.Bounds
+		if node.Role == ui.RoleButton && bounds.X > rect.X+rect.W && bounds.Y <= y && y <= bounds.Y+bounds.H {
+			f.tester.ClickAt(bounds.X+bounds.W/2, bounds.Y+bounds.H/2)
+			f.settle()
+			return
+		}
+	}
+	f.t.Fatalf("no action beside %q", label)
 }
 
 // dismissToasts waits for the notifications to go away.

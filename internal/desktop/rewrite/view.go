@@ -99,7 +99,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	// Pending writes block further mutations without dimming every control.
 	// Only the active control shows loading; unavailable controls still dim.
 	ui.Column(c.Key("rewrite-sidebar")).Fill().MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Column(c).FillWidth().Shrink(0).Gap(6).Padding(8).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 				ui.Text(c, locales.RewriteRulesTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Highlighted)
 				ui.Row(c).Gap(2).Children(func() {
@@ -186,7 +186,7 @@ func actionLabel(rule *store.RewriteRule) string {
 }
 
 // Minimum rule row pitch, scaled with the app font size.
-const ruleRowHeight float32 = 92
+const ruleRowHeight float32 = 80
 
 func (v *View) row(c *ui.Context, theme nui.Theme, row store.RewriteRow, reorderable bool) {
 	rewrite := v.Data.Rewrite
@@ -195,7 +195,7 @@ func (v *View) row(c *ui.Context, theme nui.Theme, row store.RewriteRow, reorder
 	if name == "" {
 		name = locales.RewriteRulesNewName()
 	}
-	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleGroup).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))).Padding(8, 8, 8, 5).Gap(4).FocusRing(true).AccessSelected(selected).Label(name)
+	box := ui.ButtonBase(c.Key(row.Key)).Role(ui.RoleGroup).Column().AlignItems(ui.Stretch).Justify(ui.Start).FillWidth().Height(max(ruleRowHeight, apptheme.TextSize(c, ruleRowHeight))).Padding(6, 6, 6, 4).Gap(2).FocusRing(true).AccessSelected(selected).Label(name)
 	box.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent).Background(theme.Background)
 	switch {
 	case selected:
@@ -387,7 +387,7 @@ func (v *View) header(c *ui.Context, theme nui.Theme, draft *store.RuleDraft) {
 	if draft != nil && draft.Rule.Name != "" {
 		title = draft.Rule.Name
 	}
-	ui.Row(c.Key("rewrite-header")).FillWidth().Height(48).Shrink(0).AlignItems(ui.Center).Gap(8).PaddingX(12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	ui.Row(c.Key("rewrite-header")).FillWidth().MinHeight(36).Shrink(0).AlignItems(ui.Center).Gap(6).Padding(4, 8).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Icon(c, lucide.Repeat2()).Size(16, 16).Shrink(0).TextColor(theme.Primary)
 		ui.Text(c, title).SingleLine().Grow(1).Basis(0).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)
 		if rewrite.SelectedID != "" && rewrite.IsDirty(rewrite.SelectedID) {

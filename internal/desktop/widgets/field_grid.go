@@ -8,10 +8,9 @@ import (
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
-// FieldGrid measurements, from FlowLens 1.0.5's HeadersTable: h-10 rows,
-// px-2 cells, a w-1.5 resize handle, and its column limits.
+// FieldGrid measurements preserve one-line values and a generous resize handle.
 const (
-	FieldGridRowHeight      float32 = 40
+	FieldGridRowHeight      float32 = 32
 	FieldGridNameMinWidth   float32 = 140
 	FieldGridValueMinWidth  float32 = 160
 	fieldGridCellPaddingX   float32 = 8
@@ -111,7 +110,7 @@ func fieldGridRow(c *ui.Context, theme nui.Theme, state *fieldGridState, rows []
 	if index == 0 {
 		top = 1
 	}
-	row := ui.Row(c.Key(index)).FillWidth().Height(max(FieldGridRowHeight, apptheme.TextSize(c, 14)*1.45+12)).AlignItems(ui.Stretch).Background(theme.Background)
+	row := ui.Row(c.Key(index)).FillWidth().Height(max(FieldGridRowHeight, apptheme.TextSize(c, 14)*1.45+11)).AlignItems(ui.Stretch).Background(theme.Background)
 	row.BorderWidth(top, 1, 1, 1).BorderColor(theme.Border)
 	if row.Hovered() {
 		row.Background(theme.Elevated)

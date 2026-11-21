@@ -18,7 +18,7 @@ func TestTableDividerFollowsNativeHeaderAtDifferentTextSizes(t *testing.T) {
 				palette := config.Resolve(dark, ui.Preferences{})
 				palette.FontSize, palette.Density = fontSize, 0.8
 				var state nui.TableState[string]
-				state.SetRows([]string{"row"}, func(row string) string { return row })
+				state.SetRows([]string{"first row", "second row"}, func(row string) string { return row })
 				tester := ui.NewTester(func(c *ui.Context) {
 					nui.App(c, config)
 					Table(c, palette, &state, []nui.TableColumn[string]{{ID: "value", Title: "Value", Value: func(row string) string { return row }}}, nui.TableOptions{Label: "Records"})
@@ -30,6 +30,11 @@ func TestTableDividerFollowsNativeHeaderAtDifferentTextSizes(t *testing.T) {
 						header, ok := tester.AccessByRole(ui.RoleColumnHeader, "Value")
 						if !ok {
 							t.Fatal("missing header")
+						}
+						first, firstOK := tester.Find("first row")
+						second, secondOK := tester.Find("second row")
+						if !firstOK || !secondOK || first.H < (fontSize*1.5+4)*zoom || second.Y < first.Y+first.H-0.01 {
+							t.Fatalf("scale=%v zoom=%v: clipped or crowded rows: %v, %v", scale, zoom, first, second)
 						}
 						x := int((header.Bounds.X + header.Bounds.W/2) * scale)
 						y := int(math.Round(float64((header.Bounds.Y + header.Bounds.H) * scale)))

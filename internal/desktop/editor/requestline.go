@@ -13,17 +13,17 @@ import (
 )
 
 // requestLineHeight is the height of the controls of a request line.
-const requestLineHeight float32 = 36
+const requestLineHeight float32 = 30
 
 // requestLine is the strip above an editor's panes.
 func requestLine(c *ui.Context, theme nui.Theme, key string, children func()) {
-	row := ui.Row(c.Key(key)).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(8, 10).Background(theme.MutedBackground)
+	row := ui.Row(c.Key(key)).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(6).Padding(4, 8).Background(theme.MutedBackground)
 	row.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(children)
 }
 
 // requestLineBox is a bordered group of a request line.
 func requestLineBox(c *ui.Context, theme nui.Theme, key string) ui.Element {
-	return ui.Row(c.Key(key)).Height(requestLineHeight).Shrink(0).AlignItems(ui.Center).Radius(4).Border(1, theme.Border).Background(theme.Background).Clip()
+	return ui.Row(c.Key(key)).Height(max(requestLineHeight, desktoptheme.TextSize(c, 14)*1.5+8)).Shrink(0).AlignItems(ui.Center).Radius(4).Border(1, theme.Border).Background(theme.Background).Clip()
 }
 
 // urlTextRanges colors the scheme, host, path, query and hash of a URL as it
@@ -144,7 +144,7 @@ func primaryAction(c *ui.Context, theme nui.Theme, label, tooltip string, icon *
 	button := nui.Button(c.Key("primary"), theme, label, nui.ButtonOptions{
 		Color: color, Size: nui.MD, Leading: icon,
 		UI: nui.Styles{nui.Root: {Radius: nui.Set[float32](4)}},
-	}).Width(110).Height(requestLineHeight).Shrink(0).Justify(ui.Center)
+	}).Width(110).Height(max(requestLineHeight, desktoptheme.TextSize(c, 14)*1.5+8)).Shrink(0).Justify(ui.Center)
 	button.OnClick(run)
 	nui.Tooltip(c, theme, button, tooltip, nui.TooltipOptions{Kbds: kbds})
 }

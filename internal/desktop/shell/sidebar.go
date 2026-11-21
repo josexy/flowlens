@@ -11,7 +11,7 @@ import (
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
-const primarySidebarWidth = 52
+const primarySidebarWidth = 44
 
 type sidebarItem struct {
 	section store.WorkspaceSection
@@ -62,7 +62,7 @@ func themeModeIcon(mode string) *ui.SVG {
 }
 
 func (a *App) primarySidebar(c *ui.Context, palette nui.Theme) {
-	column := ui.Column(c).Width(primarySidebarWidth).Shrink(0).FillHeight().Padding(10, 6, 8, 6).Background(palette.Elevated)
+	column := ui.Column(c).Width(primarySidebarWidth).Shrink(0).FillHeight().Padding(6, 4, 4, 4).Background(palette.Elevated)
 	column.BorderWidth(0, 1, 0, 0).BorderColor(palette.Border).Shadow(8, 0, 20, -18, ui.RGBA(15, 23, 42, 0.32))
 	column.Children(func() {
 		ui.Column(c).FillWidth().Grow(1).Basis(0).Gap(2).Children(func() {
@@ -73,7 +73,7 @@ func (a *App) primarySidebar(c *ui.Context, palette nui.Theme) {
 				})
 			}
 		})
-		ui.Column(c).FillWidth().Gap(2).Margin(10, 0, 0, 0).PaddingY(10).Children(func() {
+		ui.Column(c).FillWidth().Gap(2).Margin(6, 0, 0, 0).PaddingY(4).Children(func() {
 			a.sidebarButton(c, palette, "theme", themeModeLabelText(a.currentThemeMode()), themeModeIcon(a.currentThemeMode()), false, false, nil, a.toggleThemeMode)
 			a.sidebarButton(c, palette, "language", locales.LanguageSwitch(), lucide.Languages(), false, false, nil, a.toggleLanguage)
 			a.sidebarButton(c, palette, "settings", locales.MenuSettings(), lucide.Settings(), false, false, a.kbds(shortcuts.AppOpenSettings), a.openSettings)
@@ -86,7 +86,7 @@ func themeModeLabelText(mode string) string { return locales.ThemeTooltip(themeM
 // sidebarButton is a square button of the primary sidebar. A section button
 // marks the active section with the accent and a bar along its left edge.
 func (a *App) sidebarButton(c *ui.Context, palette nui.Theme, key, label string, icon *ui.SVG, active, section bool, kbds []string, run func()) {
-	button := ui.ButtonBase(c.Key(key)).FillWidth().Height(primarySidebarWidth - 12).Radius(8).Center().Label(label).OnClick(run)
+	button := ui.ButtonBase(c.Key(key)).FillWidth().Height(primarySidebarWidth - 8).Radius(6).Center().Label(label).OnClick(run)
 	hovered := button.Hovered() || button.Pressed()
 	color := palette.Muted
 	switch {

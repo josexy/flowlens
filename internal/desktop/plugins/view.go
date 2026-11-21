@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	pluginRowHeight float32 = 54
-	ruleRowHeight   float32 = 44
+	pluginRowHeight float32 = 46
+	ruleRowHeight   float32 = 36
 )
 
 // View is the Python Plugins sidebar and page.
@@ -147,7 +147,7 @@ func (v *View) Sidebar(c *ui.Context, theme nui.Theme) {
 	plugins := v.Data.Plugins
 	plugins.Initialize()
 	ui.Column(c.Key("plugins-sidebar")).Fill().MinHeight(0).Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Gap(10).Padding(10).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Column(c).FillWidth().Shrink(0).Gap(6).Padding(8).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).MinWidth(0).Children(func() {
 					ui.Text(c, locales.PythonPluginsTitle()).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Highlighted)
@@ -227,7 +227,7 @@ func (v *View) selectPlugin(id string) {
 func (v *View) pluginRow(c *ui.Context, theme nui.Theme, plugin *store.Plugin, reorderable bool) {
 	plugins := v.Data.Plugins
 	selected := plugins.SelectedPluginID == plugin.ID
-	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleGroup).FillWidth().MinHeight(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(8, 8, 8, 5).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
+	row := ui.ButtonBase(c.Key(plugin.ID)).Role(ui.RoleGroup).FillWidth().MinHeight(pluginRowHeight).Justify(ui.Start).Gap(6).Padding(5, 6, 5, 4).FocusRing(true).AccessSelected(selected).Label(plugin.Name)
 	row.BorderWidth(0, 0, 0, 3).BorderColor(ui.Transparent).Background(theme.Background)
 	hovered := row.Hovered()
 	switch {
@@ -406,7 +406,7 @@ func (v *View) Content(c *ui.Context, theme nui.Theme) {
 
 func (v *View) header(c *ui.Context, theme nui.Theme, plugin *store.Plugin) {
 	plugins := v.Data.Plugins
-	ui.Row(c.Key("header")).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Padding(8, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	ui.Row(c.Key("header")).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(6).Padding(5, 8).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, plugin.Name).SingleLine().FontSize(apptheme.TextSize(c, 14)).Bold().TextColor(theme.Highlighted)

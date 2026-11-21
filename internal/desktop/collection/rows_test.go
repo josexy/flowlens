@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestFolderShowsChildCountPill(t *testing.T) {
 	}
 	row, _ := f.tester.Find("Three")
 	pill, _ := f.tester.Find("child-count")
-	if pill.H != 20 || pill.X < row.X || pill.X+pill.W > row.X+row.W {
+	if math.Abs(float64(pill.H-20)) > 0.01 || pill.X < row.X || pill.X+pill.W > row.X+row.W {
 		t.Fatalf("pill %v in row %v", pill, row)
 	}
 	if row.H < pill.H || row.H > 44 {

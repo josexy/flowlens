@@ -233,10 +233,10 @@ func (w *Workspace) booleanButton(c *ui.Context, theme nui.Theme, key string, ic
 
 func (w *Workspace) buildToolbar(c *ui.Context, theme nui.Theme) {
 	config := w.proxyConfig()
-	row := ui.Row(c).FillWidth().Shrink(0).MinHeight(44).AlignItems(ui.Center).Gap(12).PaddingX(12).PaddingY(6).Background(theme.MutedBackground)
+	row := ui.Row(c).FillWidth().Shrink(0).MinHeight(36).AlignItems(ui.Center).Gap(8).PaddingX(8).PaddingY(4).Background(theme.MutedBackground)
 	row.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	row.Children(func() {
-		panel := ui.Row(c).Grow(1).Basis(0).MinWidth(0).MinHeight(32).AlignItems(ui.Center).Gap(12).Padding(0, 8, 0, 12).Background(theme.Background).Radius(4)
+		panel := ui.Row(c).Grow(1).Basis(0).MinWidth(0).MinHeight(28).AlignItems(ui.Center).Gap(8).PaddingX(8).Background(theme.Background).Radius(4)
 		panel.Border(1, theme.Border).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).Children(func() {
 			w.statusText(c, theme, config)
 			ui.Row(c).AlignItems(ui.Center).Gap(4).Shrink(0).Children(func() {

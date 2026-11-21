@@ -92,7 +92,7 @@ func (f *ruleForm) build(c *ui.Context, theme nui.Theme, draft *store.RuleDraft)
 	rule := draft.Rule
 	disabled := rule.UnavailableReason != ""
 	errors := rewrite.FieldErrors(rewrite.SelectedID)
-	ui.Column(c.Key("rule-form")).FillWidth().MaxWidth(896).Gap(20).Padding(16).AlignSelf(ui.Center).Children(func() {
+	ui.Column(c.Key("rule-form")).FillWidth().MaxWidth(896).Gap(12).Padding(12).AlignSelf(ui.Center).Children(func() {
 		nui.FormField(c.Key("name"), theme, nui.FormFieldOptions{Label: locales.RewriteRulesName(), Required: true, Error: fieldErrorMessage(errors.Name), Disabled: disabled}, func(field nui.Theme) {
 			nui.Input(c.Key("input"), field, &rule.Name, nui.InputOptions{Label: locales.RewriteRulesName(), Disabled: disabled, Invalid: errors.Name != ""}).FillWidth()
 		})

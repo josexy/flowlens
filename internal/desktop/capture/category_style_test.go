@@ -64,7 +64,7 @@ func TestCategoryRowsShowNoCounts(t *testing.T) {
 	}
 	item, _ := f.tester.AccessByRole(ui.RoleListItem, "api.test")
 	row := item.Bounds
-	if row.H != 32 {
+	if row.H < 28 || row.H > 32 {
 		t.Fatalf("row %v", row)
 	}
 }
