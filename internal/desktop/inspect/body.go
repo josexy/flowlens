@@ -91,10 +91,8 @@ func (b *BodyViewer) set(content BodyContent) {
 		content.ContentType == b.content.ContentType && strings.HasPrefix(content.Body, previousBody)
 	grew := streamingText && appended
 	tabs := logic.BodyTabs(content.ContentType, content.Binary, content.Body, b.enableSSE)
-	if !b.shown || !sameTabs(tabs, b.tabs) {
-		b.active = logic.NextBodyTab(b.active, tabs, b.tabs)
-		b.tabs = tabs
-	}
+	b.active = logic.NextBodyTab(b.active, tabs, b.tabs)
+	b.tabs = tabs
 	b.content, b.shown = content, true
 	b.category = logic.ClassifyBody(content.ContentType, content.Binary)
 	if !changed {
@@ -131,20 +129,8 @@ func (b *BodyViewer) set(content BodyContent) {
 		b.raw.SetText(content.Body)
 	} else {
 		b.formatted.SetText("")
-		b.raw.SetText(locales.DetailBinaryDataHint())
+		b.raw.SetText("")
 	}
-}
-
-func sameTabs(left, right []logic.BodyTab) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 func tabLabel(tab logic.BodyTab) string {
@@ -237,7 +223,7 @@ func (b *BodyViewer) toolbar(c *ui.Context, theme nui.Theme) {
 		}
 		strip := ui.ScrollHorizontal(c.Key("body-tabs-scroll")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false)
 		widgets.WheelScroll(c, strip).Children(func() {
-			widgets.PillTabs(c.Key("body-tabs"), theme, &b.tabChoice, items, locales.DetailBodyRaw())
+			widgets.PillTabs(c.Key("body-tabs"), theme, &b.tabChoice, items, locales.DetailBodyViews())
 		})
 		b.active = logic.BodyTab(b.tabChoice)
 	}, func() { b.actions(c, theme) })

@@ -14,10 +14,12 @@ type PillTab struct {
 	Label string
 }
 
-// pillTabsMemory is the index the tabs chose and the value it was synced with.
+// pillTabsMemory keeps the index the tabs chose and the items and value it
+// referred to, so a changed item order is not mistaken for user input.
 type pillTabsMemory struct {
 	index int
 	value string
+	items []PillTab
 }
 
 // PillTabs builds a strip of extra-small pill tabs, each as wide as its label,
@@ -29,9 +31,10 @@ func PillTabs(c *ui.Context, theme nui.Theme, value *string, items []PillTab, la
 	}
 	root := ui.Row(c).Shrink(0)
 	memory := ui.Local(root, "pill-tabs", func() pillTabsMemory { return pillTabsMemory{index: -1} })
+	itemsChanged := !slices.Equal(memory.items, items)
 	switch current := position(*value); {
-	case memory.value != *value || memory.index < 0 || memory.index >= len(items):
-		// The value changed outside the tabs.
+	case itemsChanged || memory.value != *value || memory.index < 0 || memory.index >= len(items):
+		// The value or the available tabs changed outside the tabs.
 		memory.index = current
 	case memory.index != current:
 		// The keys or a click chose another tab.
@@ -42,6 +45,9 @@ func PillTabs(c *ui.Context, theme nui.Theme, value *string, items []PillTab, la
 		*value = items[0].ID
 	}
 	memory.value = *value
+	if itemsChanged {
+		memory.items = slices.Clone(items)
+	}
 	root.Children(func() {
 		parts := ui.TabsBase(c, &memory.index, len(items))
 		list := parts.List.Label(label).AlignItems(ui.Center).Padding(4).Radius(8).Background(theme.Elevated)

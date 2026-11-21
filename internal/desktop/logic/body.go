@@ -85,13 +85,15 @@ func BodyTabs(contentType string, binary bool, body string, enableSSE bool) []Bo
 	category := ClassifyBody(contentType, binary)
 	var tabs []BodyTab
 	formattable := slices.Contains([]BodyCategory{BodyJSON, BodyXML, BodyHTML, BodyJS, BodyCSS, BodySVG}, category)
-	if formattable && len(body) < LargeTextThreshold {
+	if !binary && formattable && len(body) < LargeTextThreshold {
 		tabs = append(tabs, BodyTabFormatted)
 	}
 	if category == BodyImage || category == BodySVG {
 		tabs = append(tabs, BodyTabImage)
 	}
-	tabs = append(tabs, BodyTabRaw)
+	if !binary {
+		tabs = append(tabs, BodyTabRaw)
+	}
 	if enableSSE && IsEventStream(contentType) {
 		tabs = append(tabs, BodyTabSSE)
 	}

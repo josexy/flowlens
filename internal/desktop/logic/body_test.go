@@ -32,10 +32,17 @@ func TestBodyTabs(t *testing.T) {
 		}
 	}
 	check("application/json", false, "{}", false, BodyTabFormatted, BodyTabRaw, BodyTabHex)
-	check("image/png", true, "\x89PNG", false, BodyTabImage, BodyTabRaw, BodyTabHex)
+	check("image/png", true, "\x89PNG", false, BodyTabImage, BodyTabHex)
+	check("application/octet-stream", true, "\x00\xff", false, BodyTabHex)
+	check("text/plain", true, "caf\xe9", false, BodyTabHex)
+	check("application/json", true, "\xff", false, BodyTabHex)
+	check("application/octet-stream", false, "readable text", false, BodyTabRaw, BodyTabHex)
+	check("image/png", false, "readable text", false, BodyTabImage, BodyTabRaw, BodyTabHex)
 	check("image/svg+xml", false, "<svg/>", false, BodyTabFormatted, BodyTabImage, BodyTabRaw, BodyTabHex)
 	check("text/event-stream", false, "", true, BodyTabRaw, BodyTabSSE, BodyTabHex)
 	check("text/event-stream", false, "", false, BodyTabRaw, BodyTabHex)
+	check("text/event-stream", true, "\xff", true, BodyTabSSE, BodyTabHex)
+	check("text/plain", false, "", false, BodyTabRaw, BodyTabHex)
 	check("application/json", false, strings.Repeat("x", LargeTextThreshold-1), false, BodyTabFormatted, BodyTabRaw, BodyTabHex)
 	check("application/json", false, strings.Repeat("x", LargeTextThreshold), false, BodyTabRaw, BodyTabHex)
 }
@@ -52,8 +59,18 @@ func TestNextBodyTab(t *testing.T) {
 	if NextBodyTab(BodyTabSSE, raw, sse) != BodyTabRaw {
 		t.Fatal("fallback")
 	}
-	if NextBodyTab(BodyTabRaw, []BodyTab{BodyTabImage, BodyTabRaw}, raw) != BodyTabImage {
+	image := []BodyTab{BodyTabImage, BodyTabHex}
+	if NextBodyTab(BodyTabRaw, image, raw) != BodyTabImage {
 		t.Fatal("image default")
+	}
+	if NextBodyTab(BodyTabRaw, image, image) != BodyTabImage {
+		t.Fatal("stale Raw choice must fall back to the image")
+	}
+	if NextBodyTab(BodyTabRaw, []BodyTab{BodyTabHex}, raw) != BodyTabHex {
+		t.Fatal("binary must fall back to Hex")
+	}
+	if NextBodyTab(BodyTabHex, raw, []BodyTab{BodyTabHex}) != BodyTabHex {
+		t.Fatal("returning to text must preserve an applicable choice")
 	}
 }
 

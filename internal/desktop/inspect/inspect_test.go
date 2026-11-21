@@ -655,7 +655,7 @@ func TestSVGPreview(t *testing.T) {
 	}
 }
 
-func TestInvalidImageKeepsRawAndHex(t *testing.T) {
+func TestInvalidBinaryImageKeepsHexWithoutRaw(t *testing.T) {
 	avif := avifFixture(t, "opaque")
 	for _, tc := range []struct {
 		name, contentType, body, hex string
@@ -674,13 +674,14 @@ func TestInvalidImageKeepsRawAndHex(t *testing.T) {
 				f.has(locales.DetailImagePreviewFailed())
 				f.lacks(locales.DetailImageFormatUnsupported())
 			}
-			if !slices.Contains(f.panel.responseBody.tabs, logic.BodyTabRaw) {
-				t.Fatal("Raw tab is unavailable after decoding fails")
+			if slices.Contains(f.panel.responseBody.tabs, logic.BodyTabRaw) {
+				t.Fatal("binary image offers a Raw tab after decoding fails")
 			}
+			// A delayed choice from an earlier text body must not reopen Raw.
 			f.panel.responseBody.tabChoice = string(logic.BodyTabRaw)
 			f.settle()
-			if f.panel.responseBody.Active() != logic.BodyTabRaw || f.panel.responseBody.raw.Text() != locales.DetailBinaryDataHint() {
-				t.Fatal("Raw view did not open after decoding failed")
+			if f.panel.responseBody.Active() != logic.BodyTabImage || f.panel.responseBody.raw.Text() != "" {
+				t.Fatal("stale Raw selection did not fall back to the image")
 			}
 			f.click(locales.DetailHex())
 			if f.panel.responseBody.Active() != logic.BodyTabHex {
@@ -776,12 +777,11 @@ func TestSavingABinaryBodyKeepsItsBytes(t *testing.T) {
 	}
 }
 
-func TestInvalidUTF8BodyShowsHintAndOriginalBytes(t *testing.T) {
+func TestInvalidUTF8BodyOpensHexWithoutRaw(t *testing.T) {
 	f := bodyFixture(t, "text/plain", "caf\xe9 \xff", true)
-	if f.panel.responseBody.Active() != logic.BodyTabRaw || f.panel.responseBody.raw.Text() != locales.DetailBinaryDataHint() {
-		t.Fatalf("raw view %q", f.panel.responseBody.raw.Text())
+	if f.panel.responseBody.Active() != logic.BodyTabHex || slices.Contains(f.panel.responseBody.tabs, logic.BodyTabRaw) {
+		t.Fatalf("active %q, tabs %v", f.panel.responseBody.Active(), f.panel.responseBody.tabs)
 	}
-	f.click(locales.DetailHex())
 	f.has("63 61 66 E9 20 FF")
 	f.lacks("EF BF BD")
 }

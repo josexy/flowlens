@@ -1250,16 +1250,6 @@ func (msgs Messages) DetailBinaryData() string {
 	return Catalog.Format(msgs.locale, "detailBinaryData", nil)
 }
 
-// DetailBinaryDataHint says "[Binary data - view in Hex or Image tab]"
-// in the language the app shows.
-func DetailBinaryDataHint() string { return In(i18n.Locale()).DetailBinaryDataHint() }
-
-// DetailBinaryDataHint says "[Binary data - view in Hex or Image tab]"
-// in the language of msgs.
-func (msgs Messages) DetailBinaryDataHint() string {
-	return Catalog.Format(msgs.locale, "detailBinaryDataHint", nil)
-}
-
 // DetailBodyCopied says "Body copied"
 // in the language the app shows.
 func DetailBodyCopied() string { return In(i18n.Locale()).DetailBodyCopied() }
@@ -1318,6 +1308,16 @@ func DetailBodyUnavailable() string { return In(i18n.Locale()).DetailBodyUnavail
 // in the language of msgs.
 func (msgs Messages) DetailBodyUnavailable() string {
 	return Catalog.Format(msgs.locale, "detailBodyUnavailable", nil)
+}
+
+// DetailBodyViews says "Body views"
+// in the language the app shows.
+func DetailBodyViews() string { return In(i18n.Locale()).DetailBodyViews() }
+
+// DetailBodyViews says "Body views"
+// in the language of msgs.
+func (msgs Messages) DetailBodyViews() string {
+	return Catalog.Format(msgs.locale, "detailBodyViews", nil)
 }
 
 // DetailCertDns says "Cert DNS"
@@ -1870,11 +1870,11 @@ func (msgs Messages) DetailError() string {
 	return Catalog.Format(msgs.locale, "detailError", nil)
 }
 
-// DetailFormatted says "Formatted"
+// DetailFormatted says "Fmt"
 // in the language the app shows.
 func DetailFormatted() string { return In(i18n.Locale()).DetailFormatted() }
 
-// DetailFormatted says "Formatted"
+// DetailFormatted says "Fmt"
 // in the language of msgs.
 func (msgs Messages) DetailFormatted() string {
 	return Catalog.Format(msgs.locale, "detailFormatted", nil)
@@ -2064,21 +2064,21 @@ func (msgs Messages) DetailHexSelectionCopied() string {
 	return Catalog.Format(msgs.locale, "detailHexSelectionCopied", nil)
 }
 
-// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Raw or Hex."
+// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Hex."
 // in the language the app shows.
 func DetailImageFormatUnsupported() string { return In(i18n.Locale()).DetailImageFormatUnsupported() }
 
-// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Raw or Hex."
+// DetailImageFormatUnsupported says "This image format is unsupported or unrecognized. View it in Hex."
 // in the language of msgs.
 func (msgs Messages) DetailImageFormatUnsupported() string {
 	return Catalog.Format(msgs.locale, "detailImageFormatUnsupported", nil)
 }
 
-// DetailImagePreviewFailed says "This image could not be decoded. View it in Raw or Hex."
+// DetailImagePreviewFailed says "This image could not be decoded. View it in Hex."
 // in the language the app shows.
 func DetailImagePreviewFailed() string { return In(i18n.Locale()).DetailImagePreviewFailed() }
 
-// DetailImagePreviewFailed says "This image could not be decoded. View it in Raw or Hex."
+// DetailImagePreviewFailed says "This image could not be decoded. View it in Hex."
 // in the language of msgs.
 func (msgs Messages) DetailImagePreviewFailed() string {
 	return Catalog.Format(msgs.locale, "detailImagePreviewFailed", nil)
@@ -2296,11 +2296,11 @@ func (msgs Messages) DetailPath() string {
 	return Catalog.Format(msgs.locale, "detailPath", nil)
 }
 
-// DetailPreview says "Preview"
+// DetailPreview says "Image"
 // in the language the app shows.
 func DetailPreview() string { return In(i18n.Locale()).DetailPreview() }
 
-// DetailPreview says "Preview"
+// DetailPreview says "Image"
 // in the language of msgs.
 func (msgs Messages) DetailPreview() string {
 	return Catalog.Format(msgs.locale, "detailPreview", nil)
