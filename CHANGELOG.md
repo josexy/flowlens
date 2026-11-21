@@ -16,5 +16,5 @@ FlowLens is now a native desktop application built on MyGo instead of a web view
 ### Installing this version
 
 - Versions 1.0.x cannot update to this release on their own. Install it once from the release page; your data is picked up.
-- AppImage, RPM, and portable ZIP packages are no longer published. Windows uses the installer; Linux uses the Debian package or the tar archive.
+- AppImage and portable ZIP packages are no longer published. Windows uses the installer; Linux offers Debian and RPM packages or the tar archive. Linux packages require GTK 3, without WebKitGTK.
 - Histories saved by this version use a new file format and need 2.0.0 or later to open. Histories saved earlier still open.

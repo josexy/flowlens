@@ -16,9 +16,6 @@
 
 FlowLens captures proxy traffic, identifies local processes, and lets you inspect, edit, replay, and save requests. It is a native desktop application written in Go with [MyGo](https://github.com/egoist/mygo) and [nuxt-ui-go](https://github.com/josexy/nuxt-ui-go).
 
-> [!IMPORTANT]
-> FlowLens is currently beta. Internal contracts and local development data may change without compatibility migration before a stable release.
-
 ## Highlights
 
 - HTTP/HTTPS MITM capture, SOCKS5 proxying, live SSE message lists with per-message inspection, and WebSocket messages
@@ -40,7 +37,9 @@ Download the latest build from [GitHub Releases](https://github.com/josexy/flowl
 | --- | --- |
 | Windows x64 / ARM64 | NSIS installer |
 | macOS | Apple Silicon DMG or universal DMG |
-| Linux x64 / ARM64 | Debian package, or a tar archive with `install.sh` |
+| Linux x64 / ARM64 | Debian package, RPM package, or a tar archive plus the separate `install.sh` |
+
+Linux packages use GTK 3 for the native interface and do not require WebKitGTK.
 
 Verify downloads with `SHA256SUMS`. Unsigned Windows/macOS packages may trigger operating-system warnings.
 

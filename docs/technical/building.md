@@ -34,7 +34,13 @@ task package -- -platform windows/amd64,linux/amd64,linux/arm64 -skip-installer
 | --- | --- |
 | `windows/amd64`, `windows/arm64` | Executable and `flowlens-setup-<version>-<arch>.exe`, made with NSIS. MyGo downloads NSIS on Windows if needed. On Linux, install `nsis` or pass `-skip-installer`. |
 | `darwin/arm64`, `darwin/universal` | Application bundle and disk image. These need macOS. |
-| `linux/amd64`, `linux/arm64` | Executable, Debian package, `flowlens-<version>-linux-<arch>.tar.gz` with `install.sh`, and a `PKGBUILD` |
+| `linux/amd64`, `linux/arm64` | Executable, Debian and RPM packages, `flowlens-<version>-linux-<arch>.tar.gz`, a separate `install.sh`, and a `PKGBUILD` with its icon source files |
+
+`linux.formats` is left unset in `mygo.json`, retaining MyGo's defaults: `deb`, `rpm`, and `pkgbuild`. The tar archive is always generated. RPM architectures are named `x86_64` and `aarch64`. `mygo build -upload` publishes Debian/RPM packages, tar archives, and the separate `install.sh`; keep the script next to the matching archive and run `sh install.sh` to install that local build. The `PKGBUILD` and its icon source files stay in the local build directory, where `makepkg -si` can use them on a compatible Arch Linux system.
+
+`linux.webview` is `false`: Linux packages depend on GTK 3 without WebKitGTK, and `install.sh` and `mygo doctor` do not ask for WebKitGTK. The Linux maintainer, short description, and Development/Network desktop categories are declared in `mygo.json`.
+
+Package identity also comes from `mygo.json`: publisher and copyright match the project's license notice, and the license identifier is `MIT`. The root `LICENSE` is explicitly included through `resources`, next to the executable on Windows/Linux or in `Contents/Resources` on macOS. The font license at `fonts/OFL.txt` is retained; embedded fonts and PNG images remain excluded from duplicate resource copies.
 
 With `MYGO_UPDATER_PRIVATE_KEY` set, every target also gets a signed update archive, `flowlens-<version>-<target>.tar.gz`, and its `update-<target>.json` manifest. Windows targets are `windows-amd64` and `windows-arm64`; macOS targets are `darwin-arm64` and `darwin-universal`. `mygo build -upload` uploads these alongside the installers and disk images. Linux uses its existing tar archive for updates too. Without the signing key, Windows and macOS builds do not produce these archives or manifests.
 
@@ -76,6 +82,6 @@ MyGo replaces program files during installation on Windows and Linux; macOS stag
 
 `.github/workflows/release.yml` checks that the tag or manually supplied version matches `mygo.json`. Each `mygo build -upload` validates the update configuration and signing key, including whether the private key matches the public key, before compiling or uploading. MyGo also handles update notes from `CHANGELOG.md`. The workflow builds Windows amd64/arm64 on `windows-latest`, Linux amd64/arm64 on `ubuntu-latest`, and macOS arm64/universal on `macos-latest`, with cgo disabled on every platform. `darwin/universal` combines arm64 and amd64 in one application; listing `darwin/arm64,darwin/amd64` would produce two separate applications.
 
-Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, all six platform update archives, both Debian architectures, and their checksum entries. It also requires all six `update-<target>.json` manifests, which MyGo excludes from `SHA256SUMS`. The draft is created before the build checks.
+Build jobs upload to a draft GitHub Release to review and publish. They run one at a time because MyGo merges and replaces the shared `SHA256SUMS` during each upload. The final check requires both Windows installers, both macOS disk images, all six platform update archives, both Debian and RPM architectures, `install.sh`, and their checksum entries. It also requires all six `update-<target>.json` manifests, which MyGo excludes from `SHA256SUMS`. The draft is created before the build checks.
 
 Windows executables and installers are unsigned. macOS applications use MyGo's default ad-hoc signing and are not notarized. No platform-signing certificates or secrets are required. `MYGO_UPDATER_PRIVATE_KEY` is still required to sign update archives.

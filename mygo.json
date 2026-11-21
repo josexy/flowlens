@@ -3,15 +3,30 @@
   "slug": "flowlens",
   "identifier": "com.josexy.flowlens",
   "version": "2.0.0",
+  "copyright": "Copyright (c) 2026 joxrays",
+  "publisher": "joxrays",
+  "license": "MIT",
   "out": "build",
   "macos": {
     "icon": "assets/macos/app-icon.icns",
     "minimumSystemVersion": "13.0"
   },
+  "linux": {
+    "maintainer": "joxrays <josephxrays@163.com>",
+    "comment": "Local-first HTTP, HTTPS, WebSocket, and SOCKS5 traffic inspector",
+    "categories": [
+      "Development",
+      "Network"
+    ],
+    "webview": false
+  },
   "updates": {
     "publicKey": "/8YOLq4hDt7zrhJ7+Gpa+OaEwazlLC32Bi1PKIr7nto=",
     "github": "josexy/flowlens"
   },
+  "resources": [
+    "LICENSE"
+  ],
   "resourcesExclude": [
     "**/*.ttf",
     "*.png"
