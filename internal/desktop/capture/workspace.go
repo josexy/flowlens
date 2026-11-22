@@ -161,7 +161,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 	row := ui.Row(c.Key("capture-item")).Role(ui.RoleGroup).TabStop(false).MinHeight(32).Shrink(0).AlignItems(ui.Center).Gap(6).PaddingX(8).Margin(4, 6, 0, 6).Radius(6)
 	switch {
 	case active:
-		row.Background(selectionBackground(theme)).Border(1, theme.Border)
+		row.Background(selectionBackground(theme)).Border(1, ui.Transparent)
 	case row.Hovered():
 		row.Background(theme.Elevated).Border(1, ui.Transparent)
 	default:

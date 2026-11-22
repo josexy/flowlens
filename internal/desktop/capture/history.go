@@ -163,7 +163,7 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 	row := ui.ButtonBase(c.Key(key)).MinHeight(38).Justify(ui.Start).Gap(6).PaddingX(8).Margin(2, 6, 0, 6).Radius(6).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
 	switch {
 	case active:
-		row.Background(selectionBackground(theme)).Border(1, theme.Border)
+		row.Background(selectionBackground(theme)).Border(1, ui.Transparent)
 	case row.Hovered():
 		row.Background(theme.Elevated).Border(1, ui.Transparent)
 	default:
