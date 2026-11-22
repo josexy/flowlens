@@ -313,6 +313,8 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 		}
 		controlWidth += apptheme.TextSize(c, 20) + 26*density + 2
 		busy := proxy.Toggling || w.toolbar.applying
+		// Quick-setting saves block conflicting actions without dimming the
+		// group or its buttons; only a proxy operation changes their busy look.
 		label, color, variant, icon := locales.ToolbarStart(), nui.Primary, nui.Solid, lucide.Power()
 		run := w.toggleProxy
 		if proxy.Status.Running {
@@ -328,7 +330,7 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 		items := []nui.FieldGroupItem{{ID: "primary", Build: func(c *ui.Context, palette nui.Theme) ui.Element {
 			button := nui.Button(c, palette, label, nui.ButtonOptions{
 				Color: color, Variant: variant, Size: nui.MD, Leading: icon, Loading: proxy.Toggling, Disabled: busy,
-			}).Grow(1).Basis(0).MinWidth(0).Justify(ui.Center).Bind(&w.toolbar.proxyAction)
+			}).DimDisabled(proxy.Toggling).Grow(1).Basis(0).MinWidth(0).Justify(ui.Center).Bind(&w.toolbar.proxyAction)
 			if !busy {
 				button.OnClick(run)
 				if w.toolbar.focusProxyAction {
@@ -343,7 +345,7 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 				menuAnchor = nui.Button(c, palette, "", nui.ButtonOptions{
 					Color: color, Variant: variant, Leading: lucide.ChevronDown(), Square: true,
 					AccessibleLabel: locales.ToolbarProxyActions(), Disabled: busy,
-				}).Width(arrowWidth).Shrink(0)
+				}).DimDisabled(proxy.Toggling).Width(arrowWidth).Shrink(0)
 				if variant == nui.Solid {
 					menuAnchor.BorderWidth(0, 0, 0, 1).BorderColor(theme.Background.Alpha(0.3))
 				}
@@ -351,7 +353,7 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 			}})
 		}
 		nui.FieldGroup(c.Key("proxy-control"), theme, nui.FieldGroupOptions{Disabled: busy}, items).
-			Width(controlWidth).Shrink(0)
+			DimDisabled(proxy.Toggling).Width(controlWidth).Shrink(0)
 		if proxy.Status.Running {
 			nui.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, []nui.MenuItem{{
 				ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
