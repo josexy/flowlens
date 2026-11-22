@@ -130,7 +130,8 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 	box.OnClick(func() { workspace.Activate(tab.Key) })
 	box.Children(func() {
 		if active {
-			ui.Box(c.Key("active-line")).Absolute().Top(0).Left(0).Right(0).Height(2).Background(theme.Primary).IgnoreInput(true)
+			// Absolute insets start inside the border; cover the right divider too.
+			ui.Box(c.Key("active-line")).Absolute().Top(0).Left(0).Right(-1).Height(2).Background(theme.Primary).IgnoreInput(true)
 		}
 		iconColor := theme.Muted.Alpha(0.72)
 		if active {
@@ -196,16 +197,23 @@ func (e *Editor) closeButton(c *ui.Context, theme nui.Theme, tab *logic.Workspac
 	button := ui.ButtonBase(c.Key("close")).Size(18, 18).Shrink(0).Radius(9).Margin(0, 6, 0, 0).Center().
 		Label(locales.WorkspaceTabContextCloseCurrent() + " " + title)
 	color := theme.Muted
+	background := ui.Color{}
 	opacity := float32(0)
 	switch {
 	case button.Hovered() || button.Pressed():
-		button.Background(theme.Accented)
+		background = theme.Accented
 		color, opacity = theme.Text, 1
 	case shown || button.FocusVisible():
 		opacity = 0.72
 	}
 	button.Opacity(opacity).OnClick(func() { e.closeWithPrompt(tab.Key) })
-	button.Children(func() { ui.Icon(c, lucide.X()).Size(12, 12).TextColor(color) })
+	button.Children(func() {
+		// Keep the hit area while reducing the circle; its even inset also
+		// keeps the icon centered on the pixel grid at 150% display scale.
+		ui.Box(c).Size(16, 16).Shrink(0).Radius(8).Background(background).Center().Children(func() {
+			ui.Icon(c, lucide.X()).Size(12, 12).Shrink(0).TextColor(color)
+		})
+	})
 	nui.Tooltip(c, theme, button, locales.WorkspaceClose(), nui.TooltipOptions{})
 }
 
