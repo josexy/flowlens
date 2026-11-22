@@ -352,17 +352,22 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 				return menuAnchor
 			}})
 		}
+		// Each button owns its disabled opacity; dimming the group would apply it twice.
 		nui.FieldGroup(c.Key("proxy-control"), theme, nui.FieldGroupOptions{Disabled: busy}, items).
-			DimDisabled(proxy.Toggling).Width(controlWidth).Shrink(0)
+			DimDisabled(false).Width(controlWidth).Shrink(0)
 		if proxy.Status.Running {
 			nui.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, []nui.MenuItem{{
 				ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
 				Disabled: busy, Shortcut: strings.Join(w.kbds(shortcuts.CaptureToggleProxy), "+"),
+				// The trigger disappears after stopping; restore focus to the
+				// primary action without queueing focus on the hidden arrow.
+				Close: nui.Set(false),
 				OnSelect: func() {
+					w.toolbar.proxyMenu.Open = false
 					w.toolbar.focusProxyAction = true
 					w.toggleProxy()
 				},
-			}}, nui.MenuOptions{Label: locales.ToolbarProxyActions(), Disabled: busy, Width: nui.Set(controlWidth)})
+			}}, nui.MenuOptions{Label: locales.ToolbarProxyActions(), Disabled: busy}).MinWidth(controlWidth)
 		}
 		toolbarButton(c, theme, toolButton{
 			key: "clear", icon: lucide.Trash(), tooltip: locales.ToolbarClear(), color: nui.Error,
