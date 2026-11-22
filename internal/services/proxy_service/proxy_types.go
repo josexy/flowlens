@@ -17,10 +17,12 @@ import (
 const UserAgentHeader = "FlowLens/1.0"
 
 type ProxyStatus struct {
-	Running      bool      `json:"running"`
-	Address      string    `json:"address"`
-	Started      time.Time `json:"started"`
-	CaptureAlias string    `json:"captureAlias"`
+	Revision        uint64    `json:"revision"`
+	Running         bool      `json:"running"`
+	RecordingPaused bool      `json:"recordingPaused"`
+	Address         string    `json:"address"`
+	Started         time.Time `json:"started"`
+	CaptureAlias    string    `json:"captureAlias"`
 }
 
 type ProxyConfigApplyResult struct {

@@ -31,22 +31,24 @@ import (
 )
 
 type fakeBackend struct {
-	mu       sync.Mutex
-	entries  []*logic.TrafficEntry
-	stats    proxyservice.TrafficStatistics
-	bodies   map[uint64]*proxyservice.TrafficBodyView
-	readBody func(uint64) (*proxyservice.TrafficBodyView, error)
-	deleted  []int64
-	cleared  int
-	status   proxyservice.ProxyStatus
-	system   proxyservice.SystemProxyStatus
-	dns      proxyservice.DNSCacheStatus
-	startErr error
-	starts   int
-	stops    int
-	restarts []bool
-	alias    string
-	dnsClear int
+	mu         sync.Mutex
+	entries    []*logic.TrafficEntry
+	stats      proxyservice.TrafficStatistics
+	bodies     map[uint64]*proxyservice.TrafficBodyView
+	readBody   func(uint64) (*proxyservice.TrafficBodyView, error)
+	deleted    []int64
+	cleared    int
+	status     proxyservice.ProxyStatus
+	system     proxyservice.SystemProxyStatus
+	dns        proxyservice.DNSCacheStatus
+	startErr   error
+	pauseErr   error
+	pauseBlock chan struct{}
+	starts     int
+	stops      int
+	restarts   []bool
+	alias      string
+	dnsClear   int
 }
 
 func (f *fakeBackend) GetTraffic() []*logic.TrafficEntry {
@@ -90,14 +92,47 @@ func (f *fakeBackend) Start() (proxyservice.ProxyStatus, error) {
 	if f.startErr != nil {
 		return proxyservice.ProxyStatus{}, f.startErr
 	}
-	f.status = proxyservice.ProxyStatus{Running: true, Address: "127.0.0.1:8080"}
+	f.status = proxyservice.ProxyStatus{Revision: f.status.Revision + 1, Running: true, Address: "127.0.0.1:8080"}
 	return f.status, nil
 }
 func (f *fakeBackend) Stop() (proxyservice.ProxyStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stops++
-	f.status = proxyservice.ProxyStatus{}
+	f.status = proxyservice.ProxyStatus{Revision: f.status.Revision + 1}
+	return f.status, nil
+}
+
+func (f *fakeBackend) Restart() (proxyservice.ProxyStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stops++
+	f.starts++
+	f.status.Revision++
+	if f.startErr != nil {
+		f.status.Running = false
+		f.status.RecordingPaused = false
+		f.status.Address = ""
+		return f.status, f.startErr
+	}
+	f.status.Running = true
+	return f.status, nil
+}
+
+func (f *fakeBackend) SetRecordingPaused(paused bool) (proxyservice.ProxyStatus, error) {
+	f.mu.Lock()
+	block := f.pauseBlock
+	f.mu.Unlock()
+	if block != nil {
+		<-block
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pauseErr != nil {
+		return f.status, f.pauseErr
+	}
+	f.status.RecordingPaused = paused
+	f.status.Revision++
 	return f.status, nil
 }
 func (f *fakeBackend) GetStatus() proxyservice.ProxyStatus {
@@ -429,12 +464,13 @@ func TestFocusFilterShortcut(t *testing.T) {
 func TestStartAndStop(t *testing.T) {
 	f := newFixture(t)
 	f.requireText("Proxy not running")
-	f.click("Start")
+	f.click("Start Proxy")
 	if f.backend.starts != 1 || !f.data.Proxy.Status.Running {
 		t.Fatal("not started")
 	}
 	f.requireText("http://127.0.0.1:8080")
-	f.click("Stop")
+	f.click("Proxy actions")
+	f.click("Stop Proxy")
 	if f.backend.stops != 1 || f.data.Proxy.Status.Running {
 		t.Fatal("not stopped")
 	}
@@ -444,7 +480,7 @@ func TestStartAndStop(t *testing.T) {
 func TestStartFailureStaysStopped(t *testing.T) {
 	f := newFixture(t)
 	f.backend.startErr = errors.New("port in use")
-	f.click("Start")
+	f.click("Start Proxy")
 	f.requireText("port in use")
 	f.requireText("Proxy not running")
 	if f.data.Proxy.LastError == "" {

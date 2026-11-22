@@ -82,6 +82,8 @@ type ProxyService struct {
 	events               serviceruntime.EventBus
 	frontendEventBatcher *frontendEventBatcher
 	running              bool
+	statusRevision       uint64
+	recordingPaused      atomic.Bool
 	address              string
 	started              time.Time
 	server               *http.Server
@@ -390,6 +392,12 @@ func (s *ProxyService) getProxyConfig() (*settingservice.ProxyConfig, error) {
 func (s *ProxyService) Start() (ProxyStatus, error) {
 	s.lifecycleOpsMu.Lock()
 	defer s.lifecycleOpsMu.Unlock()
+	return s.startLocked(false)
+}
+
+// startLocked publishes recording state before the listener can accept traffic.
+// The caller holds lifecycleOpsMu.
+func (s *ProxyService) startLocked(paused bool) (ProxyStatus, error) {
 	s.runLifecycleOperationHook("start")
 
 	s.mu.Lock()
@@ -482,6 +490,7 @@ func (s *ProxyService) Start() (ProxyStatus, error) {
 	s.server = server
 	s.ln = ln
 	s.enableFlushing.Store(true)
+	s.recordingPaused.Store(paused)
 	s.setStateLocked(true, listener.Addr().String())
 	go serve()
 	status := s.currentStatusLocked()
@@ -502,6 +511,7 @@ func (s *ProxyService) Start() (ProxyStatus, error) {
 }
 
 func (s *ProxyService) setStateLocked(start bool, address string) {
+	s.statusRevision++
 	if start {
 		s.running = true
 		s.address = address
@@ -516,6 +526,11 @@ func (s *ProxyService) setStateLocked(start bool, address string) {
 func (s *ProxyService) Stop() (ProxyStatus, error) {
 	s.lifecycleOpsMu.Lock()
 	defer s.lifecycleOpsMu.Unlock()
+	return s.stopLocked()
+}
+
+// stopLocked tears down the listener while the caller holds lifecycleOpsMu.
+func (s *ProxyService) stopLocked() (ProxyStatus, error) {
 	s.runLifecycleOperationHook("stop")
 
 	s.mu.Lock()
@@ -555,10 +570,12 @@ func (s *ProxyService) Stop() (ProxyStatus, error) {
 
 func (s *ProxyService) currentStatusLocked() ProxyStatus {
 	return ProxyStatus{
-		Running:      s.running,
-		Address:      s.address,
-		Started:      s.started,
-		CaptureAlias: s.currentHistoryAlias(),
+		Revision:        s.statusRevision,
+		Running:         s.running,
+		RecordingPaused: s.running && s.recordingPaused.Load(),
+		Address:         s.address,
+		Started:         s.started,
+		CaptureAlias:    s.currentHistoryAlias(),
 	}
 }
 
@@ -789,6 +806,9 @@ func (s *ProxyService) registerHeldTrafficEntry(ctx context.Context, entry Traff
 func (s *ProxyService) registerTrafficEntryWithProducer(ctx context.Context, entry TrafficEntry, held bool) (*TrafficEntry, func()) {
 	s.trafficPublishMu.Lock()
 	defer s.trafficPublishMu.Unlock()
+	if s.recordingPaused.Load() {
+		return nil, func() {}
+	}
 	captured := s.newTrafficEntry(entry)
 	release := func() {}
 	if held {
@@ -841,81 +861,96 @@ func (s *ProxyService) httpInterceptor(_ *settingservice.ProxyConfig) mitmproxy.
 		}
 		entry.Request.Metrics = newPendingHTTPMessageMetrics(-1)
 		entry, releaseExchange := s.registerHeldTrafficEntry(ctx, *entry)
-		exchange := newCaptureExchange(s, ctx, entry)
-		exchange.release = releaseExchange
-		exchange.deferResponseTiming = hasResponseRewrite(matches)
-		// With rewrite rules, the downstream send observer is the exchange's
-		// last update.
-		exchange.awaitDownstreamSend = len(matches) > 0
+		var exchange *captureExchange
+		if entry != nil {
+			exchange = newCaptureExchange(s, ctx, entry)
+			exchange.release = releaseExchange
+			exchange.deferResponseTiming = hasResponseRewrite(matches)
+			// With rewrite rules, the downstream send observer is the exchange's
+			// last update.
+			exchange.awaitDownstreamSend = len(matches) > 0
+		}
 		if len(matches) > 0 {
 			var rewriteResult rewriteResult
 			var rewriteErr error
 			req, rewriteResult, rewriteErr = s.rewriteRequest(ctx, req, prepared, matches, abortRewrite)
-			exchange.installRewrittenRequest(req, rewriteResult)
-			if rewriteResult.changed {
-				req = mitmproxy.WithHTTPRequestSendHeaderObserver(req, exchange.observeRewrittenRequestHeaders)
+			if exchange != nil {
+				exchange.installRewrittenRequest(req, rewriteResult)
+				if rewriteResult.changed {
+					req = mitmproxy.WithHTTPRequestSendHeaderObserver(req, exchange.observeRewrittenRequestHeaders)
+				}
 			}
 			if rewriteErr != nil {
 				abortRewrite()
 				_ = mitmproxy.AbortHTTPRequestRead(req, rewriteErr)
 				closeRewriteBody(req.Body)
-				exchange.fail(rewriteErr)
+				if exchange != nil {
+					exchange.fail(rewriteErr)
+				}
 				return nil, rewriteErr
 			}
 		}
-		requestBodyless := req.Body == nil || req.Body == http.NoBody
-		exchange.setRequestBodyless(requestBodyless)
-		if !mitmproxy.ObserveHTTPExchangeTiming(ctx, exchange.observeHTTPExchangeTiming) {
-			logger.G().Warn("upstream HTTP timing observer is unavailable",
-				logx.String("host", req.Host))
+		if exchange != nil {
+			exchange.setRequestBodyless(req.Body == nil || req.Body == http.NoBody)
+			if !mitmproxy.ObserveHTTPExchangeTiming(ctx, exchange.observeHTTPExchangeTiming) {
+				logger.G().Warn("upstream HTTP timing observer is unavailable",
+					logx.String("host", req.Host))
+			}
+			capturedRequestBody := s.newCaptureStreamBodyReader(req.Body, entry, req.Header.Get("Content-Encoding"), true)
+			req.Body = observeTransferBody(capturedRequestBody, req.ContentLength, exchange.requestBodyFinished)
+			exchange.observeRetryRequestBodies(req)
 		}
-
-		capturedRequestBody := s.newCaptureStreamBodyReader(
-			req.Body,
-			entry,
-			req.Header.Get("Content-Encoding"),
-			true,
-		)
-		req.Body = observeTransferBody(capturedRequestBody, req.ContentLength, exchange.requestBodyFinished)
-		exchange.observeRetryRequestBodies(req)
 		resp, err := invoker.Invoke(req)
 		if err != nil {
 			logger.G().Error("error invoking request", logx.String("host", req.Host), logx.String("error", err.Error()))
-			exchange.fail(err)
+			if exchange != nil {
+				exchange.fail(err)
+			}
 			return resp, err
 		}
 
 		if len(matches) > 0 {
 			result, rewriteErr := s.rewriteResponse(ctx, req, resp, matches, abortRewrite)
-			exchange.resolveRewriteResponseTiming(result.changed)
-			exchange.installRewrittenResponse(resp, result)
+			if exchange != nil {
+				exchange.resolveRewriteResponseTiming(result.changed)
+				exchange.installRewrittenResponse(resp, result)
+			}
 			if rewriteErr != nil {
 				abortRewrite()
 				closeRewriteBody(resp.Body)
-				exchange.fail(rewriteErr)
+				if exchange != nil {
+					exchange.fail(rewriteErr)
+				}
 				return nil, rewriteErr
 			}
 			{
 				if err := mitmproxy.SetHTTPResponseSendObserver(resp, func(sent mitmproxy.HTTPResponseSendResult) {
-					if result.changed {
+					if exchange != nil && result.changed {
 						exchange.observeRewrittenResponseSent(sent)
 					}
 					abortRewrite()
-					exchange.settle()
+					if exchange != nil {
+						exchange.settle()
+					}
 				}); err != nil {
 					abortRewrite()
 					closeRewriteBody(resp.Body)
-					exchange.fail(err)
+					if exchange != nil {
+						exchange.fail(err)
+					}
 					return nil, fmt.Errorf("response send observer: %v: %w", err, mitmproxy.ErrDropHTTP)
 				}
 			}
-		} else {
+		} else if exchange != nil {
 			exchange.responseHeaders(resp)
 		}
 		responseBodyless := responseHasNoEntityBody(req.Method, resp)
 		if abortRewrite != nil {
 			resp.Body = &rewriteCanceledBody{ReadCloser: resp.Body, cancel: abortRewrite, expected: resp.ContentLength, complete: responseBodyless}
 			rewriteHandedOff = true
+		}
+		if exchange == nil {
+			return resp, nil
 		}
 		if responseBodyless {
 			exchange.markBodylessResponseSize()
@@ -1042,7 +1077,10 @@ func (s *ProxyService) websocketInterceptor(cfg *settingservice.ProxyConfig) mit
 		entry, releaseFrameLoop := s.registerHeldTrafficEntry(ctx, *entry)
 		defer releaseFrameLoop()
 
-		wsMsgs := s.newCaptureWebSocketMessages(entry)
+		var wsMsgs *TrafficWsMsgs
+		if entry != nil {
+			wsMsgs = s.newCaptureWebSocketMessages(entry)
+		}
 		defer closeTrafficWsMsgsSpool(wsMsgs)
 
 		for {

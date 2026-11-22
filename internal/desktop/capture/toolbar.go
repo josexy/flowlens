@@ -30,6 +30,9 @@ var addressSchemePattern = regexp.MustCompile(`(?i)^[a-z][a-z\d+\-.]*://`)
 
 type toolbarState struct {
 	modeMenu, hostMenu nui.MenuState
+	proxyMenu          nui.MenuState
+	proxyAction        ui.Handle
+	focusProxyAction   bool
 	hostOptions        []settingservice.LocalIPAddress
 
 	portOpen    bool
@@ -94,6 +97,15 @@ func (w *Workspace) toggleProxy() {
 			w.Notifier.Success(locales.ToolbarStopped())
 		default:
 			w.Notifier.Success(locales.ToolbarStarted())
+		}
+	})
+}
+
+func (w *Workspace) toggleRecording() {
+	proxy := w.Data.Proxy
+	proxy.SetRecordingPaused(!proxy.Status.RecordingPaused, func(_ proxyservice.ProxyStatus, err error) {
+		if err != nil {
+			w.Notifier.Error(locales.ToolbarOperationFailed(err.Error()))
 		}
 	})
 }
@@ -259,7 +271,7 @@ func (w *Workspace) statusText(c *ui.Context, theme nui.Theme, config *settingse
 		mode = config.Mode
 	}
 	address := ProxyDisplayAddress(proxy.Status.Address, mode)
-	ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(8).Children(func() {
+	ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(8).Clip().Children(func() {
 		color := theme.Error
 		if proxy.Status.Running {
 			color = theme.Success
@@ -285,17 +297,71 @@ func (w *Workspace) statusText(c *ui.Context, theme nui.Theme, config *settingse
 func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 	proxy := w.Data.Proxy
 	ui.Row(c).AlignItems(ui.Center).Gap(8).Shrink(0).Children(func() {
-		label, color, icon := locales.ToolbarStart(), nui.Primary, lucide.Play()
+		arrowWidth := apptheme.TextSize(c, 32)
+		var controlWidth float32
+		for index, text := range []string{locales.ToolbarStart(), locales.ToolbarPauseRecording(), locales.ToolbarResumeRecording()} {
+			width, _ := c.MeasureText(0, ui.Span{Text: text, Font: theme.Font, Size: apptheme.TextSize(c, 14), Weight: 500})
+			if index > 0 {
+				width += arrowWidth - 1 // FieldGroup overlaps adjacent borders.
+			}
+			controlWidth = max(controlWidth, width)
+		}
+		// Match nui.MD's icon, horizontal padding and gap, including outline borders.
+		density := theme.Density
+		if density <= 0 {
+			density = 1
+		}
+		controlWidth += apptheme.TextSize(c, 20) + 26*density + 2
+		busy := proxy.Toggling || w.toolbar.applying
+		label, color, variant, icon := locales.ToolbarStart(), nui.Primary, nui.Solid, lucide.Power()
+		run := w.toggleProxy
 		if proxy.Status.Running {
-			label, color, icon = locales.ToolbarStop(), nui.Error, lucide.Square()
+			run = w.toggleRecording
+			label, color, variant, icon = locales.ToolbarPauseRecording(), nui.Neutral, nui.Outline, lucide.Pause()
+			if proxy.Status.RecordingPaused {
+				label, color, variant, icon = locales.ToolbarResumeRecording(), nui.Primary, nui.Solid, lucide.Play()
+			}
+		} else {
+			w.toolbar.proxyMenu.Open = false
 		}
-		button := nui.Button(c.Key("start-stop"), theme, label, nui.ButtonOptions{
-			Color: color, Leading: icon, Loading: proxy.Toggling, Disabled: proxy.Toggling,
-		}).MinWidth(80).Justify(ui.Center)
-		if !proxy.Toggling {
-			button.OnClick(w.toggleProxy)
+		var menuAnchor ui.Element
+		items := []nui.FieldGroupItem{{ID: "primary", Build: func(c *ui.Context, palette nui.Theme) ui.Element {
+			button := nui.Button(c, palette, label, nui.ButtonOptions{
+				Color: color, Variant: variant, Size: nui.MD, Leading: icon, Loading: proxy.Toggling, Disabled: busy,
+			}).Grow(1).Basis(0).MinWidth(0).Justify(ui.Center).Bind(&w.toolbar.proxyAction)
+			if !busy {
+				button.OnClick(run)
+				if w.toolbar.focusProxyAction {
+					w.toolbar.focusProxyAction = false
+					w.toolbar.proxyAction.Focus(c)
+				}
+			}
+			return button
+		}}}
+		if proxy.Status.Running {
+			items = append(items, nui.FieldGroupItem{ID: "menu", Build: func(c *ui.Context, palette nui.Theme) ui.Element {
+				menuAnchor = nui.Button(c, palette, "", nui.ButtonOptions{
+					Color: color, Variant: variant, Leading: lucide.ChevronDown(), Square: true,
+					AccessibleLabel: locales.ToolbarProxyActions(), Disabled: busy,
+				}).Width(arrowWidth).Shrink(0)
+				if variant == nui.Solid {
+					menuAnchor.BorderWidth(0, 0, 0, 1).BorderColor(theme.Background.Alpha(0.3))
+				}
+				return menuAnchor
+			}})
 		}
-		nui.Tooltip(c, theme, button, label, nui.TooltipOptions{Kbds: w.kbds(shortcuts.CaptureToggleProxy)})
+		nui.FieldGroup(c.Key("proxy-control"), theme, nui.FieldGroupOptions{Disabled: busy}, items).
+			Width(controlWidth).Shrink(0)
+		if proxy.Status.Running {
+			nui.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, []nui.MenuItem{{
+				ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
+				Disabled: busy, Shortcut: strings.Join(w.kbds(shortcuts.CaptureToggleProxy), "+"),
+				OnSelect: func() {
+					w.toolbar.focusProxyAction = true
+					w.toggleProxy()
+				},
+			}}, nui.MenuOptions{Label: locales.ToolbarProxyActions(), Disabled: busy, Width: nui.Set(controlWidth)})
+		}
 		toolbarButton(c, theme, toolButton{
 			key: "clear", icon: lucide.Trash(), tooltip: locales.ToolbarClear(), color: nui.Error,
 			disabled: !w.captureTabActive() || len(w.Data.Traffic.Entries) == 0, kbds: w.kbds(shortcuts.CaptureClearTraffic), run: w.clearTraffic,

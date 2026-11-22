@@ -1,0 +1,197 @@
+package capture
+
+import (
+	"errors"
+	"math"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/egoist/mygo/i18n"
+	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
+	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
+	"github.com/josexy/flowlens/internal/desktop/shortcuts"
+	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/serviceruntime"
+	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
+	"github.com/josexy/flowlens/locales"
+)
+
+func TestRecordingSplitButton(t *testing.T) {
+	f := newFixture(t, entry(1, "retained.test"))
+	start, ok := f.tester.AccessByRole(ui.RoleButton, "Start Proxy")
+	if !ok {
+		t.Fatal("missing start control")
+	}
+	f.click("Start Proxy")
+	primary, ok := f.tester.AccessByRole(ui.RoleButton, "Pause")
+	arrow, arrowOK := f.tester.AccessByRole(ui.RoleMenuButton, "Proxy actions")
+	if !ok || !arrowOK || primary.Bounds.X != start.Bounds.X || math.Abs(float64(arrow.Bounds.X+arrow.Bounds.W-start.Bounds.X-start.Bounds.W)) > 1 {
+		t.Fatalf("split control changed width: start=%+v primary=%+v arrow=%+v", start.Bounds, primary.Bounds, arrow.Bounds)
+	}
+	f.click("Pause")
+	f.requireNoText("Paused")
+	if !f.data.Proxy.Status.Running || !f.data.Proxy.Status.RecordingPaused || f.backend.starts != 1 || f.backend.stops != 0 || len(f.data.Traffic.Entries) != 1 {
+		t.Fatal("pause changed listener lifecycle or retained traffic")
+	}
+	resume, ok := f.tester.AccessByRole(ui.RoleButton, "Resume")
+	if !ok || resume.Bounds != primary.Bounds {
+		t.Fatalf("resume moved the primary action: %+v / %+v", resume.Bounds, primary.Bounds)
+	}
+	f.click("Resume")
+	if f.data.Proxy.Status.RecordingPaused {
+		t.Fatal("recording did not resume")
+	}
+	f.click("Proxy actions")
+	if _, ok := menutest.Item(f.tester, "Stop Proxy"); !ok {
+		t.Fatal("missing stop menu item")
+	}
+	f.tester.Key(0, ui.KeyEscape)
+	f.settle()
+	if menutest.Shown(f.tester) || !f.tester.Focused("Proxy actions") {
+		t.Fatal("Escape did not close the menu and restore trigger focus")
+	}
+	f.tester.Key(0, ui.KeySpace)
+	f.settle()
+	f.tester.Key(0, ui.KeyEnter)
+	f.settle()
+	if f.data.Proxy.Status.Running || !f.tester.Focused("Start Proxy") {
+		t.Fatal("keyboard stop did not return focus to Start Proxy")
+	}
+}
+
+func TestRecordingCommandAndBusyGuard(t *testing.T) {
+	f := newFixture(t)
+	if f.dispatch.Invoke(shortcuts.CaptureToggleRecording) {
+		t.Fatal("recording shortcut started a stopped proxy")
+	}
+	f.click("Start Proxy")
+	block := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(block) }) }
+	t.Cleanup(unblock)
+	f.backend.pauseBlock = block
+	if !f.dispatch.Invoke(shortcuts.CaptureToggleRecording) {
+		t.Fatal("recording command unavailable")
+	}
+	f.tester.Frame()
+	for _, label := range []string{"Pause", "Proxy actions"} {
+		role := ui.RoleButton
+		if label == "Proxy actions" {
+			role = ui.RoleMenuButton
+		}
+		control, ok := f.tester.AccessByRole(role, label)
+		if !ok || !control.Disabled {
+			t.Fatalf("pending operation left %q enabled", label)
+		}
+	}
+	if f.dispatch.Invoke(shortcuts.CaptureToggleRecording) || f.dispatch.Invoke(shortcuts.CaptureToggleProxy) {
+		t.Fatal("conflicting command ran during pause operation")
+	}
+	unblock()
+	f.settle()
+	if !f.data.Proxy.Status.RecordingPaused {
+		t.Fatal("pause did not complete")
+	}
+	if !f.dispatch.Invoke(shortcuts.CaptureToggleProxy) {
+		t.Fatal("proxy command unavailable")
+	}
+	f.settle()
+	if f.data.Proxy.Status.Running || f.backend.stops != 1 {
+		t.Fatal("existing proxy shortcut resumed recording instead of stopping")
+	}
+}
+
+func TestRecordingFailureAndRestartState(t *testing.T) {
+	f := newFixture(t)
+	f.click("Start Proxy")
+	f.backend.pauseErr = errors.New("pause failed")
+	f.click("Pause")
+	if f.data.Proxy.Status.RecordingPaused || !strings.Contains(f.data.Proxy.LastError, "pause failed") {
+		t.Fatal("failed pause changed the visible state")
+	}
+	f.requireText("pause failed")
+	f.backend.pauseErr = nil
+	f.click("Pause")
+	f.data.Proxy.Restart(nil)
+	f.settle()
+	if !f.data.Proxy.Status.RecordingPaused {
+		t.Fatal("configuration restart resumed recording")
+	}
+	f.backend.startErr = errors.New("restart failed")
+	f.data.Proxy.Restart(nil)
+	f.settle()
+	if f.data.Proxy.Status.Running || f.data.Proxy.LastError != "restart failed" {
+		t.Fatal("restart failure did not publish the stopped backend status")
+	}
+}
+
+func TestRecordingIgnoresStaleStatus(t *testing.T) {
+	f := newFixture(t)
+	bus := serviceruntime.NewBus()
+	f.data.Proxy.Initialize(bus)
+	f.click("Start Proxy")
+	stale := f.data.Proxy.Status
+	f.click("Pause")
+	bus.Emit("proxy:status", stale)
+	f.settle()
+	if !f.data.Proxy.Status.RecordingPaused {
+		t.Fatal("late status event reverted the pause")
+	}
+}
+
+func TestRenderRecordingSplitButton(t *testing.T) {
+	for _, language := range []string{"en", "zh-Hans"} {
+		t.Run(language, func(t *testing.T) {
+			f := newFixture(t)
+			i18n.SetLocaleFunc(func() string { return language })
+			mode := "light"
+			f.tester = ui.NewTester(func(c *ui.Context) {
+				palette := apptheme.Begin(c, apptheme.Resolve(apptheme.Appearance{Mode: mode}).Config)
+				ui.Column(c).Fill().Background(palette.Background).Children(func() { f.workspace.buildToolbar(c, palette) })
+			}, 1200, 160)
+			f.tester.SetLocale(language)
+			for _, state := range []string{"stopped", "recording", "paused"} {
+				f.data.Proxy.Status = proxyservice.ProxyStatus{Running: state != "stopped", RecordingPaused: state == "paused", Address: "127.0.0.1:8080"}
+				for _, appearance := range []string{"light", "dark"} {
+					mode = appearance
+					f.workspace.toolbar.proxyMenu.Open = false
+					rendertest.SettleTheme(f.tester)
+					label := locales.ToolbarStart()
+					if state == "recording" {
+						label = locales.ToolbarPauseRecording()
+					}
+					if state == "paused" {
+						label = locales.ToolbarResumeRecording()
+					}
+					control, ok := f.tester.AccessByRole(ui.RoleButton, label)
+					if !ok || control.Bounds.W <= 0 || control.Bounds.X+control.Bounds.W > 1200 {
+						t.Fatalf("%s %s: missing/clipped primary %+v", state, appearance, control)
+					}
+					if state == "paused" {
+						f.click(locales.ToolbarProxyActions())
+						if !menutest.Shown(f.tester) {
+							t.Fatalf("menu did not open: state=%+v texts=%v", f.data.Proxy.Status, f.tester.Texts())
+						}
+						rendertest.SettleTheme(f.tester)
+					}
+					rendertest.Shoot(t, f.tester, "proxy-split-"+language+"-"+state+"-"+appearance)
+					if state == "paused" {
+						f.tester.SetSize(740, 160)
+						f.workspace.toolbar.proxyMenu.Open = false
+						f.settle()
+						rendertest.SettleTheme(f.tester)
+						primary, _ := f.tester.AccessByRole(ui.RoleButton, label)
+						quick, quickFound := f.tester.Find(locales.ToolbarQuickMode("HTTP"))
+						if !quickFound || quick.X < 0 || quick.X+quick.W > primary.Bounds.X || primary.Bounds.X+primary.Bounds.W > 740 {
+							t.Fatalf("controls overlap or are clipped in narrow toolbar: quick=%+v primary=%+v", quick, primary.Bounds)
+						}
+						rendertest.Shoot(t, f.tester, "proxy-split-narrow-"+language+"-"+appearance)
+						f.tester.SetSize(1200, 160)
+					}
+				}
+			}
+		})
+	}
+}

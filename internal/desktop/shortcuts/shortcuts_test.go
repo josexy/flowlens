@@ -22,8 +22,12 @@ func TestDefaultBindings(t *testing.T) {
 			t.Errorf("%s: got %q, want %q", test.id, got, test.want)
 		}
 	}
-	if len(Catalog) != 19 {
+	if len(Catalog) != 20 {
 		t.Fatalf("catalog has %d commands", len(Catalog))
+	}
+	recording, ok := CommandByID(CaptureToggleRecording)
+	if !ok || recording.DefaultBinding != nil || recording.GlobalCapable || recording.DefaultScope != settingservice.ShortcutScopeApplication {
+		t.Fatalf("recording command must be independently configurable and unbound: %+v", recording)
 	}
 }
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/josexy/flowlens/internal/desktop/runtime"
 	"github.com/josexy/flowlens/internal/serviceruntime"
@@ -25,6 +26,8 @@ const (
 type ProxyBackend interface {
 	Start() (proxyservice.ProxyStatus, error)
 	Stop() (proxyservice.ProxyStatus, error)
+	Restart() (proxyservice.ProxyStatus, error)
+	SetRecordingPaused(paused bool) (proxyservice.ProxyStatus, error)
 	GetStatus() proxyservice.ProxyStatus
 	GetSystemProxyStatus() proxyservice.SystemProxyStatus
 	SetSystemProxyEnabled(enabled bool) (proxyservice.SystemProxyStatus, error)
@@ -43,7 +46,7 @@ type ProxyStore struct {
 	SystemProxy proxyservice.SystemProxyStatus
 	DNSCache    proxyservice.DNSCacheStatus
 	LastError   string
-	// Toggling is true while the proxy is starting or stopping.
+	// Toggling guards listener and recording operations as a single job.
 	Toggling bool
 	// SystemProxyApplying is true while the system proxy is changing.
 	SystemProxyApplying bool
@@ -67,7 +70,7 @@ func (s *ProxyStore) Initialize(bus serviceruntime.EventBus) {
 	s.offs = []func(){
 		bus.On(eventProxyStatus, func(event serviceruntime.Event) {
 			if status, ok := event.Data.(proxyservice.ProxyStatus); ok {
-				s.rt.Dispatcher.Post(func() { s.Status = status })
+				s.rt.Dispatcher.Post(func() { s.applyStatus(status) })
 			}
 		}),
 		bus.On(eventProxyError, func(event serviceruntime.Event) {
@@ -98,29 +101,45 @@ func (s *ProxyStore) Cleanup() {
 // Toggle starts a stopped proxy or stops a running one. It reports false while
 // another toggle runs. done receives whether the proxy is now running.
 func (s *ProxyStore) Toggle(done func(running bool, err error)) bool {
-	if s.Toggling {
-		return false
-	}
-	s.Toggling = true
-	s.LastError = ""
 	stopping := s.Status.Running
-	runtime.Run(s.rt.Jobs, jobProxyToggle, func(context.Context) (proxyservice.ProxyStatus, error) {
+	return s.runProxyOperation(func() (proxyservice.ProxyStatus, error) {
 		if stopping {
 			return s.backend.Stop()
 		}
 		return s.backend.Start()
 	}, func(status proxyservice.ProxyStatus, err error) {
+		if done != nil {
+			done(status.Running, err)
+		}
+	})
+}
+
+func (s *ProxyStore) applyStatus(status proxyservice.ProxyStatus) {
+	if status.Revision >= s.Status.Revision {
+		s.Status = status
+	}
+}
+
+func (s *ProxyStore) runProxyOperation(work func() (proxyservice.ProxyStatus, error), done func(proxyservice.ProxyStatus, error)) bool {
+	if s.Toggling {
+		return false
+	}
+	s.Toggling = true
+	s.LastError = ""
+	runtime.Run(s.rt.Jobs, jobProxyToggle, func(context.Context) (proxyservice.ProxyStatus, error) {
+		status, err := work()
+		if err != nil {
+			status = s.backend.GetStatus()
+		}
+		return status, err
+	}, func(status proxyservice.ProxyStatus, err error) {
 		s.Toggling = false
+		s.applyStatus(status)
 		if err != nil {
 			s.LastError = err.Error()
-			if done != nil {
-				done(s.Status.Running, err)
-			}
-			return
 		}
-		s.Status = status
 		if done != nil {
-			done(status.Running, nil)
+			done(s.Status, err)
 		}
 	})
 	return true
@@ -128,21 +147,23 @@ func (s *ProxyStore) Toggle(done func(running bool, err error)) bool {
 
 // Restart stops and starts the proxy so a changed configuration takes effect.
 func (s *ProxyStore) Restart(done func(error)) {
-	runtime.Run(s.rt.Jobs, jobProxyToggle, func(context.Context) (proxyservice.ProxyStatus, error) {
-		if _, err := s.backend.Stop(); err != nil {
-			return proxyservice.ProxyStatus{}, err
-		}
-		return s.backend.Start()
-	}, func(status proxyservice.ProxyStatus, err error) {
-		if err == nil {
-			s.Status = status
-		} else {
-			s.LastError = err.Error()
-		}
+	if !s.runProxyOperation(s.backend.Restart, func(_ proxyservice.ProxyStatus, err error) {
 		if done != nil {
 			done(err)
 		}
-	})
+	}) && done != nil {
+		done(errors.New("proxy operation already in progress"))
+	}
+}
+
+// SetRecordingPaused changes admission without touching the listener or session.
+func (s *ProxyStore) SetRecordingPaused(paused bool, done func(proxyservice.ProxyStatus, error)) bool {
+	if !s.Status.Running {
+		return false
+	}
+	return s.runProxyOperation(func() (proxyservice.ProxyStatus, error) {
+		return s.backend.SetRecordingPaused(paused)
+	}, done)
 }
 
 // SetSystemProxyEnabled turns the managed system proxy on or off. It reports

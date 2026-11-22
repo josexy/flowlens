@@ -9368,6 +9368,18 @@ func (msgs Messages) ShortcutsCommandsCaptureToggleProxy() string {
 	return Catalog.Format(msgs.locale, "shortcutsCommandsCaptureToggleProxy", nil)
 }
 
+// ShortcutsCommandsCaptureToggleRecording says "Toggle Recording"
+// in the language the app shows.
+func ShortcutsCommandsCaptureToggleRecording() string {
+	return In(i18n.Locale()).ShortcutsCommandsCaptureToggleRecording()
+}
+
+// ShortcutsCommandsCaptureToggleRecording says "Toggle Recording"
+// in the language of msgs.
+func (msgs Messages) ShortcutsCommandsCaptureToggleRecording() string {
+	return Catalog.Format(msgs.locale, "shortcutsCommandsCaptureToggleRecording", nil)
+}
+
 // ShortcutsCommandsCaptureToggleSystemProxy says "Toggle System Proxy"
 // in the language the app shows.
 func ShortcutsCommandsCaptureToggleSystemProxy() string {
@@ -10558,11 +10570,41 @@ func (msgs Messages) ToolbarSkipVerifyTlsOn() string {
 	return Catalog.Format(msgs.locale, "toolbarSkipVerifyTlsOn", nil)
 }
 
-// ToolbarStart says "Start"
+// ToolbarPauseRecording says "Pause"
+// in the language the app shows.
+func ToolbarPauseRecording() string { return In(i18n.Locale()).ToolbarPauseRecording() }
+
+// ToolbarPauseRecording says "Pause"
+// in the language of msgs.
+func (msgs Messages) ToolbarPauseRecording() string {
+	return Catalog.Format(msgs.locale, "toolbarPauseRecording", nil)
+}
+
+// ToolbarResumeRecording says "Resume"
+// in the language the app shows.
+func ToolbarResumeRecording() string { return In(i18n.Locale()).ToolbarResumeRecording() }
+
+// ToolbarResumeRecording says "Resume"
+// in the language of msgs.
+func (msgs Messages) ToolbarResumeRecording() string {
+	return Catalog.Format(msgs.locale, "toolbarResumeRecording", nil)
+}
+
+// ToolbarProxyActions says "Proxy actions"
+// in the language the app shows.
+func ToolbarProxyActions() string { return In(i18n.Locale()).ToolbarProxyActions() }
+
+// ToolbarProxyActions says "Proxy actions"
+// in the language of msgs.
+func (msgs Messages) ToolbarProxyActions() string {
+	return Catalog.Format(msgs.locale, "toolbarProxyActions", nil)
+}
+
+// ToolbarStart says "Start Proxy"
 // in the language the app shows.
 func ToolbarStart() string { return In(i18n.Locale()).ToolbarStart() }
 
-// ToolbarStart says "Start"
+// ToolbarStart says "Start Proxy"
 // in the language of msgs.
 func (msgs Messages) ToolbarStart() string {
 	return Catalog.Format(msgs.locale, "toolbarStart", nil)
@@ -10578,11 +10620,11 @@ func (msgs Messages) ToolbarStarted() string {
 	return Catalog.Format(msgs.locale, "toolbarStarted", nil)
 }
 
-// ToolbarStop says "Stop"
+// ToolbarStop says "Stop Proxy"
 // in the language the app shows.
 func ToolbarStop() string { return In(i18n.Locale()).ToolbarStop() }
 
-// ToolbarStop says "Stop"
+// ToolbarStop says "Stop Proxy"
 // in the language of msgs.
 func (msgs Messages) ToolbarStop() string {
 	return Catalog.Format(msgs.locale, "toolbarStop", nil)

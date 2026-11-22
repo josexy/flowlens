@@ -381,8 +381,13 @@ func (w *Workspace) declareShortcuts() {
 	})
 	w.Dispatcher.Handle(shortcuts.Handler{
 		CommandID: shortcuts.CaptureToggleProxy,
-		When:      func() bool { return !w.Data.Proxy.Toggling },
+		When:      func() bool { return !w.Data.Proxy.Toggling && !w.toolbar.applying },
 		Run:       w.toggleProxy,
+	})
+	w.Dispatcher.Handle(shortcuts.Handler{
+		CommandID: shortcuts.CaptureToggleRecording,
+		When:      func() bool { return w.Data.Proxy.Status.Running && !w.Data.Proxy.Toggling && !w.toolbar.applying },
+		Run:       w.toggleRecording,
 	})
 	w.Dispatcher.Handle(shortcuts.Handler{
 		CommandID: shortcuts.CaptureToggleSystemProxy,

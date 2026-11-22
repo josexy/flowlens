@@ -23,6 +23,16 @@ Changing the listener, proxy mode, or CA may require restarting the running prox
 
 Upstream proxy modes: `No Proxy` sends traffic directly, `System Proxy` uses the operating-system or environment proxy, and `Custom Proxy` uses the configured URL.
 
+### Pause Recording Without Disconnecting Clients
+
+The toolbar uses one split button sized to its labels. **Start Proxy** starts forwarding and recording. While it runs, choose **Pause** to stop collecting new requests without stopping the listener or changing the system proxy. The status continues to show the proxy address, and the button changes to **Resume**. Choose **Resume** to collect new traffic in the same session; traffic skipped during the pause is not recovered.
+
+Requests and connections already being recorded finish recording normally. This includes downloads, SSE streams, and existing WebSocket connections, so existing rows can still update while paused. A request or WebSocket/TCP connection started during the pause stays unrecorded even if it ends after you resume. Each new HTTP request on a reused connection gets its own recording decision.
+
+Existing records remain available for inspection, saving, and export. Clearing traffic or restarting the capture session keeps recording paused. Configuration-driven proxy restarts also preserve pause. An explicit stop followed by **Start Proxy** enables recording, and pause is not remembered when the application restarts.
+
+To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
+
 ### MITM Certificates
 
 HTTPS capture requires a CA certificate that the client application trusts. Inspect the selected CA under `Settings > Proxy`, add it to the trust store the client uses, then restart the proxy when prompted.

@@ -62,6 +62,14 @@ FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection t
 
 **Size limit.** HBIN v3 indexes entries with 32-bit offsets, so one history holds at most 4 GiB of encoded data. A save that would pass that limit fails and is logged; the capture's cached data stays available for export until the session ends.
 
+## Recording Admission
+
+Pause Recording changes capture admission, not proxy forwarding. Admission is decided once when the HTTP interceptor registers a request, the WebSocket interceptor registers a successful handshake, or the raw TCP interceptor observes a new tunnel. HTTP requests on a reused connection are admitted independently. Skipped exchanges create no entry, captured body, metrics, or record-attribution subscription, and are not added later when recording resumes. WebSocket frames are still consumed, forwarded, and released even when their handshake was not recorded.
+
+Exchanges admitted before pausing continue recording to completion, including downloads, SSE responses, and all messages on existing WebSocket connections. As a result, existing rows and totals can still update while recording is paused. TLS, rewrite rules, upstream configuration, and live request options keep working. Pause does not change system proxy settings or interrupt connections. Connection-level process lookup remains available for later admitted requests on reused connections.
+
+Pause is process-local and never written to settings or history. Explicit Start Proxy enables recording; a configuration-driven listener restart preserves pause before accepting traffic. Clear Traffic and capture-session restart preserve pause while retaining their normal generation and cleanup rules. Existing data remains readable, periodically savable, and exportable during a pause; HBIN and HAR formats are unchanged.
+
 ## Capture Memory
 
 A capture session keeps in memory only its newest 5000 entries and the entries whose exchange is still in progress: an HTTP exchange until its response ends or fails, a captured body until it is read to its end or closed, a WebSocket entry until its connection closes, and a process lookup until its result is final. These are the entries the interface shows.

@@ -54,8 +54,12 @@ Every icon-only control that had a tooltip in FlowLens 1.0.5 SHALL show a toolti
 - **THEN** a tooltip names the action and the command
 
 #### Scenario: Toolbar control with a binding
-- **WHEN** the user hovers Start or Stop in the proxy toolbar
-- **THEN** the tooltip shows the label and the resolved Toggle Proxy binding
+- **WHEN** the user hovers Clear Traffic in the proxy toolbar
+- **THEN** the tooltip shows the label and the resolved Clear Traffic binding
+
+#### Scenario: Split proxy control
+- **WHEN** the user hovers the split control's Start Proxy, Pause, Resume, or dropdown arrow
+- **THEN** no tooltip is shown, and the controls retain their visible or accessible names
 
 ### Requirement: Notification placement and duration
 Notifications SHALL appear top-center in every FlowLens window, without a progress bar. Success and info notifications SHALL stay 1.8 seconds, warnings 3 seconds, and errors 4 seconds, unless an operation sets its own duration. HAR import results SHALL stay 5 seconds, or 8 seconds when any file failed.

@@ -30,6 +30,7 @@ const (
 	AppOpenSettings          = "app.openSettings"
 	AppShowMainWindow        = "app.showMainWindow"
 	CaptureToggleProxy       = "capture.toggleProxy"
+	CaptureToggleRecording   = "capture.toggleRecording"
 	WorkbenchCapture         = "workbench.capture"
 	WorkbenchCategory        = "workbench.category"
 	WorkbenchAPICollection   = "workbench.apiCollection"
@@ -53,6 +54,7 @@ var Catalog = []Command{
 	{ID: AppOpenSettings, Category: locales.ShortcutsCategoriesApplication, Label: locales.ShortcutsCommandsAppOpenSettings, DefaultBinding: bind(",", modifierPrimary), DefaultScope: settingservice.ShortcutScopeApplication},
 	{ID: AppShowMainWindow, Category: locales.ShortcutsCategoriesApplication, Label: locales.ShortcutsCommandsAppShowMainWindow, DefaultScope: settingservice.ShortcutScopeGlobal, AllowInModal: true, AllowInEditable: true, GlobalCapable: true},
 	{ID: CaptureToggleProxy, Category: locales.ShortcutsCategoriesCapture, Label: locales.ShortcutsCommandsCaptureToggleProxy, DefaultScope: settingservice.ShortcutScopeApplication, GlobalCapable: true},
+	{ID: CaptureToggleRecording, Category: locales.ShortcutsCategoriesCapture, Label: locales.ShortcutsCommandsCaptureToggleRecording, DefaultScope: settingservice.ShortcutScopeApplication},
 	{ID: WorkbenchCapture, Category: locales.ShortcutsCategoriesWorkbench, Label: locales.ShortcutsCommandsWorkbenchCapture, DefaultBinding: bind("1", modifierPrimary), DefaultScope: settingservice.ShortcutScopeApplication},
 	{ID: WorkbenchCategory, Category: locales.ShortcutsCategoriesWorkbench, Label: locales.ShortcutsCommandsWorkbenchCategory, DefaultBinding: bind("2", modifierPrimary), DefaultScope: settingservice.ShortcutScopeApplication},
 	{ID: WorkbenchAPICollection, Category: locales.ShortcutsCategoriesWorkbench, Label: locales.ShortcutsCommandsWorkbenchApiCollection, DefaultBinding: bind("3", modifierPrimary), DefaultScope: settingservice.ShortcutScopeApplication},
