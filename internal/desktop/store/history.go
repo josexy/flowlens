@@ -344,15 +344,23 @@ func (s *HistoryStore) Delete(key string, done func(error)) {
 	})
 }
 
+// forgetAll empties the list and closes the opened history after every saved
+// history was removed. A list load in progress is abandoned, so it cannot
+// bring removed entries back.
+func (s *HistoryStore) forgetAll() {
+	s.rt.Jobs.Cancel(jobHistoryList)
+	s.Metadata, s.Loading = nil, false
+	s.ListVersion++
+	s.clearSelection()
+}
+
 // ClearAll removes every saved history.
 func (s *HistoryStore) ClearAll(done func(error)) {
 	runtime.Run(s.rt.Jobs, jobHistoryClear, func(context.Context) (struct{}, error) {
 		return struct{}{}, s.backend.ClearHistories()
 	}, func(_ struct{}, err error) {
 		if err == nil {
-			s.rt.Jobs.Cancel(jobHistoryList)
-			s.Metadata, s.Loading = nil, false
-			s.clearSelection()
+			s.forgetAll()
 		}
 		if done != nil {
 			done(err)

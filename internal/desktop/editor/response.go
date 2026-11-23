@@ -35,13 +35,6 @@ func newResponseView(e *Editor, key string, state *logic.HTTPEditorState) *respo
 	}
 }
 
-func (r *responseView) fields() []logic.HeaderField {
-	if r.state.Response == nil {
-		return nil
-	}
-	return logic.EditableRowsToHeaderFields(r.state.Response.Headers)
-}
-
 func formatElapsed(micros int64) string {
 	if micros <= 0 {
 		return ""
@@ -69,7 +62,7 @@ func (r *responseView) build(c *ui.Context, theme nui.Theme) {
 		r.identity++
 	}
 	hasResponse, hasConsole := logic.HasResponse(state), logic.HasRequestConsole(state)
-	fields := r.fields()
+	fields := logic.ResponseSetCookieFields(state.Response)
 	hasCookies := logic.HasCookieHeader(fields, "set-cookie")
 	visible := logic.VisibleResponseTab(state, hasCookies)
 	cancelled := state.Response != nil && state.Response.Kind == logic.ResponseKindCancelled
@@ -113,7 +106,7 @@ func (r *responseView) tabItems(hasCookies bool) []nui.TabItem {
 	}
 	items = append(items, nui.TabItem{ID: logic.ResponseTabHeaders, Label: locales.WorkspaceHttpRequestResponseHeaders() + "(" + strconv.Itoa(len(state.Response.Headers)) + ")"})
 	if hasCookies {
-		items = append(items, nui.TabItem{ID: logic.ResponseTabCookies, Label: locales.WorkspaceHttpRequestCookies() + "(" + strconv.Itoa(len(logic.ParseResponseCookies(r.fields()))) + ")"})
+		items = append(items, nui.TabItem{ID: logic.ResponseTabCookies, Label: locales.WorkspaceHttpRequestCookies() + "(" + strconv.Itoa(len(logic.ParseResponseCookies(logic.ResponseSetCookieFields(r.state.Response)))) + ")"})
 	}
 	if count := logic.ResponseTrailerCount(state.Response); count > 0 {
 		items = append(items, nui.TabItem{ID: logic.ResponseTabTrailers, Label: locales.WorkspaceHttpRequestResponseTrailers() + "(" + strconv.Itoa(len(state.Response.Trailers)) + ")"})

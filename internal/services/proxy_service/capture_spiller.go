@@ -11,7 +11,7 @@ const (
 	// captureMemoryWindow is how many of the newest entries a capture session
 	// keeps in memory, matching the window the interface shows. Entries whose
 	// exchange is still in progress stay as well.
-	captureMemoryWindow = frontendTrafficEntryLimit
+	captureMemoryWindow = liveTrafficWindow
 	// captureSpillBatch is how many settled entries one spill batch moves, and
 	// how far the window may grow before the spiller wakes.
 	captureSpillBatch = 256

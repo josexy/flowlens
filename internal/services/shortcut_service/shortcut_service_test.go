@@ -365,7 +365,7 @@ func TestWaylandAndMacRuntimeWarnings(t *testing.T) {
 		name        string
 		environment Environment
 		status      ShortcutRuntimeStatus
-		warning     string
+		warning     ShortcutWarning
 	}{
 		{name: "wayland", environment: Environment{OS: "linux", Wayland: true}, status: ShortcutStatusPortalPending, warning: WarningWaylandPortalControlsBinding},
 		{name: "mac", environment: Environment{OS: "darwin"}, status: ShortcutStatusActive, warning: WarningMacNonANSICompatibility},
@@ -376,7 +376,7 @@ func TestWaylandAndMacRuntimeWarnings(t *testing.T) {
 			if err != nil || !result.Applied {
 				t.Fatalf("apply: result=%+v err=%v", result, err)
 			}
-			if result.RuntimeState.Commands[CommandShowMainWindow].Status != test.status || !reflect.DeepEqual(result.Warnings, []string{test.warning}) {
+			if result.RuntimeState.Commands[CommandShowMainWindow].Status != test.status || !reflect.DeepEqual(result.Warnings, []ShortcutWarning{test.warning}) {
 				t.Fatalf("unexpected runtime state: %+v", result)
 			}
 		})

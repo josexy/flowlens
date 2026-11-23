@@ -59,18 +59,24 @@ func (s *updateWindowController) open() {
 // updateRestartHandler restarts into a staged update through the guards that
 // protect quitting.
 type updateRestartHandler struct {
+	// blocked asks the quit guards; onMain runs it on the main thread.
 	blocked func(proceed func()) bool
+	onMain  func(func())
 	restart func() error
 	failed  func(error)
 
 	inFlight atomic.Bool
 }
 
+// request restarts into the staged update once no guard holds unsaved work.
+// It runs on a goroutine and asks the guards on the main thread.
 func (h *updateRestartHandler) request() {
 	if !h.inFlight.CompareAndSwap(false, true) {
 		return
 	}
-	if h.blocked(func() { go h.request() }) {
+	var blocked bool
+	h.onMain(func() { blocked = h.blocked(func() { go h.request() }) })
+	if blocked {
 		h.inFlight.Store(false)
 		return
 	}

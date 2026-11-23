@@ -10,7 +10,7 @@ func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	f := newFixture(t, entry(1, "old.test"), entry(2, "other.test"))
 	f.showCategories = true
 	f.settle()
-	if len(f.workspace.category.entries) == 0 || len(f.workspace.Table.Rows()) == 0 {
+	if len(f.workspace.category.entries) == 0 || len(f.workspace.Table.rows) == 0 {
 		t.Fatal("views were not populated")
 	}
 	f.showCategories = false
@@ -22,7 +22,7 @@ func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	var released int
 	f.workspace.ReleaseDetail = func() { released++ }
 	f.data.Traffic.ResetState()
-	if released != 1 || len(f.workspace.Table.Rows()) != 0 || f.workspace.Table.state.Len() != 0 {
+	if released != 1 || len(f.workspace.Table.rows) != 0 || f.workspace.Table.state.Len() != 0 {
 		t.Fatal("reset retained a table or failed to release its hidden detail")
 	}
 	view := &f.workspace.category
@@ -39,7 +39,7 @@ func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	f.data.Traffic.AddOrUpdate(entry(1, "new.test"))
 	f.data.Traffic.FlushPending()
 	f.settle()
-	if rows := f.workspace.Table.Rows(); len(rows) != 1 || rows[0].Host != "new.test" {
+	if rows := f.workspace.Table.rows; len(rows) != 1 || rows[0].Host != "new.test" {
 		t.Fatal("next session could not reuse an entry ID")
 	}
 }
@@ -56,7 +56,7 @@ func TestDeletingSelectedCaptureReleasesDetailBeforeAnotherFrame(t *testing.T) {
 		t.Fatal("deleting selected capture retained details")
 	}
 	f.settle()
-	if rows := f.workspace.Table.Rows(); len(rows) != 1 || rows[0].Host != "kept.test" {
+	if rows := f.workspace.Table.rows; len(rows) != 1 || rows[0].Host != "kept.test" {
 		t.Fatal("delete affected other traffic")
 	}
 }
@@ -66,13 +66,13 @@ func TestHistoryResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	f.click("session one")
 	f.showCategories = true
 	f.settle()
-	if len(f.workspace.category.entries) == 0 || len(f.workspace.HistoryTable.Rows()) == 0 {
+	if len(f.workspace.category.entries) == 0 || len(f.workspace.HistoryTable.rows) == 0 {
 		t.Fatal("history views were not populated")
 	}
 	var released int
 	f.workspace.ReleaseHistoryDetail = func() { released++ }
 	f.data.History.CloseOpened()
-	if released != 1 || len(f.workspace.HistoryTable.Rows()) != 0 || f.workspace.category.entries != nil {
+	if released != 1 || len(f.workspace.HistoryTable.rows) != 0 || f.workspace.category.entries != nil {
 		t.Fatal("closing history retained hidden view state")
 	}
 	if len(f.data.Traffic.Entries) != 1 {

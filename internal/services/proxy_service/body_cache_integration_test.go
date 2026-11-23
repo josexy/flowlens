@@ -795,7 +795,8 @@ func TestBodyViewCacheReadersShareClearCacheLease(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- svc.ClearCacheFiles()
+		_, err := svc.ClearCacheFiles()
+		done <- err
 	}()
 
 	select {
@@ -1161,7 +1162,7 @@ func TestClearCacheAndHistoryClearsCurrentHistoryAndCacheAndPreservesUnknownHist
 		t.Fatalf("WriteFile request draft cache: %v", err)
 	}
 
-	if err := svc.ClearCacheAndHistory(); err != nil {
+	if _, err := svc.ClearCacheAndHistory(); err != nil {
 		t.Fatalf("ClearCacheAndHistory: %v", err)
 	}
 
@@ -1282,7 +1283,7 @@ func TestClearCacheFilesRemovesCachesButKeepsHistory(t *testing.T) {
 		t.Fatalf("WriteFile history: %v", err)
 	}
 
-	if err := svc.ClearCacheFiles(); err != nil {
+	if _, err := svc.ClearCacheFiles(); err != nil {
 		t.Fatalf("ClearCacheFiles: %v", err)
 	}
 
@@ -1335,7 +1336,7 @@ func TestClearCacheFilesStartsNewHistoryWithoutOverwritingSavedCapture(t *testin
 		t.Fatalf("read old hidx: %v", err)
 	}
 
-	if err := svc.ClearCacheFiles(); err != nil {
+	if _, err := svc.ClearCacheFiles(); err != nil {
 		t.Fatalf("ClearCacheFiles: %v", err)
 	}
 	newKey := svc.currentHistoryMetadata.Key
@@ -1417,7 +1418,7 @@ func TestClearCacheFilesAbortsOpenBodySpoolBeforeRemovingCacheDir(t *testing.T) 
 		t.Fatalf("tmp cache file should exist before ClearCacheFiles: %v", err)
 	}
 
-	if err := svc.ClearCacheFiles(); err != nil {
+	if _, err := svc.ClearCacheFiles(); err != nil {
 		t.Fatalf("ClearCacheFiles: %v", err)
 	}
 	if err := reader.Close(); err != nil {
@@ -1495,7 +1496,7 @@ func TestClearCacheFilesSynchronizesWithNewBodyCaptures(t *testing.T) {
 	}
 
 	for range 5 {
-		if err := svc.ClearCacheFiles(); err != nil {
+		if _, err := svc.ClearCacheFiles(); err != nil {
 			t.Fatalf("ClearCacheFiles: %v", err)
 		}
 	}

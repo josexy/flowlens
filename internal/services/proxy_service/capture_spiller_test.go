@@ -190,7 +190,7 @@ func TestSpillerRacesWithClearRestartAndDelete(t *testing.T) {
 			if last := svc.trafficEntries.Back(); last != nil {
 				id := random.Uint64N(last.Key()) + 1
 				_, _ = svc.GetTrafficBodyView(id)
-				svc.DeleteTraffic([]int64{int64(id), int64(id) + 1})
+				svc.DeleteTraffic([]uint64{id, id + 1})
 			}
 			time.Sleep(100 * time.Microsecond)
 		}
@@ -324,7 +324,7 @@ func TestSpilledEntryActionsMatchTheEntryBeforeSpilling(t *testing.T) {
 	}
 
 	stats := svc.GetStatistics()
-	svc.DeleteTraffic([]int64{int64(httpID), int64(wsID)})
+	svc.DeleteTraffic([]uint64{httpID, wsID})
 	if svc.captureSpillStore().Has(httpID) || svc.captureSpillStore().Has(wsID) {
 		t.Fatal("deleted spilled entries are still stored")
 	}

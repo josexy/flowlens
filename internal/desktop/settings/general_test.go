@@ -30,14 +30,12 @@ func TestAnimationRoundTripClearsUnsavedChanges(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				baseline := store.CloneSettings(f.draft())
-				var dirty bool
-				f.view.Host.DirtyChanged = func(value bool) { dirty = value }
+				baseline := f.draft().Clone()
 				assertDirty := func(want bool) {
 					t.Helper()
 					button, ok := f.tester.AccessByRole(ui.RoleButton, locales.SettingsSave())
-					if !ok || button.Disabled == want || f.view.Dirty() != want || dirty != want {
-						t.Fatalf("want dirty=%v, view=%v, host=%v, save=%+v", want, f.view.Dirty(), dirty, button)
+					if !ok || button.Disabled == want || f.view.Dirty() != want {
+						t.Fatalf("want dirty=%v, view=%v, save=%+v", want, f.view.Dirty(), button)
 					}
 				}
 				assertDirty(false)

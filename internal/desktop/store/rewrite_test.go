@@ -173,12 +173,11 @@ func (f *fakeRewrite) ReorderRules(ids []string, revision int64) (RewriteState, 
 }
 
 type rewriteHarness struct {
-	t         *testing.T
-	store     *RewriteStore
-	backend   *fakeRewrite
-	window    *runtimetest.Window
-	listeners int
-	notify    func(int64)
+	t       *testing.T
+	store   *RewriteStore
+	backend *fakeRewrite
+	window  *runtimetest.Window
+	changes *countingTopic[rewriteservice.Changed]
 }
 
 func newRewriteHarness(t *testing.T, initial ...RewriteState) *rewriteHarness {
@@ -193,11 +192,8 @@ func newRewriteHarness(t *testing.T, initial ...RewriteState) *rewriteHarness {
 	t.Cleanup(rt.Close)
 	backend := &fakeRewrite{t: t, server: cloneState(state)}
 	h := &rewriteHarness{t: t, backend: backend, window: window}
-	h.store = NewRewriteStore(rt, backend, func(notify func(int64)) func() {
-		h.listeners++
-		h.notify = notify
-		return func() { h.listeners--; h.notify = nil }
-	})
+	h.changes = &countingTopic[rewriteservice.Changed]{}
+	h.store = NewRewriteStore(rt, backend, h.changes)
 	return h
 }
 
@@ -515,12 +511,12 @@ func TestRewriteCleanupIgnoresOutstandingSnapshot(t *testing.T) {
 		return RewriteState{Revision: 5, Enabled: true}, nil
 	}
 	h.store.Initialize()
-	if h.listeners != 1 {
-		t.Fatal(h.listeners)
+	if h.changes.count() != 1 {
+		t.Fatal(h.changes.count())
 	}
 	h.store.Cleanup()
-	if h.listeners != 0 {
-		t.Fatal(h.listeners)
+	if h.changes.count() != 0 {
+		t.Fatal(h.changes.count())
 	}
 	close(release)
 	<-finished
@@ -933,13 +929,13 @@ func TestRewriteStaysLightweightUntilInitialized(t *testing.T) {
 		reads++
 		return h.backend.server_(), nil
 	}
-	if h.store.HasDirtyDrafts() || h.listeners != 0 || h.store.State.Revision != -1 || reads != 0 {
+	if h.store.HasDirtyDrafts() || h.changes.count() != 0 || h.store.State.Revision != -1 || reads != 0 {
 		t.Fatal("a clean quit reads nothing")
 	}
 	h.store.Initialize()
 	h.store.Initialize()
 	h.idle()
-	if reads != 1 || h.listeners != 1 || h.store.SelectedID != "a" {
-		t.Fatal(reads, h.listeners)
+	if reads != 1 || h.changes.count() != 1 || h.store.SelectedID != "a" {
+		t.Fatal(reads, h.changes.count())
 	}
 }

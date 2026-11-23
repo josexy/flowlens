@@ -247,14 +247,14 @@ func TestDNSCacheSharedByCaptureEditorResendAndWebSocket(t *testing.T) {
 	}
 	_, _ = io.Copy(io.Discard, response.Body)
 	_ = response.Body.Close()
-	if _, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000}, http.MethodGet, u.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}); err != nil {
+	if _, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000}, http.MethodGet, u.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil); err != nil {
 		t.Fatal(err)
 	}
 	result, err := svc.ResendRequestWithTrafficEntry(context.Background(), ResendConfig{Count: 1}, &TrafficEntry{Type: "http", Method: http.MethodGet, URL: u.String()}, nil)
 	if err != nil || result.Success != 1 {
 		t.Fatalf("resend: %+v %v", result, err)
 	}
-	connected, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{URL: "ws://" + u.Host + "/ws", ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000})
+	connected, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{URL: "ws://" + u.Host + "/ws", ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestDNSCacheSharedByCaptureEditorResendAndWebSocket(t *testing.T) {
 	if _, err := svc.Stop(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000}, http.MethodGet, u.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}); err != nil {
+	if _, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, TimeoutMs: 2000}, http.MethodGet, u.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != 2 {
@@ -346,7 +346,7 @@ func TestDNSCacheProxyEndpointsPreserveRemoteDestinationResolution(t *testing.T)
 			origin, _ := url.Parse(rawOrigin)
 			origin.Host = net.JoinHostPort("localhost", origin.Port())
 			for range 2 {
-				response, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeCustom, CustomProxy: proxyURL.String(), SkipVerifyTLS: true, TimeoutMs: 2000}, http.MethodGet, origin.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+				response, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeCustom, CustomProxy: proxyURL.String(), SkipVerifyTLS: true, TimeoutMs: 2000}, http.MethodGet, origin.String(), nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 				if err != nil || response.StatusCode != http.StatusNoContent {
 					t.Fatalf("%s via %s: %+v %v", origin.Scheme, proxyURL.Scheme, response, err)
 				}
@@ -357,7 +357,7 @@ func TestDNSCacheProxyEndpointsPreserveRemoteDestinationResolution(t *testing.T)
 			} else {
 				origin.Scheme = "ws"
 			}
-			connected, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{URL: origin.String(), ProxyMode: SendRequestProxyModeCustom, CustomProxy: proxyURL.String(), SkipVerifyTLS: true, TimeoutMs: 2000})
+			connected, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{URL: origin.String(), ProxyMode: SendRequestProxyModeCustom, CustomProxy: proxyURL.String(), SkipVerifyTLS: true, TimeoutMs: 2000}, nil)
 			if err != nil {
 				t.Fatalf("%s via %s: %v", origin.Scheme, proxyURL.Scheme, err)
 			}

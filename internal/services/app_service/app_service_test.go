@@ -2,12 +2,11 @@ package appservice
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
 	"github.com/egoist/mygo"
-	"github.com/josexy/flowlens/internal/serviceruntime"
-	"github.com/josexy/flowlens/internal/serviceruntime/bustest"
 )
 
 func TestApplicationVersionUsesMyGoMetadata(t *testing.T) {
@@ -47,17 +46,35 @@ func (readyEngine) Check(context.Context) (*Release, error) {
 
 func (readyEngine) DownloadAndInstall(context.Context) error { return nil }
 
-func startedAppService(t *testing.T) (*AppService, *bustest.RecordingBus) {
+// restartRequests counts the restarts a service asked for.
+type restartRequests struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (r *restartRequests) request() {
+	r.mu.Lock()
+	r.count++
+	r.mu.Unlock()
+}
+
+func (r *restartRequests) len() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.count
+}
+
+func startedAppService(t *testing.T) (*AppService, *restartRequests) {
 	t.Helper()
-	bus := bustest.NewRecordingBus()
+	restarts := &restartRequests{}
 	service := New()
-	service.SetEventBus(bus)
+	service.SetRestartRequester(restarts.request)
 	service.SetUpdateEngine(readyEngine{}, UpdateApplyModeSelf)
 	if err := service.ServiceStartup(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(service.ShutdownUpdater)
-	return service, bus
+	return service, restarts
 }
 
 func waitForServicePhase(t *testing.T, service *AppService, phase UpdatePhase) {
@@ -79,17 +96,17 @@ func TestUpdatesAreNotReadyWithoutAnEngine(t *testing.T) {
 }
 
 func TestRestartForUpdateRequiresAStagedUpdate(t *testing.T) {
-	service, bus := startedAppService(t)
+	service, restarts := startedAppService(t)
 	if err := service.RestartForUpdate(); err == nil {
 		t.Fatal("restart before an update is staged should fail")
 	}
-	if len(bus.Named(UpdateUserRestartEventName)) != 0 {
-		t.Fatal("restart event published without a staged update")
+	if restarts.len() != 0 {
+		t.Fatal("restart requested without a staged update")
 	}
 }
 
 func TestRestartForUpdatePublishesGuardedRestart(t *testing.T) {
-	service, bus := startedAppService(t)
+	service, restarts := startedAppService(t)
 	if err := service.CheckForUpdates(); err != nil {
 		t.Fatal(err)
 	}
@@ -101,13 +118,13 @@ func TestRestartForUpdatePublishesGuardedRestart(t *testing.T) {
 	if err := service.RestartForUpdate(); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(bus.Named(UpdateUserRestartEventName)); got != 1 {
-		t.Fatalf("restart events = %d", got)
+	if got := restarts.len(); got != 1 {
+		t.Fatalf("restart requests = %d", got)
 	}
 }
 
-func TestRestartFailureEventIsRecorded(t *testing.T) {
-	service, bus := startedAppService(t)
+func TestRestartFailureIsRecorded(t *testing.T) {
+	service, restarts := startedAppService(t)
 	if err := service.CheckForUpdates(); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +133,11 @@ func TestRestartFailureEventIsRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForServicePhase(t, service, UpdatePhaseReady)
-	bus.Emit(UpdateRestartFailedEventName, "cannot relaunch")
+	service.RestartFailed(nil)
+	if phase := service.GetUpdateSnapshot().Phase; phase != UpdatePhaseReady {
+		t.Fatalf("a nil failure changed the phase to %q", phase)
+	}
+	service.RestartFailed(errors.New("cannot relaunch"))
 	snapshot := service.GetUpdateSnapshot()
 	if snapshot.Phase != UpdatePhaseError || snapshot.Failure == nil || snapshot.Failure.Message != "cannot relaunch" {
 		t.Fatalf("snapshot = %#v", snapshot)
@@ -133,7 +154,7 @@ func TestRestartFailureEventIsRecorded(t *testing.T) {
 	if got := service.GetUpdateSnapshot(); got.Phase != UpdatePhaseReady || got.Failure != nil {
 		t.Fatalf("retry snapshot: %+v", got)
 	}
-	if len(bus.Named(UpdateUserRestartEventName)) != 1 {
+	if restarts.len() != 1 {
 		t.Fatal("retry did not request a guarded restart")
 	}
 }
@@ -141,9 +162,7 @@ func TestRestartFailureEventIsRecorded(t *testing.T) {
 func TestReportedProgressReachesSubscribers(t *testing.T) {
 	blocked := make(chan struct{})
 	release := make(chan struct{})
-	bus := bustest.NewRecordingBus()
 	service := New()
-	service.SetEventBus(bus)
 	service.SetUpdateEngine(&fakeUpdateEngine{
 		check: func(context.Context) (*Release, error) { return &Release{Version: "9.9.9", ArtifactSize: 10}, nil },
 		download: func(context.Context) error {
@@ -160,8 +179,7 @@ func TestReportedProgressReachesSubscribers(t *testing.T) {
 	var received sync.WaitGroup
 	received.Add(1)
 	var once sync.Once
-	off := bus.On(UpdateStateChangedEventName, func(event serviceruntime.Event) {
-		snapshot := event.Data.(UpdateSnapshot)
+	off := service.Events.UpdateState.Subscribe(func(snapshot UpdateSnapshot) {
 		if snapshot.Progress != nil && snapshot.Progress.Written == 5 {
 			once.Do(received.Done)
 		}

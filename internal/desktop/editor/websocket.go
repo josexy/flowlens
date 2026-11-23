@@ -25,12 +25,12 @@ const (
 	socketTabResponseCookies = "response-cookies"
 	socketTabResponse        = "response"
 	socketTabResponseError   = "response-error"
-	socketStatusConnected    = "connected"
-	socketStatusConnecting   = "connecting"
-	socketStatusError        = "error"
-	socketStatusCancelled    = "cancelled"
-	socketStatusClosed       = "closed"
-	socketStatusIdle         = "idle"
+	socketStatusConnected    = logic.WebSocketConnected
+	socketStatusConnecting   = logic.WebSocketConnecting
+	socketStatusError        = logic.WebSocketError
+	socketStatusCancelled    = logic.WebSocketCancelled
+	socketStatusClosed       = logic.WebSocketClosed
+	socketStatusIdle         = logic.WebSocketIdle
 	draftTypeBinaryFile      = "binary-file"
 )
 

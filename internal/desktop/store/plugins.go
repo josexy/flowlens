@@ -51,8 +51,11 @@ type PluginBackend interface {
 	OpenPluginDirectory(id string) error
 }
 
-// PluginEvents subscribes to plugin changes.
-type PluginEvents func(registry func(PluginRegistryEvent), status func(PluginStatusEvent)) (off func())
+// PluginEvents publish plugin and runtime changes.
+type PluginEvents struct {
+	Registry Topic[PluginRegistryEvent]
+	Status   Topic[PluginStatusEvent]
+}
 
 type pluginDraft struct {
 	content, saved, err string
@@ -542,8 +545,11 @@ func (s *PluginsStore) Initialize() {
 		return
 	}
 	s.initialized = true
-	if s.connect != nil {
-		s.off = s.connect(s.onRegistry, s.onStatus)
+	if s.connect.Registry != nil && s.connect.Status != nil {
+		post := s.rt.Dispatcher.Post
+		offRegistry := s.connect.Registry.Subscribe(func(event PluginRegistryEvent) { post(func() { s.onRegistry(event) }) })
+		offStatus := s.connect.Status.Subscribe(func(event PluginStatusEvent) { post(func() { s.onStatus(event) }) })
+		s.off = func() { offRegistry(); offStatus() }
 	}
 	report := func(err error) {
 		if err != nil {

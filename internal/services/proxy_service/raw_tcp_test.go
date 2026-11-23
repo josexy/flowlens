@@ -161,7 +161,7 @@ func TestRawTCPInterceptorConcurrentStorageAndDeletion(t *testing.T) {
 		t.Fatalf("stored/emitted = %d/%d, want %d/%d", len(entries), emitted.Load(), tunnelCount, tunnelCount)
 	}
 	seen := make(map[uint64]struct{}, tunnelCount)
-	ids := make([]int64, 0, tunnelCount)
+	ids := make([]uint64, 0, tunnelCount)
 	for _, entry := range entries {
 		if entry.Type != "tcp" || entry.RawTCP == nil {
 			t.Fatalf("non-TCP concurrent entry = %+v", entry)
@@ -170,7 +170,7 @@ func TestRawTCPInterceptorConcurrentStorageAndDeletion(t *testing.T) {
 			t.Fatalf("duplicate traffic ID %d", entry.ID)
 		}
 		seen[entry.ID] = struct{}{}
-		ids = append(ids, int64(entry.ID))
+		ids = append(ids, entry.ID)
 	}
 	if got := service.GetStatistics(); got.Total != tunnelCount || got.TotalTCP != tunnelCount || got.TotalHTTP != 0 || got.TotalWS != 0 {
 		t.Fatalf("statistics after concurrent insert = %+v", got)

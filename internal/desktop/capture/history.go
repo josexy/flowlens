@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	historyItemPrefix = "history:"
+	historyItemPrefix = store.CaptureItemHistoryPrefix
 	jobPickHAR        = "capture:pick-har"
 )
 

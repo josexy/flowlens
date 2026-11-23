@@ -501,16 +501,20 @@ func (d *deleteDialog) build(c *ui.Context, theme nui.Theme, v *View) {
 }
 
 // QuitPrompt asks what to do with unsaved rules before quitting or updating.
+// Respond hears the decision once, on the main thread.
 type QuitPrompt struct {
 	Reason  string
-	Respond func(decision string)
+	Respond func(decision QuitDecision)
 }
+
+// QuitDecision is the answer to a quit prompt.
+type QuitDecision uint8
 
 // Decisions a quit prompt can get.
 const (
-	DecisionSave    = "save"
-	DecisionDiscard = "discard"
-	DecisionCancel  = "cancel"
+	DecisionSave QuitDecision = iota + 1
+	DecisionDiscard
+	DecisionCancel
 )
 
 // ReasonUpdate is the reason of a prompt before an update restart.
@@ -531,7 +535,7 @@ func (v *View) AskQuit(prompt QuitPrompt) {
 // QuitPending reports whether a prompt is open.
 func (v *View) QuitPending() bool { return v.guard.prompt != nil }
 
-func (v *View) reply(decision string) {
+func (v *View) reply(decision QuitDecision) {
 	rewrite := v.Data.Rewrite
 	prompt := v.guard.prompt
 	if prompt == nil || rewrite.Busy() {

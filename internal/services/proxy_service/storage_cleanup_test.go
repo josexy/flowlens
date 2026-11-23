@@ -12,6 +12,7 @@ import (
 
 	bodycache "github.com/josexy/flowlens/internal/pkg/body_cache"
 	"github.com/josexy/flowlens/internal/pkg/fs"
+	"github.com/josexy/flowlens/internal/serviceruntime/topictest"
 )
 
 type residualHistoryCleaner struct {
@@ -71,7 +72,7 @@ func TestClearCacheAndHistoryReturnsHistoryCleanerError(t *testing.T) {
 	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "clear indexed histories") {
 		t.Fatalf("clearStoredCaptureData error = %v", err)
 	}
-	if result.historyCleared {
+	if result.HistoryCleared {
 		t.Fatal("failed history cleanup must not report history as cleared")
 	}
 	if cleaner.calls != 1 {
@@ -88,10 +89,10 @@ func TestClearCacheAndHistoryRejectsMissingHistoryCleanerAfterStateReset(t *test
 	svc.storeTrafficEntry(&TrafficEntry{ID: 1, Type: "http"})
 
 	result, err := svc.clearStoredCaptureData(true)
-	if !result.stateCleared {
+	if !result.Cleared {
 		t.Fatal("clearStoredCaptureData should report the in-memory reset")
 	}
-	if result.historyCleared {
+	if result.HistoryCleared {
 		t.Fatal("missing history cleaner must not report history as cleared")
 	}
 	if err == nil || !strings.Contains(err.Error(), "history cleaner is not configured") {
@@ -112,7 +113,7 @@ func TestClearStoredCaptureDataReportsCompleteHistoryClear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clearStoredCaptureData: %v", err)
 	}
-	if !result.historyCleared {
+	if !result.HistoryCleared {
 		t.Fatal("successful history cleanup should report history as cleared")
 	}
 	if cleaner.calls != 1 {
@@ -165,7 +166,7 @@ func TestClearStoredCaptureDataRotatesCurrentKeyBeforeIndexingFailedPair(t *test
 	if !errors.Is(err, wantRemoveErr) || !errors.Is(err, wantCleanerErr) {
 		t.Fatalf("clearStoredCaptureData error = %v", err)
 	}
-	if result.historyCleared {
+	if result.HistoryCleared {
 		t.Fatal("failed current history pair must report a partial history clear")
 	}
 	if cleaner.calls != 1 || !cleaner.visible {
@@ -307,5 +308,113 @@ func TestServiceStartupRemovesOnlyStaleBodyCacheSessions(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(cacheRoot, name, "file")); err != nil {
 			t.Fatalf("%s was removed: %v", name, err)
 		}
+	}
+}
+
+func TestClearLocalDataReportsWhatWasCleared(t *testing.T) {
+	historyErr := errors.New("history index is busy")
+	tests := []struct {
+		name        string
+		clear       func(*ProxyService) (LocalDataClearResult, error)
+		cleanerErr  error
+		wantScope   LocalDataClearScope
+		wantHistory bool
+		wantErr     error
+	}{
+		{name: "cache only", clear: (*ProxyService).ClearCacheFiles, wantScope: LocalDataScopeCache},
+		{name: "cache and history", clear: (*ProxyService).ClearCacheAndHistory, wantScope: LocalDataScopeCacheAndHistory, wantHistory: true},
+		{name: "history not cleared", clear: (*ProxyService).ClearCacheAndHistory, cleanerErr: historyErr, wantScope: LocalDataScopeCacheAndHistory, wantErr: historyErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setTestConfigDir(t)
+			svc := newTestProxyService(t, nil)
+			cleaner := &testHistoryCleaner{err: tt.cleanerErr}
+			svc.SetHistoryCleaner(cleaner)
+			svc.storeTrafficEntry(&TrafficEntry{ID: 1, Type: "http"})
+			baseDir, err := fs.GetBaseStorageDir()
+			if err != nil {
+				t.Fatalf("GetBaseStorageDir: %v", err)
+			}
+
+			result, err := tt.clear(svc)
+			if tt.wantErr == nil && err != nil {
+				t.Fatalf("clear: %v", err)
+			}
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("clear error = %v, want %v", err, tt.wantErr)
+			}
+			want := LocalDataClearResult{
+				Scope:                 tt.wantScope,
+				Cleared:               true,
+				HistoryCleared:        tt.wantHistory,
+				RequestDraftCacheRoot: filepath.Join(baseDir, "request-draft-cache"),
+			}
+			if result != want {
+				t.Fatalf("result = %+v, want %+v", result, want)
+			}
+			if svc.trafficEntries.Len() != 0 {
+				t.Fatalf("trafficEntries.Len = %d, want 0", svc.trafficEntries.Len())
+			}
+		})
+	}
+}
+
+func TestClearLocalDataReportsPartialFailureWithResult(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permissions do not stop root from removing files")
+	}
+	setTestConfigDir(t)
+	svc := newTestProxyService(t, nil)
+	baseDir, err := fs.GetBaseStorageDir()
+	if err != nil {
+		t.Fatalf("GetBaseStorageDir: %v", err)
+	}
+	locked := filepath.Join(baseDir, "cache", "locked")
+	if err := os.MkdirAll(locked, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "file"), []byte("kept"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+
+	result, err := svc.ClearCacheFiles()
+	if err == nil || !strings.Contains(err.Error(), "remove cache directory") {
+		t.Fatalf("ClearCacheFiles error = %v, want a cache removal failure", err)
+	}
+	if !result.Cleared || result.Scope != LocalDataScopeCache || result.HistoryCleared {
+		t.Fatalf("result = %+v, want a cleared cache-only result", result)
+	}
+	if result.RequestDraftCacheRoot != filepath.Join(baseDir, "request-draft-cache") {
+		t.Fatalf("RequestDraftCacheRoot = %q", result.RequestDraftCacheRoot)
+	}
+}
+
+func TestProxyTopicsPublishStatusChanges(t *testing.T) {
+	setTestConfigDir(t)
+	svc := newTestProxyService(t, nil)
+	svc.SetHistoryCleaner(&testHistoryCleaner{})
+	status := topictest.Record(t, &svc.Events.Status)
+	dns := topictest.Record(t, &svc.Events.DNSCache)
+	live := topictest.Record(t, &svc.Events.Live)
+
+	cleared := svc.ClearDNSCache()
+	if got, ok := dns.Last(); !ok || dns.Len() != 1 || got != cleared {
+		t.Fatalf("DNS cache values = %+v", dns.Values())
+	}
+	if _, err := svc.ClearCacheAndHistory(); err != nil {
+		t.Fatalf("ClearCacheAndHistory: %v", err)
+	}
+	if got, ok := status.Last(); !ok || got.Running {
+		t.Fatalf("status values = %+v", status.Values())
+	}
+	// Without a running batcher, each live event is published at once.
+	batches := live.Values()
+	if len(batches) != 1 || len(batches[0].Events) != 1 || batches[0].Events[0] != (TrafficResetEvent{CaptureGeneration: svc.captureGeneration}) {
+		t.Fatalf("live batches = %+v", batches)
 	}
 }

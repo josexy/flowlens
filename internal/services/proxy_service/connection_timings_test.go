@@ -137,7 +137,7 @@ func TestConnectionTimingCaptureRefreshesImmutableSnapshots(t *testing.T) {
 		t.Fatal("an already published snapshot was mutated")
 	}
 	if !reflect.DeepEqual(newTrafficMetricsPatch(after).Metrics.Connection, want) {
-		t.Fatal("connection timings missing from frontend patch")
+		t.Fatal("connection timings missing from the live patch")
 	}
 	// The next dial fails. The old successful connection must not complete it.
 	md.SetDNSLookupStartTs(time.UnixMicro(2100))

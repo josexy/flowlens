@@ -54,14 +54,14 @@ func TestConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
 
 func testConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
 	h := newTrafficHarness(t, nil)
-	bus := serviceruntime.NewBus()
+	var live serviceruntime.Topic[proxyservice.LiveBatch]
 	poster := &heldPoster{}
-	off := h.router.Connect(bus, poster.post)
+	off := h.router.Connect(&live, poster.post)
 	defer off()
-	publisher := proxyservice.NewFrontendEventPublisher(bus)
+	publisher := proxyservice.NewLivePublisher(&live)
 	defer publisher.Close()
 
-	if err := publisher.Publish(eventTrafficEntry, trafficEntry(1)); err != nil {
+	if err := publisher.Publish(proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)}); err != nil {
 		t.Fatalf("publish first: %v", err)
 	}
 	poster.waitFor(t, 1)
@@ -70,7 +70,7 @@ func testConnectKeepsAtMostOneBatchWaitingForTheMainThread(t *testing.T) {
 	// the pending bound is held back, and its excess is dropped.
 	var dropped int
 	for id := uint64(2); id <= 2000; id++ {
-		if err := publisher.Publish(eventTrafficEntry, trafficEntry(id)); err != nil {
+		if err := publisher.Publish(proxyservice.TrafficEntryEvent{Entry: trafficEntry(id)}); err != nil {
 			dropped++
 		}
 	}

@@ -372,6 +372,7 @@ func TestHTTPRequestTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
 						server.URL,
 						nil,
 						SendRequestBody{BodyType: SendRequestBodyTypeNone},
+						nil,
 					)
 					if !tt.requestSkip {
 						if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
@@ -410,6 +411,7 @@ func TestHTTPRequestHTTPSForwardProxyUsesRequestTLSVerification(t *testing.T) {
 				"http://example.invalid/request",
 				nil,
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if !requestSkip {
 				if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
@@ -540,6 +542,7 @@ func TestHTTPRequestUsesConfiguredClientHello(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -585,6 +588,7 @@ func TestHTTPRequestUsesConfiguredHTTP2Fingerprint(t *testing.T) {
 				server.URL,
 				nil,
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -672,6 +676,7 @@ func TestHTTPRequestHTTP2FingerprintRebuildsRedirectHeaderBlock(t *testing.T) {
 			{Name: "X-Request-Editor", Value: "kept"},
 		},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -745,6 +750,7 @@ func TestHTTPRequestHTTP2FingerprintPreserves307RedirectBody(t *testing.T) {
 		redirect.URL+"/redirect-source",
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "body"},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -781,6 +787,7 @@ func TestHTTPRequestHTTP2FingerprintDoesNotForceHTTP2(t *testing.T) {
 		server.URL,
 		[]HTTPHeaderField{{Name: "X-Request-Editor", Value: "one"}},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -823,6 +830,7 @@ func TestHTTPRequestUsesConfiguredHTTP2FingerprintThroughHTTPProxy(t *testing.T)
 		target.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -869,6 +877,7 @@ func TestHTTPRequestUsesConfiguredHTTP2FingerprintOverH2C(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -902,6 +911,7 @@ func TestHTTPRequestHTTP2FingerprintValidation(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("empty HTTP/2 fingerprint changed the default request path: %v", err)
@@ -920,6 +930,7 @@ func TestHTTPRequestHTTP2FingerprintValidation(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "invalid HTTP/2 fingerprint") {
 		t.Fatalf("invalid HTTP/2 fingerprint error = %v", err)
@@ -937,6 +948,7 @@ func TestHTTPRequestHTTP2FingerprintValidation(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("HTTP/1 request parsed unused HTTP/2 fingerprint: %v", err)
@@ -1030,7 +1042,7 @@ func TestWebSocketTLSVerificationIsIndependentOfProxyConfig(t *testing.T) {
 					if path.proxyURL != "" {
 						req.ProxyMode = SendRequestProxyModeCustom
 					}
-					connected, err := svc.ConnectWebSocket(context.Background(), req)
+					connected, err := svc.ConnectWebSocket(context.Background(), req, nil)
 					if !tt.requestSkip {
 						if _, ok := errors.AsType[x509.UnknownAuthorityError](err); !ok {
 							t.Fatalf("untrusted certificate error = %v, want unknown authority", err)
@@ -1073,7 +1085,7 @@ func TestWebSocketSessionUsesConfiguredClientHelloAndHTTP1ALPN(t *testing.T) {
 		URL:              strings.Replace(server.URL, "https://", "wss://", 1),
 		TLSClientHelloID: TLSClientHelloIOSAuto,
 		SkipVerifyTLS:    true,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ConnectWebSocket: %v", err)
 	}
@@ -1143,6 +1155,7 @@ func TestMITMCaptureStillMirrorsDownstreamClientHello(t *testing.T) {
 		targetAddress,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("HTTP Request through MITM proxy: %v", err)

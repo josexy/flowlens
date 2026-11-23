@@ -5,15 +5,10 @@ import (
 	"errors"
 
 	"github.com/josexy/flowlens/internal/desktop/runtime"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 )
 
 const (
-	eventProxyStatus      = "proxy:status"
-	eventProxyError       = "proxy:error"
-	eventSystemProxy      = "proxy:system-proxy-status"
-	eventDNSCache         = "proxy:dns-cache-status"
 	jobProxyToggle        = "proxy:toggle"
 	jobSystemProxy        = "proxy:system"
 	jobDNSRefresh         = "proxy:dns-refresh"
@@ -62,30 +57,21 @@ func NewProxyStore(rt Runtime, backend ProxyBackend) *ProxyStore {
 }
 
 // Initialize reads the current state and follows later changes.
-func (s *ProxyStore) Initialize(bus serviceruntime.EventBus) {
+func (s *ProxyStore) Initialize(events *proxyservice.Events) {
 	s.Status = s.backend.GetStatus()
 	s.SystemProxy = s.backend.GetSystemProxyStatus()
 	s.DNSCache = s.backend.GetDNSCacheStatus()
 	s.Cleanup()
+	post := s.rt.Dispatcher.Post
 	s.offs = []func(){
-		bus.On(eventProxyStatus, func(event serviceruntime.Event) {
-			if status, ok := event.Data.(proxyservice.ProxyStatus); ok {
-				s.rt.Dispatcher.Post(func() { s.applyStatus(status) })
-			}
+		events.Status.Subscribe(func(status proxyservice.ProxyStatus) {
+			post(func() { s.applyStatus(status) })
 		}),
-		bus.On(eventProxyError, func(event serviceruntime.Event) {
-			message, _ := event.Data.(string)
-			s.rt.Dispatcher.Post(func() { s.LastError = message })
+		events.SystemProxy.Subscribe(func(status proxyservice.SystemProxyStatus) {
+			post(func() { s.SystemProxy = status })
 		}),
-		bus.On(eventSystemProxy, func(event serviceruntime.Event) {
-			if status, ok := event.Data.(proxyservice.SystemProxyStatus); ok {
-				s.rt.Dispatcher.Post(func() { s.SystemProxy = status })
-			}
-		}),
-		bus.On(eventDNSCache, func(event serviceruntime.Event) {
-			if status, ok := event.Data.(proxyservice.DNSCacheStatus); ok {
-				s.rt.Dispatcher.Post(func() { s.DNSCache = status })
-			}
+		events.DNSCache.Subscribe(func(status proxyservice.DNSCacheStatus) {
+			post(func() { s.DNSCache = status })
 		}),
 	}
 }

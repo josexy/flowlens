@@ -13,7 +13,6 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	"github.com/josexy/flowlens/locales"
 )
@@ -129,12 +128,12 @@ func TestRecordingFailureAndRestartState(t *testing.T) {
 
 func TestRecordingIgnoresStaleStatus(t *testing.T) {
 	f := newFixture(t)
-	bus := serviceruntime.NewBus()
-	f.data.Proxy.Initialize(bus)
+	var events proxyservice.Events
+	f.data.Proxy.Initialize(&events)
 	f.click("Start Proxy")
 	stale := f.data.Proxy.Status
 	f.click("Pause")
-	bus.Emit("proxy:status", stale)
+	events.Status.Publish(stale)
 	f.settle()
 	if !f.data.Proxy.Status.RecordingPaused {
 		t.Fatal("late status event reverted the pause")

@@ -32,7 +32,6 @@ import (
 	"github.com/josexy/flowlens/internal/pkg/orderedmap"
 	processattribution "github.com/josexy/flowlens/internal/pkg/process_attribution"
 	"github.com/josexy/flowlens/internal/pkg/systemproxy"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	rewriteservice "github.com/josexy/flowlens/internal/services/rewrite_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/logx"
@@ -44,20 +43,11 @@ import (
 )
 
 const (
-	trafficEventName               = "traffic:entry"
-	trafficPatchEventName          = "traffic:patch"
-	trafficLiveUpdateEventName     = "traffic:live-update"
-	trafficResetEventName          = "traffic:reset"
-	statusEventName                = "proxy:status"
-	httpRequestEventName           = "http-request:event"
-	webSocketSessionEventName      = "websocket-session:event"
-	requestEditorFileDropEventName = "request-editor:file-drop"
-	localDataClearedEventName      = "app:local-data-cleared"
-	systemProxyStatusEventName     = "proxy:system-proxy-status"
-	frontendEventFlushInterval     = 16 * time.Millisecond
-	frontendEventMaxPending        = 512
-	frontendEventMaxBytes          = 4 << 20
-	frontendTrafficEntryLimit      = 5000
+	liveEventFlushInterval = 16 * time.Millisecond
+	liveEventMaxPending    = 512
+	liveEventMaxBytes      = 4 << 20
+	// liveTrafficWindow is how many of the newest entries the interface holds.
+	liveTrafficWindow = 5000
 )
 
 type TrafficEntryWithStatics struct {
@@ -73,26 +63,27 @@ type ProxyService struct {
 	// lifecycleOpsMu serializes operations that publish, tear down, or reset
 	// the proxy lifecycle. The cross-domain order is lifecycleOpsMu,
 	// requestDraftCacheOpsMu, clearDataMu, captureLifecycleMu, bodyCacheMu, then mu.
-	lifecycleOpsMu       sync.Mutex
-	mu                   sync.Mutex
-	baseCtx              context.Context
-	baseCancel           context.CancelFunc
-	shutdownOnce         sync.Once
-	shutdownErr          error
-	events               serviceruntime.EventBus
-	frontendEventBatcher *frontendEventBatcher
-	running              bool
-	statusRevision       uint64
-	recordingPaused      atomic.Bool
-	address              string
-	started              time.Time
-	server               *http.Server
-	ln                   net.Listener
-	nextID               uint64
+	lifecycleOpsMu sync.Mutex
+	mu             sync.Mutex
+	baseCtx        context.Context
+	baseCancel     context.CancelFunc
+	shutdownOnce   sync.Once
+	shutdownErr    error
+	// Events publishes status changes and live capture events.
+	Events          Events
+	liveBatcher     *liveEventBatcher
+	running         bool
+	statusRevision  uint64
+	recordingPaused atomic.Bool
+	address         string
+	started         time.Time
+	server          *http.Server
+	ln              net.Listener
+	nextID          uint64
 
 	captureLifecycleMu sync.RWMutex
 	captureGeneration  uint64
-	// trafficPublishMu keeps snapshot revisions and frontend event enqueueing in
+	// trafficPublishMu keeps snapshot revisions and live event enqueueing in
 	// the same order across transport and process-attribution goroutines.
 	trafficPublishMu sync.Mutex
 
@@ -223,15 +214,19 @@ type webSocketSession struct {
 	started time.Time
 	conn    *websocket.Conn
 	cancel  context.CancelFunc
+	// sink receives the session's events; it belongs to the connect call.
+	sink WebSocketSink
 	// messageOrder makes a sent message's event precede the events of what the
 	// peer answers it with.
 	messageOrder sync.Mutex
 }
 
 type httpRequestStreamSession struct {
-	id        string
-	target    string
-	started   time.Time
+	id      string
+	target  string
+	started time.Time
+	// sink receives the stream's events; it belongs to the send call.
+	sink      HTTPStreamSink
 	cancel    context.CancelFunc
 	response  *http.Response
 	body      io.ReadCloser
@@ -282,10 +277,6 @@ func (s *ProxyService) httpRequestRunner() HTTPRequestPluginRunner {
 	return s.httpRequestPluginRunner
 }
 
-// SetEventBus sets where status, traffic, and session events are published.
-// It must be called before ServiceStartup.
-func (s *ProxyService) SetEventBus(events serviceruntime.EventBus) { s.events = events }
-
 func (s *ProxyService) ServiceStartup(ctx context.Context) error {
 	s.baseCtx, s.baseCancel = context.WithCancel(ctx)
 	// The single-instance lock is held before services start, so no other run
@@ -294,7 +285,7 @@ func (s *ProxyService) ServiceStartup(ctx context.Context) error {
 	removeStaleBodyCacheSessions()
 	s.startCaptureSpiller(s.baseCtx)
 	s.dnsCacheManager()
-	s.frontendEventBatcher = newBusFrontendEventBatcher(s.events, defaultFrontendEventBatcherOptions())
+	s.liveBatcher = newLiveEventBatcher(defaultLiveEventBatcherOptions(), s.Events.Live.Publish)
 	s.refreshLocalProcessAddresses()
 	s.startBackgroundSyncIfReady()
 	logger.G().Info("Proxy service started")
@@ -356,15 +347,15 @@ func (s *ProxyService) shutdown() error {
 	if manager := s.processManager(); manager != nil {
 		manager.Close()
 	}
-	if s.frontendEventBatcher != nil {
-		s.frontendEventBatcher.Close()
+	if s.liveBatcher != nil {
+		s.liveBatcher.Close()
 	}
 	logger.G().Info("Proxy service stopped")
 	return shutdownErr
 }
 
 func (s *ProxyService) startBackgroundSyncIfReady() {
-	if s.events == nil || s.settingService == nil {
+	if s.settingService == nil {
 		return
 	}
 	s.bgSyncOnce.Do(func() {
@@ -728,20 +719,20 @@ func proxyRestartRequired(startCfg, currentCfg *settingservice.ProxyConfig) bool
 	return len(proxyRestartReasons(startCfg, currentCfg)) > 0
 }
 
-func proxyRestartReasons(startCfg, currentCfg *settingservice.ProxyConfig) []string {
+func proxyRestartReasons(startCfg, currentCfg *settingservice.ProxyConfig) []ProxyRestartReason {
 	if startCfg == nil || currentCfg == nil {
 		return nil
 	}
-	reasons := make([]string, 0, 4)
+	reasons := make([]ProxyRestartReason, 0, 4)
 	if startCfg.Mode != currentCfg.Mode {
-		reasons = append(reasons, "proxy mode changed")
+		reasons = append(reasons, ProxyRestartReasonProxyMode)
 	}
 	if startCfg.Host != currentCfg.Host || startCfg.Port != currentCfg.Port {
-		reasons = append(reasons, "listen address changed")
+		reasons = append(reasons, ProxyRestartReasonListenAddress)
 	}
 	if startCfg.UseBuiltinCA != currentCfg.UseBuiltinCA || (!currentCfg.UseBuiltinCA &&
 		(startCfg.CACertPath != currentCfg.CACertPath || startCfg.CAKeyPath != currentCfg.CAKeyPath)) {
-		reasons = append(reasons, "mitm ca changed")
+		reasons = append(reasons, ProxyRestartReasonMITMCA)
 	}
 	return reasons
 }
@@ -1492,8 +1483,8 @@ func formatTLSGreaseValue(value uint16) string {
 	return fmt.Sprintf("GREASE (0x%04X)", value)
 }
 
-// emitTraffic publishes the one full snapshot that creates a live frontend
-// entry. Callers that store immediately before emitting hold trafficPublishMu
+// emitTraffic publishes the one full snapshot that creates an entry in the
+// interface's live list. Callers that store immediately before emitting hold trafficPublishMu
 // so this event stays ordered with all later patches.
 func (s *ProxyService) emitTraffic(entry *TrafficEntry) {
 	s.captureLifecycleMu.RLock()
@@ -1513,7 +1504,7 @@ func (s *ProxyService) emitTraffic(entry *TrafficEntry) {
 	if s.emitTrafficHook != nil {
 		s.emitTrafficHook(entry)
 	}
-	s.emitHighFrequencyFrontendEvent(trafficEventName, entry)
+	s.publishLive(TrafficEntryEvent{Entry: entry})
 }
 
 // emitTrafficPatch publishes a strongly typed incremental update. The entry is
@@ -1527,7 +1518,7 @@ func (s *ProxyService) emitTrafficPatch(entry *TrafficEntry, patch TrafficEntryP
 	if s.emitTrafficPatchHook != nil {
 		s.emitTrafficPatchHook(patch)
 	}
-	s.emitHighFrequencyFrontendEvent(trafficPatchEventName, patch)
+	s.publishLive(TrafficPatchEvent{Patch: patch})
 }
 
 // capturedSSEChunkPublisher returns the onChunk callback that publishes the
@@ -1562,7 +1553,7 @@ func (s *ProxyService) emitTrafficLiveUpdate(update TrafficLiveUpdate) {
 	if s.emitTrafficLiveUpdateHook != nil {
 		s.emitTrafficLiveUpdateHook(update)
 	}
-	s.emitHighFrequencyFrontendEvent(trafficLiveUpdateEventName, update)
+	s.publishLive(TrafficLiveUpdateEvent{Update: update})
 }
 
 // emitTrafficResetLocked publishes an unbounded marker while the caller holds
@@ -1571,16 +1562,11 @@ func (s *ProxyService) emitTrafficLiveUpdate(update TrafficLiveUpdate) {
 // old-generation event before this marker and every new-generation event after
 // it, including when they are flushed in separate batches.
 func (s *ProxyService) emitTrafficResetLocked() {
-	s.emitUnboundedFrontendEvent(trafficResetEventName, map[string]uint64{
-		"captureGeneration": s.captureGeneration,
-	})
+	s.publishLiveUnbounded(TrafficResetEvent{CaptureGeneration: s.captureGeneration})
 }
 
 func (s *ProxyService) emitStatus() {
-	if s.events == nil {
-		return
-	}
-	_ = s.events.Emit(statusEventName, s.GetStatus())
+	s.Events.Status.Publish(s.GetStatus())
 }
 
 // markHistoryDirty marks the in-memory history as needing a new disk flush.
@@ -1734,64 +1720,68 @@ func (s *ProxyService) captureEntryCount() int {
 	return s.trafficEntries.Len() + s.captureSpillStore().Len()
 }
 
-func (s *ProxyService) emitWebSocketSessionEvent(event WebSocketSessionEvent) {
+// emitWebSocketSessionEvent publishes a session event for its connect call's
+// sink, in order with the other live events. Without a running batcher, as in
+// headless tests, it is delivered at once.
+func (s *ProxyService) emitWebSocketSessionEvent(sink WebSocketSink, event WebSocketSessionEvent) {
 	if s.emitWebSocketSessionEventHook != nil {
 		s.emitWebSocketSessionEventHook(event)
 	}
-	s.emitUnboundedFrontendEvent(webSocketSessionEventName, event)
+	live := WebSocketEvent{Event: event, Sink: sink}
+	if s.liveBatcher == nil {
+		live.Deliver()
+		return
+	}
+	s.publishLiveUnbounded(live)
 }
 
-func (s *ProxyService) emitHTTPRequestEvent(event HTTPRequestStreamEvent) {
+// emitHTTPRequestEvent publishes a stream event for its send call's sink, in
+// order with the other live events. Without a running batcher, as in headless
+// tests, it is delivered at once.
+func (s *ProxyService) emitHTTPRequestEvent(sink HTTPStreamSink, event HTTPRequestStreamEvent) {
 	if s.emitHTTPRequestEventHook != nil {
 		s.emitHTTPRequestEventHook(event)
 	}
-	s.emitUnboundedFrontendEvent(httpRequestEventName, event)
+	live := HTTPStreamEvent{Event: event, Sink: sink}
+	if s.liveBatcher == nil {
+		live.Deliver()
+		return
+	}
+	s.publishLiveUnbounded(live)
 }
 
-func (s *ProxyService) emitHighFrequencyFrontendEvent(name string, data any) {
-	if s.frontendEventBatcher != nil {
-		err := s.frontendEventBatcher.Publish(name, data)
-		if err != nil &&
-			!errors.Is(err, errFrontendEventDropped) &&
-			!errors.Is(err, errFrontendEventBatcherClosed) {
-			logger.G().Warnf("Failed to enqueue frontend event %s: %v", name, err)
+// publishLive queues a high-frequency event within the live batcher's
+// pending limits. Without a running batcher, as in headless tests, the event
+// is published at once.
+func (s *ProxyService) publishLive(event LiveEvent) {
+	if s.liveBatcher != nil {
+		err := s.liveBatcher.Publish(event)
+		if err != nil && !errors.Is(err, errLiveEventDropped) && !errors.Is(err, errLiveBatcherClosed) {
+			logger.G().Warnf("Failed to enqueue %s event: %v", event.liveKind(), err)
 		}
 		return
 	}
-	if s.events != nil {
-		_ = s.events.Emit(name, data)
-	}
+	s.Events.Live.Publish(LiveBatch{Events: []LiveEvent{event}})
 }
 
-func (s *ProxyService) emitUnboundedFrontendEvent(name string, data any) {
-	if s.frontendEventBatcher != nil {
-		err := s.frontendEventBatcher.PublishUnbounded(name, data)
-		if err != nil && !errors.Is(err, errFrontendEventBatcherClosed) {
-			logger.G().Warnf("Failed to enqueue frontend event %s: %v", name, err)
+// publishLiveUnbounded queues a lifecycle event that must not be dropped, in
+// order with the other live events.
+func (s *ProxyService) publishLiveUnbounded(event LiveEvent) {
+	if s.liveBatcher != nil {
+		if err := s.liveBatcher.PublishUnbounded(event); err != nil && !errors.Is(err, errLiveBatcherClosed) {
+			logger.G().Warnf("Failed to enqueue %s event: %v", event.liveKind(), err)
 		}
 		return
 	}
-	if s.events != nil {
-		_ = s.events.Emit(name, data)
-	}
+	s.Events.Live.Publish(LiveBatch{Events: []LiveEvent{event}})
 }
 
-func (s *ProxyService) EmitRequestEditorFileDrop(paths []string, dataFileDropTarget string) {
-	if s.events == nil || len(paths) == 0 {
-		return
-	}
-	_ = s.events.Emit(requestEditorFileDropEventName, RequestEditorFileDropEvent{
-		Paths:              paths,
-		DataFileDropTarget: dataFileDropTarget,
-	})
-}
-
-// GetTraffic returns the newest frontend-sized window (without bodies). Older
-// entries remain retained for the complete history file and HAR export.
+// GetTraffic returns the newest entries the interface holds, without bodies.
+// Older entries remain retained for the complete history file and HAR export.
 func (s *ProxyService) GetTraffic() []*TrafficEntry {
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
-	return s.trafficEntries.TailValues(frontendTrafficEntryLimit)
+	return s.trafficEntries.TailValues(liveTrafficWindow)
 }
 
 func (s *ProxyService) getAllTraffic() []*TrafficEntry {
@@ -1801,19 +1791,19 @@ func (s *ProxyService) getAllTraffic() []*TrafficEntry {
 }
 
 // SetLiveTrafficDetail selects the only traffic entry whose live body or
-// WebSocket updates should be delivered to the frontend. ID zero disables it.
+// WebSocket updates should be delivered to the interface. ID zero disables it.
 func (s *ProxyService) SetLiveTrafficDetail(id uint64) {
 	s.liveTrafficDetailID.Store(id)
 }
 
-// DeleteTraffic deletes traffic entries
-func (s *ProxyService) DeleteTraffic(id []int64) {
+// DeleteTraffic deletes the traffic entries with the given IDs.
+func (s *ProxyService) DeleteTraffic(ids []uint64) {
 	s.clearDataMu.Lock()
 	defer s.clearDataMu.Unlock()
 	s.captureLifecycleMu.RLock()
 	defer s.captureLifecycleMu.RUnlock()
-	for _, i := range id {
-		s.deleteTrafficEntryCaptureLocked(uint64(i))
+	for _, id := range ids {
+		s.deleteTrafficEntryCaptureLocked(id)
 	}
 }
 
@@ -2508,6 +2498,7 @@ func (s *ProxyService) SendHTTPRequest(
 	method, targetURL string,
 	headerFields []HTTPHeaderField,
 	body SendRequestBody,
+	sink HTTPStreamSink,
 ) (SendRequestResponse, error) {
 	if cfg.MaxRedirects < 0 {
 		return SendRequestResponse{}, fmt.Errorf("max redirects must not be negative")
@@ -2876,6 +2867,7 @@ func (s *ProxyService) SendHTTPRequest(
 			id:        sessionID,
 			target:    logTarget,
 			started:   started,
+			sink:      sink,
 			cancel:    cancelRequest,
 			response:  resp,
 			body:      bodyReader,
@@ -2893,7 +2885,7 @@ func (s *ProxyService) SendHTTPRequest(
 		)
 		go s.runHTTPRequestStreamReadLoop(session)
 		if err := detachRequestCallCancellation(callCtx, detachCallCancellation, cancelRequest); err != nil {
-			s.finalizeHTTPRequestStream(sessionID, "closed", nil)
+			s.finalizeHTTPRequestStream(sessionID, HTTPStreamClosed, nil)
 			return SendRequestResponse{}, err
 		}
 		streamingResponse = true
@@ -3086,7 +3078,7 @@ func (s *ProxyService) DisconnectHTTPRequestStream(sessionID string) error {
 	if sessionID != "" {
 		logger.G().Infof("HTTP request SSE disconnect requested: session_id=%s", sessionID)
 	}
-	s.finalizeHTTPRequestStream(sessionID, "closed", nil)
+	s.finalizeHTTPRequestStream(sessionID, HTTPStreamClosed, nil)
 	return nil
 }
 
@@ -3099,9 +3091,9 @@ func (s *ProxyService) runHTTPRequestStreamReadLoop(session *httpRequestStreamSe
 			nextOffset := startOffset + int64(n)
 			session.offset.Store(nextOffset)
 			eventOffset := startOffset
-			s.emitHTTPRequestEvent(HTTPRequestStreamEvent{
+			s.emitHTTPRequestEvent(session.sink, HTTPRequestStreamEvent{
 				SessionID: session.id,
-				EventType: "chunk",
+				EventType: HTTPStreamChunk,
 				Offset:    &eventOffset,
 				// buffer is reused by the next Read, so the event owns a copy.
 				Chunk: bytes.Clone(buffer[:n]),
@@ -3111,15 +3103,15 @@ func (s *ProxyService) runHTTPRequestStreamReadLoop(session *httpRequestStreamSe
 			continue
 		}
 		if errors.Is(err, io.EOF) {
-			s.finalizeHTTPRequestStream(session.id, "complete", nil)
+			s.finalizeHTTPRequestStream(session.id, HTTPStreamComplete, nil)
 			return
 		}
-		s.finalizeHTTPRequestStream(session.id, "error", err)
+		s.finalizeHTTPRequestStream(session.id, HTTPStreamError, err)
 		return
 	}
 }
 
-func (s *ProxyService) finalizeHTTPRequestStream(sessionID, eventType string, streamErr error) {
+func (s *ProxyService) finalizeHTTPRequestStream(sessionID string, eventType HTTPStreamEventKind, streamErr error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return
@@ -3146,7 +3138,7 @@ func (s *ProxyService) finalizeHTTPRequestStream(sessionID, eventType string, st
 		EventType: eventType,
 		Offset:    &endOffset,
 	}
-	if eventType == "complete" && session.response != nil {
+	if eventType == HTTPStreamComplete && session.response != nil {
 		event.TrailerFields,
 			event.TrailersTruncated,
 			event.TrailerOrderUnavailable = completeResponseTrailerFields(
@@ -3157,7 +3149,7 @@ func (s *ProxyService) finalizeHTTPRequestStream(sessionID, eventType string, st
 	if streamErr != nil {
 		event.Error = streamErr.Error()
 	}
-	s.emitHTTPRequestEvent(event)
+	s.emitHTTPRequestEvent(session.sink, event)
 
 	duration := time.Since(session.started).Round(time.Millisecond)
 	if streamErr != nil {
@@ -3191,7 +3183,7 @@ func (s *ProxyService) closeAllHTTPRequestStreams() {
 		return true
 	})
 	for _, sessionID := range sessionIDs {
-		s.finalizeHTTPRequestStream(sessionID, "closed", nil)
+		s.finalizeHTTPRequestStream(sessionID, HTTPStreamClosed, nil)
 	}
 }
 
@@ -3204,13 +3196,14 @@ func (s *ProxyService) closeAllWebSocketSessions() {
 		return true
 	})
 	for _, sessionID := range sessionIDs {
-		s.finalizeWebSocketSession(sessionID, "closed", nil, "closed")
+		s.finalizeWebSocketSession(sessionID, "closed", nil, WebSocketEventClosed)
 	}
 }
 
 func (s *ProxyService) ConnectWebSocket(
 	callCtx context.Context,
 	req WebSocketConnectRequest,
+	sink WebSocketSink,
 ) (WebSocketConnectResponse, error) {
 	targetURL := strings.TrimSpace(req.URL)
 	if targetURL == "" {
@@ -3391,6 +3384,7 @@ func (s *ProxyService) ConnectWebSocket(
 		started: time.Now(),
 		conn:    conn,
 		cancel:  cancel,
+		sink:    sink,
 	}
 	s.webSocketSessions.Store(sessionID, session)
 	logger.G().Infof(
@@ -3400,15 +3394,15 @@ func (s *ProxyService) ConnectWebSocket(
 		responseStatusCode,
 		responseProtocol,
 	)
-	s.emitWebSocketSessionEvent(WebSocketSessionEvent{
+	s.emitWebSocketSessionEvent(sink, WebSocketSessionEvent{
 		SessionID: sessionID,
-		EventType: "connected",
+		EventType: WebSocketEventConnected,
 		Status:    "connected",
 	})
 
 	go s.runWebSocketReadLoop(sessionCtx, session)
 	if err := detachRequestCallCancellation(callCtx, detachCallCancellation, cancel); err != nil {
-		s.finalizeWebSocketSession(sessionID, "closed", nil, "closed")
+		s.finalizeWebSocketSession(sessionID, "closed", nil, WebSocketEventClosed)
 		return WebSocketConnectResponse{}, err
 	}
 
@@ -3446,9 +3440,9 @@ func (s *ProxyService) SendWebSocketMessage(req WebSocketSendRequest) error {
 	session.messageOrder.Lock()
 	err = session.conn.WriteMessage(messageType, payload)
 	if err == nil {
-		s.emitWebSocketSessionEvent(WebSocketSessionEvent{
+		s.emitWebSocketSessionEvent(session.sink, WebSocketSessionEvent{
 			SessionID: req.SessionID,
-			EventType: "message",
+			EventType: WebSocketEventMessage,
 			Status:    "connected",
 			Message:   normalizeWebSocketMessage("send", normalizedType, payload),
 		})
@@ -3463,7 +3457,7 @@ func (s *ProxyService) SendWebSocketMessage(req WebSocketSendRequest) error {
 			len(payload),
 			err,
 		)
-		s.finalizeWebSocketSession(req.SessionID, "error", err, "error")
+		s.finalizeWebSocketSession(req.SessionID, "error", err, WebSocketEventError)
 		return err
 	}
 	logger.G().Debugf(
@@ -3481,7 +3475,7 @@ func (s *ProxyService) DisconnectWebSocket(sessionID string) error {
 	if sessionID != "" {
 		logger.G().Infof("WebSocket session disconnect requested: session_id=%s", sessionID)
 	}
-	s.finalizeWebSocketSession(strings.TrimSpace(sessionID), "closed", nil, "closed")
+	s.finalizeWebSocketSession(strings.TrimSpace(sessionID), "closed", nil, WebSocketEventClosed)
 	return nil
 }
 
@@ -4470,15 +4464,15 @@ func (s *ProxyService) runWebSocketReadLoop(
 		msgType, payload, err := session.conn.ReadMessage()
 		if err != nil {
 			if ctx.Err() != nil {
-				s.finalizeWebSocketSession(session.id, "closed", nil, "closed")
+				s.finalizeWebSocketSession(session.id, "closed", nil, WebSocketEventClosed)
 				return
 			}
 
 			status := "error"
-			eventType := "error"
+			eventType := WebSocketEventError
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				status = "closed"
-				eventType = "closed"
+				eventType = WebSocketEventClosed
 			}
 			s.finalizeWebSocketSession(session.id, status, err, eventType)
 			return
@@ -4493,9 +4487,9 @@ func (s *ProxyService) runWebSocketReadLoop(
 			len(payload),
 		)
 		session.messageOrder.Lock()
-		s.emitWebSocketSessionEvent(WebSocketSessionEvent{
+		s.emitWebSocketSessionEvent(session.sink, WebSocketSessionEvent{
 			SessionID: session.id,
-			EventType: "message",
+			EventType: WebSocketEventMessage,
 			Status:    "connected",
 			Message:   normalizeWebSocketMessage("receive", msgTypeName, payload),
 		})
@@ -4507,7 +4501,7 @@ func (s *ProxyService) finalizeWebSocketSession(
 	sessionID string,
 	status string,
 	err error,
-	eventType string,
+	eventType WebSocketEventKind,
 ) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -4556,7 +4550,7 @@ func (s *ProxyService) finalizeWebSocketSession(
 		}
 	}
 
-	s.emitWebSocketSessionEvent(WebSocketSessionEvent{
+	s.emitWebSocketSessionEvent(session.sink, WebSocketSessionEvent{
 		SessionID: sessionID,
 		EventType: eventType,
 		Status:    status,
@@ -4951,34 +4945,19 @@ func (s *ProxyService) configuredHistoryCleaner() HistoryCleaner {
 	return s.historyCleaner
 }
 
-func (s *ProxyService) emitLocalDataCleared(scope, requestDraftCacheRoot string, historyCleared bool) {
-	if s.events == nil {
-		return
-	}
-	_ = s.events.Emit(localDataClearedEventName, map[string]any{
-		"scope":                 scope,
-		"requestDraftCacheRoot": requestDraftCacheRoot,
-		"historyCleared":        historyCleared,
-	})
-}
-
-type storedCaptureClearResult struct {
-	stateCleared          bool
-	historyCleared        bool
-	requestDraftCacheRoot string
-}
-
-func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurrent bool) (storedCaptureClearResult, error) {
+func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurrent bool) (LocalDataClearResult, error) {
 	s.clearDataMu.Lock()
 	defer s.clearDataMu.Unlock()
 
+	result := LocalDataClearResult{Scope: LocalDataScopeCache}
+	if includeHistory {
+		result.Scope = LocalDataScopeCacheAndHistory
+	}
 	baseDir, err := fs.GetBaseStorageDir()
 	if err != nil {
-		return storedCaptureClearResult{}, fmt.Errorf("get base storage directory: %w", err)
+		return result, fmt.Errorf("get base storage directory: %w", err)
 	}
-	result := storedCaptureClearResult{
-		requestDraftCacheRoot: filepath.Clean(filepath.Join(baseDir, "request-draft-cache")),
-	}
+	result.RequestDraftCacheRoot = filepath.Clean(filepath.Join(baseDir, "request-draft-cache"))
 
 	wasEnabled := s.enableFlushing.Swap(false)
 	defer s.enableFlushing.Store(wasEnabled)
@@ -4995,21 +4974,21 @@ func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurr
 	s.clearTrafficWithBodyCache(s.bodyCache)
 	s.closeCaptureSpillNoLock()
 	s.bodyCache = nil
-	result.stateCleared = true
+	result.Cleared = true
 	previousHistoryKey := s.CurrentHistoryKey()
 
 	var clearErrors []error
 	if err := removeStorageDirectories(os.RemoveAll,
 		storageDirectoryRemoval{name: "cache", path: filepath.Join(baseDir, "cache")},
-		storageDirectoryRemoval{name: "request draft cache", path: result.requestDraftCacheRoot},
+		storageDirectoryRemoval{name: "request draft cache", path: result.RequestDraftCacheRoot},
 	); err != nil {
 		clearErrors = append(clearErrors, err)
 	}
 
 	if includeHistory {
-		result.historyCleared = true
+		result.HistoryCleared = true
 		if err := s.removeCurrentHistoryFiles(previousHistoryKey); err != nil {
-			result.historyCleared = false
+			result.HistoryCleared = false
 			clearErrors = append(clearErrors, fmt.Errorf("remove current history: %w", err))
 		}
 	}
@@ -5020,11 +4999,11 @@ func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurr
 	if includeHistory {
 		if cleaner := s.configuredHistoryCleaner(); cleaner != nil {
 			if err := cleaner.ClearHistories(); err != nil {
-				result.historyCleared = false
+				result.HistoryCleared = false
 				clearErrors = append(clearErrors, fmt.Errorf("clear indexed histories: %w", err))
 			}
 		} else {
-			result.historyCleared = false
+			result.HistoryCleared = false
 			clearErrors = append(clearErrors, errors.New("clear indexed histories: history cleaner is not configured"))
 		}
 	}
@@ -5044,9 +5023,9 @@ func (s *ProxyService) clearStoredCaptureDataLocked(includeHistory, preserveCurr
 }
 
 // clearStoredCaptureData is retained for focused package tests. Production
-// entry points keep both locks through frontend notification so recovery and
+// entry points keep both locks through the status update so recovery and
 // cache removal have one observable order.
-func (s *ProxyService) clearStoredCaptureData(includeHistory bool) (storedCaptureClearResult, error) {
+func (s *ProxyService) clearStoredCaptureData(includeHistory bool) (LocalDataClearResult, error) {
 	s.lifecycleOpsMu.Lock()
 	defer s.lifecycleOpsMu.Unlock()
 	s.requestDraftCacheOpsMu.Lock()
@@ -5055,7 +5034,10 @@ func (s *ProxyService) clearStoredCaptureData(includeHistory bool) (storedCaptur
 	return s.clearStoredCaptureDataLocked(includeHistory, false)
 }
 
-func (s *ProxyService) ClearCacheFiles() error {
+// ClearCacheFiles archives the current capture, then removes caches and the
+// request draft cache. The result describes what was removed, also when an
+// error is returned.
+func (s *ProxyService) ClearCacheFiles() (LocalDataClearResult, error) {
 	s.lifecycleOpsMu.Lock()
 	defer s.lifecycleOpsMu.Unlock()
 	s.runLifecycleOperationHook("clear-cache")
@@ -5068,19 +5050,20 @@ func (s *ProxyService) ClearCacheFiles() error {
 	// capture write lock so traffic cannot fall between the disk snapshot and
 	// the generation reset.
 	result, err := s.clearStoredCaptureDataLocked(false, true)
-	if result.stateCleared {
-		s.emitLocalDataCleared("cache", result.requestDraftCacheRoot, false)
+	if result.Cleared {
 		s.emitStatus()
 	}
 	if err != nil {
 		logger.G().Warnf("Clear cache files completed with errors: %v", err)
-		return err
+		return result, err
 	}
 	logger.G().Info("Clear cache files completed")
-	return nil
+	return result, nil
 }
 
-func (s *ProxyService) ClearCacheAndHistory() error {
+// ClearCacheAndHistory removes caches, the current capture, and saved history.
+// The result describes what was removed, also when an error is returned.
+func (s *ProxyService) ClearCacheAndHistory() (LocalDataClearResult, error) {
 	s.lifecycleOpsMu.Lock()
 	defer s.lifecycleOpsMu.Unlock()
 	s.runLifecycleOperationHook("clear-cache-and-history")
@@ -5090,17 +5073,13 @@ func (s *ProxyService) ClearCacheAndHistory() error {
 
 	logger.G().Infof("Clear cache and history requested: entries=%d", s.captureEntryCount())
 	result, err := s.clearStoredCaptureDataLocked(true, false)
-	if result.stateCleared {
-		s.emitLocalDataCleared("cache-and-history", result.requestDraftCacheRoot, result.historyCleared)
-	}
-	if err != nil {
-		s.emitStatus()
-		logger.G().Warnf("Clear cache and history completed with errors: %v", err)
-		return err
-	}
 	s.emitStatus()
+	if err != nil {
+		logger.G().Warnf("Clear cache and history completed with errors: %v", err)
+		return result, err
+	}
 	logger.G().Info("Clear cache and history completed")
-	return nil
+	return result, nil
 }
 
 // historySaveInterval is the shortest time between periodic saves of the

@@ -267,7 +267,5 @@ func (s *ProxyService) ClearDNSCache() DNSCacheStatus {
 }
 
 func (s *ProxyService) emitDNSCacheStatus(status DNSCacheStatus) {
-	if s.events != nil {
-		s.events.Emit("proxy:dns-cache-status", status)
-	}
+	s.Events.DNSCache.Publish(status)
 }

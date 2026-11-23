@@ -21,9 +21,7 @@ func (s *ProxyService) SetRecordingPaused(paused bool) (ProxyStatus, error) {
 	status := s.currentStatusLocked()
 	s.mu.Unlock()
 	s.trafficPublishMu.Unlock()
-	if s.events != nil {
-		_ = s.events.Emit(statusEventName, status)
-	}
+	s.Events.Status.Publish(status)
 	return status, nil
 }
 

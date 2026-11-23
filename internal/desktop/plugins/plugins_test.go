@@ -16,7 +16,6 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	pythonpluginservice "github.com/josexy/flowlens/internal/services/python_plugin_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
@@ -151,18 +150,8 @@ func newFixture(t *testing.T) *fixture {
 	window := &runtimetest.Window{}
 	rt.Dispatcher.SetMain(window)
 	t.Cleanup(rt.Close)
-	bus := serviceruntime.NewBus()
-	service.SetEventBus(bus)
 	data := store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: settings}, Plugins: backend,
-		PluginEvents: func(registry func(store.PluginRegistryEvent), status func(store.PluginStatusEvent)) func() {
-			offRegistry := bus.On(pythonpluginservice.RegistryEventName, func(event serviceruntime.Event) {
-				rt.Dispatcher.Post(func() { registry(event.Data.(store.PluginRegistryEvent)) })
-			})
-			offStatus := bus.On(pythonpluginservice.StatusEventName, func(event serviceruntime.Event) {
-				rt.Dispatcher.Post(func() { status(event.Data.(store.PluginStatusEvent)) })
-			})
-			return func() { offRegistry(); offStatus() }
-		},
+		PluginEvents: store.PluginEvents{Registry: &service.Events.Registry, Status: &service.Events.Status},
 	})
 	t.Cleanup(data.Plugins.Cleanup)
 	if err := data.Settings.Load(); err != nil {

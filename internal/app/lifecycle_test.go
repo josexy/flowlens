@@ -53,7 +53,7 @@ func newLifecycleFixture(t *testing.T, behavior settingservice.MainWindowCloseBe
 		prepare:        func() error { fixture.prepared.Add(1); return nil },
 		quit:           func() { fixture.quits.Add(1) },
 	})
-	fixture.lifecycle = &appLifecycle{window: fixture.window, settings: settings, coordinator: coordinator, guards: guards}
+	fixture.lifecycle = &appLifecycle{window: fixture.window, settings: settings, coordinator: coordinator, guards: guards, onMain: func(fn func()) { fn() }}
 	fixture.lifecycle.trayAvailable.Store(true)
 	return fixture
 }
@@ -159,6 +159,32 @@ func TestGuardsRunInOrderAndStopAtTheFirstBlock(t *testing.T) {
 	f.lifecycle.RequestQuit()
 	if len(calls) != 1 || calls[0] != "settings" {
 		t.Fatalf("calls %v", calls)
+	}
+}
+
+func TestResolvedGuardContinuesTheQuitOnTheMainThread(t *testing.T) {
+	var resume func()
+	guard := func(_ string, proceed func()) bool {
+		if resume != nil {
+			return false
+		}
+		resume = proceed
+		return true
+	}
+	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, guard)
+	var onMain []string
+	f.lifecycle.onMain = func(fn func()) {
+		onMain = append(onMain, "posted")
+		fn()
+	}
+	f.lifecycle.RequestQuit()
+	if len(onMain) != 0 || f.lifecycle.coordinator.InProgress() {
+		t.Fatal("the guard did not hold the quit")
+	}
+	resume()
+	f.waitForQuit(t)
+	if len(onMain) != 1 {
+		t.Fatalf("the resolved quit continued %d times through onMain, want once", len(onMain))
 	}
 }
 

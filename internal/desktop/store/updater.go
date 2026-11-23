@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/josexy/flowlens/internal/desktop/runtime"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	appservice "github.com/josexy/flowlens/internal/services/app_service"
 )
 
@@ -60,15 +59,13 @@ func (s *UpdaterStore) ApplySnapshot(next appservice.UpdateSnapshot) {
 }
 
 // Initialize subscribes to the service and reads its state.
-func (s *UpdaterStore) Initialize(bus serviceruntime.EventBus, post func(func())) {
+func (s *UpdaterStore) Initialize(updates Topic[appservice.UpdateSnapshot], post func(func())) {
 	if s.Initialized || s.offs != nil {
 		return
 	}
 	s.offs = []func(){
-		bus.On(appservice.UpdateStateChangedEventName, func(event serviceruntime.Event) {
-			if snapshot, ok := event.Data.(appservice.UpdateSnapshot); ok {
-				post(func() { s.ApplySnapshot(snapshot) })
-			}
+		updates.Subscribe(func(snapshot appservice.UpdateSnapshot) {
+			post(func() { s.ApplySnapshot(snapshot) })
 		}),
 	}
 	runtime.Run(s.rt.Jobs, "updater:initialize", func(context.Context) (appservice.UpdateSnapshot, error) {

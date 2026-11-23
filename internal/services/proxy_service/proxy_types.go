@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	bodycache "github.com/josexy/flowlens/internal/pkg/body_cache"
 	"github.com/josexy/flowlens/internal/pkg/fs"
+	"github.com/josexy/flowlens/internal/serviceruntime"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
 
@@ -25,10 +26,33 @@ type ProxyStatus struct {
 	CaptureAlias    string    `json:"captureAlias"`
 }
 
+// Events are the values the proxy service publishes. Subscribers must not
+// block.
+type Events struct {
+	// Status is the proxy's state after every change.
+	Status serviceruntime.Topic[ProxyStatus]
+	// SystemProxy is the managed system proxy's state after every change.
+	SystemProxy serviceruntime.Topic[SystemProxyStatus]
+	// DNSCache is the DNS cache's state after it changes.
+	DNSCache serviceruntime.Topic[DNSCacheStatus]
+	// Live carries capture and request-editor events in bounded batches.
+	Live serviceruntime.Topic[LiveBatch]
+}
+
+// ProxyRestartReason names a saved change that takes effect only after the
+// running proxy restarts. The values are kept readable for logs.
+type ProxyRestartReason string
+
+const (
+	ProxyRestartReasonProxyMode     ProxyRestartReason = "proxy mode changed"
+	ProxyRestartReasonListenAddress ProxyRestartReason = "listen address changed"
+	ProxyRestartReasonMITMCA        ProxyRestartReason = "mitm ca changed"
+)
+
 type ProxyConfigApplyResult struct {
-	Applied         bool     `json:"applied"`
-	RestartRequired bool     `json:"restartRequired"`
-	RestartReasons  []string `json:"restartReasons"`
+	Applied         bool                 `json:"applied"`
+	RestartRequired bool                 `json:"restartRequired"`
+	RestartReasons  []ProxyRestartReason `json:"restartReasons"`
 }
 
 type SystemProxyStatus struct {
@@ -379,6 +403,30 @@ type LocalDataSize struct {
 	HistoryBytes int64 `json:"historyBytes"`
 }
 
+// LocalDataClearScope names what a local-data cleanup was asked to remove.
+type LocalDataClearScope uint8
+
+const (
+	// LocalDataScopeCache removes caches after archiving the current capture.
+	LocalDataScopeCache LocalDataClearScope = iota + 1
+	// LocalDataScopeCacheAndHistory removes caches, the current capture, and
+	// saved history.
+	LocalDataScopeCacheAndHistory
+)
+
+// LocalDataClearResult reports what a local-data cleanup removed. It is filled
+// even when the cleanup also returns an error, so the interface can refresh
+// what was removed before it reports the failure.
+type LocalDataClearResult struct {
+	Scope LocalDataClearScope
+	// Cleared reports that the capture, caches, and process icons were reset.
+	Cleared bool
+	// HistoryCleared reports that every saved history was removed.
+	HistoryCleared bool
+	// RequestDraftCacheRoot is the cleaned request draft cache directory.
+	RequestDraftCacheRoot string
+}
+
 type SendRequestProxyMode string
 
 const (
@@ -523,15 +571,30 @@ type SendRequestResponse struct {
 	StreamSessionID         string                      `json:"streamSessionId,omitempty"`
 }
 
+// HTTPStreamEventKind names an event of an HTTP Request Editor stream.
+type HTTPStreamEventKind string
+
+const (
+	HTTPStreamChunk    HTTPStreamEventKind = "chunk"
+	HTTPStreamComplete HTTPStreamEventKind = "complete"
+	HTTPStreamClosed   HTTPStreamEventKind = "closed"
+	HTTPStreamError    HTTPStreamEventKind = "error"
+)
+
+// HTTPStreamSink receives the events of the HTTP Request Editor stream that
+// one send started, in publication order, on the interface's main thread.
+// A nil sink ignores them.
+type HTTPStreamSink func(HTTPRequestStreamEvent)
+
 type HTTPRequestStreamEvent struct {
-	SessionID               string            `json:"sessionId"`
-	EventType               string            `json:"eventType"` // "chunk", "complete", "closed", or "error"
-	Offset                  *int64            `json:"offset,omitempty"`
-	Chunk                   []byte            `json:"chunk,omitempty"` // owned by the event; read-only
-	TrailerFields           []HTTPHeaderField `json:"trailerFields"`
-	TrailersTruncated       bool              `json:"trailersTruncated,omitempty"`
-	TrailerOrderUnavailable bool              `json:"trailerOrderUnavailable,omitempty"`
-	Error                   string            `json:"error,omitempty"`
+	SessionID               string              `json:"sessionId"`
+	EventType               HTTPStreamEventKind `json:"eventType"`
+	Offset                  *int64              `json:"offset,omitempty"`
+	Chunk                   []byte              `json:"chunk,omitempty"` // owned by the event; read-only
+	TrailerFields           []HTTPHeaderField   `json:"trailerFields"`
+	TrailersTruncated       bool                `json:"trailersTruncated,omitempty"`
+	TrailerOrderUnavailable bool                `json:"trailerOrderUnavailable,omitempty"`
+	Error                   string              `json:"error,omitempty"`
 }
 
 type WebSocketConnectRequest struct {
@@ -562,12 +625,27 @@ type WebSocketSendRequest struct {
 	File      *SendRequestFile `json:"file,omitempty"`
 }
 
+// WebSocketEventKind names an event of a WebSocket Client session.
+type WebSocketEventKind string
+
+const (
+	WebSocketEventConnected WebSocketEventKind = "connected"
+	WebSocketEventMessage   WebSocketEventKind = "message"
+	WebSocketEventClosed    WebSocketEventKind = "closed"
+	WebSocketEventError     WebSocketEventKind = "error"
+)
+
+// WebSocketSink receives the events of the WebSocket Client session that one
+// connect started, in publication order, on the interface's main thread. A
+// nil sink ignores them.
+type WebSocketSink func(WebSocketSessionEvent)
+
 type WebSocketSessionEvent struct {
-	SessionID string            `json:"sessionId"`
-	EventType string            `json:"eventType"`
-	Status    string            `json:"status"`
-	Message   *WebSocketMessage `json:"message,omitempty"`
-	Error     string            `json:"error,omitempty"`
+	SessionID string             `json:"sessionId"`
+	EventType WebSocketEventKind `json:"eventType"`
+	Status    string             `json:"status"`
+	Message   *WebSocketMessage  `json:"message,omitempty"`
+	Error     string             `json:"error,omitempty"`
 }
 
 type ResendConfig struct {
@@ -589,11 +667,6 @@ type HistoryMetadata struct {
 	CreatedAt     int64  `json:"createdAt"` // Unix milliseconds timestamp
 	Total         int    `json:"total"`
 	FormatVersion uint16 `json:"formatVersion"`
-}
-
-type RequestEditorFileDropEvent struct {
-	Paths              []string `json:"paths,omitempty"`
-	DataFileDropTarget string   `json:"dataFileDropTarget,omitempty"`
 }
 
 func getHistoryStoragePath() (string, error) {

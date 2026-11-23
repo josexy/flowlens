@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sync"
 	"testing"
 
 	appfs "github.com/josexy/flowlens/internal/pkg/fs"
+	"github.com/josexy/flowlens/internal/serviceruntime/topictest"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
 
@@ -128,15 +128,14 @@ func TestServiceExposesPluginFilesRulesOrderingAndEnableValidation(t *testing.T)
 		t.Fatalf("DeletePlugin: %v", err)
 	}
 
-	events.mu.Lock()
-	defer events.mu.Unlock()
-	if len(events.registry) < 10 {
-		t.Fatalf("registry events = %#v", events.registry)
+	registry := events.registry.Values()
+	if len(registry) < 10 {
+		t.Fatalf("registry events = %#v", registry)
 	}
 	var previous uint64
-	for _, event := range events.registry {
+	for _, event := range registry {
 		if event.EventID <= previous {
-			t.Fatalf("event IDs are not monotonic: %#v", events.registry)
+			t.Fatalf("event IDs are not monotonic: %#v", registry)
 		}
 		previous = event.EventID
 	}
@@ -190,10 +189,9 @@ func TestServiceRuntimeConfigurationProbeAndShutdown(t *testing.T) {
 	if _, err := service.currentPool(context.Background()); err == nil {
 		t.Fatal("currentPool succeeded after shutdown")
 	}
-	events.mu.Lock()
-	defer events.mu.Unlock()
-	if len(events.status) < 2 || events.status[len(events.status)-1].Status.Ready != true {
-		t.Fatalf("status events = %#v", events.status)
+	statusEvents := events.status.Values()
+	if len(statusEvents) < 2 || statusEvents[len(statusEvents)-1].Status.Ready != true {
+		t.Fatalf("status events = %#v", statusEvents)
 	}
 }
 
@@ -217,10 +215,8 @@ func TestServiceStartupWithDisabledMissingInterpreterKeepsRuntimeUnavailable(t *
 		t.Fatalf("disabled missing-interpreter status = %+v, pool=%v", status, service.pool)
 	}
 
-	events.mu.Lock()
-	defer events.mu.Unlock()
-	if len(events.status) == 0 || events.status[len(events.status)-1].Status.Ready {
-		t.Fatalf("startup status events = %#v", events.status)
+	if last, ok := events.status.Last(); !ok || last.Status.Ready {
+		t.Fatalf("startup status events = %#v", events.status.Values())
 	}
 }
 
@@ -259,26 +255,24 @@ func TestServiceLogEventsAreForwardedWithMonotonicIDs(t *testing.T) {
 			Message: "entry", Timestamp: int64(index + 1),
 		})
 	}
-	events.mu.Lock()
-	defer events.mu.Unlock()
-	if len(events.logs) != 5 {
-		t.Fatalf("emitted log count = %d", len(events.logs))
+	logs := events.logs.Values()
+	if len(logs) != 5 {
+		t.Fatalf("emitted log count = %d", len(logs))
 	}
-	for index := 1; index < len(events.logs); index++ {
-		if events.logs[index].EventID <= events.logs[index-1].EventID {
+	for index := 1; index < len(logs); index++ {
+		if logs[index].EventID <= logs[index-1].EventID {
 			t.Fatalf("log event IDs are not monotonic at %d", index)
 		}
 	}
-	if events.logs[0].Timestamp != 1 || events.logs[len(events.logs)-1].Timestamp != 5 {
-		t.Fatalf("emitted log timestamps = %#v", events.logs)
+	if logs[0].Timestamp != 1 || logs[len(logs)-1].Timestamp != 5 {
+		t.Fatalf("emitted log timestamps = %#v", logs)
 	}
 }
 
 type capturedServiceEvents struct {
-	mu       sync.Mutex
-	registry []RegistryEvent
-	status   []StatusEvent
-	logs     []PluginLogEntry
+	registry *topictest.Recorder[RegistryEvent]
+	status   *topictest.Recorder[StatusEvent]
+	logs     *topictest.Recorder[PluginLogEntry]
 }
 
 func newServiceHarness(t *testing.T) (*PythonPluginService, *capturedServiceEvents) {
@@ -288,26 +282,18 @@ func newServiceHarness(t *testing.T) (*PythonPluginService, *capturedServiceEven
 	if err := settings.Load(); err != nil {
 		t.Fatalf("load settings: %v", err)
 	}
-	events := new(capturedServiceEvents)
-	emit := func(name string, value any) {
-		events.mu.Lock()
-		defer events.mu.Unlock()
-		switch name {
-		case RegistryEventName:
-			events.registry = append(events.registry, value.(RegistryEvent))
-		case StatusEventName:
-			events.status = append(events.status, value.(StatusEvent))
-		case LogEventName:
-			events.logs = append(events.logs, value.(PluginLogEntry))
-		}
-	}
 	root := t.TempDir()
 	service, err := newWithPaths(
-		repository.db, settings, filepath.Join(root, "packages"), filepath.Join(root, "runtime"), emit,
+		repository.db, settings, filepath.Join(root, "packages"), filepath.Join(root, "runtime"),
 	)
 	if err != nil {
 		t.Fatalf("newWithPaths: %v", err)
 	}
 	t.Cleanup(func() { _ = service.Shutdown() })
+	events := &capturedServiceEvents{
+		registry: topictest.Record(t, &service.Events.Registry),
+		status:   topictest.Record(t, &service.Events.Status),
+		logs:     topictest.Record(t, &service.Events.Log),
+	}
 	return service, events
 }

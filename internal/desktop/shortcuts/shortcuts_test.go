@@ -1,6 +1,7 @@
 package shortcuts
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -10,15 +11,15 @@ import (
 
 func TestDefaultBindings(t *testing.T) {
 	for _, test := range []struct{ id, want string }{
-		{AppSave, "Ctrl+S"}, {AppOpenSettings, "Ctrl+,"}, {WorkbenchCapture, "Ctrl+1"}, {WorkbenchMemStats, "Ctrl+6"},
-		{WorkspaceNewHTTPRequest, "Ctrl+N"}, {WorkspaceNewWebSocket, "Ctrl+Shift+N"}, {WorkspaceCloseTab, "Ctrl+W"},
-		{WorkspaceNextTab, "Ctrl+Tab"}, {WorkspacePreviousTab, "Ctrl+Shift+Tab"}, {RequestEditorSend, "Ctrl+Enter"}, {CaptureFocusFilter, "Ctrl+F"},
+		{AppSave, "ctrl+s"}, {AppOpenSettings, "ctrl+,"}, {WorkbenchCapture, "ctrl+1"}, {WorkbenchMemStats, "ctrl+6"},
+		{WorkspaceNewHTTPRequest, "ctrl+n"}, {WorkspaceNewWebSocket, "ctrl+shift+n"}, {WorkspaceCloseTab, "ctrl+w"},
+		{WorkspaceNextTab, "ctrl+tab"}, {WorkspacePreviousTab, "ctrl+shift+tab"}, {RequestEditorSend, "ctrl+enter"}, {CaptureFocusFilter, "ctrl+f"},
 	} {
 		command, ok := CommandByID(test.id)
 		if !ok {
 			t.Fatalf("no command %q", test.id)
 		}
-		if got := Display(command.DefaultBinding, false); got != test.want {
+		if got := strings.Join(KbdKeys(command.DefaultBinding, false), "+"); got != test.want {
 			t.Errorf("%s: got %q, want %q", test.id, got, test.want)
 		}
 	}
@@ -37,12 +38,6 @@ func TestPrimaryFollowsThePlatform(t *testing.T) {
 	other, _ := Resolve(binding, false)
 	if !mac.Super || mac.Control || !other.Control || other.Super {
 		t.Fatalf("mac %+v, other %+v", mac, other)
-	}
-	if got := Display(binding, true); got != "⌘S" {
-		t.Fatalf("mac label %q", got)
-	}
-	if got := Display(binding, false); got != "Ctrl+S" {
-		t.Fatalf("label %q", got)
 	}
 	if got := KbdKeys(bind(" ", modifierPrimary, modifierShift), true); len(got) != 3 || got[0] != "shift" || got[1] != "meta" || got[2] != "space" {
 		t.Fatalf("kbd %v", got)

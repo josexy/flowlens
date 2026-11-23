@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/josexy/flowlens/internal/desktop/rewrite"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/settings"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	appservice "github.com/josexy/flowlens/internal/services/app_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
@@ -25,13 +25,12 @@ func TestAutomaticUpdateRestartUsesLifecycleWithoutAWindow(t *testing.T) {
 				guarded = reason == quitReasonUpdate
 				return blocked
 			})
-			service, bus := appservice.New(), serviceruntime.NewBus()
+			service := appservice.New()
 			engine := newEngineFixture(func(_ context.Context, progress func(int64, int64)) error {
 				progress(100, 100)
 				return nil
 			}).engine
 			engine.reporter = service
-			service.SetEventBus(bus)
 			service.SetUpdateEngine(engine, appservice.UpdateApplyModeSelf)
 			if err := service.ServiceStartup(t.Context()); err != nil {
 				t.Fatal(err)
@@ -40,11 +39,10 @@ func TestAutomaticUpdateRestartUsesLifecycleWithoutAWindow(t *testing.T) {
 			var failed []error
 			handler := restartHandler(f, &failed)
 			requested := make(chan struct{}, 2)
-			off := bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) {
+			service.SetRestartRequester(func() {
 				handler.request()
 				requested <- struct{}{}
 			})
-			t.Cleanup(off)
 			if err := service.CheckForUpdates(); err != nil {
 				t.Fatal(err)
 			}
@@ -81,8 +79,29 @@ func TestAutomaticUpdateRestartUsesLifecycleWithoutAWindow(t *testing.T) {
 func restartHandler(f *lifecycleFixture, failed *[]error) *updateRestartHandler {
 	return &updateRestartHandler{
 		blocked: func(proceed func()) bool { return f.lifecycle.blockedByGuards(quitReasonUpdate, proceed) },
+		onMain:  func(fn func()) { fn() },
 		restart: f.lifecycle.restartForUpdate,
 		failed:  func(err error) { *failed = append(*failed, err) },
+	}
+}
+
+func TestUpdateRestartAsksTheGuardsOnTheMainThread(t *testing.T) {
+	var onMain atomic.Bool
+	var guardedOnMain []bool
+	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, func(string, func()) bool {
+		guardedOnMain = append(guardedOnMain, onMain.Load())
+		return false
+	})
+	var failed []error
+	handler := restartHandler(f, &failed)
+	handler.onMain = func(fn func()) {
+		onMain.Store(true)
+		defer onMain.Store(false)
+		fn()
+	}
+	handler.request()
+	if len(guardedOnMain) != 1 || !guardedOnMain[0] || !f.lifecycle.relaunch.Load() {
+		t.Fatalf("guards on the main thread: %v, relaunch %t", guardedOnMain, f.lifecycle.relaunch.Load())
 	}
 }
 
@@ -132,27 +151,16 @@ func TestDirtyWorkBlocksUpdateRestartUntilResolved(t *testing.T) {
 }
 
 func TestRewriteDraftsBlockUpdateRestart(t *testing.T) {
-	rewrite := &rewriteQuitGuard{}
-	rewrite.setDirty(true)
-	var request *rewriteQuitRequest
-	var proceed func()
-	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, func(reason string, next func()) bool {
-		blocked, asked := rewrite.request(reason)
-		if asked != nil {
-			request, proceed = asked, next
-		}
-		return blocked
-	})
+	view := &fakeRewriteView{dirty: true}
+	guard := &rewriteQuitGuard{view: view}
+	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, guard.guard)
 	var failed []error
 	handler := restartHandler(f, &failed)
 	handler.request()
-	if request == nil || request.Reason != quitReasonUpdate || f.lifecycle.relaunch.Load() {
-		t.Fatalf("%+v", request)
+	if len(view.askedReasons()) != 1 || view.askedReasons()[0] != quitReasonUpdate || f.lifecycle.relaunch.Load() {
+		t.Fatalf("asked %v", view.askedReasons())
 	}
-	if _, confirmed := rewrite.confirm(request.RequestID, request.Reason, "discard"); !confirmed {
-		t.Fatal("confirmed")
-	}
-	proceed()
+	view.reply(rewrite.DecisionDiscard)
 	deadline := time.Now().Add(2 * time.Second)
 	for !f.lifecycle.relaunch.Load() && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
@@ -160,6 +168,13 @@ func TestRewriteDraftsBlockUpdateRestart(t *testing.T) {
 	if !f.lifecycle.relaunch.Load() {
 		t.Fatal("discarded drafts allow the restart")
 	}
+}
+
+// makeSettingsDirty gives the open Settings window an unsaved change.
+func makeSettingsDirty(controller *settingsWindowController) {
+	settings := controller.data.Settings
+	settings.Draft.CommonConfig.DisableAnimations = !settings.Draft.CommonConfig.DisableAnimations
+	settings.SyncDirty()
 }
 
 func settingsGuardFixture(t *testing.T, service *settingservice.SettingService) (*settingsWindowController, *widgets.ConfirmDialog, func()) {
@@ -187,7 +202,7 @@ func TestDirtySettingsBlockUpdateRestart(t *testing.T) {
 	var confirm *widgets.ConfirmDialog
 	var drain func()
 	controller, confirm, drain = settingsGuardFixture(t, f.settings)
-	controller.dirty.Store(true)
+	makeSettingsDirty(controller)
 	var failed []error
 	handler := restartHandler(f, &failed)
 	handler.request()
@@ -203,7 +218,7 @@ func TestDirtySettingsBlockUpdateRestart(t *testing.T) {
 		drain()
 		time.Sleep(time.Millisecond)
 	}
-	if !f.lifecycle.relaunch.Load() || controller.dirty.Load() {
+	if !f.lifecycle.relaunch.Load() || controller.view.Dirty() {
 		t.Fatal("confirmed discard restarts")
 	}
 }
@@ -216,13 +231,13 @@ func TestDecliningDirtySettingsKeepsRunning(t *testing.T) {
 	var confirm *widgets.ConfirmDialog
 	var drain func()
 	controller, confirm, drain = settingsGuardFixture(t, f.settings)
-	controller.dirty.Store(true)
+	makeSettingsDirty(controller)
 	var failed []error
 	handler := restartHandler(f, &failed)
 	handler.request()
 	drain()
 	confirm.Cancel()
-	if f.lifecycle.relaunch.Load() || !controller.dirty.Load() || controller.asking.Load() {
+	if f.lifecycle.relaunch.Load() || !controller.view.Dirty() || controller.asking {
 		t.Fatal("keeps editing")
 	}
 	handler.request()
@@ -259,5 +274,41 @@ func TestRestartRefusedDuringShutdown(t *testing.T) {
 	}
 	if err := f.lifecycle.restartForUpdate(); err == nil || f.lifecycle.relaunch.Load() {
 		t.Fatal("shutdown blocks restart")
+	}
+}
+
+func TestUpdateRestartWaitsForBothPrompts(t *testing.T) {
+	var controller *settingsWindowController
+	view := &fakeRewriteView{dirty: true}
+	rewriteGuard := &rewriteQuitGuard{view: view}
+	f := newLifecycleFixture(t, settingservice.MainWindowCloseBehaviorQuit, func(reason string, next func()) bool {
+		return controller.quitGuard(reason, next)
+	}, rewriteGuard.guard)
+	var confirm *widgets.ConfirmDialog
+	var drain func()
+	controller, confirm, drain = settingsGuardFixture(t, f.settings)
+	makeSettingsDirty(controller)
+	var failed []error
+	handler := restartHandler(f, &failed)
+	handler.request()
+	drain()
+	if !confirm.Open() || len(view.askedReasons()) != 0 || f.lifecycle.relaunch.Load() {
+		t.Fatal("the Settings prompt comes first")
+	}
+	confirm.Accept()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(view.askedReasons()) == 0 && time.Now().Before(deadline) {
+		drain()
+		time.Sleep(time.Millisecond)
+	}
+	if len(view.askedReasons()) != 1 || view.askedReasons()[0] != quitReasonUpdate || f.lifecycle.relaunch.Load() {
+		t.Fatalf("the rewrite prompt follows the Settings prompt: asked %v, relaunch %t", view.askedReasons(), f.lifecycle.relaunch.Load())
+	}
+	view.reply(rewrite.DecisionSave)
+	for !f.lifecycle.relaunch.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !f.lifecycle.relaunch.Load() || len(failed) != 0 {
+		t.Fatalf("restart after both prompts: relaunch %t, failures %v", f.lifecycle.relaunch.Load(), failed)
 	}
 }

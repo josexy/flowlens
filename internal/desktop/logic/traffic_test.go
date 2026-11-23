@@ -348,12 +348,6 @@ func TestIncompleteMetricsStayLast(t *testing.T) {
 	}
 }
 
-func TestSortCycle(t *testing.T) {
-	if NextSortOrder(SortNone) != SortAsc || NextSortOrder(SortAsc) != SortDesc || NextSortOrder(SortDesc) != SortNone {
-		t.Fatal("cycle")
-	}
-}
-
 func TestSortedTextIgnoresCase(t *testing.T) {
 	sorter := NewTrafficTableSorter()
 	a, b, c := tableEntry(1, 0), tableEntry(2, 0), tableEntry(3, 0)

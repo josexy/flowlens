@@ -1,8 +1,6 @@
 package app
 
 import (
-	"sync/atomic"
-
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/settings"
@@ -24,8 +22,8 @@ type settingsWindowController struct {
 
 	window *mygo.Window
 	view   *settings.View
-	dirty  atomic.Bool
-	asking atomic.Bool
+	// asking is true while the window asks about unsaved changes.
+	asking bool
 }
 
 func newSettingsWindowController(all *services, data *store.Store, restart func()) *settingsWindowController {
@@ -99,8 +97,6 @@ func (s *settingsWindowController) host() settings.Host {
 		ClearLogs:    all.logging.ClearLogs,
 		OpenLogDir:   all.logging.OpenLogDir,
 		DataSize:     func() (proxyservice.LocalDataSize, error) { return all.proxy.GetLocalDataSize() },
-		ClearCache:   all.proxy.ClearCacheFiles,
-		ClearAllData: all.proxy.ClearCacheAndHistory,
 		PythonStatus: all.python.GetRuntimeStatus,
 		TestPython:   all.python.TestInterpreter,
 		FindPython:   all.python.DiscoverInterpreters,
@@ -109,7 +105,6 @@ func (s *settingsWindowController) host() settings.Host {
 				s.window.Destroy()
 			}
 		},
-		DirtyChanged: s.dirty.Store,
 	}
 }
 
@@ -147,36 +142,29 @@ func (s *settingsWindowController) open() {
 	})
 	window.OnClosed(func() {
 		s.data.Runtime.Dispatcher.Unregister(settingsWindowName)
-		s.dirty.Store(false)
-		s.window, s.view = nil, nil
+		s.window, s.view, s.asking = nil, nil, false
 	})
 	window.Show()
 	window.Focus()
 }
 
-// quitGuard asks before unsaved settings are lost to a quit or update.
+// quitGuard asks before unsaved settings are lost to a quit or update. It
+// runs on the main thread and reads the window's state directly.
 func (s *settingsWindowController) quitGuard(reason string, proceed func()) bool {
-	if !s.dirty.Load() {
+	if s.view == nil || !s.view.Dirty() {
 		return false
 	}
-	if !s.asking.CompareAndSwap(false, true) {
+	if s.asking {
 		return true
 	}
-	s.data.Runtime.Dispatcher.Post(func() {
-		if s.view == nil {
-			s.asking.Store(false)
-			proceed()
-			return
-		}
-		if s.window != nil {
-			s.window.Show()
-			s.window.Focus()
-		}
-		s.view.AskDiscardBeforeQuit(reason == quitReasonUpdate, func() {
-			s.asking.Store(false)
-			s.dirty.Store(false)
-			proceed()
-		}, func() { s.asking.Store(false) })
-	})
+	s.asking = true
+	if s.window != nil {
+		s.window.Show()
+		s.window.Focus()
+	}
+	s.view.AskDiscardBeforeQuit(reason == quitReasonUpdate, func() {
+		s.asking = false
+		proceed()
+	}, func() { s.asking = false })
 	return true
 }

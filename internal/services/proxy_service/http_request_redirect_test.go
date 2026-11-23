@@ -74,7 +74,7 @@ func TestSendHTTPRequestRedirectLimit(t *testing.T) {
 					response, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{
 						ProxyMode: SendRequestProxyModeNone, Protocol: transport.protocol,
 						HTTP2Fingerprint: transport.fingerprint, SkipVerifyTLS: true, MaxRedirects: tc.limit,
-					}, http.MethodGet, server.URL+"/0", nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+					}, http.MethodGet, server.URL+"/0", nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -134,7 +134,7 @@ func TestSendHTTPRequestRedirectMethodsAndFileCleanup(t *testing.T) {
 					ProxyMode: SendRequestProxyModeNone, MaxRedirects: limit,
 				}, http.MethodPost, server.URL, nil, SendRequestBody{
 					BodyType: SendRequestBodyTypeFile, File: &SendRequestFile{Path: path},
-				})
+				}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -166,7 +166,7 @@ func TestSendHTTPRequestRejectsNegativeRedirectLimitBeforeHooks(t *testing.T) {
 	svc.SetHTTPRequestPluginRunner(runner)
 	_, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{
 		ProxyMode: SendRequestProxyModeNone, MaxRedirects: -1,
-	}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+	}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 	if err == nil || !strings.Contains(err.Error(), "max redirects") || requests.Load() != 0 || runner.beginCount.Load() != 0 {
 		t.Fatalf("err=%v requests=%d plugin starts=%d", err, requests.Load(), runner.beginCount.Load())
 	}
@@ -194,7 +194,7 @@ func TestSendHTTPRequestRedirectLimitRunsHooksOnce(t *testing.T) {
 			svc.SetHTTPRequestPluginRunner(runner)
 			_, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{
 				ProxyMode: SendRequestProxyModeNone, MaxRedirects: limit,
-			}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+			}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +224,7 @@ func TestSendHTTPRequestRedirectCancellation(t *testing.T) {
 	go func() {
 		_, err := svc.SendHTTPRequest(ctx, SendRequestConfig{
 			ProxyMode: SendRequestProxyModeNone, MaxRedirects: 1, TimeoutMs: 5000,
-		}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+		}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 		done <- err
 	}()
 	select {
@@ -261,7 +261,7 @@ func TestSendHTTPRequestTimeoutCoversRedirectChain(t *testing.T) {
 	svc := newTestProxyService(t, &settingservice.ProxyConfig{})
 	_, err := svc.SendHTTPRequest(context.Background(), SendRequestConfig{
 		ProxyMode: SendRequestProxyModeNone, MaxRedirects: 20, TimeoutMs: 150,
-	}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone})
+	}, http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone}, nil)
 	var timeout net.Error
 	if !errors.As(err, &timeout) || !timeout.Timeout() || requests.Load() >= 21 {
 		t.Fatalf("chain should time out before reaching the redirect limit: requests=%d err=%v", requests.Load(), err)

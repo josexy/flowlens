@@ -1,11 +1,13 @@
 package store
 
 import (
+	"maps"
+	"slices"
 	"sync/atomic"
 	"time"
 
+	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 )
 
@@ -33,86 +35,139 @@ func (c dispatcherClock) After(d time.Duration, fn func()) func() {
 	}
 }
 
-type eventListener struct {
-	onData    func(any)
-	onDropped func(uint64)
+// listeners holds the main-thread listeners of one kind of value. Removing a
+// listener replaces the slice, so delivery can iterate a snapshot while a
+// listener unsubscribes.
+type listeners[T any] struct {
+	next  uint64
+	items []listenerEntry[T]
 }
 
-// EventRouter delivers batched backend events to their listeners on the main
-// thread, keeping publication order.
-type EventRouter struct {
-	listeners map[string][]*eventListener
+type listenerEntry[T any] struct {
+	id uint64
+	fn func(T)
 }
 
-// NewEventRouter returns a router without listeners.
-func NewEventRouter() *EventRouter {
-	return &EventRouter{listeners: make(map[string][]*eventListener)}
-}
-
-// Subscribe adds a listener for name. onDropped, if set, hears how many events
-// of that name were lost, so the listener can recover from a snapshot.
-func (r *EventRouter) Subscribe(name string, onData func(any), onDropped func(uint64)) (off func()) {
-	listener := &eventListener{onData: onData, onDropped: onDropped}
-	r.listeners[name] = append(r.listeners[name], listener)
+func (l *listeners[T]) add(fn func(T)) (off func()) {
+	l.next++
+	id := l.next
+	l.items = append(l.items[:len(l.items):len(l.items)], listenerEntry[T]{id: id, fn: fn})
 	active := true
 	return func() {
 		if !active {
 			return
 		}
 		active = false
-		current := r.listeners[name]
-		next := make([]*eventListener, 0, len(current))
-		for _, candidate := range current {
-			if candidate != listener {
-				next = append(next, candidate)
+		next := make([]listenerEntry[T], 0, len(l.items))
+		for _, item := range l.items {
+			if item.id != id {
+				next = append(next, item)
 			}
 		}
-		if len(next) == 0 {
-			delete(r.listeners, name)
-			return
-		}
-		r.listeners[name] = next
+		l.items = next
 	}
+}
+
+func (l *listeners[T]) call(value T) {
+	for _, item := range l.items {
+		item.fn(value)
+	}
+}
+
+// EventRouter delivers live batches to typed listeners on the main thread,
+// keeping publication order. All methods run on the main thread.
+type EventRouter struct {
+	entries     listeners[*logic.TrafficEntry]
+	patches     listeners[*logic.TrafficPatch]
+	liveUpdates listeners[proxyservice.TrafficLiveUpdate]
+	resets      listeners[uint64]
+	dropped     map[proxyservice.LiveEventKind]*listeners[uint64]
+}
+
+// NewEventRouter returns a router without listeners.
+func NewEventRouter() *EventRouter {
+	return &EventRouter{dropped: make(map[proxyservice.LiveEventKind]*listeners[uint64])}
+}
+
+// OnTrafficEntry hears complete live capture entries.
+func (r *EventRouter) OnTrafficEntry(fn func(*logic.TrafficEntry)) (off func()) {
+	return r.entries.add(fn)
+}
+
+// OnTrafficPatch hears updates of live capture entries.
+func (r *EventRouter) OnTrafficPatch(fn func(*logic.TrafficPatch)) (off func()) {
+	return r.patches.add(fn)
+}
+
+// OnTrafficLiveUpdate hears SSE and WebSocket data of the entry in the detail
+// panel.
+func (r *EventRouter) OnTrafficLiveUpdate(fn func(proxyservice.TrafficLiveUpdate)) (off func()) {
+	return r.liveUpdates.add(fn)
+}
+
+// OnTrafficReset hears the start of a new capture generation.
+func (r *EventRouter) OnTrafficReset(fn func(captureGeneration uint64)) (off func()) {
+	return r.resets.add(fn)
+}
+
+// OnDropped hears how many events of kind were lost, so the listener can
+// recover from a snapshot.
+func (r *EventRouter) OnDropped(kind proxyservice.LiveEventKind, fn func(count uint64)) (off func()) {
+	drops := r.dropped[kind]
+	if drops == nil {
+		drops = &listeners[uint64]{}
+		r.dropped[kind] = drops
+	}
+	return drops.add(fn)
 }
 
 // ListenerCount returns the number of subscribed listeners.
 func (r *EventRouter) ListenerCount() int {
-	count := 0
-	for _, listeners := range r.listeners {
-		count += len(listeners)
+	count := len(r.entries.items) + len(r.patches.items) + len(r.liveUpdates.items) + len(r.resets.items)
+	for _, drops := range r.dropped {
+		count += len(drops.items)
 	}
 	return count
 }
 
-// Dispatch delivers a batch: events in order, then drop counts.
-func (r *EventRouter) Dispatch(batch proxyservice.FrontendEventBatch) {
+// Dispatch delivers a batch: events in order, then drop counts by kind.
+// Request-editor stream and session events go to the sink of the operation
+// that started them.
+func (r *EventRouter) Dispatch(batch proxyservice.LiveBatch) {
 	for _, event := range batch.Events {
-		for _, listener := range r.listeners[event.Name] {
-			listener.onData(event.Data)
+		switch event := event.(type) {
+		case proxyservice.TrafficEntryEvent:
+			if event.Entry != nil {
+				r.entries.call(event.Entry)
+			}
+		case proxyservice.TrafficPatchEvent:
+			r.patches.call(&event.Patch)
+		case proxyservice.TrafficLiveUpdateEvent:
+			r.liveUpdates.call(event.Update)
+		case proxyservice.TrafficResetEvent:
+			r.resets.call(event.CaptureGeneration)
+		case proxyservice.HTTPStreamEvent:
+			event.Deliver()
+		case proxyservice.WebSocketEvent:
+			event.Deliver()
 		}
 	}
-	for name, count := range batch.Dropped {
-		if count == 0 {
-			continue
-		}
-		for _, listener := range r.listeners[name] {
-			if listener.onDropped != nil {
-				listener.onDropped(count)
+	kinds := slices.Sorted(maps.Keys(batch.Dropped))
+	for _, kind := range kinds {
+		if count := batch.Dropped[kind]; count != 0 {
+			if drops := r.dropped[kind]; drops != nil {
+				drops.call(count)
 			}
 		}
 	}
 }
 
-// Connect feeds batches from bus through post, which must run its function on
-// the main thread. One batch causes one redraw. Each batch is claimed until it
-// has been dispatched, so at most one batch waits for the main thread and
+// Connect feeds batches from live through post, which must run its function
+// on the main thread. One batch causes one redraw. Each batch is claimed until
+// it has been dispatched, so at most one batch waits for the main thread and
 // events published meanwhile stay within the backend's pending bound.
-func (r *EventRouter) Connect(bus serviceruntime.EventBus, post func(func())) (off func()) {
-	return bus.On(proxyservice.BatchedAppEventName, func(event serviceruntime.Event) {
-		batch, ok := event.Data.(proxyservice.FrontendEventBatch)
-		if !ok {
-			return
-		}
+func (r *EventRouter) Connect(live Topic[proxyservice.LiveBatch], post func(func())) (off func()) {
+	return live.Subscribe(func(batch proxyservice.LiveBatch) {
 		release := batch.Claim()
 		post(func() {
 			defer release()

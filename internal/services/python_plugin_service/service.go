@@ -22,13 +22,7 @@ import (
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
 
-const (
-	RegistryEventName = "python-plugins:registry"
-	StatusEventName   = "python-plugins:status"
-	LogEventName      = "python-plugins:log"
-
-	workerShutdownWait = 5 * time.Second
-)
+const workerShutdownWait = 5 * time.Second
 
 type ManagedPluginFile struct {
 	Path    string `json:"path"`
@@ -73,7 +67,16 @@ type PluginLogEntry struct {
 	Timestamp   int64  `json:"timestamp"`
 }
 
-type serviceEventEmitter func(name string, value any)
+// Events are the values the Python plugin service publishes. Subscribers
+// must not block.
+type Events struct {
+	// Registry tells that plugins or their rules changed.
+	Registry serviceruntime.Topic[RegistryEvent]
+	// Status is the runtime's state after it changes.
+	Status serviceruntime.Topic[StatusEvent]
+	// Log is one line of plugin output for the request editor console.
+	Log serviceruntime.Topic[PluginLogEntry]
+}
 
 type PythonPluginService struct {
 	repository  *repository
@@ -85,8 +88,8 @@ type PythonPluginService struct {
 	baseMu     sync.RWMutex
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
-	events     serviceruntime.EventBus
-	emit       serviceEventEmitter
+	// Events publishes registry, status, and console output changes.
+	Events Events
 
 	mutationMu sync.Mutex
 	runtimeMu  sync.Mutex
@@ -111,7 +114,6 @@ func New(db *sql.DB, settings *settingservice.SettingService) (*PythonPluginServ
 		settings,
 		filepath.Join(baseDir, "python_plugins"),
 		filepath.Join(baseDir, "python_plugin_runtime"),
-		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -124,7 +126,6 @@ func newWithPaths(
 	settings *settingservice.SettingService,
 	packagesRoot string,
 	runtimeRoot string,
-	emit serviceEventEmitter,
 ) (*PythonPluginService, error) {
 	if db == nil {
 		return nil, errors.New("python plugin database is not available")
@@ -137,7 +138,6 @@ func newWithPaths(
 		repository:  repository,
 		settings:    settings,
 		runtimeRoot: runtimeRoot,
-		emit:        emit,
 	}
 	packages, err := newPackageManager(repository, packagesRoot, runtimeRoot, service)
 	if err != nil {
@@ -825,7 +825,7 @@ func (s *PythonPluginService) handleWorkerLog(value WorkerLog) {
 		entry.Timestamp = time.Now().UnixMicro()
 	}
 	s.logWorkerEntry(entry)
-	s.emitEvent(LogEventName, entry)
+	s.Events.Log.Publish(entry)
 }
 
 func (s *PythonPluginService) logWorkerEntry(entry PluginLogEntry) {
@@ -843,7 +843,7 @@ func (s *PythonPluginService) logWorkerEntry(entry PluginLogEntry) {
 }
 
 func (s *PythonPluginService) emitRegistry(change, pluginID string) {
-	s.emitEvent(RegistryEventName, RegistryEvent{
+	s.Events.Registry.Publish(RegistryEvent{
 		EventID: s.eventID.Add(1), Change: change, PluginID: pluginID,
 	})
 }
@@ -857,20 +857,7 @@ func (s *PythonPluginService) emitStatus() {
 }
 
 func (s *PythonPluginService) emitStatusValue(status RuntimeStatus) {
-	s.emitEvent(StatusEventName, StatusEvent{EventID: s.eventID.Add(1), Status: status})
-}
-
-func (s *PythonPluginService) emitEvent(name string, value any) {
-	if s.emit != nil {
-		s.emit(name, value)
-		return
-	}
-	s.baseMu.RLock()
-	events := s.events
-	s.baseMu.RUnlock()
-	if events != nil {
-		events.Emit(name, value)
-	}
+	s.Events.Status.Publish(StatusEvent{EventID: s.eventID.Add(1), Status: status})
 }
 
 func sanitizeRuntimeError(err error) string {
@@ -918,11 +905,4 @@ func openDirectory(path string) error {
 	}
 	go func() { _ = command.Wait() }()
 	return nil
-}
-
-// SetEventBus sets where registry, status, and log events are published.
-func (s *PythonPluginService) SetEventBus(events serviceruntime.EventBus) {
-	s.baseMu.Lock()
-	defer s.baseMu.Unlock()
-	s.events = events
 }

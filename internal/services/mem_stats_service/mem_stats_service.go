@@ -9,9 +9,6 @@ import (
 	"github.com/josexy/flowlens/internal/serviceruntime"
 )
 
-// MemStatsEventName names the event that carries each sample.
-const MemStatsEventName = "memstats:update"
-
 // MemSnapshot holds one sample of FlowLens's memory.
 type MemSnapshot struct {
 	Timestamp int64         `json:"timestamp"` // Unix milliseconds
@@ -25,15 +22,23 @@ type MonitoringStatus struct {
 	IntervalMs int64 `json:"intervalMs"`
 }
 
+// Events are the values the memory monitoring service publishes. Subscribers
+// must not block.
+type Events struct {
+	// Snapshot is each memory sample.
+	Snapshot serviceruntime.Topic[MemSnapshot]
+}
+
 // MemStatsService exposes memory monitoring to the interface.
 type MemStatsService struct {
+	// Events publishes memory samples.
+	Events       Events
 	mu           sync.Mutex
 	sampler      *runtimeSampler
 	baseCtx      context.Context
 	baseCancel   context.CancelFunc
 	shutdownOnce sync.Once
 	monitorWG    sync.WaitGroup
-	events       serviceruntime.EventBus
 	monitoring   bool
 	shuttingDown bool
 	intervalMs   int64
@@ -139,7 +144,7 @@ func (s *MemStatsService) monitorLoop(intervalMs int64, stopCh chan struct{}) {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	defer ticker.Stop()
 
-	// Emit immediately on start so the frontend gets data right away.
+	// Publish immediately on start so the interface gets data right away.
 	s.emit(s.snapshot())
 
 	for {
@@ -155,10 +160,7 @@ func (s *MemStatsService) monitorLoop(intervalMs int64, stopCh chan struct{}) {
 }
 
 func (s *MemStatsService) emit(snapshot MemSnapshot) {
-	if s.events == nil {
-		return
-	}
-	_ = s.events.Emit(MemStatsEventName, snapshot)
+	s.Events.Snapshot.Publish(snapshot)
 }
 
 // snapshot samples the process and the Go runtime without stopping the world.
@@ -169,6 +171,3 @@ func (s *MemStatsService) snapshot() MemSnapshot {
 		Runtime:   s.sampler.read(),
 	}
 }
-
-// SetEventBus sets where memory snapshots are published.
-func (s *MemStatsService) SetEventBus(events serviceruntime.EventBus) { s.events = events }

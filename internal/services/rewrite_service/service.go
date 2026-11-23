@@ -13,15 +13,26 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/josexy/flowlens/internal/pkg/logger"
+	"github.com/josexy/flowlens/internal/serviceruntime"
 )
 
 var ErrRevisionConflict = errors.New("rewrite rules revision conflict; reload before saving")
 
+// Events are the values the rewrite service publishes. Subscribers must not
+// block.
+type Events struct {
+	// Changed tells that a mutation committed a new revision of the rules.
+	Changed serviceruntime.Topic[Changed]
+}
+
 type RewriteService struct {
+	// Events publishes rule changes.
+	Events   Events
 	db       *sql.DB
 	mu       sync.Mutex
 	snapshot atomic.Pointer[Snapshot]
-	changed  func(Changed)
+	// stopped ends change notifications once Shutdown returns.
+	stopped bool
 
 	loadOnce   sync.Once
 	loadDone   chan struct{}
@@ -34,12 +45,6 @@ func New(db *sql.DB) *RewriteService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &RewriteService{db: db, loadDone: make(chan struct{}), loadCtx: ctx, loadCancel: cancel}
 }
-func SetChangedHandler(s *RewriteService, f func(Changed)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.changed = f
-}
-
 func (s *RewriteService) Snapshot() *Snapshot {
 	if s == nil {
 		return nil
@@ -114,7 +119,7 @@ func (s *RewriteService) Shutdown() error {
 	<-s.loadDone
 	s.mu.Lock()
 	// Wait for any committed mutation's notification before releasing the app.
-	s.changed = nil
+	s.stopped = true
 	s.mu.Unlock()
 	return nil
 }
@@ -280,8 +285,8 @@ func (s *RewriteService) mutate(revision int64, edit func(*State) error) (State,
 		return State{}, err
 	}
 	s.snapshot.Store(&Snapshot{candidate, compiled})
-	if s.changed != nil {
-		s.changed(Changed{candidate.Revision})
+	if !s.stopped {
+		s.Events.Changed.Publish(Changed{candidate.Revision})
 	}
 	return cloneState(candidate), nil
 }

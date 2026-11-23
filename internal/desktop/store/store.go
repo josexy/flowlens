@@ -6,6 +6,7 @@ package store
 import (
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
+	rewriteservice "github.com/josexy/flowlens/internal/services/rewrite_service"
 )
 
 // Runtime carries the interface's threading primitives into each store.
@@ -26,6 +27,13 @@ func (r Runtime) Close() {
 	r.Dispatcher.Close()
 }
 
+// Topic is a service topic as the stores use it. serviceruntime.Topic
+// satisfies it. A subscriber only posts to the dispatcher, so it never
+// blocks the publisher.
+type Topic[T any] interface {
+	Subscribe(fn func(T)) (off func())
+}
+
 // Store is the root of the application state.
 type Store struct {
 	Runtime    Runtime
@@ -44,11 +52,17 @@ type Store struct {
 	MemStats   *MemStatsStore
 	// ShuttingDown makes the main window show the shutdown indicator.
 	ShuttingDown bool
+	// ClearProcessIcons forgets the process icons the windows hold, after
+	// local data is cleared.
+	ClearProcessIcons func()
+
+	storage StorageBackend
 }
 
 // Dependencies are the services the stores use.
 type Dependencies struct {
 	Settings     SettingsDependencies
+	Storage      StorageBackend
 	Updater      UpdaterBackend
 	MemStats     MemStatsBackend
 	Traffic      TrafficBackend
@@ -60,8 +74,8 @@ type Dependencies struct {
 	Rewrite      RewriteBackend
 	Plugins      PluginBackend
 	PluginEvents PluginEvents
-	// RewriteChanges subscribes to rule changes.
-	RewriteChanges func(func(revision int64)) (off func())
+	// RewriteChanges publishes rule changes.
+	RewriteChanges Topic[rewriteservice.Changed]
 }
 
 // New returns a Store with empty state.
@@ -72,6 +86,7 @@ func New(rt Runtime, dependencies Dependencies) *Store {
 		Settings:  NewSettingsStore(rt, dependencies.Settings),
 		Workbench: NewWorkbenchStore(),
 		Events:    events,
+		storage:   dependencies.Storage,
 	}
 	if dependencies.Traffic != nil {
 		data.Traffic = NewTrafficStore(rt, dependencies.Traffic, events, nil)
@@ -92,7 +107,7 @@ func New(rt Runtime, dependencies Dependencies) *Store {
 		data.History = NewHistoryStore(rt, dependencies.History)
 	}
 	if dependencies.Requests != nil {
-		data.Workspace = NewWorkspaceStore(rt, dependencies.Requests, dependencies.Saved, events, nil)
+		data.Workspace = NewWorkspaceStore(rt, dependencies.Requests, dependencies.Saved, nil)
 	}
 	if dependencies.Rewrite != nil {
 		data.Rewrite = NewRewriteStore(rt, dependencies.Rewrite, dependencies.RewriteChanges)

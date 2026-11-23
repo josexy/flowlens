@@ -105,16 +105,12 @@ func (s *ProxyService) restoreManagedSystemProxy() error {
 		return nil
 	}
 	err := s.systemProxy.Restore()
-	if s.events != nil {
-		s.emitSystemProxyStatus(s.GetSystemProxyStatus())
-	}
+	s.emitSystemProxyStatus(s.GetSystemProxyStatus())
 	return err
 }
 
 func (s *ProxyService) emitSystemProxyStatus(status SystemProxyStatus) {
-	if s.events != nil {
-		_ = s.events.Emit(systemProxyStatusEventName, status)
-	}
+	s.Events.SystemProxy.Publish(status)
 }
 
 func (s *ProxyService) resolveMITMUpstreamProxy(cfg *settingservice.ProxyConfig) string {

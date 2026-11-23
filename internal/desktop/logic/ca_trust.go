@@ -4,12 +4,14 @@ import settingservice "github.com/josexy/flowlens/internal/services/setting_serv
 
 // CATrustInput is what decides the certificate panel's actions.
 type CATrustInput struct {
-	UseBuiltinCA     bool
-	Info             *settingservice.CACertificateInfo
-	Trust            *settingservice.CACertificateTrustStatus
-	TrustLoading     bool
-	TrustLoadFailed  bool
-	ChangingTrust    bool
+	UseBuiltinCA    bool
+	Info            *settingservice.CACertificateInfo
+	Trust           *settingservice.CACertificateTrustStatus
+	TrustLoading    bool
+	TrustLoadFailed bool
+	ChangingTrust   bool
+	// SettingsDirty is set while the draft's certificate configuration
+	// differs from the saved one, which the actions apply to.
 	SettingsDirty    bool
 	HasExistingFiles bool
 	Generating       bool
@@ -46,6 +48,27 @@ const (
 	CAToneWarning
 )
 
+// CAActionHint explains the trust button's state.
+type CAActionHint int
+
+// Trust button hints.
+const (
+	CAActionHintAction CAActionHint = iota // names the action
+	CAActionHintLoading
+	CAActionHintSaveFirst
+	CAActionHintUnavailable
+)
+
+// CAPanelHint is the note the certificate panel shows under its status.
+type CAPanelHint int
+
+// Panel hints.
+const (
+	CAPanelHintNone CAPanelHint = iota
+	CAPanelHintSaveFirst
+	CAPanelHintUninstallFirst
+)
+
 // CAGenerationHint explains the generate button's state.
 type CAGenerationHint int
 
@@ -75,13 +98,19 @@ const (
 
 // CATrustState is the certificate panel's derived state.
 type CATrustState struct {
+	// TrustActions is set when the platform offers the trust button.
+	TrustActions bool
+	// ShowSummary is set when the panel shows the trust summary.
+	ShowSummary        bool
 	Action             CATrustAction
 	ActionDisabled     bool
+	ActionHint         CAActionHint
 	GenerationDisabled bool
 	GenerationHint     CAGenerationHint
 	Summary            CATrustSummary
 	SummaryTone        CATone
 	Status             CAStatus
+	PanelHint          CAPanelHint
 }
 
 // DeriveCATrustState computes the certificate panel's state.
@@ -92,16 +121,27 @@ func DeriveCATrustState(in CATrustInput) CATrustState {
 	hasEntry := trust != nil && (trust.Present || trust.Installed)
 	installed := trust != nil && trust.Installed
 	fingerprint := trust != nil && trust.SHA256Fingerprint != ""
+	supported := trust != nil && trust.Supported
 
 	var state CATrustState
+	state.TrustActions = supported
+	state.ShowSummary = supported || in.TrustLoadFailed
 	if hasEntry {
 		state.Action = CATrustUninstall
 	}
 	state.ActionDisabled = unknown || in.Generating || in.ChangingTrust || in.SettingsDirty ||
 		!fingerprint || (!hasEntry && !ready)
+	switch {
+	case in.TrustLoading:
+		state.ActionHint = CAActionHintLoading
+	case in.SettingsDirty:
+		state.ActionHint = CAActionHintSaveFirst
+	case unknown:
+		state.ActionHint = CAActionHintUnavailable
+	}
 	state.GenerationDisabled = !in.UseBuiltinCA || in.SettingsDirty || in.Generating ||
 		in.TrustLoading || in.TrustLoadFailed || in.ChangingTrust ||
-		(trust != nil && trust.Supported && (hasEntry || (trust.Error != "" && fingerprint)))
+		(supported && (hasEntry || (trust.Error != "" && fingerprint)))
 
 	switch {
 	case !in.UseBuiltinCA:
@@ -110,7 +150,7 @@ func DeriveCATrustState(in CATrustInput) CATrustState {
 		state.GenerationHint = CAHintSaveFirst
 	case in.TrustLoading:
 		state.GenerationHint = CAHintLoading
-	case trust != nil && trust.Supported && hasEntry:
+	case supported && hasEntry:
 		state.GenerationHint = CAHintUninstallFirst
 	case state.GenerationDisabled && unknown:
 		state.GenerationHint = CAHintStatusUnavailable
@@ -146,6 +186,13 @@ func DeriveCATrustState(in CATrustInput) CATrustState {
 		state.Status = CAStatusNotCA
 	default:
 		state.Status = CAStatusIncomplete
+	}
+
+	switch {
+	case in.SettingsDirty && (in.UseBuiltinCA || supported):
+		state.PanelHint = CAPanelHintSaveFirst
+	case in.UseBuiltinCA && supported && hasEntry && !unknown:
+		state.PanelHint = CAPanelHintUninstallFirst
 	}
 	return state
 }
