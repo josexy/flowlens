@@ -191,7 +191,7 @@ type toolButton struct {
 	disabled bool
 	kbds     []string
 	run      func()
-	// quick makes it a proxy toolbar setting: larger, with a tight padding.
+	// quick gives proxy toolbar settings compact square padding.
 	quick bool
 	// color is the button's color when it is not active, Neutral by default.
 	color nui.Color
@@ -217,7 +217,7 @@ func toolbarButton(c *ui.Context, theme nui.Theme, b toolButton) ui.Element {
 		AccessibleLabel: label, Disabled: b.disabled,
 	}
 	if b.quick {
-		options.Size, options.UI = nui.MD, quickButtonPadding
+		options.UI = quickButtonPadding
 	}
 	button := nui.Button(c.Key(b.key), theme, "", options)
 	if b.run != nil && !b.disabled {
@@ -248,7 +248,7 @@ func (w *Workspace) buildToolbar(c *ui.Context, theme nui.Theme) {
 	row := ui.Row(c).FillWidth().Shrink(0).MinHeight(36).AlignItems(ui.Center).Gap(8).PaddingX(8).PaddingY(4).Background(theme.MutedBackground)
 	row.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	row.Children(func() {
-		panel := ui.Row(c).Grow(1).Basis(0).MinWidth(0).MinHeight(28).AlignItems(ui.Center).Gap(8).PaddingX(8).Background(theme.Background).Radius(4)
+		panel := ui.Row(c).Grow(1).Basis(0).MinWidth(0).MinHeight(28).AlignItems(ui.Center).Gap(8).PaddingX(8).PaddingY(3).Background(theme.Background).Radius(4)
 		panel.Border(1, theme.Border).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).Children(func() {
 			w.statusText(c, theme, config)
 			ui.Row(c).AlignItems(ui.Center).Gap(4).Shrink(0).Children(func() {
