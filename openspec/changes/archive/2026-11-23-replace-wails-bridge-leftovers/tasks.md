@@ -93,7 +93,7 @@ Every command runs from the repository root with `CGO_ENABLED=0`, which the Task
   - no `json.Marshal` used for clones or snapshots.
 
   Record the commands and their output.
-- [ ] 10.4 Real-window acceptance on a desktop session:
+- [x] 10.4 Real-window acceptance on a Windows desktop session:
   - clear cache, then all data, with an open history, a draft-cache file in a request tab, and process icons shown;
   - save a proxy restart change in both languages;
   - stream an SSE response and Stop it, then send again;
@@ -101,7 +101,7 @@ Every command runs from the repository root with `CGO_ENABLED=0`, which the Task
   - run a Python script that prints 5,000 lines;
   - quit with dirty Settings and with dirty rewrite drafts, including during an update restart.
 
-  This machine is headless Linux arm64, so this task stays open until it is run on Linux, Windows, and macOS desktops, with the platform recorded for each.
+  The original implementation was verified on headless Linux arm64. At the user's direction on 2026-11-23, desktop acceptance is required only on Windows; Linux and macOS desktop acceptance are out of scope for this change. All six Windows scenarios passed on 2026-11-23 (Windows amd64, Python 3.12.10). Update restart used a temporary local update engine with the real windows, quit guards, shutdown, and relaunch; it did not download or replace an executable.
 - [x] 10.5 Run `openspec validate replace-wails-bridge-leftovers --strict --no-interactive`. Then compare the implementation with the `application-settings` and `service-event-delivery` deltas and design.md, scenario by scenario, listing the test or acceptance evidence for each, and record any gap.
 
 ## Workflow follow-up
