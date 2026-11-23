@@ -439,11 +439,9 @@ func (s *ProxyService) startLocked(paused bool) (ProxyStatus, error) {
 	s.ensureBodyCacheLocked()
 
 	var server *http.Server
-	var ln net.Listener
 	var serve func()
 	switch cfg.Mode {
 	case settingservice.ProxyModeSOCKS5:
-		ln = listener
 		serve = func() {
 			defer handler.Cleanup()
 			for {
@@ -480,7 +478,8 @@ func (s *ProxyService) startLocked(paused bool) (ProxyStatus, error) {
 
 	// Publish a complete lifecycle snapshot atomically: once running becomes
 	// observable, Stop can always find the matching cancel function and
-	// server/listener. lifecycleOpsMu keeps teardown out until serve is started.
+	// listener. Keep the HTTP listener too: Server.Close cannot close it until
+	// Serve registers it, which may happen after Start returns.
 	s.mu.Lock()
 	s.proxyServerCancel = proxyServerCancel
 	s.proxyHandler = handler
@@ -488,7 +487,7 @@ func (s *ProxyService) startLocked(paused bool) (ProxyStatus, error) {
 	s.antiCache.Store(cfg.AntiCache)
 	s.antiComp.Store(cfg.AntiComp)
 	s.server = server
-	s.ln = ln
+	s.ln = listener
 	s.enableFlushing.Store(true)
 	s.recordingPaused.Store(paused)
 	s.setStateLocked(true, listener.Addr().String())
