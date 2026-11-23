@@ -358,7 +358,7 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 		if proxy.Status.Running {
 			nui.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, []nui.MenuItem{{
 				ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
-				Disabled: busy, Shortcut: strings.Join(w.kbds(shortcuts.CaptureToggleProxy), "+"),
+				Disabled: busy,
 				// The trigger disappears after stopping; restore focus to the
 				// primary action without queueing focus on the hidden arrow.
 				Close: nui.Set(false),

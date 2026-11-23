@@ -31,7 +31,7 @@ Requests and connections already being recorded finish recording normally. This 
 
 Existing records remain available for inspection, saving, and export. Clearing traffic or restarting the capture session keeps recording paused. Configuration-driven proxy restarts also preserve pause. An explicit stop followed by **Start Proxy** enables recording, and pause is not remembered when the application restarts.
 
-To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
+To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. This menu item shows no shortcut hint; view or change the binding in **Settings > Shortcuts**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
 
 ### MITM Certificates
 
