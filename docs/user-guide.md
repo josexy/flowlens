@@ -31,7 +31,7 @@ Requests and connections already being recorded finish recording normally. This 
 
 Existing records remain available for inspection, saving, and export. Clearing traffic or restarting the capture session keeps recording paused. Configuration-driven proxy restarts also preserve pause. An explicit stop followed by **Start Proxy** enables recording, and pause is not remembered when the application restarts.
 
-To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
+To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. This menu item shows no shortcut hint; view or change the binding in **Settings > Shortcuts**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
 
 ### MITM Certificates
 
@@ -72,6 +72,8 @@ The globe control beside the HTTP cache control opens the DNS cache settings. En
 ## Inspect Traffic
 
 ### Traffic Tables
+
+Drag a column divider to resize it; widths, column order, and hidden columns are saved. Path initially uses the remaining space. Widths set by dragging stay fixed when the sidebar or window changes size. Extra space after fixed columns keeps the row background, and narrow tables scroll horizontally.
 
 In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. With the table focused, the arrow keys move the selection, Shift+arrows extend it, and `Primary+A` selects all.
 

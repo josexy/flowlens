@@ -2,10 +2,12 @@ package capture
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/locales"
 )
 
@@ -13,7 +15,7 @@ func TestHeaderResizeKeepsCaptureAcrossFastMoves(t *testing.T) {
 	for _, title := range []string{locales.TrafficHost(), locales.TrafficPath()} {
 		for _, dark := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/dark=%v", title, dark), func(t *testing.T) {
-				f := newFixture(t, entry(1, "a.test"))
+				f := newFixtureSized(t, []*logic.TrafficEntry{entry(1, "a.test")}, 2000, 800)
 				f.setDark(dark)
 				table := f.workspace.Table
 				header := headerRect(t, f, title)
@@ -51,5 +53,45 @@ func TestHeaderResizeKeepsCaptureAcrossFastMoves(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestResizingLastPathColumnPersistsItsWidth(t *testing.T) {
+	f := newFixtureSized(t, []*logic.TrafficEntry{entry(1, "a.test")}, 2000, 800)
+	table := f.workspace.Table
+	table.state.List.Columns.Order = append(slices.DeleteFunc(slices.Clone(table.state.List.Columns.Order), func(key string) bool { return key == "path" }), "path")
+	f.settle()
+	order := slices.Clone(table.state.List.Columns.Order)
+	for _, want := range []float32{150, 120} {
+		header := headerRect(t, f, locales.TrafficPath())
+		x, y := header.X+header.W-2, header.Y+header.H/2
+		target := x + want - header.W
+		if want == 120 {
+			target -= 100 // The native grip must stop at the 120-DIP minimum.
+		}
+		f.tester.Move(x, y)
+		f.tester.Press(x, y)
+		f.tester.Move(target, y)
+		f.tester.Release(target, y)
+		f.settle()
+		if got := headerRect(t, f, locales.TrafficPath()).W; got != want {
+			t.Fatalf("dragged path width %v, want %v", got, want)
+		}
+		snapshot, err := f.service.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := snapshot.TrafficTableConfig.ColumnWidths; !maps.Equal(got, map[string]float32{"path": want}) {
+			t.Fatalf("saved widths %v, want only path=%v", got, want)
+		}
+		if !slices.Equal(snapshot.TrafficTableConfig.ColumnOrder, order) {
+			t.Fatalf("saved order changed: %v", snapshot.TrafficTableConfig.ColumnOrder)
+		}
+	}
+	f.workspace.Table = NewTable(table.source, table.deps)
+	f.tester.SetSize(2400, 800)
+	f.settle()
+	if got := headerRect(t, f, locales.TrafficPath()).W; got != 120 {
+		t.Fatalf("recreated table did not retain dragged width: %v", got)
 	}
 }

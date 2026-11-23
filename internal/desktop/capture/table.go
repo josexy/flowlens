@@ -72,11 +72,10 @@ type Table struct {
 	rowsSort     logic.TrafficSort
 	rowsComputed bool
 
-	fullOrder     []string
-	layoutOrder   []string
-	layoutWidth   map[string]float32
-	loaded        bool
-	viewportWidth float32
+	fullOrder   []string
+	layoutOrder []string
+	layoutWidth map[string]float32
+	loaded      bool
 
 	hovered        bool
 	wasAtEdge      bool
@@ -386,55 +385,46 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.followNewest(rowsChanged)
 
 	columns := make([]nui.TableColumn[int], len(visible))
-	var fixedWidth float32
-	for _, column := range visible {
-		if column.key != logic.ColumnPath {
-			width := column.width
-			if saved := t.state.List.Columns.Widths[string(column.key)]; saved > 0 {
-				width = saved
-			}
-			fixedWidth += max(width, column.minWidth)
-		}
-	}
 	order := t.displayOrder(visible)
-	var totalWidth float32
+	// MyGo lays out an unsized Path in the current frame. Once resized,
+	// its saved width takes precedence, just like every other column.
+	flexPath := slices.ContainsFunc(visible, func(column columnDefinition) bool {
+		return column.key == logic.ColumnPath && t.state.List.Columns.Widths[string(column.key)] <= 0
+	})
+	// Fixed columns keep their exact widths. A native flex tail fills the
+	// remaining row background. Keep a small tail after a reordered flex
+	// Path too: MyGo omits the resize grip on the last flex column.
+	fill := !flexPath || len(order) > 0 && order[len(order)-1] == string(logic.ColumnPath)
 	for index, column := range visible {
-		width := column.width
-		if column.key == logic.ColumnPath && t.state.List.Columns.Widths[string(column.key)] <= 0 {
-			// Default width and drag minimum are separate: the first drag
-			// must be able to shrink below the readable 300-DIP default.
-			width = max(300, t.viewportWidth-fixedWidth)
-		}
 		columns[index] = nui.TableColumn[int]{
-			Title: column.title(), ID: string(column.key), Width: width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
+			Title: column.title(), ID: string(column.key), Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
 			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
 				t.CellBuilds++
 				key := string(column.key)
 				if key == order[0] {
 					t.noteRowSpan(cellFill(c, "row-span"), row)
 				}
-				t.cellBackground(c, theme, row, key == order[0], key == order[len(order)-1])
+				t.cellBackground(c, theme, row, key == order[0], !fill && key == order[len(order)-1])
 				t.cell(c, theme, t.rows[row], column.key)
 			},
 		}
-		if saved := t.state.List.Columns.Widths[string(column.key)]; saved > 0 {
-			width = saved
+	}
+	if fill {
+		var width float32
+		if flexPath {
+			width = 16
 		}
-		totalWidth += max(width, column.minWidth)
+		columns = append(columns, nui.TableColumn[int]{
+			ID: "row-fill", Width: width, Fixed: true,
+			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
+				if len(order) == 0 {
+					t.noteRowSpan(cellFill(c, "row-span"), row)
+				}
+				t.cellBackground(c, theme, row, len(order) == 0, true)
+			},
+		})
 	}
 	t.state.List.HeaderCell = t.headerCell(c, theme, visible)
-	if spare := t.viewportWidth - totalWidth; spare > 0 && len(order) > 0 {
-		// Saved widths (including Path), or a hidden Path, can leave unused
-		// room. Extend the last displayed column without saving that extra
-		// width; shrinking the viewport restores the user's preferred size.
-		last := slices.IndexFunc(columns, func(column nui.TableColumn[int]) bool { return column.ID == order[len(order)-1] })
-		column := &columns[last]
-		width := column.Width
-		if saved := t.state.List.Columns.Widths[column.ID]; saved > 0 {
-			width = saved
-		}
-		column.MinWidth = max(width, column.MinWidth) + spare
-	}
 	t.menuSpans = t.menuSpans[:0]
 	var doubleClicked bool
 	var element ui.Element
@@ -461,12 +451,6 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 			t.newRequestsButton(c, theme, live.PendingLiveEntryCount())
 		}
 	})
-	if width := element.Bounds().W; width <= 0 {
-		c.Invalidate()
-	} else if width != t.viewportWidth {
-		t.viewportWidth = width
-		c.Invalidate()
-	}
 	t.resolveMenu(element)
 	t.syncChoice(element.Changed() || rowsChanged)
 	if t.focusRequested && t.state.List.Focus(c) {

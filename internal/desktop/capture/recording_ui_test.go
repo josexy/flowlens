@@ -93,7 +93,7 @@ func TestRecordingControlsDimOnceDuringOperations(t *testing.T) {
 	}
 }
 
-func TestRecordingStopMenuFitsShortcut(t *testing.T) {
+func TestRecordingStopMenuOmitsShortcut(t *testing.T) {
 	for _, language := range []string{"en", "zh-Hans"} {
 		for _, mode := range []string{"light", "dark"} {
 			for _, size := range []int{16, 24} {
@@ -103,11 +103,8 @@ func TestRecordingStopMenuFitsShortcut(t *testing.T) {
 					f.data.Settings.Current.Shortcuts = &settingservice.ShortcutConfig{Overrides: map[string]settingservice.ShortcutOverride{
 						shortcuts.CaptureToggleProxy: {Binding: &settingservice.ShortcutBinding{Key: "F12", Modifiers: []settingservice.ShortcutModifier{"control", "shift", "alt"}}},
 					}}
-					var labelWidth, iconWidth float32
 					f.tester = ui.NewTester(func(c *ui.Context) {
 						palette := apptheme.Begin(c, apptheme.Resolve(apptheme.Appearance{Mode: mode, AppFontSize: size, DisableAnimations: true}).Config)
-						labelWidth, _ = c.MeasureText(0, ui.Span{Text: locales.ToolbarStop(), Font: palette.Font, Size: apptheme.TextSize(c, 14)})
-						iconWidth = apptheme.TextSize(c, 20)
 						ui.Column(c).Fill().Background(palette.Background).Children(func() { f.workspace.buildToolbar(c, palette) })
 					}, 1200, 160)
 					f.tester.SetLocale(language)
@@ -117,14 +114,14 @@ func TestRecordingStopMenuFitsShortcut(t *testing.T) {
 					if !ok || menu.Bounds.X < 0 || menu.Bounds.X+menu.Bounds.W > 1200 {
 						t.Fatalf("menu is missing or outside the window: %+v", menu.Bounds)
 					}
-					for index, key := range f.workspace.kbds(shortcuts.CaptureToggleProxy) {
+					label, ok := f.tester.Find(locales.ToolbarStop())
+					if !ok || label.W <= 0 || label.H <= 0 || label.X < menu.Bounds.X || label.X+label.W > menu.Bounds.X+menu.Bounds.W {
+						t.Errorf("Stop Proxy label is missing or clipped: label=%+v menu=%+v", label, menu.Bounds)
+					}
+					for _, key := range f.workspace.kbds(shortcuts.CaptureToggleProxy) {
 						text := strings.ToUpper(nui.FormatKey(key, runtime.GOOS))
-						bounds, ok := f.tester.Find(text)
-						if !ok || bounds.W <= 0 || bounds.H <= 0 || bounds.X < menu.Bounds.X || bounds.X+bounds.W > menu.Bounds.X+menu.Bounds.W {
-							t.Errorf("shortcut key %s is clipped: key=%+v menu=%+v", text, bounds, menu.Bounds)
-						}
-						if index == 0 && bounds.X-menu.Bounds.X < labelWidth+iconWidth {
-							t.Error("shortcut leaves insufficient room for the Stop Proxy label and icon")
+						if _, ok := f.tester.Find(text); ok {
+							t.Errorf("Stop Proxy menu displays shortcut key %s", text)
 						}
 					}
 					rendertest.Shoot(t, f.tester, "proxy-stop-menu-"+t.Name())

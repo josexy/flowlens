@@ -2,6 +2,7 @@ package proxyservice
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
+	http "github.com/josexy/xhttp"
 )
 
 func TestStartPublishesCompleteStateAndSerializesStop(t *testing.T) {
@@ -54,7 +56,7 @@ func TestStartPublishesCompleteStateAndSerializesStop(t *testing.T) {
 	handlerInstalled := service.proxyHandler != nil
 	configInstalled := service.startProxyConfig != nil
 	service.mu.Unlock()
-	if !running || !serverInstalled || listenerInstalled || !cancelInstalled || !handlerInstalled || !configInstalled {
+	if !running || !serverInstalled || !listenerInstalled || !cancelInstalled || !handlerInstalled || !configInstalled {
 		t.Fatalf(
 			"published state incomplete: running=%t server=%t listener=%t cancel=%t handler=%t config=%t",
 			running,
@@ -99,6 +101,30 @@ func TestStartPublishesCompleteStateAndSerializesStop(t *testing.T) {
 	if service.enableFlushing.Load() {
 		t.Fatal("Stop left history flushing enabled")
 	}
+}
+
+func TestStopReleasesHTTPListenerBeforeServe(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	address := listener.Addr().String()
+
+	// Model a bound listener whose Serve goroutine has not run yet. Closing
+	// the HTTP server alone cannot release a listener it has not registered.
+	server := &http.Server{}
+	service := &ProxyService{running: true, address: address, server: server, ln: listener}
+	status, err := service.Stop()
+	if err != nil || status.Running {
+		t.Fatalf("Stop: %+v %v", status, err)
+	}
+
+	replacement, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("listener still bound after Stop returned: %v", err)
+	}
+	t.Cleanup(func() { _ = replacement.Close() })
 }
 
 func TestHistoryMetadataConcurrentAccess(t *testing.T) {
