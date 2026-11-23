@@ -76,6 +76,57 @@ func TestCoalescerHoldsValuesWhileABatchWaitsForTheMainThread(t *testing.T) {
 	})
 }
 
+func TestCoalescerBoundsEveryBatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dispatcher, _, window := setup()
+		var delivered [][]int
+		keepLast := func(pending []int) []int { return pending[max(0, len(pending)-3):] }
+		coalescer := runtime.NewCoalescer(dispatcher, func(batch []int) { delivered = append(delivered, batch) }, keepLast)
+		defer coalescer.Close()
+		for value := range 5 {
+			coalescer.Add(value)
+		}
+		time.Sleep(runtime.CoalesceInterval)
+		synctest.Wait()
+		window.Drain()
+		if len(delivered) != 1 || !slices.Equal(delivered[0], []int{2, 3, 4}) {
+			t.Fatalf("delivered %v, want the bound's newest values", delivered)
+		}
+	})
+}
+
+func TestCoalescerBoundWorkStaysLinearDuringAStall(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dispatcher, _, window := setup()
+		const keep, values = 1000, 100_000
+		scanned := 0
+		keepLast := func(pending []int) []int {
+			scanned += len(pending)
+			return pending[max(0, len(pending)-keep):]
+		}
+		var delivered []int
+		coalescer := runtime.NewCoalescer(dispatcher, func(batch []int) { delivered = append(delivered, batch...) }, keepLast)
+		defer coalescer.Close()
+		coalescer.Add(-1)
+		time.Sleep(runtime.CoalesceInterval)
+		synctest.Wait()
+		// The main thread is stalled while the values arrive.
+		for value := range values {
+			coalescer.Add(value)
+		}
+		if scanned > 4*values {
+			t.Fatalf("bound looked at %d values for %d added, want at most %d", scanned, values, 4*values)
+		}
+		window.Drain()
+		time.Sleep(runtime.CoalesceInterval)
+		synctest.Wait()
+		window.Drain()
+		if len(delivered) != 1+keep || delivered[1] != values-keep || delivered[keep] != values-1 {
+			t.Fatalf("delivered %d values, want the first and the newest %d", len(delivered), keep)
+		}
+	})
+}
+
 func TestCoalescerCloseDropsPendingValuesWithoutBlocking(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		dispatcher, _, window := setup()

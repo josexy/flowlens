@@ -22,15 +22,18 @@ type Coalescer[T any] struct {
 
 	mu       sync.Mutex
 	pending  []T
+	boundAt  int
 	timer    *time.Timer
 	inFlight bool
 	closed   bool
 }
 
 // NewCoalescer returns a coalescer that delivers batches on the main thread
-// through dispatcher. bound, when set, runs after each value is added and
-// returns the values to keep, so that pending values stay bounded while the
-// main thread is busy.
+// through dispatcher. bound, when set, returns the pending values to keep, so
+// that they stay bounded while the main thread is busy. It runs whenever the
+// pending values have doubled since it last ran, so its cost is spread over
+// the values added, and once more before a batch is posted: pending values
+// stay within twice what bound keeps, and every batch is bounded.
 func NewCoalescer[T any](dispatcher *Dispatcher, deliver func(batch []T), bound func(pending []T) []T) *Coalescer[T] {
 	return &Coalescer[T]{post: dispatcher.Post, deliver: deliver, bound: bound, interval: CoalesceInterval}
 }
@@ -43,8 +46,9 @@ func (c *Coalescer[T]) Add(value T) {
 		return
 	}
 	c.pending = append(c.pending, value)
-	if c.bound != nil {
+	if c.bound != nil && len(c.pending) >= c.boundAt {
 		c.pending = c.bound(c.pending)
+		c.boundAt = 2 * len(c.pending)
 	}
 	c.armLocked()
 }
@@ -53,7 +57,7 @@ func (c *Coalescer[T]) Add(value T) {
 func (c *Coalescer[T]) Discard() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.pending = nil
+	c.pending, c.boundAt = nil, 0
 }
 
 // Close stops delivery and drops pending values without waiting for the main
@@ -62,7 +66,7 @@ func (c *Coalescer[T]) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.closed = true
-	c.pending = nil
+	c.pending, c.boundAt = nil, 0
 	if c.timer != nil {
 		c.timer.Stop()
 		c.timer = nil
@@ -84,7 +88,10 @@ func (c *Coalescer[T]) flush() {
 		return
 	}
 	batch := c.pending
-	c.pending = nil
+	if c.bound != nil {
+		batch = c.bound(batch)
+	}
+	c.pending, c.boundAt = nil, 0
 	c.inFlight = true
 	c.mu.Unlock()
 	c.post(func() {

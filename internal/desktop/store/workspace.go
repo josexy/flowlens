@@ -840,26 +840,34 @@ func (s *WorkspaceStore) ConnectPluginLogs(logs Topic[logic.PluginLogEntry]) (of
 	}
 }
 
-// boundPluginLogs keeps at most the console's entry limit of one execution's
-// pending output, dropping its oldest lines, which the console would drop.
+// boundPluginLogs keeps the newest MaxRequestConsoleEntries entries of each
+// execution, which is all its console keeps, in order.
 func boundPluginLogs(pending []logic.PluginLogEntry) []logic.PluginLogEntry {
 	if len(pending) <= logic.MaxRequestConsoleEntries {
 		return pending
 	}
-	execution := pending[len(pending)-1].ExecutionID
-	count, oldest := 0, -1
-	for index, entry := range pending {
-		if entry.ExecutionID == execution {
-			if oldest < 0 {
-				oldest = index
-			}
-			count++
-		}
+	excess := map[string]int{}
+	for _, entry := range pending {
+		excess[entry.ExecutionID]++
 	}
-	if count <= logic.MaxRequestConsoleEntries {
+	trimmed := false
+	for execution, count := range excess {
+		excess[execution] = count - logic.MaxRequestConsoleEntries
+		trimmed = trimmed || count > logic.MaxRequestConsoleEntries
+	}
+	if !trimmed {
 		return pending
 	}
-	return slices.Delete(pending, oldest, oldest+1)
+	kept := pending[:0]
+	for _, entry := range pending {
+		if excess[entry.ExecutionID] > 0 {
+			excess[entry.ExecutionID]--
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	clear(pending[len(kept):])
+	return kept
 }
 
 // applyPluginLogs adds a batch of output to the consoles of the tabs running
