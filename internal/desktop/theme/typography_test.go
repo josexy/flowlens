@@ -41,9 +41,13 @@ func TestCustomTextMatchesControlsAcrossSizesAndDPI(t *testing.T) {
 				if caption.H >= body.H || heading.H <= body.H {
 					t.Fatalf("text hierarchy lost: caption %+v, body %+v, heading %+v", caption, body, heading)
 				}
+				// The line height is a multiple of the font size, so it shows
+				// the font size on every platform. Widths follow glyph
+				// advances, which Pango on Linux hints to whole pixels, so a
+				// line at twice the size is not exactly twice as wide.
 				if size == 12 {
 					small = body
-				} else if math.Abs(float64(body.W-small.W*float32(size)/12)) > 2 {
+				} else if math.Abs(float64(body.H-small.H*float32(size)/12)) > 0.5 || body.W <= small.W {
 					t.Fatalf("text did not scale proportionally: size %v, small %+v, body %+v", size, small, body)
 				}
 			}
