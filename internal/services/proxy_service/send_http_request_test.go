@@ -103,6 +103,7 @@ func TestSendHTTPRequestTextBodies(t *testing.T) {
 				server.URL,
 				nil,
 				tt.body,
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -149,6 +150,7 @@ func TestSendHTTPRequestNoneBodyOmitsContentType(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -211,6 +213,7 @@ func TestSendHTTPRequestBodylessResponsesSkipContentDecodingAndStreaming(t *test
 				server.URL,
 				nil,
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -264,6 +267,7 @@ func TestSendHTTPRequestSSEReturnsAfterResponseHeaders(t *testing.T) {
 			server.URL,
 			nil,
 			SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			nil,
 		)
 		resultCh <- struct {
 			response SendRequestResponse
@@ -340,6 +344,7 @@ func TestSendHTTPRequestCancellationBeforeResponseHeaders(t *testing.T) {
 			server.URL,
 			nil,
 			SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			nil,
 		)
 		resultCh <- err
 	}()
@@ -388,6 +393,7 @@ func TestSendHTTPRequestCancellationWhileReadingResponseBody(t *testing.T) {
 			server.URL,
 			nil,
 			SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			nil,
 		)
 		resultCh <- err
 	}()
@@ -432,6 +438,7 @@ func TestSendHTTPRequestSSECompletionIncludesTrailers(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -481,6 +488,7 @@ func TestSendHTTPRequestResponseTrailers(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -643,6 +651,7 @@ func TestSendHTTPRequestReencodesGzipRequestBody(t *testing.T) {
 			BodyType: SendRequestBodyTypeJSON,
 			Text:     string(payload),
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -719,6 +728,7 @@ func TestSendHTTPRequestURLEncodedBody(t *testing.T) {
 				{Enabled: true, Name: "empty", Value: ""},
 			},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -747,6 +757,7 @@ func TestSendHTTPRequestUsesFallbackUAHeader(t *testing.T) {
 		server.URL,
 		testHeaderFields(map[string][]string{}),
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -774,6 +785,7 @@ func TestSendHTTPRequestPrefersExplicitUserAgentOverUAFallback(t *testing.T) {
 			"User-Agent": {"explicit-ua"},
 		}),
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -821,6 +833,7 @@ func TestSendHTTPRequestFileBodyStreamsFile(t *testing.T) {
 				Size: int64(len(fileContent)),
 			},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -880,6 +893,7 @@ func TestSendHTTPRequestReencodesGzipFileBody(t *testing.T) {
 				Size: int64(len(fileContent)),
 			},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -988,6 +1002,7 @@ func TestSendHTTPRequestFormDataStreamsMultipart(t *testing.T) {
 				{Enabled: true, Name: "notes", ItemType: "text", Value: "kept"},
 			},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -1021,6 +1036,7 @@ func TestSendHTTPRequestFormDataInvalidFileFails(t *testing.T) {
 				},
 			},
 		},
+		nil,
 	)
 	if err == nil {
 		t.Fatal("expected error for invalid form-data file path")
@@ -1052,6 +1068,7 @@ func TestSendHTTPRequestTimeoutMs(t *testing.T) {
 		SendRequestBody{
 			BodyType: SendRequestBodyTypeText,
 		},
+		nil,
 	)
 	if err == nil {
 		t.Fatal("expected timeout error")
@@ -1110,6 +1127,7 @@ func TestSendHTTPRequestCustomProxyPathStillWorks(t *testing.T) {
 			BodyType: SendRequestBodyTypeText,
 			Text:     "through-proxy",
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)
@@ -1168,6 +1186,7 @@ func TestSendHTTPRequestSystemProxyPathUsesEnvironmentProxy(t *testing.T) {
 		SendRequestBody{
 			BodyType: SendRequestBodyTypeNone,
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest returned error: %v", err)

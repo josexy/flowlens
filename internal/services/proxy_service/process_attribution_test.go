@@ -744,7 +744,7 @@ func TestClearCacheCancelsMissingIconRecovery(t *testing.T) {
 		}{data: data, err: recoveryErr}
 	}()
 	waitForSignal(t, recoveryStarted, "missing icon recovery")
-	if err := service.ClearCacheFiles(); err != nil {
+	if _, err := service.ClearCacheFiles(); err != nil {
 		t.Fatalf("ClearCacheFiles: %v", err)
 	}
 	select {
@@ -809,7 +809,7 @@ func TestClearCacheStopsOldIconWorkAndInvalidatesConnectionLookup(t *testing.T) 
 	})
 
 	waitForSignal(t, iconStarted, "icon extraction")
-	if err := service.ClearCacheFiles(); err != nil {
+	if _, err := service.ClearCacheFiles(); err != nil {
 		t.Fatalf("ClearCacheFiles: %v", err)
 	}
 	close(releaseIcon)
@@ -833,7 +833,7 @@ func TestClearCacheStopsOldIconWorkAndInvalidatesConnectionLookup(t *testing.T) 
 func TestClearCacheOperationsResetProcessIconStore(t *testing.T) {
 	tests := []struct {
 		name  string
-		clear func(*ProxyService) error
+		clear func(*ProxyService) (LocalDataClearResult, error)
 	}{
 		{name: "cache files", clear: (*ProxyService).ClearCacheFiles},
 		{name: "cache and history", clear: (*ProxyService).ClearCacheAndHistory},
@@ -859,7 +859,7 @@ func TestClearCacheOperationsResetProcessIconStore(t *testing.T) {
 			service := newProxyAttributionTestService(nil, store)
 			service.SetHistoryCleaner(&testHistoryCleaner{})
 			service.resetCurrentHistoryMetadata()
-			if err := test.clear(service); err != nil {
+			if _, err := test.clear(service); err != nil {
 				t.Fatalf("clear: %v", err)
 			}
 			data, found, err := store.Get(key)

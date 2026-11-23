@@ -8,8 +8,9 @@ import (
 	"testing"
 )
 
-// The frontend loads these same fixtures and compares the complete Raw panel
-// text and displayed totals, so protocol formatting cannot silently drift.
+// TestRawPanelMatchesLogicalHeaderSizeFixtures in internal/desktop/logic loads
+// these same fixtures and compares the complete Raw panel text and displayed
+// totals, so protocol formatting cannot silently drift.
 func TestLogicalHeaderSizesMatchRawDisplayAndV1HAR(t *testing.T) {
 	data, err := os.ReadFile("testdata/logical_header_sizes.json")
 	if err != nil {

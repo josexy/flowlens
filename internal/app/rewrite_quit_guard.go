@@ -1,54 +1,47 @@
 package app
 
-import (
-	"strconv"
-	"sync"
-)
+import "github.com/josexy/flowlens/internal/desktop/rewrite"
 
-type rewriteQuitRequest struct {
-	RequestID string `json:"requestId"`
-	Reason    string `json:"reason"`
+// rewriteQuitView is the rewrite rules view as its quit guard uses it. Every
+// method runs on the main thread.
+type rewriteQuitView interface {
+	Dirty() bool
+	QuitPending() bool
+	AskQuit(prompt rewrite.QuitPrompt)
 }
 
-// The guard never times out a user's decision. A request ID prevents a stale
-// dialog response from authorizing a later quit/restart operation.
+// rewriteQuitGuard asks what to do with unsaved rewrite rules before quitting
+// or updating. It runs on the main thread, like the view it asks.
 type rewriteQuitGuard struct {
-	mu      sync.Mutex
-	dirty   bool
-	nextID  uint64
-	pending *rewriteQuitRequest
+	view rewriteQuitView
+	// show brings the main window forward before asking.
+	show func()
+	// asking is the prompt whose decision is awaited. A decision of any other
+	// prompt is stale and authorizes nothing.
+	asking *rewrite.QuitPrompt
 }
 
-func (g *rewriteQuitGuard) setDirty(dirty bool) { g.mu.Lock(); defer g.mu.Unlock(); g.dirty = dirty }
-func (g *rewriteQuitGuard) request(reason string) (blocked bool, request *rewriteQuitRequest) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.pending != nil {
-		return true, nil
+func (g *rewriteQuitGuard) guard(reason string, proceed func()) (blocked bool) {
+	if g.asking != nil || g.view.QuitPending() {
+		return true
 	}
-	if !g.dirty {
-		return false, nil
+	if !g.view.Dirty() {
+		return false
 	}
-	g.nextID++
-	value := rewriteQuitRequest{RequestID: strconv.FormatUint(g.nextID, 10), Reason: reason}
-	g.pending = &value
-	copy := value
-	return true, &copy
-}
-func (g *rewriteQuitGuard) confirm(id, responseReason, decision string) (reason string, proceed bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.pending == nil || g.pending.RequestID != id || g.pending.Reason != responseReason {
-		return "", false
+	prompt := &rewrite.QuitPrompt{Reason: reason}
+	prompt.Respond = func(decision rewrite.QuitDecision) {
+		if g.asking != prompt {
+			return
+		}
+		g.asking = nil
+		if decision != rewrite.DecisionCancel {
+			proceed()
+		}
 	}
-	if decision != "save" && decision != "discard" && decision != "cancel" {
-		return "", false
+	g.asking = prompt
+	if g.show != nil {
+		g.show()
 	}
-	reason = g.pending.Reason
-	g.pending = nil
-	if decision == "cancel" {
-		return reason, false
-	}
-	g.dirty = false
-	return reason, true
+	g.view.AskQuit(*prompt)
+	return true
 }

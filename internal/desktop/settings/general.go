@@ -108,7 +108,7 @@ func (v *View) fontRow(c *ui.Context, palette nui.Theme, key, label string, fami
 func paletteOptions(names []string) []nui.ListboxItem {
 	items := make([]nui.ListboxItem, len(names))
 	for index, name := range names {
-		items[index] = nui.ListboxItem{ID: name, Label: message("settingsThemeColorsPalette" + camel(name))}
+		items[index] = nui.ListboxItem{ID: name, Label: paletteText(name)}
 	}
 	return items
 }

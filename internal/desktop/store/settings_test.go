@@ -619,3 +619,44 @@ func TestDetailSplitsSurviveLayoutToggle(t *testing.T) {
 		t.Fatalf("%+v", snapshot.TrafficDetailConfig)
 	}
 }
+
+// echoShortcuts applies every candidate as it is.
+type echoShortcuts struct {
+	applied *settingservice.ShortcutConfig
+}
+
+func (e *echoShortcuts) ApplyShortcutConfig(config *settingservice.ShortcutConfig) (*shortcutservice.ShortcutApplyResult, error) {
+	e.applied = config
+	return &shortcutservice.ShortcutApplyResult{Applied: true, Config: config}, nil
+}
+
+func (e *echoShortcuts) GetShortcutRuntimeState() shortcutservice.ShortcutRuntimeState {
+	return shortcutservice.ShortcutRuntimeState{}
+}
+
+func TestDisabledShortcutRoundTripsThroughASave(t *testing.T) {
+	shortcuts := &echoShortcuts{}
+	h := newHarness(t, shortcuts, nil)
+	h.store.BeginEdit()
+	h.store.Draft.Shortcuts = &settingservice.ShortcutConfig{Overrides: map[string]settingservice.ShortcutOverride{
+		"app.save": {Binding: nil, Scope: settingservice.ShortcutScopeApplication},
+	}}
+	h.store.MarkDirty(SectionShortcuts)
+	var saveErr error
+	if !h.store.Save(func(_ SaveResult, err error) { saveErr = err }) {
+		t.Fatal("Save refused")
+	}
+	h.settle()
+	if saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	for name, config := range map[string]*settingservice.ShortcutConfig{"applied": shortcuts.applied, "current": h.store.Current.Shortcuts} {
+		override, ok := config.Overrides["app.save"]
+		if !ok || override.Binding != nil {
+			t.Fatalf("%s override = %+v, %t, want the disabled shortcut", name, override, ok)
+		}
+	}
+	if h.store.Current.Shortcuts == h.store.Draft.Shortcuts {
+		t.Fatal("the saved shortcuts share storage with the draft")
+	}
+}

@@ -225,7 +225,7 @@ func TestBadgeStaysOpaqueOnSelectedDarkRow(t *testing.T) {
 	f.data.Traffic.SetHighlight(72, "")
 	f.settle()
 	before := sample()
-	for _, entry := range f.workspace.Table.Rows() {
+	for _, entry := range f.workspace.Table.rows {
 		if entry.ID == 72 {
 			f.workspace.Table.state.Selection.Clear()
 			f.workspace.Table.state.Selection.Add(trafficRowID(72))

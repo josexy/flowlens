@@ -202,7 +202,7 @@ func TestShutdownWaitsForMutationNotification(t *testing.T) {
 			close(release)
 		}
 	}()
-	SetChangedHandler(s, func(Changed) { close(entered); <-release })
+	s.Events.Changed.Subscribe(func(Changed) { close(entered); <-release })
 	mutationDone := make(chan error, 1)
 	go func() { _, err := s.SaveRule(testRule(), 0); mutationDone <- err }()
 	select {
@@ -229,7 +229,9 @@ func TestShutdownWaitsForMutationNotification(t *testing.T) {
 			t.Fatal("mutation/shutdown did not finish")
 		}
 	}
-	if s.changed != nil {
-		t.Fatal("shutdown retained its application event callback")
+	notified := 0
+	s.Events.Changed.Subscribe(func(Changed) { notified++ })
+	if _, err := s.SaveRule(testRule(), 0); err == nil && notified != 0 {
+		t.Fatal("a change after shutdown was published")
 	}
 }

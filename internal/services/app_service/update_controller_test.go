@@ -35,7 +35,7 @@ func TestUpdateControllerCheckFindsManualRelease(t *testing.T) {
 		},
 		download: func(context.Context) error { return nil },
 	}
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeManual, nil)
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeManual, nil, nil)
 
 	if err := controller.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
@@ -62,7 +62,7 @@ func TestUpdateControllerCancelCheckReturnsToIdle(t *testing.T) {
 		},
 		download: func(context.Context) error { return nil },
 	}
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil)
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil, nil)
 
 	if err := controller.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
@@ -96,15 +96,11 @@ func TestUpdateControllerInstallTracksBytes(t *testing.T) {
 	}
 	var eventsMu sync.Mutex
 	var events []UpdateSnapshot
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, func(name string, data ...any) bool {
-		if name != UpdateStateChangedEventName {
-			return false
-		}
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, func(snapshot UpdateSnapshot) {
 		eventsMu.Lock()
-		events = append(events, data[0].(UpdateSnapshot))
+		events = append(events, snapshot)
 		eventsMu.Unlock()
-		return true
-	})
+	}, nil)
 
 	if err := controller.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
@@ -160,7 +156,7 @@ func TestUpdateControllerCancelDownloadKeepsRelease(t *testing.T) {
 			return ctx.Err()
 		},
 	}
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil)
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil, nil)
 
 	if err := controller.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
@@ -189,7 +185,7 @@ func TestUpdateControllerRejectsOverlappingOperations(t *testing.T) {
 		},
 		download: func(context.Context) error { return nil },
 	}
-	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil)
+	controller := newUpdateController(engine, "1.0.2", UpdateApplyModeSelf, nil, nil)
 
 	if err := controller.Check(); err != nil {
 		t.Fatalf("first Check: %v", err)
@@ -249,16 +245,13 @@ func TestUpdateControllerAutomaticRestartOutcomes(t *testing.T) {
 			}
 			var controller *updateController
 			restarts := 0
-			controller = newUpdateController(engine, "1.0.0", UpdateApplyModeSelf, func(name string, _ ...any) bool {
-				if name == UpdateUserRestartEventName {
-					// The event must be emitted without the state lock and only
-					// once the service can honor the guarded restart request.
-					if controller.Snapshot().Phase != UpdatePhaseReady {
-						t.Error("restart before ready")
-					}
-					restarts++
+			controller = newUpdateController(engine, "1.0.0", UpdateApplyModeSelf, nil, func() {
+				// The request must be made without the state lock and only
+				// once the service can honor the guarded restart request.
+				if controller.Snapshot().Phase != UpdatePhaseReady {
+					t.Error("restart before ready")
 				}
-				return true
+				restarts++
 			})
 			if err := controller.Check(); err != nil {
 				t.Fatal(err)

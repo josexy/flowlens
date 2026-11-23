@@ -55,7 +55,7 @@ func TestNativeDoubleClickTogglesDetails(t *testing.T) {
 					f.workspace.Detail = panel.Build
 				}
 				f.settle()
-				first, second := table.Rows()[0], table.Rows()[1]
+				first, second := table.rows[0], table.rows[1]
 				check := func(ids []uint64, focused uint64, visible bool) {
 					t.Helper()
 					entry := table.source.SelectedEntry()
@@ -130,7 +130,7 @@ func TestDetailCloseRetainsSelectionAndReturnsFocus(t *testing.T) {
 			}
 			f.settle()
 			// The history fixture uses its own traffic hosts.
-			row := table.Rows()[0]
+			row := table.rows[0]
 			f.openDetails(row.Host)
 			keytest.TabTo(t, f.tester, locales.DetailClosePanel())
 			f.tester.Key(0, ui.KeySpace)

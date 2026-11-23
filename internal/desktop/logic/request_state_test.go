@@ -41,9 +41,9 @@ func TestTLSVerificationIsPerTabAndSaved(t *testing.T) {
 	if state.Settings.SkipVerifyTLS || HasMeaningfulRequestDraft(tab) {
 		t.Fatal("default")
 	}
-	initial := CreateSnapshotForTab(tab)
+	initial := RequestSnapshotOf(tab)
 	state.Settings.SkipVerifyTLS = true
-	if other.Settings.SkipVerifyTLS || !HasMeaningfulRequestDraft(tab) || CreateSnapshotForTab(tab) == initial {
+	if other.Settings.SkipVerifyTLS || !HasMeaningfulRequestDraft(tab) || RequestSnapshotOf(tab).Equal(initial) {
 		t.Fatal("per tab")
 	}
 	for _, skip := range []bool{true, false} {
@@ -58,7 +58,7 @@ func TestTLSVerificationIsPerTabAndSaved(t *testing.T) {
 			t.Fatal("apply")
 		}
 	}
-	if CreateSnapshotForTab(tab) != initial {
+	if !RequestSnapshotOf(tab).Equal(initial) {
 		t.Fatal("snapshot")
 	}
 }
@@ -84,10 +84,10 @@ func TestRedirectLimitsSavedAndDirty(t *testing.T) {
 	state := BuildEmptyHTTPEditorState(DraftNew)
 	other := BuildEmptyHTTPEditorState(DraftNew)
 	tab := httpTab(state)
-	initial := CreateSnapshotForTab(tab)
+	initial := RequestSnapshotOf(tab)
 	for _, limit := range []int{1, 12, 0} {
 		state.Settings.MaxRedirects = limit
-		if other.Settings.MaxRedirects != 0 || HasMeaningfulRequestDraft(tab) != (limit > 0) || (CreateSnapshotForTab(tab) == initial) != (limit == 0) {
+		if other.Settings.MaxRedirects != 0 || HasMeaningfulRequestDraft(tab) != (limit > 0) || (RequestSnapshotOf(tab).Equal(initial)) != (limit == 0) {
 			t.Fatalf("limit %d", limit)
 		}
 		saved := BuildSavedHTTPRequest(state)
@@ -116,9 +116,9 @@ func TestWebSocketTLSIsPerTabAndSaved(t *testing.T) {
 	if HasMeaningfulRequestDraft(tab) {
 		t.Fatal("default")
 	}
-	initial := CreateSnapshotForTab(tab)
+	initial := RequestSnapshotOf(tab)
 	state.Settings.SkipVerifyTLS = true
-	if other.Settings.SkipVerifyTLS || !HasMeaningfulRequestDraft(tab) || CreateSnapshotForTab(tab) == initial {
+	if other.Settings.SkipVerifyTLS || !HasMeaningfulRequestDraft(tab) || RequestSnapshotOf(tab).Equal(initial) {
 		t.Fatal("per tab")
 	}
 	for _, skip := range []bool{true, false} {
@@ -133,7 +133,7 @@ func TestWebSocketTLSIsPerTabAndSaved(t *testing.T) {
 			t.Fatal("apply")
 		}
 	}
-	if CreateSnapshotForTab(tab) != initial {
+	if !RequestSnapshotOf(tab).Equal(initial) {
 		t.Fatal("snapshot")
 	}
 }
@@ -251,5 +251,74 @@ func TestDeriveTabTitle(t *testing.T) {
 		if got := DeriveRequestTabTitle(input); got != want {
 			t.Errorf("%q: %q", input, got)
 		}
+	}
+}
+
+func TestRequestSnapshotOwnsItsRowsAndFiles(t *testing.T) {
+	state := BuildEmptyHTTPEditorState(DraftNew)
+	state.URL = "https://example.test/upload"
+	state.Headers = []EditableRow{{Key: "X-Token", Value: "one", Enabled: true}}
+	state.RequestBodyType = BodyTypeFile
+	state.RequestBodyFile = &RequestFileValue{Path: "/data/body.bin", Name: "body.bin", Size: 3}
+	state.RequestBodyFormData = []FormDataItem{{ID: "f", Enabled: true, Name: "upload", ItemType: "file", File: &RequestFileValue{Path: "/data/form.bin"}}}
+	tab := httpTab(state)
+	saved := RequestSnapshotOf(tab)
+	if saved.IsZero() || !RequestSnapshotOf(tab).Equal(saved) {
+		t.Fatal("an unchanged tab differs from its snapshot")
+	}
+	for _, edit := range []struct {
+		name           string
+		change, revert func()
+	}{
+		{"url", func() { state.URL += "?x=1" }, func() { state.URL = "https://example.test/upload" }},
+		{"header row", func() { state.Headers[0].Value = "two" }, func() { state.Headers[0].Value = "one" }},
+		{"body file", func() { state.RequestBodyFile.Path = "/data/other.bin" }, func() { state.RequestBodyFile.Path = "/data/body.bin" }},
+		{"form-data file", func() { state.RequestBodyFormData[0].File.Size = 9 }, func() { state.RequestBodyFormData[0].File.Size = 0 }},
+		{"removed body file", func() { state.RequestBodyFile = nil }, func() { state.RequestBodyFile = &RequestFileValue{Path: "/data/body.bin", Name: "body.bin", Size: 3} }},
+	} {
+		edit.change()
+		if RequestSnapshotOf(tab).Equal(saved) {
+			t.Fatalf("%s: an edit made after the snapshot was not seen", edit.name)
+		}
+		edit.revert()
+		if !RequestSnapshotOf(tab).Equal(saved) {
+			t.Fatalf("%s: reverting the edit did not match the snapshot", edit.name)
+		}
+	}
+}
+
+func TestRequestSnapshotIgnoresRowsThatAreNotSaved(t *testing.T) {
+	state := BuildEmptyHTTPEditorState(DraftNew)
+	state.URL = "https://example.test/"
+	tab := httpTab(state)
+	saved := RequestSnapshotOf(tab)
+	state.Params = append(state.Params, EditableRow{Key: "  ", Value: "\t", Enabled: true}, EditableRow{Key: "off", Value: "x", Enabled: false})
+	state.Headers = append(state.Headers, EditableRow{Key: ":authority", Value: "example.test", Enabled: true}, EditableRow{Key: " ", Enabled: true})
+	state.RequestBodyFormData = append(state.RequestBodyFormData, FormDataItem{ID: "blank", Enabled: true, Name: " "}, FormDataItem{ID: "off", Enabled: false, Name: "x"})
+	if !RequestSnapshotOf(tab).Equal(saved) {
+		t.Fatal("whitespace-only, disabled, or pseudo-header rows made the tab differ")
+	}
+	state.Headers = append(state.Headers, EditableRow{Key: "Accept", Value: "*/*", Enabled: true})
+	if RequestSnapshotOf(tab).Equal(saved) {
+		t.Fatal("a meaningful row was not seen")
+	}
+}
+
+func TestWebSocketSnapshotOwnsItsDraftFile(t *testing.T) {
+	state := BuildEmptyWebSocketClientState(DraftNew)
+	state.URL, state.DraftType = "ws://example.test/", "binary-file"
+	state.DraftFile = &RequestFileValue{Path: "/data/frame.bin"}
+	tab := wsTab(state)
+	saved := RequestSnapshotOf(tab)
+	state.DraftFile.Path = "/data/other.bin"
+	if RequestSnapshotOf(tab).Equal(saved) {
+		t.Fatal("an in-place file change was not seen")
+	}
+	state.DraftFile.Path = "/data/frame.bin"
+	if !RequestSnapshotOf(tab).Equal(saved) || RequestSnapshotOf(httpTab(BuildEmptyHTTPEditorState(DraftNew))).Equal(saved) {
+		t.Fatal("snapshots of different kinds or contents compare equal")
+	}
+	if !(RequestSnapshot{}).Equal(RequestSnapshotOf(&WorkspaceTab{Type: TabTypeCapture})) {
+		t.Fatal("tabs that are not requests have the zero snapshot")
 	}
 }

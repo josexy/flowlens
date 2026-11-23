@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -98,5 +99,21 @@ func TestCASelectionRestartReasons(t *testing.T) {
 	changed.CAKeyPath = "other.key"
 	if !proxyRestartRequired(&custom, &changed) {
 		t.Fatal("changing an active custom path did not request a restart")
+	}
+}
+
+func TestProxyRestartReasonsKeepTheirOrder(t *testing.T) {
+	start := &settingservice.ProxyConfig{Mode: settingservice.ProxyModeHTTP, Host: "127.0.0.1", Port: 8080, UseBuiltinCA: true}
+	current := *start
+	current.Mode = settingservice.ProxyModeSOCKS5
+	current.Port = 8081
+	current.UseBuiltinCA = false
+	got := proxyRestartReasons(start, &current)
+	want := []ProxyRestartReason{ProxyRestartReasonProxyMode, ProxyRestartReasonListenAddress, ProxyRestartReasonMITMCA}
+	if !slices.Equal(got, want) {
+		t.Fatalf("reasons = %q, want %q", got, want)
+	}
+	if string(ProxyRestartReasonProxyMode) != "proxy mode changed" || string(ProxyRestartReasonListenAddress) != "listen address changed" || string(ProxyRestartReasonMITMCA) != "mitm ca changed" {
+		t.Fatal("restart reasons changed their logged values")
 	}
 }

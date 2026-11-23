@@ -40,7 +40,7 @@ type fixture struct {
 	t       *testing.T
 	service *fakeService
 	data    *store.MemStatsStore
-	bus     *serviceruntime.Bus
+	samples *serviceruntime.Topic[memstatsservice.MemSnapshot]
 	rt      store.Runtime
 	window  *runtimetest.Window
 	tester  *ui.Tester
@@ -60,15 +60,15 @@ func openFixture(t *testing.T, status memstatsservice.MonitoringStatus, first me
 	t.Cleanup(rt.Close)
 	service := &fakeService{status: status, sample: first}
 	data := store.NewMemStatsStore(rt, service)
-	bus := serviceruntime.NewBus()
-	data.Initialize(bus, rt.Dispatcher.Post)
+	samples := &serviceruntime.Topic[memstatsservice.MemSnapshot]{}
+	data.Initialize(samples, rt.Dispatcher.Post)
 	t.Cleanup(data.Cleanup)
 	// The app reads the monitoring status at startup, before the section shows.
 	rt.Jobs.Wait()
 	window.Drain()
 	config := theme.Resolve(theme.Appearance{}).Config
 	view := New(data)
-	f := &fixture{t: t, service: service, data: data, bus: bus, rt: rt, window: window, view: view, config: config}
+	f := &fixture{t: t, service: service, data: data, samples: samples, rt: rt, window: window, view: view, config: config}
 	f.tester = ui.NewTester(func(c *ui.Context) { view.Content(c, nui.App(c, f.config)) }, 1200, 1200)
 	f.tester.SetLocale("en")
 	f.settle()
@@ -171,7 +171,7 @@ func sample(timestamp int64) memstatsservice.MemSnapshot {
 }
 
 func (f *fixture) emit(timestamp int64) {
-	f.bus.Emit(memstatsservice.MemStatsEventName, sample(timestamp))
+	f.samples.Publish(sample(timestamp))
 	f.settle()
 }
 

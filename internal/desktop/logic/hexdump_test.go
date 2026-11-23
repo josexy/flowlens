@@ -38,16 +38,7 @@ func TestHexStringReadsRawBytes(t *testing.T) {
 	}
 }
 
-func TestByteRowsSurviveWidthChanges(t *testing.T) {
-	const length = 100 * 1024 * 1024
-	for _, offset := range []int64{0, 10000, 31_234_567, length - 1} {
-		for _, columns := range []int{1, 16, 21, 64} {
-			row := HexRowOf(offset, length, columns)
-			if row*int64(columns) > offset || (row+1)*int64(columns) <= offset {
-				t.Fatalf("offset %d columns %d row %d", offset, columns, row)
-			}
-		}
-	}
+func TestHexRowCountCoversLargeAndEmptyBodies(t *testing.T) {
 	if HexRowCount(1024*1024*1024*1024+7, 16) != 68719476737 {
 		t.Fatalf("rows %d", HexRowCount(1024*1024*1024*1024+7, 16))
 	}

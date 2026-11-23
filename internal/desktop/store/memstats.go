@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/josexy/flowlens/internal/desktop/runtime"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	memstatsservice "github.com/josexy/flowlens/internal/services/mem_stats_service"
 )
 
@@ -62,14 +61,12 @@ func (s *MemStatsStore) Clear() {
 }
 
 // Initialize reads the service's state and subscribes to its samples.
-func (s *MemStatsStore) Initialize(bus serviceruntime.EventBus, post func(func())) {
+func (s *MemStatsStore) Initialize(samples Topic[memstatsservice.MemSnapshot], post func(func())) {
 	if s.off != nil {
 		return
 	}
-	s.off = bus.On(memstatsservice.MemStatsEventName, func(event serviceruntime.Event) {
-		if sample, ok := event.Data.(memstatsservice.MemSnapshot); ok {
-			post(func() { s.Add(sample) })
-		}
+	s.off = samples.Subscribe(func(sample memstatsservice.MemSnapshot) {
+		post(func() { s.Add(sample) })
 	})
 	runtime.Run(s.rt.Jobs, "memstats:status", func(context.Context) (memstatsservice.MonitoringStatus, error) {
 		return s.backend.GetMonitoringStatus(), nil

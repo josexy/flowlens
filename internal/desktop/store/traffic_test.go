@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"slices"
 	"strings"
@@ -57,7 +58,7 @@ type fakeTrafficBackend struct {
 	bodyErr   error
 	bodyCalls int
 	live      []uint64
-	deleted   [][]int64
+	deleted   [][]uint64
 	cleared   int
 }
 
@@ -91,7 +92,7 @@ func (f *fakeTrafficBackend) ClearTraffic() error {
 	return nil
 }
 
-func (f *fakeTrafficBackend) DeleteTraffic(ids []int64) {
+func (f *fakeTrafficBackend) DeleteTraffic(ids []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, ids)
@@ -140,12 +141,12 @@ func (h *trafficHarness) tick() {
 	h.clock.tick(100 * time.Millisecond)
 }
 
-func (h *trafficHarness) emit(name string, data any) {
-	h.router.Dispatch(proxyservice.FrontendEventBatch{Events: []proxyservice.FrontendEvent{{Name: name, Data: data}}})
+func (h *trafficHarness) emit(events ...proxyservice.LiveEvent) {
+	h.router.Dispatch(proxyservice.LiveBatch{Events: events})
 }
 
-func (h *trafficHarness) drop(name string) {
-	h.router.Dispatch(proxyservice.FrontendEventBatch{Dropped: map[string]uint64{name: 1}})
+func (h *trafficHarness) drop(kind proxyservice.LiveEventKind) {
+	h.router.Dispatch(proxyservice.LiveBatch{Dropped: map[proxyservice.LiveEventKind]uint64{kind: 1}})
 	h.settle()
 }
 
@@ -251,9 +252,9 @@ func TestQueuedRequestsKeepPatchesAndRejectStaleReplacements(t *testing.T) {
 	h.store.PauseLiveEviction()
 	h.store.AddOrUpdate(trafficEntry(5001))
 	h.tick()
-	h.emit(eventTrafficPatch, *createdPatch(5001, 3))
+	h.emit(proxyservice.TrafficPatchEvent{Patch: *createdPatch(5001, 3)})
 	h.store.AddOrUpdate(withRevision(trafficEntry(5001), 2))
-	h.emit(eventTrafficPatch, logic.TrafficPatch{TrafficID: 5001, Revision: 4, Error: &proxyservice.TrafficError{Error: "connection closed"}})
+	h.emit(proxyservice.TrafficPatchEvent{Patch: logic.TrafficPatch{TrafficID: 5001, Revision: 4, Error: &proxyservice.TrafficError{Error: "connection closed"}}})
 	h.tick()
 	h.store.AddOrUpdate(trafficEntry(5002))
 	h.store.ResumeLiveEviction()
@@ -269,14 +270,14 @@ func TestQueuedRequestsKeepPatchesAndRejectStaleReplacements(t *testing.T) {
 
 func TestLiveRequestsStayInIDOrder(t *testing.T) {
 	h := newTrafficHarness(t, []*logic.TrafficEntry{trafficEntry(108)})
-	h.emit(eventTrafficEntry, withStatus(trafficEntry(111), 200))
-	h.emit(eventTrafficEntry, withStatus(trafficEntry(110), 500))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: withStatus(trafficEntry(111), 200)})
+	h.emit(proxyservice.TrafficEntryEvent{Entry: withStatus(trafficEntry(110), 500)})
 	h.tick()
 	requireIDs(t, h.store.Entries, []uint64{108, 110, 111})
 
 	h.store.Select(h.store.Entries[1])
-	h.emit(eventTrafficEntry, trafficEntry(109))
-	h.emit(eventTrafficEntry, trafficEntry(112))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(109)})
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(112)})
 	h.tick()
 	requireIDs(t, h.store.Entries, []uint64{108, 109, 110, 111, 112})
 	if h.store.Selected.ID != 110 {
@@ -284,8 +285,8 @@ func TestLiveRequestsStayInIDOrder(t *testing.T) {
 	}
 
 	// Inserting an earlier ID must also refresh the positions used by patches.
-	h.emit(eventTrafficPatch, *createdPatch(110, 2))
-	h.emit(eventTrafficEntry, withStatus(trafficEntry(110), 500))
+	h.emit(proxyservice.TrafficPatchEvent{Patch: *createdPatch(110, 2)})
+	h.emit(proxyservice.TrafficEntryEvent{Entry: withStatus(trafficEntry(110), 500)})
 	h.tick()
 	if h.store.Entries[2].StatusCode != 201 || h.store.Selected.StatusCode != 201 || h.store.Entries[3].StatusCode != 200 {
 		t.Fatalf("status %d selected %d next %d", h.store.Entries[2].StatusCode, h.store.Selected.StatusCode, h.store.Entries[3].StatusCode)
@@ -304,7 +305,7 @@ func TestSnapshotsUseIDOrder(t *testing.T) {
 	h.store.AddOrUpdate(trafficEntry(5))
 	h.tick()
 	h.backend.setSnapshot([]*logic.TrafficEntry{trafficEntry(3), trafficEntry(1), trafficEntry(4), trafficEntry(2)})
-	h.drop(eventTrafficEntry)
+	h.drop(proxyservice.LiveTrafficEntry)
 	requireIDs(t, h.store.Entries, []uint64{1, 2, 3, 4, 5, 6})
 }
 
@@ -313,8 +314,8 @@ func TestEventsBufferedDuringLoadMergeInOrder(t *testing.T) {
 	gate := make(chan struct{})
 	h.backend.gate = gate
 	h.store.Initialize(nil)
-	h.emit(eventTrafficEntry, trafficEntry(112))
-	h.emit(eventTrafficEntry, trafficEntry(109))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(112)})
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(109)})
 	close(gate)
 	h.settle()
 	requireIDs(t, h.store.Entries, []uint64{108, 109, 110, 111, 112})
@@ -325,7 +326,7 @@ func TestPatchesBufferedDuringLoadApplyToSnapshot(t *testing.T) {
 	gate := make(chan struct{})
 	h.backend.gate = gate
 	h.store.Initialize(nil)
-	h.emit(eventTrafficPatch, *createdPatch(1, 2))
+	h.emit(proxyservice.TrafficPatchEvent{Patch: *createdPatch(1, 2)})
 	close(gate)
 	h.settle()
 	if h.store.Entries[0].StatusCode != 201 {
@@ -338,9 +339,9 @@ func TestDeleteDuringLoadWins(t *testing.T) {
 	gate := make(chan struct{})
 	h.backend.gate = gate
 	h.store.Initialize(nil)
-	h.emit(eventTrafficEntry, trafficEntry(1))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)})
 	h.store.Delete([]uint64{1})
-	h.emit(eventTrafficEntry, trafficEntry(1))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)})
 	close(gate)
 	h.settle()
 	requireIDs(t, h.store.Entries, []uint64{2})
@@ -356,7 +357,7 @@ func TestOversizedSnapshotsTrimLowestIDs(t *testing.T) {
 	if h.store.Entries[len(h.store.Entries)-1].ID != 5002 || h.store.Entries[0].ID != 3 {
 		t.Fatalf("first %d", h.store.Entries[0].ID)
 	}
-	h.emit(eventTrafficReset, nil)
+	h.emit(proxyservice.TrafficResetEvent{})
 	h.store.AddOrUpdate(trafficEntry(2))
 	h.store.AddOrUpdate(trafficEntry(1))
 	h.tick()
@@ -396,7 +397,7 @@ func TestRecoveryMergesMissingIDsBeforeQueuedEntries(t *testing.T) {
 	h.store.AddOrUpdate(withStatus(withRevision(trafficEntry(5002), 3), 201))
 	h.tick()
 	h.backend.setSnapshot(entryRange(5001, 5000))
-	h.drop(eventTrafficEntry)
+	h.drop(proxyservice.LiveTrafficEntry)
 	if h.store.Entries[0].ID != 1 || h.store.PendingLiveEntryCount() != 5000 {
 		t.Fatalf("first %d queued %d", h.store.Entries[0].ID, h.store.PendingLiveEntryCount())
 	}
@@ -413,7 +414,7 @@ func TestRecoveryAndResetRespectHeldWindow(t *testing.T) {
 	h := newTrafficHarness(t, entryRange(1, 5000))
 	h.store.PauseLiveEviction()
 	h.backend.setSnapshot(entryRange(5001, 5000))
-	h.drop(eventTrafficEntry)
+	h.drop(proxyservice.LiveTrafficEntry)
 	if h.store.Entries[0].ID != 1 || h.store.PendingLiveEntryCount() != 5000 {
 		t.Fatalf("first %d queued %d", h.store.Entries[0].ID, h.store.PendingLiveEntryCount())
 	}
@@ -426,7 +427,7 @@ func TestRecoveryAndResetRespectHeldWindow(t *testing.T) {
 func TestDropOfPatchesConvergesOnSnapshot(t *testing.T) {
 	h := newTrafficHarness(t, []*logic.TrafficEntry{trafficEntry(1)})
 	h.backend.setSnapshot([]*logic.TrafficEntry{withStatus(withRevision(trafficEntry(1), 5), 204), trafficEntry(2)})
-	h.drop(eventTrafficPatch)
+	h.drop(proxyservice.LiveTrafficPatch)
 	requireIDs(t, h.store.Entries, []uint64{1, 2})
 	if h.store.Entries[0].StatusCode != 204 {
 		t.Fatalf("status %d", h.store.Entries[0].StatusCode)
@@ -436,7 +437,7 @@ func TestDropOfPatchesConvergesOnSnapshot(t *testing.T) {
 func TestInactiveSurfaceSkipsEventsAndRecoversOnReturn(t *testing.T) {
 	h := newTrafficHarness(t, []*logic.TrafficEntry{trafficEntry(1)})
 	h.store.SetSurfaceActive(false)
-	h.emit(eventTrafficEntry, trafficEntry(2))
+	h.emit(proxyservice.TrafficEntryEvent{Entry: trafficEntry(2)})
 	h.tick()
 	requireIDs(t, h.store.Entries, []uint64{1})
 	h.backend.setSnapshot([]*logic.TrafficEntry{trafficEntry(1), trafficEntry(2)})
@@ -482,30 +483,63 @@ func TestDeleteClearsSelectionAndCallsBackend(t *testing.T) {
 
 func TestRouterKeepsOrderAndReportsDrops(t *testing.T) {
 	router := NewEventRouter()
-	var received []int
+	var received []uint64
 	var dropped []uint64
-	off := router.Subscribe("traffic:entry", func(data any) { received = append(received, data.(int)) }, func(count uint64) { dropped = append(dropped, count) })
-	router.Dispatch(proxyservice.FrontendEventBatch{
-		Events:  []proxyservice.FrontendEvent{{Name: "traffic:entry", Data: 1}, {Name: "traffic:patch", Data: 9}, {Name: "traffic:entry", Data: 2}},
-		Dropped: map[string]uint64{"traffic:entry": 3},
+	offEntry := router.OnTrafficEntry(func(entry *logic.TrafficEntry) { received = append(received, entry.ID) })
+	offDrops := router.OnDropped(proxyservice.LiveTrafficEntry, func(count uint64) { dropped = append(dropped, count) })
+	router.Dispatch(proxyservice.LiveBatch{
+		Events: []proxyservice.LiveEvent{
+			proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)},
+			proxyservice.TrafficPatchEvent{Patch: logic.TrafficPatch{TrafficID: 9}},
+			proxyservice.TrafficEntryEvent{Entry: trafficEntry(2)},
+		},
+		Dropped: map[proxyservice.LiveEventKind]uint64{proxyservice.LiveTrafficEntry: 3, proxyservice.LiveTrafficPatch: 5},
 	})
-	if !slices.Equal(received, []int{1, 2}) || !slices.Equal(dropped, []uint64{3}) {
+	if !slices.Equal(received, []uint64{1, 2}) || !slices.Equal(dropped, []uint64{3}) {
 		t.Fatalf("%v %v", received, dropped)
 	}
-	off()
-	off()
-	router.Dispatch(proxyservice.FrontendEventBatch{Events: []proxyservice.FrontendEvent{{Name: "traffic:entry", Data: 4}}})
+	offEntry()
+	offEntry()
+	offDrops()
+	router.Dispatch(proxyservice.LiveBatch{Events: []proxyservice.LiveEvent{proxyservice.TrafficEntryEvent{Entry: trafficEntry(4)}}})
 	if len(received) != 2 || router.ListenerCount() != 0 {
 		t.Fatal("still subscribed")
 	}
 }
 
+func TestRouterDispatchesEveryKindInBatchOrder(t *testing.T) {
+	router := NewEventRouter()
+	var got []string
+	router.OnTrafficEntry(func(entry *logic.TrafficEntry) { got = append(got, fmt.Sprint("entry ", entry.ID)) })
+	router.OnTrafficPatch(func(patch *logic.TrafficPatch) { got = append(got, fmt.Sprint("patch ", patch.TrafficID)) })
+	router.OnTrafficLiveUpdate(func(update proxyservice.TrafficLiveUpdate) { got = append(got, fmt.Sprint("live ", update.TrafficID)) })
+	router.OnTrafficReset(func(generation uint64) { got = append(got, fmt.Sprint("reset ", generation)) })
+	httpSink := func(event proxyservice.HTTPRequestStreamEvent) { got = append(got, "http "+event.SessionID) }
+	wsSink := func(event proxyservice.WebSocketSessionEvent) { got = append(got, "ws "+event.SessionID) }
+	for _, kind := range []proxyservice.LiveEventKind{proxyservice.LiveTrafficPatch, proxyservice.LiveTrafficEntry} {
+		router.OnDropped(kind, func(count uint64) { got = append(got, fmt.Sprint("dropped ", kind, " ", count)) })
+	}
+	router.Dispatch(proxyservice.LiveBatch{
+		Events: []proxyservice.LiveEvent{
+			proxyservice.TrafficResetEvent{CaptureGeneration: 3},
+			proxyservice.WebSocketEvent{Event: proxyservice.WebSocketSessionEvent{SessionID: "w"}, Sink: wsSink},
+			proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)},
+			proxyservice.HTTPStreamEvent{Event: proxyservice.HTTPRequestStreamEvent{SessionID: "h"}, Sink: httpSink},
+			proxyservice.HTTPStreamEvent{Event: proxyservice.HTTPRequestStreamEvent{SessionID: "ignored"}},
+			proxyservice.TrafficPatchEvent{Patch: logic.TrafficPatch{TrafficID: 1}},
+			proxyservice.TrafficLiveUpdateEvent{Update: proxyservice.TrafficLiveUpdate{TrafficID: 1}},
+		},
+		Dropped: map[proxyservice.LiveEventKind]uint64{proxyservice.LiveTrafficPatch: 2, proxyservice.LiveTrafficEntry: 1},
+	})
+	want := []string{"reset 3", "ws w", "entry 1", "http h", "patch 1", "live 1", "dropped traffic entry 1", "dropped traffic patch 2"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("delivery = %q, want %q", got, want)
+	}
+}
+
 func TestResetMarkerClearsBeforeLaterEvents(t *testing.T) {
 	h := newTrafficHarness(t, []*logic.TrafficEntry{trafficEntry(1)})
-	h.router.Dispatch(proxyservice.FrontendEventBatch{Events: []proxyservice.FrontendEvent{
-		{Name: eventTrafficReset, Data: nil},
-		{Name: eventTrafficEntry, Data: withStatus(trafficEntry(1), 204)},
-	}})
+	h.emit(proxyservice.TrafficResetEvent{}, proxyservice.TrafficEntryEvent{Entry: withStatus(trafficEntry(1), 204)})
 	h.tick()
 	requireIDs(t, h.store.Entries, []uint64{1})
 	if h.store.Entries[0].StatusCode != 204 {
@@ -536,10 +570,10 @@ func openDetail(t *testing.T, view *proxyservice.TrafficBodyView) *trafficHarnes
 
 func TestLiveSSEReconcilesByByteOffset(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "hello"})
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 8, " wo"))
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 3, "lo, "))
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 0, "he"))
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 7, "x"))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 8, " wo")})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 3, "lo, ")})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 0, "he")})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 7, "x")})
 	h.tick()
 	if h.store.BodyView.ResponseBody != "hello, x wo" {
 		t.Fatalf("body %q", h.store.BodyView.ResponseBody)
@@ -549,12 +583,12 @@ func TestLiveSSEReconcilesByByteOffset(t *testing.T) {
 func TestLiveSSEJoinsSplitCharacters(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{})
 	text := "汉"
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 0, text[:1]))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 0, text[:1])})
 	h.tick()
 	if h.store.BodyView.ResponseBody != "" {
 		t.Fatalf("body %q", h.store.BodyView.ResponseBody)
 	}
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 1, text[1:]))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 1, text[1:])})
 	h.tick()
 	if h.store.BodyView.ResponseBody != text {
 		t.Fatalf("body %q", h.store.BodyView.ResponseBody)
@@ -564,7 +598,7 @@ func TestLiveSSEJoinsSplitCharacters(t *testing.T) {
 func TestLiveSSESwitchesBinarySnapshotToText(t *testing.T) {
 	// The snapshot ends inside "é", so it was marked binary as invalid UTF-8.
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "abc\xc3", ResponseBodyBinary: true})
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 4, "\xa9def"))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 4, "\xa9def")})
 	h.tick()
 	if h.store.BodyView.ResponseBody != "abcédef" || h.store.BodyView.ResponseBodyBinary {
 		t.Fatalf("%+v", h.store.BodyView)
@@ -575,7 +609,7 @@ func TestLiveGapAfterBinarySnapshotReloadsSnapshot(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "\x00\x01", ResponseBodyBinary: true})
 	before := h.backend.bodyCalls
 	h.backend.bodies[1] = &proxyservice.TrafficBodyView{ResponseBody: "data: x\n\n"}
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 5, "late"))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 5, "late")})
 	h.tick()
 	h.settle()
 	if h.backend.bodyCalls != before+1 || h.store.BodyView.ResponseBody != "data: x\n\n" || h.store.BodyView.ResponseBodyBinary {
@@ -587,7 +621,7 @@ func TestLiveGapReloadsSnapshot(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "abc"})
 	before := h.backend.bodyCalls
 	h.backend.bodies[1] = &proxyservice.TrafficBodyView{ResponseBody: "abcdefghij"}
-	h.emit(eventTrafficLiveUpdate, sseChunk(1, 9, "j"))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(1, 9, "j")})
 	h.tick()
 	h.settle()
 	if h.backend.bodyCalls != before+1 || h.store.BodyView.ResponseBody != "abcdefghij" {
@@ -597,21 +631,21 @@ func TestLiveGapReloadsSnapshot(t *testing.T) {
 
 func TestLiveWebSocketMessagesAndGap(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{{}}})
-	h.emit(eventTrafficLiveUpdate, wsMessage(1, 2))
-	h.emit(eventTrafficLiveUpdate, wsMessage(1, 1))
-	h.emit(eventTrafficLiveUpdate, wsMessage(1, 0))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: wsMessage(1, 2)})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: wsMessage(1, 1)})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: wsMessage(1, 0)})
 	h.tick()
 	if len(h.store.BodyView.WebSocketMessages) != 3 {
 		t.Fatalf("messages %d", len(h.store.BodyView.WebSocketMessages))
 	}
 	before := h.backend.bodyCalls
-	h.emit(eventTrafficLiveUpdate, wsMessage(1, 9))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: wsMessage(1, 9)})
 	h.tick()
 	h.settle()
 	if h.backend.bodyCalls != before+1 {
 		t.Fatal("gap should reload")
 	}
-	h.emit(eventTrafficLiveUpdate, proxyservice.TrafficLiveUpdate{TrafficID: 1, Kind: proxyservice.TrafficLiveUpdateWebSocketTruncated})
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: proxyservice.TrafficLiveUpdate{TrafficID: 1, Kind: proxyservice.TrafficLiveUpdateWebSocketTruncated}})
 	h.tick()
 	if !h.store.BodyView.WsMsgsTruncated {
 		t.Fatal("truncated")
@@ -621,7 +655,7 @@ func TestLiveWebSocketMessagesAndGap(t *testing.T) {
 func TestDroppedLiveUpdatesReload(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "a"})
 	before := h.backend.bodyCalls
-	h.drop(eventTrafficLiveUpdate)
+	h.drop(proxyservice.LiveTrafficLiveUpdate)
 	if h.backend.bodyCalls != before+1 {
 		t.Fatal("drop should reload")
 	}
@@ -630,7 +664,7 @@ func TestDroppedLiveUpdatesReload(t *testing.T) {
 func TestLiveUpdatesForOtherEntriesAreIgnored(t *testing.T) {
 	h := openDetail(t, &proxyservice.TrafficBodyView{ResponseBody: "a"})
 	version := h.store.BodyViewVersion
-	h.emit(eventTrafficLiveUpdate, sseChunk(2, 0, "zz"))
+	h.emit(proxyservice.TrafficLiveUpdateEvent{Update: sseChunk(2, 0, "zz")})
 	h.tick()
 	if h.store.BodyViewVersion != version {
 		t.Fatal("changed")
@@ -679,7 +713,7 @@ func TestTerminalPatchRefreshesBody(t *testing.T) {
 	h.store.SetShowDetailPanel(true)
 	h.settle()
 	before := h.backend.bodyCalls
-	h.emit(eventTrafficPatch, logic.TrafficPatch{TrafficID: 1, Revision: 2, Metrics: &proxyservice.TrafficMetricsPatch{Response: &proxyservice.HTTPMessageMetrics{State: proxyservice.HTTPMessageStateCompleted}}})
+	h.emit(proxyservice.TrafficPatchEvent{Patch: logic.TrafficPatch{TrafficID: 1, Revision: 2, Metrics: &proxyservice.TrafficMetricsPatch{Response: &proxyservice.HTTPMessageMetrics{State: proxyservice.HTTPMessageStateCompleted}}}})
 	h.settle()
 	if h.backend.bodyCalls != before+1 {
 		t.Fatalf("calls %d", h.backend.bodyCalls)
@@ -727,10 +761,10 @@ func TestStatisticsAreDebounced(t *testing.T) {
 
 func TestConnectDeliversBatchesOnTheMainThread(t *testing.T) {
 	h := newTrafficHarness(t, nil)
-	bus := serviceruntime.NewBus()
-	off := h.router.Connect(bus, h.rt.Dispatcher.Post)
+	var live serviceruntime.Topic[proxyservice.LiveBatch]
+	off := h.router.Connect(&live, h.rt.Dispatcher.Post)
 	defer off()
-	bus.Emit(proxyservice.BatchedAppEventName, proxyservice.FrontendEventBatch{Events: []proxyservice.FrontendEvent{{Name: eventTrafficEntry, Data: trafficEntry(1)}}})
+	live.Publish(proxyservice.LiveBatch{Events: []proxyservice.LiveEvent{proxyservice.TrafficEntryEvent{Entry: trafficEntry(1)}}})
 	h.settle()
 	h.tick()
 	requireIDs(t, h.store.Entries, []uint64{1})
@@ -739,9 +773,9 @@ func TestConnectDeliversBatchesOnTheMainThread(t *testing.T) {
 func TestResetAndDropInOneBatchEndOnTheSnapshot(t *testing.T) {
 	h := newTrafficHarness(t, entryRange(1, 3))
 	h.backend.setSnapshot(entryRange(10, 2))
-	h.router.Dispatch(proxyservice.FrontendEventBatch{
-		Events:  []proxyservice.FrontendEvent{{Name: eventTrafficReset}},
-		Dropped: map[string]uint64{eventTrafficEntry: 4},
+	h.router.Dispatch(proxyservice.LiveBatch{
+		Events:  []proxyservice.LiveEvent{proxyservice.TrafficResetEvent{}},
+		Dropped: map[proxyservice.LiveEventKind]uint64{proxyservice.LiveTrafficEntry: 4},
 	})
 	h.settle()
 	requireIDs(t, h.store.Entries, idRange(10, 2))
@@ -768,7 +802,7 @@ func TestLiveSSEAppendsChunksWithoutCopyingTheBody(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	for _, update := range updates {
-		h.emit(eventTrafficLiveUpdate, update)
+		h.emit(proxyservice.TrafficLiveUpdateEvent{Update: update})
 		h.tick()
 	}
 	runtime.ReadMemStats(&after)

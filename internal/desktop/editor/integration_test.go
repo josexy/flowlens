@@ -14,7 +14,6 @@ import (
 
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/pkg/database"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
@@ -37,15 +36,13 @@ func newServiceFixture(t *testing.T) *fixture {
 	if err := settings.Load(); err != nil {
 		t.Fatal(err)
 	}
-	bus := serviceruntime.NewBus()
 	service := proxyservice.New(settings)
-	service.SetEventBus(bus)
 	if err := service.ServiceStartup(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = service.ServiceShutdown() })
 	f := newFixture(t, service, nil)
-	f.data.Events.Connect(bus, f.data.Runtime.Dispatcher.Post)
+	f.data.Events.Connect(&service.Events.Live, f.data.Runtime.Dispatcher.Post)
 	return f
 }
 

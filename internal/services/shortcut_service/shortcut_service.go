@@ -29,9 +29,12 @@ const (
 	ShortcutStatusPortalPending ShortcutRuntimeStatus = "portalPending"
 )
 
+// ShortcutWarning names a platform limit of system-wide shortcuts.
+type ShortcutWarning string
+
 const (
-	WarningWaylandPortalControlsBinding = "waylandPortalControlsBinding"
-	WarningMacNonANSICompatibility      = "macNonANSICompatibility"
+	WarningWaylandPortalControlsBinding ShortcutWarning = "waylandPortalControlsBinding"
+	WarningMacNonANSICompatibility      ShortcutWarning = "macNonANSICompatibility"
 )
 
 type ShortcutCommandRuntimeState struct {
@@ -41,7 +44,7 @@ type ShortcutCommandRuntimeState struct {
 
 type ShortcutRuntimeState struct {
 	Commands map[string]ShortcutCommandRuntimeState `json:"commands"`
-	Warnings []string                               `json:"warnings"`
+	Warnings []ShortcutWarning                      `json:"warnings"`
 }
 
 type ShortcutApplyResult struct {
@@ -50,18 +53,21 @@ type ShortcutApplyResult struct {
 	// rejected or rolled-back rebind it is the restored previous configuration.
 	Config       *settingservice.ShortcutConfig `json:"config"`
 	RuntimeState ShortcutRuntimeState           `json:"runtimeState"`
-	Warnings     []string                       `json:"warnings"`
-	ErrorCode    string                         `json:"errorCode,omitempty"`
+	Warnings     []ShortcutWarning              `json:"warnings"`
+	ErrorCode    ShortcutApplyErrorCode         `json:"errorCode,omitempty"`
 	ErrorMessage string                         `json:"errorMessage,omitempty"`
 }
 
+// ShortcutApplyErrorCode names why a shortcut change was not applied.
+type ShortcutApplyErrorCode string
+
 const (
-	ApplyErrorInvalidConfig      = "invalidConfig"
-	ApplyErrorUnsupported        = "unsupported"
-	ApplyErrorRegistration       = "registrationConflict"
-	ApplyErrorPersistence        = "persistenceFailed"
-	ApplyErrorUnregister         = "unregisterFailed"
-	ApplyErrorRollbackIncomplete = "rollbackIncomplete"
+	ApplyErrorInvalidConfig      ShortcutApplyErrorCode = "invalidConfig"
+	ApplyErrorUnsupported        ShortcutApplyErrorCode = "unsupported"
+	ApplyErrorRegistration       ShortcutApplyErrorCode = "registrationConflict"
+	ApplyErrorPersistence        ShortcutApplyErrorCode = "persistenceFailed"
+	ApplyErrorUnregister         ShortcutApplyErrorCode = "unregisterFailed"
+	ApplyErrorRollbackIncomplete ShortcutApplyErrorCode = "rollbackIncomplete"
 )
 
 type Registrar interface {
@@ -133,9 +139,9 @@ func detectEnvironment() Environment {
 	}
 }
 
-// Start applies the currently persisted configuration. Main should call this
-// after the main window reports frontend-ready so callbacks cannot race the
-// frontend shortcut host during application startup.
+// Start applies the currently persisted configuration. The application calls
+// it once the main window is shown, so callbacks cannot race the window's
+// shortcut handling during startup.
 func (s *ShortcutService) Start() (*ShortcutApplyResult, error) {
 	if s.store == nil {
 		return s.failureResult(ApplyErrorPersistence, errors.New("shortcut config store is not available"), nil), nil
@@ -415,17 +421,17 @@ func (s *ShortcutService) successResultLocked() ShortcutApplyResult {
 		Applied:      true,
 		Config:       settingservice.NormalizeShortcutConfig(s.effectiveConfig),
 		RuntimeState: state,
-		Warnings:     append([]string(nil), state.Warnings...),
+		Warnings:     append([]ShortcutWarning(nil), state.Warnings...),
 	}
 }
 
-func (s *ShortcutService) failureResult(code string, applyErr error, state *ShortcutRuntimeState) *ShortcutApplyResult {
+func (s *ShortcutService) failureResult(code ShortcutApplyErrorCode, applyErr error, state *ShortcutRuntimeState) *ShortcutApplyResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.failureResultLocked(code, applyErr, state)
 }
 
-func (s *ShortcutService) failureResultLocked(code string, applyErr error, overrideState *ShortcutRuntimeState) *ShortcutApplyResult {
+func (s *ShortcutService) failureResultLocked(code ShortcutApplyErrorCode, applyErr error, overrideState *ShortcutRuntimeState) *ShortcutApplyResult {
 	state := s.runtimeState
 	if overrideState != nil {
 		state = *overrideState
@@ -435,7 +441,7 @@ func (s *ShortcutService) failureResultLocked(code string, applyErr error, overr
 		Applied:      false,
 		Config:       settingservice.NormalizeShortcutConfig(s.effectiveConfig),
 		RuntimeState: clonedState,
-		Warnings:     append([]string(nil), clonedState.Warnings...),
+		Warnings:     append([]ShortcutWarning(nil), clonedState.Warnings...),
 		ErrorCode:    code,
 	}
 	if applyErr != nil {
@@ -451,7 +457,7 @@ func emptyRuntimeState() ShortcutRuntimeState {
 func cloneRuntimeState(state ShortcutRuntimeState) ShortcutRuntimeState {
 	clone := emptyRuntimeState()
 	maps.Copy(clone.Commands, state.Commands)
-	clone.Warnings = append([]string(nil), state.Warnings...)
+	clone.Warnings = append([]ShortcutWarning(nil), state.Warnings...)
 	return clone
 }
 

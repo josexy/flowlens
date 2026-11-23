@@ -385,13 +385,15 @@ func (v *View) loadDataSize() {
 	})
 }
 
-func (v *View) clearData(work func() error, done *bool) {
+// clearData removes local data through the store, which refreshes the other
+// windows even if this one closes first.
+func (v *View) clearData(scope proxyservice.LocalDataClearScope, done *bool) {
 	state := &v.storage
 	if state.pending {
 		return
 	}
 	state.pending, state.cacheDone, state.allDone = true, false, false
-	run(v, "data-clear", func() (struct{}, error) { return struct{}{}, work() }, func(_ struct{}, err error) {
+	v.Data.ClearLocalData(scope, func(err error) {
 		state.pending = false
 		if err != nil {
 			v.Notifier.Error(err.Error())
@@ -494,10 +496,10 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 		}
 		blocked := state.pending
 		v.dangerRow(c, palette, "clear-cache", locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesDesc(), locales.SettingsClearAction(), nui.Neutral, nui.Outline, blocked, false, func() {
-			v.Confirm.Ask(confirmRequest(locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesConfirm(), locales.SettingsClearAction(), nui.Warning, func() { v.clearData(v.Host.ClearCache, &state.cacheDone) }))
+			v.Confirm.Ask(confirmRequest(locales.SettingsClearCacheFiles(), locales.SettingsClearCacheFilesConfirm(), locales.SettingsClearAction(), nui.Warning, func() { v.clearData(proxyservice.LocalDataScopeCache, &state.cacheDone) }))
 		})
 		v.dangerRow(c, palette, "clear-all", locales.SettingsClearAllData(), locales.SettingsClearAllDataDesc(), locales.SettingsClearAction(), nui.Error, nui.Solid, blocked, false, func() {
-			v.Confirm.Ask(confirmRequest(locales.SettingsClearAllData(), locales.SettingsClearAllDataConfirm(), locales.SettingsClearAction(), nui.Error, func() { v.clearData(v.Host.ClearAllData, &state.allDone) }))
+			v.Confirm.Ask(confirmRequest(locales.SettingsClearAllData(), locales.SettingsClearAllDataConfirm(), locales.SettingsClearAction(), nui.Error, func() { v.clearData(proxyservice.LocalDataScopeCacheAndHistory, &state.allDone) }))
 		})
 	})
 }
@@ -609,11 +611,11 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 	config := draft.Shortcuts
 	settings := v.Data.Settings
 	runtimeState := settings.ShortcutRuntime
-	warnings := append([]string(nil), runtimeState.Warnings...)
+	warnings := append([]shortcutservice.ShortcutWarning(nil), runtimeState.Warnings...)
 	if result := settings.LastShortcutResult; result != nil {
 		if !result.Applied {
 			runtimeState = result.RuntimeState
-			warnings = append([]string(nil), runtimeState.Warnings...)
+			warnings = append([]shortcutservice.ShortcutWarning(nil), runtimeState.Warnings...)
 		}
 		warnings = append(warnings, result.Warnings...)
 	}
@@ -632,7 +634,7 @@ func (v *View) shortcutsPage(c *ui.Context, palette nui.Theme, draft *settingser
 		})
 	})
 	for index, warning := range warnings {
-		nui.Alert(c.Key(fmt.Sprintf("warning-%d", index)), palette, nui.AlertOptions{Title: message("shortcutsWarnings" + camel(warning)), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
+		nui.Alert(c.Key(fmt.Sprintf("warning-%d", index)), palette, nui.AlertOptions{Title: shortcutWarningText(warning), Color: nui.Warning, Variant: nui.Soft, Icon: lucide.TriangleAlert()})
 	}
 	query := strings.ToLower(strings.TrimSpace(state.search))
 	type group struct {
@@ -711,7 +713,7 @@ func (v *View) commandRow(c *ui.Context, palette nui.Theme, config *settingservi
 				}
 				if scope == settingservice.ShortcutScopeGlobal && resolved.Binding != nil {
 					if runtime, ok := runtimeState.Commands[command.ID]; ok {
-						nui.Badge(c.Key("runtime"), palette, message("shortcutsRuntime"+camel(string(runtime.Status))), nui.BadgeOptions{Color: runtimeStatusColor(runtime.Status), Variant: nui.Soft, Size: nui.SM})
+						nui.Badge(c.Key("runtime"), palette, shortcutRuntimeText(runtime.Status), nui.BadgeOptions{Color: runtimeStatusColor(runtime.Status), Variant: nui.Soft, Size: nui.SM})
 					}
 				}
 			})

@@ -1,5 +1,7 @@
 package store
 
+import "strings"
+
 // WorkspaceSection is a page of the workbench.
 type WorkspaceSection string
 
@@ -31,6 +33,10 @@ const (
 
 // CaptureItemLive selects the live capture in the Capture section.
 const CaptureItemLive = "capture"
+
+// CaptureItemHistoryPrefix begins the Capture section item of a saved
+// history, followed by its key.
+const CaptureItemHistoryPrefix = "history:"
 
 // WorkbenchStore holds which page the main window shows.
 type WorkbenchStore struct {
@@ -102,6 +108,14 @@ func (w *WorkbenchStore) SelectCaptureItem(item string) {
 	w.SecondarySidebarVisible = true
 	w.CaptureSelection = item
 	w.ActiveContent = ContentTraffic
+}
+
+// LeaveHistory selects the live capture in place of a saved history after
+// saved histories were removed. The active section stays.
+func (w *WorkbenchStore) LeaveHistory() {
+	if strings.HasPrefix(w.CaptureSelection, CaptureItemHistoryPrefix) {
+		w.CaptureSelection = CaptureItemLive
+	}
 }
 
 // OpenPythonHelp shows the API help for a scope.

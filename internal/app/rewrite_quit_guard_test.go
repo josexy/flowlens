@@ -1,38 +1,129 @@
 package app
 
-import "testing"
+import (
+	"slices"
+	"sync"
+	"testing"
 
-func TestRewriteQuitGuardRequiresMatchingDecision(t *testing.T) {
-	g := &rewriteQuitGuard{}
-	if blocked, _ := g.request("quit"); blocked {
-		t.Fatal("clean blocked")
+	"github.com/josexy/flowlens/internal/desktop/rewrite"
+)
+
+// fakeRewriteView holds one quit prompt, as the rewrite view does: a reply
+// clears the prompt before the decision is delivered.
+// Its lock lets tests poll it while a restart continues on a goroutine.
+type fakeRewriteView struct {
+	mu     sync.Mutex
+	dirty  bool
+	prompt *rewrite.QuitPrompt
+	asked  []string
+}
+
+func (v *fakeRewriteView) Dirty() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.dirty
+}
+
+func (v *fakeRewriteView) QuitPending() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.prompt != nil
+}
+
+func (v *fakeRewriteView) AskQuit(prompt rewrite.QuitPrompt) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.prompt = &prompt
+	v.asked = append(v.asked, prompt.Reason)
+}
+
+func (v *fakeRewriteView) askedReasons() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return slices.Clone(v.asked)
+}
+
+func (v *fakeRewriteView) currentPrompt() *rewrite.QuitPrompt {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.prompt
+}
+
+func (v *fakeRewriteView) reply(decision rewrite.QuitDecision) {
+	v.mu.Lock()
+	prompt := v.prompt
+	v.prompt = nil
+	if decision != rewrite.DecisionCancel {
+		v.dirty = false
 	}
-	g.setDirty(true)
-	blocked, req := g.request("quit")
-	if !blocked || req == nil {
-		t.Fatal("dirty not guarded")
+	v.mu.Unlock()
+	prompt.Respond(decision)
+}
+
+func TestRewriteQuitGuardPassesWithoutUnsavedRules(t *testing.T) {
+	view := &fakeRewriteView{}
+	guard := &rewriteQuitGuard{view: view}
+	if guard.guard(quitReasonQuit, func() { t.Fatal("proceeded") }) || len(view.askedReasons()) != 0 {
+		t.Fatal("clean rules blocked the quit")
 	}
-	if blocked, again := g.request("update"); !blocked || again != nil {
-		t.Fatal("parallel request replaced dialog")
+}
+
+func TestRewriteQuitGuardProceedsOnlyAfterSaveOrDiscard(t *testing.T) {
+	for _, decision := range []rewrite.QuitDecision{rewrite.DecisionSave, rewrite.DecisionDiscard} {
+		view := &fakeRewriteView{dirty: true}
+		shown := 0
+		guard := &rewriteQuitGuard{view: view, show: func() { shown++ }}
+		proceeded := 0
+		if !guard.guard(quitReasonUpdate, func() { proceeded++ }) {
+			t.Fatal("unsaved rules did not block")
+		}
+		if shown != 1 || len(view.askedReasons()) != 1 || view.askedReasons()[0] != quitReasonUpdate || proceeded != 0 {
+			t.Fatalf("shown %d, asked %v, proceeded %d", shown, view.askedReasons(), proceeded)
+		}
+		view.reply(decision)
+		if proceeded != 1 {
+			t.Fatalf("decision %d proceeded %d times", decision, proceeded)
+		}
+		if guard.guard(quitReasonQuit, func() {}) {
+			t.Fatal("resolved rules still block")
+		}
 	}
-	if _, proceed := g.confirm("stale", "quit", "discard"); proceed {
-		t.Fatal("stale approval")
+}
+
+func TestRewriteQuitGuardIgnoresStaleDecisionsAfterACancel(t *testing.T) {
+	view := &fakeRewriteView{dirty: true}
+	guard := &rewriteQuitGuard{view: view}
+	var quits, updates int
+	guard.guard(quitReasonQuit, func() { quits++ })
+	cancelled := view.currentPrompt()
+	view.reply(rewrite.DecisionCancel)
+	if quits != 0 || !view.Dirty() {
+		t.Fatal("cancel proceeded or lost the unsaved rules")
 	}
-	if _, proceed := g.confirm(req.RequestID, "quit", "cancel"); proceed {
-		t.Fatal("cancel approved")
+	if !guard.guard(quitReasonUpdate, func() { updates++ }) {
+		t.Fatal("cancel cleared the guard")
 	}
-	_, req = g.request("update")
-	if req == nil {
-		t.Fatal("cancel discarded dirty state")
+	// A decision for the cancelled prompt authorizes nothing.
+	cancelled.Respond(rewrite.DecisionDiscard)
+	if quits != 0 || updates != 0 || !view.QuitPending() {
+		t.Fatalf("stale decision: quits %d, updates %d", quits, updates)
 	}
-	reason, proceed := g.confirm(req.RequestID, "update", "save")
-	if !proceed || reason != "update" {
-		t.Fatal(reason, proceed)
+	view.reply(rewrite.DecisionSave)
+	if quits != 0 || updates != 1 {
+		t.Fatalf("quits %d, updates %d", quits, updates)
 	}
-	if blocked, _ := g.request("update"); blocked {
-		t.Fatal("successful save still dirty")
+}
+
+func TestRewriteQuitGuardBlocksASecondQuitWhileAsking(t *testing.T) {
+	view := &fakeRewriteView{dirty: true}
+	guard := &rewriteQuitGuard{view: view}
+	var first, second int
+	guard.guard(quitReasonQuit, func() { first++ })
+	if !guard.guard(quitReasonUpdate, func() { second++ }) || len(view.askedReasons()) != 1 {
+		t.Fatalf("a second request replaced the open prompt: asked %v", view.askedReasons())
 	}
-	if _, proceed = g.confirm(req.RequestID, "update", "save"); proceed {
-		t.Fatal("duplicate approved")
+	view.reply(rewrite.DecisionDiscard)
+	if first != 1 || second != 0 {
+		t.Fatalf("first %d, second %d", first, second)
 	}
 }

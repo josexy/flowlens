@@ -240,7 +240,7 @@ func TestWebSocketSessionPreservesHandshakeHeaderFields(t *testing.T) {
 			{Name: "x-request-first", Value: "first"},
 			{Name: "Connection", Value: "close"},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestWebSocketHTTPRequestSessionLifecycle(t *testing.T) {
 	connectCallCtx, cancelConnectCall := context.WithCancel(context.Background())
 	connectResp, err := svc.ConnectWebSocket(connectCallCtx, WebSocketConnectRequest{
 		URL: strings.Replace(server.URL, "http://", "ws://", 1),
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestWebSocketSessionConnectCancellation(t *testing.T) {
 	go func() {
 		_, err := svc.ConnectWebSocket(callCtx, WebSocketConnectRequest{
 			URL: strings.Replace(server.URL, "http://", "ws://", 1),
-		})
+		}, nil)
 		resultCh <- err
 	}()
 
@@ -459,7 +459,7 @@ func TestWebSocketSessionHandshakeTimeout(t *testing.T) {
 	_, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{
 		URL:       strings.Replace(server.URL, "http://", "ws://", 1),
 		TimeoutMs: 50,
-	})
+	}, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ConnectWebSocket error = %v, want context deadline exceeded", err)
 	}
@@ -508,7 +508,7 @@ func TestWebSocketHTTPRequestSessionRemoteCloseEmitsClosedEvent(t *testing.T) {
 
 	connectResp, err := svc.ConnectWebSocket(context.Background(), WebSocketConnectRequest{
 		URL: strings.Replace(server.URL, "http://", "ws://", 1),
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}

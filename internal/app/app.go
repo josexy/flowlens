@@ -42,14 +42,12 @@ import (
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	shortcutservice "github.com/josexy/flowlens/internal/services/shortcut_service"
 	"github.com/josexy/flowlens/locales"
-	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
 const (
-	globalShortcutDebounce    = 250 * time.Millisecond
-	shutdownMinimumVisible    = 300 * time.Millisecond
-	shutdownUIReadyTimeout    = 2 * time.Second
-	shortcutsChangedEventName = "app:shortcuts-changed"
+	globalShortcutDebounce = 250 * time.Millisecond
+	shutdownMinimumVisible = 300 * time.Millisecond
+	shutdownUIReadyTimeout = 2 * time.Second
 )
 
 // startupSteps are the stages that must happen in this order: a second instance
@@ -135,7 +133,6 @@ func Run() {
 }
 
 type services struct {
-	bus           *serviceruntime.Bus
 	app           *appservice.AppService
 	setting       *settingservice.SettingService
 	rewrite       *rewriteservice.RewriteService
@@ -150,9 +147,7 @@ type services struct {
 }
 
 func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(shortcutservice.ShortcutApplyResult)) (_ *services, startErr error) {
-	bus := serviceruntime.NewBus()
 	appSvc := appservice.New()
-	appSvc.SetEventBus(bus)
 	configureUpdates(appSvc)
 	settingSvc := settingservice.New(db)
 	if err := settingSvc.Load(); err != nil {
@@ -169,30 +164,21 @@ func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(
 	logger.G().Info("FlowLens startup initialized")
 
 	rewriteSvc := rewriteservice.New(db)
-	rewriteservice.SetChangedHandler(rewriteSvc, func(event rewriteservice.Changed) {
-		bus.Emit(rewriteservice.ChangedEvent, event)
-	})
 	proxySvc := proxyservice.New(settingSvc)
-	proxySvc.SetEventBus(bus)
 	proxyservice.SetRewriteService(proxySvc, rewriteSvc)
 	pythonSvc, err := pythonpluginservice.New(db, settingSvc)
 	if err != nil {
 		return nil, fmt.Errorf("initialize Python plugin service: %w", err)
 	}
-	pythonSvc.SetEventBus(bus)
 	proxySvc.SetHTTPRequestPluginRunner(pythonSvc)
 	memStatsSvc := memstatsservice.New()
-	memStatsSvc.SetEventBus(bus)
 	historySvc := historyservice.New(settingSvc, proxySvc)
 	proxySvc.SetHistoryCleaner(historySvc)
 	apiCollectionSvc := apicollectionservice.New(db)
 	if err := apiCollectionSvc.Load(); err != nil {
 		return nil, fmt.Errorf("load API collection: %w", err)
 	}
-	shortcutSvc := shortcutservice.NewWithNotifier(newSystemShortcuts(), settingSvc, invokeShortcut, func(result shortcutservice.ShortcutApplyResult) {
-		bus.Emit(shortcutsChangedEventName, result)
-		shortcutsChanged(result)
-	})
+	shortcutSvc := shortcutservice.NewWithNotifier(newSystemShortcuts(), settingSvc, invokeShortcut, shortcutsChanged)
 	loggingSvc := loggingservice.New(settingSvc)
 
 	lifecycle := serviceruntime.NewLifecycle(context.Background())
@@ -201,7 +187,7 @@ func newServices(db *sql.DB, invokeShortcut func(string), shortcutsChanged func(
 	// single connection must not make them wait for rule compilation.
 	lifecycle.Register(rewriteSvc)
 	return &services{
-		bus: bus, app: appSvc, setting: settingSvc, rewrite: rewriteSvc, proxy: proxySvc, python: pythonSvc,
+		app: appSvc, setting: settingSvc, rewrite: rewriteSvc, proxy: proxySvc, python: pythonSvc,
 		memStats: memStatsSvc, history: historySvc, apiCollection: apiCollectionSvc, logging: loggingSvc,
 		shortcut: shortcutSvc, lifecycle: lifecycle,
 	}, nil
@@ -277,36 +263,19 @@ func startServices(db *sql.DB) (_ *launched, startErr error) {
 			Backend: all.setting, Shortcuts: all.shortcut, Proxy: all.proxy, Python: all.python, ApplyLocale: locale.Apply,
 			ApplyThemeMode: applyNativeThemeMode,
 		},
-		Traffic:    all.proxy,
-		Proxy:      all.proxy,
-		History:    all.history,
-		Requests:   all.proxy,
-		Saved:      all.apiCollection,
-		Collection: all.apiCollection,
-		Rewrite:    all.rewrite,
-		Plugins:    all.python,
-		Updater:    all.app,
-		MemStats:   all.memStats,
-		PluginEvents: func(registry func(store.PluginRegistryEvent), status func(store.PluginStatusEvent)) (off func()) {
-			offRegistry := all.bus.On(pythonpluginservice.RegistryEventName, func(event serviceruntime.Event) {
-				if value, ok := event.Data.(store.PluginRegistryEvent); ok {
-					rt.Dispatcher.Post(func() { registry(value) })
-				}
-			})
-			offStatus := all.bus.On(pythonpluginservice.StatusEventName, func(event serviceruntime.Event) {
-				if value, ok := event.Data.(store.PluginStatusEvent); ok {
-					rt.Dispatcher.Post(func() { status(value) })
-				}
-			})
-			return func() { offRegistry(); offStatus() }
-		},
-		RewriteChanges: func(notify func(int64)) (off func()) {
-			return all.bus.On(rewriteservice.ChangedEvent, func(event serviceruntime.Event) {
-				if changed, ok := event.Data.(rewriteservice.Changed); ok {
-					rt.Dispatcher.Post(func() { notify(changed.Revision) })
-				}
-			})
-		},
+		Storage:        all.proxy,
+		Traffic:        all.proxy,
+		Proxy:          all.proxy,
+		History:        all.history,
+		Requests:       all.proxy,
+		Saved:          all.apiCollection,
+		Collection:     all.apiCollection,
+		Rewrite:        all.rewrite,
+		Plugins:        all.python,
+		Updater:        all.app,
+		MemStats:       all.memStats,
+		PluginEvents:   store.PluginEvents{Registry: &all.python.Events.Registry, Status: &all.python.Events.Status},
+		RewriteChanges: &all.rewrite.Events.Changed,
 	})
 	if err := data.Settings.Load(); err != nil {
 		return nil, failed(startupfailure.StageSettings, err)
@@ -384,6 +353,7 @@ func openMainWindow(started *launched, shown func()) {
 	})
 	started.application = app
 	icons := widgets.NewProcessIcons(data.Runtime.Jobs, all.proxy.GetProcessIcon)
+	data.ClearProcessIcons = icons.Clear
 	captureWorkspace := capture.New(data, capture.Host{
 		ListLocalIPs: all.setting.ListLocalIPv4Addresses,
 		Resend:       all.proxy.ResendRequest,
@@ -490,11 +460,7 @@ func openMainWindow(started *launched, shown func()) {
 	statistics := memstats.New(data.MemStats)
 	statistics.Select = func() { data.Workbench.ShowSection(store.WorkspaceMemStats) }
 	app.Surfaces[store.WorkspaceMemStats] = shell.Surface{Sidebar: statistics.Sidebar, Content: statistics.Content}
-	quitGuard := &rewriteQuitGuard{}
-	app.Overlays = append(app.Overlays, func(c *ui.Context, theme nui.Theme) {
-		quitGuard.setDirty(rules.Dirty())
-		rules.Overlay(c, theme)
-	})
+	app.Overlays = append(app.Overlays, rules.Overlay)
 	settingsWindow := newSettingsWindowController(all, data, func() { captureWorkspace.Restart() })
 	updateWindow := &updateWindowController{data: data}
 	app.Host.OpenSettings = settingsWindow.open
@@ -523,9 +489,9 @@ func openMainWindow(started *launched, shown func()) {
 	}
 	window = mygo.NewWindow(options)
 	data.Runtime.Dispatcher.SetMain(window)
-	data.Events.Connect(all.bus, data.Runtime.Dispatcher.Post)
-	data.Workspace.ConnectPluginLogs(all.bus, data.Runtime.Dispatcher.Post)
-	data.Proxy.Initialize(all.bus)
+	data.Events.Connect(&all.proxy.Events.Live, data.Runtime.Dispatcher.Post)
+	mygo.App.OnQuit(data.Workspace.ConnectPluginLogs(&all.python.Events.Log))
+	data.Proxy.Initialize(&all.proxy.Events)
 	data.Traffic.Initialize(func(err error) {
 		if err != nil {
 			logger.G().Errorf("Load captured traffic: %v", err)
@@ -548,6 +514,7 @@ func openMainWindow(started *launched, shown func()) {
 
 	lifecycle := &appLifecycle{
 		window:   window,
+		onMain:   mygo.RunOnMain,
 		settings: all.setting,
 		saveGeom: func() { updateWindowConfigFromRuntimeIfStartupReady(all.setting, window, &ready) },
 	}
@@ -574,29 +541,17 @@ func openMainWindow(started *launched, shown func()) {
 	settingsWindow.canClose = lifecycle.coordinator.CanQuit
 	restartForUpdate := &updateRestartHandler{
 		blocked: func(proceed func()) bool { return lifecycle.blockedByGuards(quitReasonUpdate, proceed) },
+		onMain:  mygo.RunOnMain,
 		restart: lifecycle.restartForUpdate,
-		failed:  func(err error) { all.bus.Emit(appservice.UpdateRestartFailedEventName, err.Error()) },
+		failed:  all.app.RestartFailed,
 	}
-	offUpdateRestart := all.bus.On(appservice.UpdateUserRestartEventName, func(serviceruntime.Event) { go restartForUpdate.request() })
-	mygo.App.OnQuit(offUpdateRestart)
-	data.Updater.Initialize(all.bus, data.Runtime.Dispatcher.Post)
-	data.MemStats.Initialize(all.bus, data.Runtime.Dispatcher.Post)
+	all.app.SetRestartRequester(func() { go restartForUpdate.request() })
+	mygo.App.OnQuit(func() { all.app.SetRestartRequester(nil) })
+	data.Updater.Initialize(&all.app.Events.UpdateState, data.Runtime.Dispatcher.Post)
+	data.MemStats.Initialize(&all.memStats.Events.Snapshot, data.Runtime.Dispatcher.Post)
 	app.Host.ShutdownUIReady = func() { lifecycle.coordinator.UIReady() }
-	lifecycle.guards = append(lifecycle.guards, settingsWindow.quitGuard)
-	lifecycle.guards = append(lifecycle.guards, func(reason string, proceed func()) bool {
-		blocked, request := quitGuard.request(reason)
-		if request != nil {
-			data.Runtime.Dispatcher.Post(func() {
-				show()
-				rules.AskQuit(rewrite.QuitPrompt{Reason: request.Reason, Respond: func(decision string) {
-					if _, confirmed := quitGuard.confirm(request.RequestID, request.Reason, decision); confirmed {
-						proceed()
-					}
-				}})
-			})
-		}
-		return blocked
-	})
+	rewriteGuard := &rewriteQuitGuard{view: rules, show: show}
+	lifecycle.guards = append(lifecycle.guards, settingsWindow.quitGuard, rewriteGuard.guard)
 
 	mygo.App.OnBeforeQuit(func(event *mygo.QuitEvent) {
 		if lifecycle.BeforeQuit() {

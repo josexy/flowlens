@@ -13,28 +13,22 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
 	"github.com/josexy/flowlens/internal/pkg/logger"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	apicollectionservice "github.com/josexy/flowlens/internal/services/api_collection_service"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
-	pythonpluginservice "github.com/josexy/flowlens/internal/services/python_plugin_service"
 	"github.com/josexy/flowlens/locales"
 )
 
 const (
-	eventHTTPRequest       = "http-request:event"
-	eventWebSocketSession  = "websocket-session:event"
-	maxPendingSessions     = 100
 	streamFlushInterval    = 100 * time.Millisecond
 	webSocketSessionGone   = "websocket session not found"
 	jobWebSocketConnectPfx = "workspace:ws-connect:"
-	pluginLogFlushInterval = 16 * time.Millisecond
 )
 
 // RequestBackend sends requests for the editor tabs.
 type RequestBackend interface {
-	SendHTTPRequest(ctx context.Context, config proxyservice.SendRequestConfig, method, targetURL string, headers []logic.HeaderField, body proxyservice.SendRequestBody) (proxyservice.SendRequestResponse, error)
+	SendHTTPRequest(ctx context.Context, config proxyservice.SendRequestConfig, method, targetURL string, headers []logic.HeaderField, body proxyservice.SendRequestBody, sink proxyservice.HTTPStreamSink) (proxyservice.SendRequestResponse, error)
 	DisconnectHTTPRequestStream(sessionID string) error
-	ConnectWebSocket(ctx context.Context, request proxyservice.WebSocketConnectRequest) (proxyservice.WebSocketConnectResponse, error)
+	ConnectWebSocket(ctx context.Context, request proxyservice.WebSocketConnectRequest, sink proxyservice.WebSocketSink) (proxyservice.WebSocketConnectResponse, error)
 	SendWebSocketMessage(request proxyservice.WebSocketSendRequest) error
 	DisconnectWebSocket(sessionID string) error
 	RecoverRequestBodyForEditing(requestURL string, headers []logic.HeaderField, body proxyservice.TrafficBodyView) (proxyservice.RequestBodyRecoveryResult, error)
@@ -48,9 +42,20 @@ type SavedRequestBackend interface {
 	UpdateWebSocketRequest(id string, request *apicollectionservice.SavedWebSocketRequest) (*apicollectionservice.APICollectionRequest, error)
 }
 
+// httpStreamRuntime is one send of an HTTP Request Editor tab and the
+// streaming response it may start. It exists before the backend call, so the
+// send's sink owns every event of its stream, including those that arrive
+// before the call returns.
 type httpStreamRuntime struct {
-	sessionID  string
-	state      *logic.HTTPEditorState
+	key       string
+	sessionID string
+	state     *logic.HTTPEditorState
+	// active is false once Stop, a new send, closing the tab, or cleanup ended
+	// the operation. Its later events are discarded.
+	active bool
+	// streaming is true once the send returned a streaming response; events
+	// wait in pending until then.
+	streaming  bool
 	byteOffset int64
 	decoder    *utf8StreamDecoder
 	// Append only on the main thread. String snapshots remain immutable as
@@ -60,31 +65,19 @@ type httpStreamRuntime struct {
 	stopFlush func()
 }
 
-// boundedKeys remembers a limited number of session IDs.
-type boundedKeys struct {
-	values *orderedMap[struct{}]
-	limit  int
-}
-
-func newBoundedKeys(limit int) *boundedKeys {
-	return &boundedKeys{values: newOrderedMap[struct{}](), limit: limit}
-}
-
-func (k *boundedKeys) add(id uint64) {
-	if !k.values.Has(id) && k.values.Len() >= k.limit {
-		k.values.DeleteOldest()
-		k.values.compact()
-	}
-	k.values.Set(id, struct{}{})
-}
-
-func hashSession(id string) uint64 {
-	var hash uint64 = 14695981039346656037
-	for _, b := range []byte(id) {
-		hash ^= uint64(b)
-		hash *= 1099511628211
-	}
-	return hash
+// webSocketRuntime is one connect of a WebSocket Client tab and the session it
+// may open. Events wait in pending until the connect call returns.
+type webSocketRuntime struct {
+	key       string
+	sessionID string
+	state     *logic.WebSocketClientState
+	// active is false once the session ended, was replaced, or its tab closed.
+	active bool
+	// attached is true once the connect call returned a session.
+	attached bool
+	pending  []proxyservice.WebSocketSessionEvent
+	// connecting cancels the connect call while it runs.
+	connecting context.CancelFunc
 }
 
 // WorkspaceStore holds the capture, history, and request editor tabs.
@@ -98,46 +91,25 @@ type WorkspaceStore struct {
 	ActiveKey string
 	seed      int
 
-	streams         map[string]*httpStreamRuntime
-	pendingHTTP     map[string][]proxyservice.HTTPRequestStreamEvent
-	pendingHTTPKeys []string
-	ignoredHTTP     *boundedKeys
-	pendingWS       map[string][]proxyservice.WebSocketSessionEvent
-	pendingWSKeys   []string
-	ignoredWS       *boundedKeys
-	wsCancels       map[string]context.CancelFunc
-	wsGeneration    map[string]int
-	sends           map[string]*sendOperation
-	pendingLogs     []logic.PluginLogEntry
-	stopLogFlush    func()
-	messageSeed     uint64
-	recoveryEpoch   uint64
-	offs            []func()
+	// streams and sockets hold each tab's current request operation.
+	streams map[string]*httpStreamRuntime
+	sockets map[string]*webSocketRuntime
+	sends   map[string]*sendOperation
+	// logs gathers plugin console output for the main thread.
+	logs          *runtime.Coalescer[logic.PluginLogEntry]
+	messageSeed   uint64
+	recoveryEpoch uint64
 }
 
 // NewWorkspaceStore returns a store holding only the capture tab.
-func NewWorkspaceStore(rt Runtime, backend RequestBackend, saved SavedRequestBackend, router *EventRouter, clock Clock) *WorkspaceStore {
+func NewWorkspaceStore(rt Runtime, backend RequestBackend, saved SavedRequestBackend, clock Clock) *WorkspaceStore {
 	if clock == nil {
 		clock = dispatcherClock{dispatcher: rt.Dispatcher}
 	}
 	s := &WorkspaceStore{
 		rt: rt, backend: backend, saved: saved, clock: clock, ActiveKey: logic.CaptureTabKey,
 		Tabs:    []*logic.WorkspaceTab{{Key: logic.CaptureTabKey, Type: logic.TabTypeCapture, Title: logic.CaptureTabKey}},
-		streams: map[string]*httpStreamRuntime{}, pendingHTTP: map[string][]proxyservice.HTTPRequestStreamEvent{},
-		ignoredHTTP: newBoundedKeys(maxPendingSessions), pendingWS: map[string][]proxyservice.WebSocketSessionEvent{},
-		ignoredWS: newBoundedKeys(maxPendingSessions), wsCancels: map[string]context.CancelFunc{}, wsGeneration: map[string]int{}, sends: map[string]*sendOperation{},
-	}
-	s.offs = []func(){
-		router.Subscribe(eventHTTPRequest, func(data any) {
-			if event, ok := data.(proxyservice.HTTPRequestStreamEvent); ok {
-				s.queueHTTPEvent(event)
-			}
-		}, nil),
-		router.Subscribe(eventWebSocketSession, func(data any) {
-			if event, ok := data.(proxyservice.WebSocketSessionEvent); ok {
-				s.handleWebSocketEvent(event)
-			}
-		}, nil),
+		streams: map[string]*httpStreamRuntime{}, sockets: map[string]*webSocketRuntime{}, sends: map[string]*sendOperation{},
 	}
 	return s
 }
@@ -315,11 +287,11 @@ func (s *WorkspaceStore) IsDirty(key string) bool {
 	if tab == nil || !isRequestTab(tab) {
 		return false
 	}
-	snapshot := logic.CreateSnapshotForTab(tab)
+	snapshot := logic.RequestSnapshotOf(tab)
 	if tab.APIID != "" {
-		return snapshot != tab.SavedSnapshot
+		return !snapshot.Equal(tab.SavedSnapshot)
 	}
-	return snapshot != "" && logic.HasMeaningfulRequestDraft(tab)
+	return !snapshot.IsZero() && logic.HasMeaningfulRequestDraft(tab)
 }
 
 // HasUnsavedNewRequestTabs reports whether a never-saved draft exists.
@@ -364,22 +336,23 @@ func (s *WorkspaceStore) CloseTab(key string) (closedHistoryKey string) {
 	}
 	tab := s.Tabs[index]
 	if tab.HTTP != nil {
+		if operation := s.streams[key]; operation != nil {
+			s.endHTTPOperation(operation)
+		}
 		if session := strings.TrimSpace(tab.HTTP.StreamSessionID); session != "" {
 			tab.HTTP.IsStreaming, tab.HTTP.StreamSessionID = false, ""
-			s.discardStream(session, true)
 			s.disconnectStream(session)
 		}
 		s.CancelSend(key)
 	}
-	if cancel := s.wsCancels[key]; cancel != nil {
-		delete(s.wsCancels, key)
-		cancel()
+	if operation := s.sockets[key]; operation != nil {
+		if operation.connecting != nil {
+			operation.connecting()
+		}
+		s.endWebSocketOperation(operation)
 	}
-	delete(s.wsGeneration, key)
 	if tab.WebSocket != nil && tab.WebSocket.SessionID != "" {
-		session := tab.WebSocket.SessionID
-		s.ignoreWebSocket(session)
-		s.disconnectWebSocket(session)
+		s.disconnectWebSocket(tab.WebSocket.SessionID)
 	}
 	if tab.Type == logic.TabTypeHistory {
 		closedHistoryKey = tab.HistoryKey
@@ -547,33 +520,39 @@ func (s *WorkspaceStore) disconnectWebSocket(session string) {
 	})
 }
 
-func (s *WorkspaceStore) bufferHTTP(event proxyservice.HTTPRequestStreamEvent) {
-	session := strings.TrimSpace(event.SessionID)
-	if session == "" {
-		return
+// beginHTTPOperation ends the tab's previous operation and starts the one
+// whose sink receives the next send's events.
+func (s *WorkspaceStore) beginHTTPOperation(key string, state *logic.HTTPEditorState) *httpStreamRuntime {
+	if previous := s.streams[key]; previous != nil {
+		s.endHTTPOperation(previous)
 	}
-	if _, ok := s.pendingHTTP[session]; !ok {
-		if len(s.pendingHTTPKeys) >= maxPendingSessions {
-			delete(s.pendingHTTP, s.pendingHTTPKeys[0])
-			s.pendingHTTPKeys = s.pendingHTTPKeys[1:]
-		}
-		s.pendingHTTPKeys = append(s.pendingHTTPKeys, session)
-	}
-	s.pendingHTTP[session] = append(s.pendingHTTP[session], event)
+	operation := &httpStreamRuntime{key: key, state: state, active: true, decoder: &utf8StreamDecoder{}}
+	s.streams[key] = operation
+	return operation
 }
 
-func (s *WorkspaceStore) queueHTTPEvent(event proxyservice.HTTPRequestStreamEvent) {
-	session := strings.TrimSpace(event.SessionID)
-	if session == "" || s.ignoredHTTP.values.Has(hashSession(session)) {
+// endHTTPOperation discards the operation's pending and later events.
+func (s *WorkspaceStore) endHTTPOperation(operation *httpStreamRuntime) {
+	operation.active = false
+	operation.pending = nil
+	if operation.stopFlush != nil {
+		operation.stopFlush()
+		operation.stopFlush = nil
+	}
+	if s.streams[operation.key] == operation {
+		delete(s.streams, operation.key)
+	}
+}
+
+// receiveHTTP is the sink of one send. It runs on the main thread.
+func (s *WorkspaceStore) receiveHTTP(operation *httpStreamRuntime, event proxyservice.HTTPRequestStreamEvent) {
+	if !operation.active {
 		return
 	}
-	stream := s.streams[session]
-	if stream == nil {
-		s.bufferHTTP(event)
-		return
+	operation.pending = append(operation.pending, event)
+	if operation.streaming {
+		s.scheduleStreamFlush(operation)
 	}
-	stream.pending = append(stream.pending, event)
-	s.scheduleStreamFlush(stream)
 }
 
 func (s *WorkspaceStore) scheduleStreamFlush(stream *httpStreamRuntime) {
@@ -586,75 +565,64 @@ func (s *WorkspaceStore) scheduleStreamFlush(stream *httpStreamRuntime) {
 	})
 }
 
-// RegisterHTTPStream begins following a streaming response.
-func (s *WorkspaceStore) RegisterHTTPStream(key, sessionID string) bool {
+// attachHTTPStream follows the streaming response the send returned, whose
+// session ID Stop and closing the tab use. Events that arrived before the
+// send returned are applied on the next flush.
+func (s *WorkspaceStore) attachHTTPStream(operation *httpStreamRuntime, sessionID string) bool {
 	session := strings.TrimSpace(sessionID)
 	if session == "" {
+		s.endHTTPOperation(operation)
 		return false
 	}
-	tab := s.FindTab(key)
-	if tab == nil || tab.HTTP == nil || tab.HTTP.Response == nil {
-		s.discardStream(session, true)
+	state := operation.state
+	if !operation.active || state.Response == nil {
+		// The tab closed or a new operation replaced this one while sending.
+		s.endHTTPOperation(operation)
 		s.disconnectStream(session)
 		return false
 	}
-	state := tab.HTTP
-	s.ignoredHTTP.values.Delete(hashSession(session))
-	offset := int64(len(state.Response.Body))
-	stream := &httpStreamRuntime{sessionID: session, state: state, byteOffset: offset, decoder: &utf8StreamDecoder{}, pending: s.pendingHTTP[session]}
-	stream.body.WriteString(state.Response.Body)
-	delete(s.pendingHTTP, session)
-	s.streams[session] = stream
+	operation.sessionID, operation.streaming = session, true
+	operation.byteOffset = int64(len(state.Response.Body))
+	operation.body.WriteString(state.Response.Body)
 	state.StreamSessionID, state.IsStreaming = session, true
-	state.Response.StreamState = "streaming"
-	if len(stream.pending) > 0 {
-		s.scheduleStreamFlush(stream)
+	state.Response.StreamState = logic.StreamStateStreaming
+	if len(operation.pending) > 0 {
+		s.scheduleStreamFlush(operation)
 	}
 	return true
-}
-
-func (s *WorkspaceStore) discardStream(session string, ignoreLate bool) {
-	if ignoreLate {
-		s.ignoredHTTP.add(hashSession(session))
-	}
-	if stream := s.streams[session]; stream != nil && stream.stopFlush != nil {
-		stream.stopFlush()
-	}
-	delete(s.streams, session)
-	delete(s.pendingHTTP, session)
 }
 
 func (s *WorkspaceStore) finishStream(stream *httpStreamRuntime, event proxyservice.HTTPRequestStreamEvent) {
 	response := stream.state.Response
 	if response != nil {
-		if event.EventType == "complete" {
+		if event.EventType == proxyservice.HTTPStreamComplete {
 			response.Trailers = logic.HeaderFieldsToEditableRows(event.TrailerFields)
-			response.TrailersHaveWireOrder = event.TrailerFields != nil && !event.TrailerOrderUnavailable
+			response.TrailersHaveWireOrder = logic.HasWireOrder(event.TrailerFields, event.TrailerOrderUnavailable)
 			response.TrailersTruncated = event.TrailersTruncated
 		}
-		if event.EventType == "error" && event.Error != "" {
+		if event.EventType == proxyservice.HTTPStreamError && event.Error != "" {
 			response.ErrorMessage = event.Error
 		}
 		response.ElapsedMicros = time.Since(stream.state.SentAt).Microseconds()
-		response.StreamState = "completed"
-		if event.EventType == "error" {
-			response.StreamState = "error"
+		response.StreamState = logic.StreamStateCompleted
+		if event.EventType == proxyservice.HTTPStreamError {
+			response.StreamState = logic.StreamStateError
 		}
 	}
 	stream.state.IsStreaming, stream.state.StreamSessionID = false, ""
-	s.discardStream(stream.sessionID, true)
+	s.endHTTPOperation(stream)
 }
 
 func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
-	if s.streams[stream.sessionID] != stream {
+	if !stream.active || !stream.streaming {
 		return
 	}
 	var chunks, terminal []proxyservice.HTTPRequestStreamEvent
 	for _, event := range stream.pending {
 		switch {
-		case event.EventType == "chunk" && event.Offset != nil:
+		case event.EventType == proxyservice.HTTPStreamChunk && event.Offset != nil:
 			chunks = append(chunks, event)
-		case event.EventType != "chunk":
+		case event.EventType != proxyservice.HTTPStreamChunk:
 			terminal = append(terminal, event)
 		}
 	}
@@ -704,7 +672,8 @@ func (s *WorkspaceStore) flushStream(stream *httpStreamRuntime) {
 	stream.pending = append(stream.pending, terminal...)
 }
 
-// DisconnectHTTPTab stops following a tab's stream.
+// DisconnectHTTPTab stops following a tab's stream. What arrived before Stop
+// is applied; later events of the stream are discarded.
 func (s *WorkspaceStore) DisconnectHTTPTab(key string) {
 	tab := s.FindTab(key)
 	if tab == nil || tab.HTTP == nil {
@@ -712,20 +681,20 @@ func (s *WorkspaceStore) DisconnectHTTPTab(key string) {
 	}
 	state := tab.HTTP
 	session := strings.TrimSpace(state.StreamSessionID)
-	if stream := s.streams[session]; stream != nil {
-		if stream.stopFlush != nil {
-			stream.stopFlush()
-			stream.stopFlush = nil
+	if operation := s.streams[key]; operation != nil {
+		if operation.stopFlush != nil {
+			operation.stopFlush()
+			operation.stopFlush = nil
 		}
-		s.flushStream(stream)
+		s.flushStream(operation)
+		s.endHTTPOperation(operation)
 	}
 	state.IsStreaming, state.StreamSessionID = false, ""
 	if state.Response != nil && state.Response.Kind == "success" {
-		state.Response.StreamState = "stopped"
+		state.Response.StreamState = logic.StreamStateStopped
 		state.Response.ElapsedMicros = time.Since(state.SentAt).Microseconds()
 	}
 	if session != "" {
-		s.discardStream(session, true)
 		s.disconnectStream(session)
 	}
 }
@@ -769,7 +738,9 @@ func (s *WorkspaceStore) SendTab(key string, pythonEnabled bool) string {
 		executionID = newExecutionID()
 		state.ActiveResponseTab = logic.ResponseTabConsole
 	}
-	s.pendingLogs = nil
+	if s.logs != nil {
+		s.logs.Discard()
+	}
 	state.ScriptExecutionID = executionID
 	state.ScriptConsoleEntries = nil
 	config := logic.BuildSendConfig(state, executionID)
@@ -780,22 +751,26 @@ func (s *WorkspaceStore) SendTab(key string, pythonEnabled bool) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	operation := &sendOperation{cancel: cancel}
 	s.sends[key] = operation
+	stream := s.beginHTTPOperation(key, state)
+	sink := func(event proxyservice.HTTPRequestStreamEvent) { s.receiveHTTP(stream, event) }
 	runtime.Run(s.rt.Jobs, "workspace:send:"+key, func(context.Context) (proxyservice.SendRequestResponse, error) {
-		return s.backend.SendHTTPRequest(ctx, config, method, target, headers, body)
+		return s.backend.SendHTTPRequest(ctx, config, method, target, headers, body, sink)
 	}, func(response proxyservice.SendRequestResponse, err error) {
 		cancel()
 		if s.sends[key] == operation {
 			delete(s.sends, key)
 		}
 		state.IsSending = false
-		s.finishSend(key, state, response, err, operation.requested)
+		s.finishSend(stream, response, err, operation.requested)
 	})
 	return ""
 }
 
-func (s *WorkspaceStore) finishSend(key string, state *logic.HTTPEditorState, response proxyservice.SendRequestResponse, err error, cancelled bool) {
+func (s *WorkspaceStore) finishSend(stream *httpStreamRuntime, response proxyservice.SendRequestResponse, err error, cancelled bool) {
+	state := stream.state
 	elapsed := time.Since(state.SentAt).Microseconds()
 	if err != nil {
+		s.endHTTPOperation(stream)
 		state.IsStreaming, state.StreamSessionID = false, ""
 		if cancelled || errors.Is(err, context.Canceled) {
 			state.Response = logic.CancelledResponseView()
@@ -813,11 +788,13 @@ func (s *WorkspaceStore) finishSend(key string, state *logic.HTTPEditorState, re
 	if response.PluginExecution != nil && response.PluginExecution.ExecutionID != "" {
 		state.ScriptExecutionID = response.PluginExecution.ExecutionID
 	}
-	registered := false
+	attached := false
 	if streaming {
-		registered = s.RegisterHTTPStream(key, response.StreamSessionID)
+		attached = s.attachHTTPStream(stream, response.StreamSessionID)
+	} else {
+		s.endHTTPOperation(stream)
 	}
-	state.ActiveResponseTab = logic.ResponseTabAfterSend(view, streaming, registered, state.InlineScriptEnabled)
+	state.ActiveResponseTab = logic.ResponseTabAfterSend(view, streaming, attached, state.InlineScriptEnabled)
 }
 
 // CancelSend abandons a request being sent.
@@ -843,31 +820,59 @@ func (s *WorkspaceStore) StopTab(key string) {
 // ClearScriptConsole empties a tab's console.
 func (s *WorkspaceStore) ClearScriptConsole(key string) {
 	if tab := s.FindTab(key); tab != nil && tab.HTTP != nil {
-		s.pendingLogs = nil
+		if s.logs != nil {
+			s.logs.Discard()
+		}
 		tab.HTTP.ScriptConsoleEntries = nil
 	}
 }
 
-// ConnectPluginLogs follows Python plugin output, delivered through post.
-func (s *WorkspaceStore) ConnectPluginLogs(bus serviceruntime.EventBus, post func(func())) (off func()) {
-	return bus.On(pythonpluginservice.LogEventName, func(event serviceruntime.Event) {
-		if entry, ok := event.Data.(logic.PluginLogEntry); ok {
-			post(func() { s.queuePluginLog(entry) })
-		}
-	})
-}
-
-func (s *WorkspaceStore) queuePluginLog(entry logic.PluginLogEntry) {
-	s.pendingLogs = append(s.pendingLogs, entry)
-	if s.stopLogFlush == nil {
-		s.stopLogFlush = s.clock.After(pluginLogFlushInterval, s.flushPluginLogs)
+// ConnectPluginLogs follows Python plugin output. Lines reach the consoles in
+// batches, one interface update per flush interval. off stops following and
+// drops output that has not reached the main thread.
+func (s *WorkspaceStore) ConnectPluginLogs(logs Topic[logic.PluginLogEntry]) (off func()) {
+	coalescer := runtime.NewCoalescer(s.rt.Dispatcher, s.applyPluginLogs, boundPluginLogs)
+	s.logs = coalescer
+	unsubscribe := logs.Subscribe(coalescer.Add)
+	return func() {
+		unsubscribe()
+		coalescer.Close()
 	}
 }
 
-func (s *WorkspaceStore) flushPluginLogs() {
-	s.stopLogFlush = nil
-	batch := s.pendingLogs
-	s.pendingLogs = nil
+// boundPluginLogs keeps the newest MaxRequestConsoleEntries entries of each
+// execution, which is all its console keeps, in order.
+func boundPluginLogs(pending []logic.PluginLogEntry) []logic.PluginLogEntry {
+	if len(pending) <= logic.MaxRequestConsoleEntries {
+		return pending
+	}
+	excess := map[string]int{}
+	for _, entry := range pending {
+		excess[entry.ExecutionID]++
+	}
+	trimmed := false
+	for execution, count := range excess {
+		excess[execution] = count - logic.MaxRequestConsoleEntries
+		trimmed = trimmed || count > logic.MaxRequestConsoleEntries
+	}
+	if !trimmed {
+		return pending
+	}
+	kept := pending[:0]
+	for _, entry := range pending {
+		if excess[entry.ExecutionID] > 0 {
+			excess[entry.ExecutionID]--
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	clear(pending[len(kept):])
+	return kept
+}
+
+// applyPluginLogs adds a batch of output to the consoles of the tabs running
+// its executions. Output of an execution no open tab runs is discarded.
+func (s *WorkspaceStore) applyPluginLogs(batch []logic.PluginLogEntry) {
 	for _, tab := range s.Tabs {
 		if tab.HTTP == nil || tab.HTTP.ScriptExecutionID == "" {
 			continue
@@ -886,49 +891,29 @@ func newExecutionID() string {
 	return hex.EncodeToString(raw[:])
 }
 
-func (s *WorkspaceStore) findWebSocketBySession(session string) *logic.WebSocketClientState {
-	normalized := strings.TrimSpace(session)
-	if normalized == "" {
-		return nil
+// endWebSocketOperation discards the operation's pending and later events.
+func (s *WorkspaceStore) endWebSocketOperation(operation *webSocketRuntime) {
+	operation.active = false
+	operation.pending = nil
+	if s.sockets[operation.key] == operation {
+		delete(s.sockets, operation.key)
 	}
-	for _, tab := range s.Tabs {
-		if tab.WebSocket != nil && tab.WebSocket.SessionID == normalized {
-			return tab.WebSocket
-		}
-	}
-	return nil
 }
 
-func (s *WorkspaceStore) ignoreWebSocket(session string) {
-	normalized := strings.TrimSpace(session)
-	if normalized == "" {
+// receiveWebSocket is the sink of one connect. It runs on the main thread.
+func (s *WorkspaceStore) receiveWebSocket(operation *webSocketRuntime, event proxyservice.WebSocketSessionEvent) {
+	if !operation.active {
 		return
 	}
-	s.ignoredWS.add(hashSession(normalized))
-	delete(s.pendingWS, normalized)
-}
-
-func (s *WorkspaceStore) handleWebSocketEvent(event proxyservice.WebSocketSessionEvent) {
-	if state := s.findWebSocketBySession(event.SessionID); state != nil {
-		s.applyWebSocketEvent(state, event)
+	if !operation.attached {
+		operation.pending = append(operation.pending, event)
 		return
 	}
-	session := strings.TrimSpace(event.SessionID)
-	if session == "" || s.ignoredWS.values.Has(hashSession(session)) {
-		return
-	}
-	if _, ok := s.pendingWS[session]; !ok {
-		if len(s.pendingWSKeys) >= maxPendingSessions {
-			delete(s.pendingWS, s.pendingWSKeys[0])
-			s.pendingWSKeys = s.pendingWSKeys[1:]
-		}
-		s.pendingWSKeys = append(s.pendingWSKeys, session)
-	}
-	s.pendingWS[session] = append(s.pendingWS[session], event)
+	s.applyWebSocketEvent(operation, event)
 }
 
 func isTerminalWebSocket(state *logic.WebSocketClientState) bool {
-	return state.ConnectionStatus == "closed" || state.ConnectionStatus == "error" || state.ConnectionStatus == "cancelled"
+	return state.ConnectionStatus == logic.WebSocketClosed || state.ConnectionStatus == logic.WebSocketError || state.ConnectionStatus == logic.WebSocketCancelled
 }
 
 func (s *WorkspaceStore) nextMessageID() string {
@@ -936,25 +921,34 @@ func (s *WorkspaceStore) nextMessageID() string {
 	return fmt.Sprintf("websocket-client-msg:%d", s.messageSeed)
 }
 
-func (s *WorkspaceStore) applyWebSocketEvent(state *logic.WebSocketClientState, event proxyservice.WebSocketSessionEvent) {
+func (s *WorkspaceStore) applyWebSocketEvent(operation *webSocketRuntime, event proxyservice.WebSocketSessionEvent) {
+	state := operation.state
 	switch {
-	case event.EventType == "connected":
+	case event.EventType == proxyservice.WebSocketEventConnected:
 		if !isTerminalWebSocket(state) {
-			state.SessionID, state.ConnectionStatus, state.ResponseError = event.SessionID, "connected", ""
+			state.SessionID, state.ConnectionStatus, state.ResponseError = event.SessionID, logic.WebSocketConnected, ""
 		}
-	case event.EventType == "message" && event.Message != nil:
+	case event.EventType == proxyservice.WebSocketEventMessage && event.Message != nil:
 		if !isTerminalWebSocket(state) {
-			state.ConnectionStatus, state.ResponseError = "connected", ""
+			state.ConnectionStatus, state.ResponseError = logic.WebSocketConnected, ""
 			state.Messages = append(state.Messages, logic.ToWebSocketDisplayMessage(event.Message, s.nextMessageID(), time.Now()))
 		}
-	case event.EventType == "closed" || event.EventType == "error":
-		s.ignoreWebSocket(event.SessionID)
-		failed := event.Status == "error" || event.EventType == "error"
-		state.ConnectionStatus, state.SessionID, state.ResponseError = "closed", "", ""
+	case event.EventType == proxyservice.WebSocketEventClosed || event.EventType == proxyservice.WebSocketEventError:
+		s.endWebSocketOperation(operation)
+		failed := event.Status == "error" || event.EventType == proxyservice.WebSocketEventError
+		state.ConnectionStatus, state.SessionID, state.ResponseError = logic.WebSocketClosed, "", ""
 		if failed {
-			state.ConnectionStatus, state.ResponseError = "error", event.Error
+			state.ConnectionStatus, state.ResponseError = logic.WebSocketError, event.Error
 		}
 	}
+}
+
+// endWebSocketSession closes the tab's session if it is still session.
+func (s *WorkspaceStore) endWebSocketSession(key, session string, state *logic.WebSocketClientState) {
+	if operation := s.sockets[key]; operation != nil && operation.sessionID == session {
+		s.endWebSocketOperation(operation)
+	}
+	state.SessionID, state.ConnectionStatus, state.ResponseError = "", logic.WebSocketClosed, ""
 }
 
 // ClearWebSocketMessages empties a tab's message list.
@@ -967,48 +961,61 @@ func (s *WorkspaceStore) ClearWebSocketMessages(key string) {
 // ConnectWebSocket opens a tab's connection. done hears a failure.
 func (s *WorkspaceStore) ConnectWebSocket(key string, done func(error)) {
 	tab := s.FindTab(key)
-	if tab == nil || tab.WebSocket == nil || tab.WebSocket.ConnectionStatus == "connecting" || tab.WebSocket.ConnectionStatus == "connected" {
+	if tab == nil || tab.WebSocket == nil || tab.WebSocket.ConnectionStatus == logic.WebSocketConnecting || tab.WebSocket.ConnectionStatus == logic.WebSocketConnected {
 		return
 	}
 	state := tab.WebSocket
-	state.ConnectionStatus, state.ResponseError = "connecting", ""
+	state.ConnectionStatus, state.ResponseError = logic.WebSocketConnecting, ""
 	timeout := max(state.Settings.TimeoutMs, 0)
 	request := proxyservice.WebSocketConnectRequest{
 		URL: state.URL, HeaderFields: logic.EditableRowsToHeaderFields(state.Headers), ProxyMode: proxyservice.SendRequestProxyMode(state.Settings.ProxyMode),
 		CustomProxy: state.Settings.CustomProxy, TimeoutMs: timeout, SkipVerifyTLS: state.Settings.SkipVerifyTLS, TLSClientHelloID: proxyservice.TLSClientHelloID(state.Settings.TLSClientHelloID),
 	}
+	if previous := s.sockets[key]; previous != nil {
+		s.endWebSocketOperation(previous)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s.wsGeneration[key]++
-	generation := s.wsGeneration[key]
-	s.wsCancels[key] = cancel
+	operation := &webSocketRuntime{key: key, state: state, active: true, connecting: cancel}
+	s.sockets[key] = operation
+	sink := func(event proxyservice.WebSocketSessionEvent) { s.receiveWebSocket(operation, event) }
 	runtime.Run(s.rt.Jobs, jobWebSocketConnectPfx+key, func(context.Context) (proxyservice.WebSocketConnectResponse, error) {
-		return s.backend.ConnectWebSocket(ctx, request)
+		return s.backend.ConnectWebSocket(ctx, request, sink)
 	}, func(response proxyservice.WebSocketConnectResponse, err error) {
 		cancel()
-		if s.wsGeneration[key] != generation {
+		operation.connecting = nil
+		session := strings.TrimSpace(response.SessionID)
+		if !operation.active {
+			// The tab closed or a new connection replaced this one.
+			if err == nil && session != "" {
+				s.disconnectWebSocket(session)
+			}
 			return
 		}
-		delete(s.wsCancels, key)
 		switch {
 		case errors.Is(err, context.Canceled):
-			state.ConnectionStatus, state.SessionID, state.ResponseHeaders, state.ResponseError = "cancelled", "", nil, ""
+			s.endWebSocketOperation(operation)
+			state.ConnectionStatus, state.SessionID, state.ResponseHeaders, state.ResponseError = logic.WebSocketCancelled, "", nil, ""
 		case err != nil:
-			state.ConnectionStatus, state.SessionID, state.ResponseHeaders, state.ResponseError = "error", "", nil, err.Error()
+			s.endWebSocketOperation(operation)
+			state.ConnectionStatus, state.SessionID, state.ResponseHeaders, state.ResponseError = logic.WebSocketError, "", nil, err.Error()
 			if done != nil {
 				done(err)
 			}
 		default:
-			session := strings.TrimSpace(response.SessionID)
-			s.ignoredWS.values.Delete(hashSession(session))
-			state.SessionID, state.ConnectionStatus = session, "idle"
+			operation.sessionID, operation.attached = session, true
+			state.SessionID, state.ConnectionStatus = session, logic.WebSocketIdle
 			if response.Status == "connected" {
-				state.ConnectionStatus = "connected"
+				state.ConnectionStatus = logic.WebSocketConnected
 			}
 			state.ResponseHeaders, state.ResponseError = logic.HeaderFieldsToEditableRows(response.HeaderFields), ""
-			for _, event := range s.pendingWS[session] {
-				s.applyWebSocketEvent(state, event)
+			pending := operation.pending
+			operation.pending = nil
+			for _, event := range pending {
+				if !operation.active {
+					break
+				}
+				s.applyWebSocketEvent(operation, event)
 			}
-			delete(s.pendingWS, session)
 		}
 	})
 }
@@ -1016,11 +1023,11 @@ func (s *WorkspaceStore) ConnectWebSocket(key string, done func(error)) {
 // CancelWebSocketConnection abandons a connection attempt.
 func (s *WorkspaceStore) CancelWebSocketConnection(key string) {
 	tab := s.FindTab(key)
-	cancel := s.wsCancels[key]
-	if tab == nil || tab.WebSocket == nil || cancel == nil || tab.WebSocket.ConnectionStatus != "connecting" {
+	operation := s.sockets[key]
+	if tab == nil || tab.WebSocket == nil || operation == nil || operation.connecting == nil || tab.WebSocket.ConnectionStatus != logic.WebSocketConnecting {
 		return
 	}
-	cancel()
+	operation.connecting()
 }
 
 // SendWebSocketMessage sends a tab's draft.
@@ -1030,7 +1037,7 @@ func (s *WorkspaceStore) SendWebSocketMessage(key string, done func(error)) {
 		return
 	}
 	state := tab.WebSocket
-	if state.ConnectionStatus != "connected" || state.SessionID == "" {
+	if state.ConnectionStatus != logic.WebSocketConnected || state.SessionID == "" {
 		if done != nil {
 			done(errors.New("websocket session is not connected"))
 		}
@@ -1053,8 +1060,7 @@ func (s *WorkspaceStore) SendWebSocketMessage(key string, done func(error)) {
 	}, func(_ struct{}, err error) {
 		state.IsSendingMessage = false
 		if err != nil && strings.Contains(err.Error(), webSocketSessionGone) {
-			s.ignoreWebSocket(session)
-			state.SessionID, state.ConnectionStatus, state.ResponseError = "", "closed", ""
+			s.endWebSocketSession(key, session, state)
 		}
 		if done != nil {
 			done(err)
@@ -1071,15 +1077,14 @@ func (s *WorkspaceStore) DisconnectWebSocket(key string, done func(error)) {
 	state := tab.WebSocket
 	session := strings.TrimSpace(state.SessionID)
 	if session == "" {
-		state.ConnectionStatus, state.ResponseError = "closed", ""
+		state.ConnectionStatus, state.ResponseError = logic.WebSocketClosed, ""
 		return
 	}
 	runtime.Run(s.rt.Jobs, "workspace:ws-close:"+key, func(context.Context) (struct{}, error) {
 		return struct{}{}, s.backend.DisconnectWebSocket(session)
 	}, func(_ struct{}, err error) {
 		if err == nil {
-			s.ignoreWebSocket(session)
-			state.SessionID, state.ConnectionStatus, state.ResponseError = "", "closed", ""
+			s.endWebSocketSession(key, session, state)
 		}
 		if done != nil {
 			done(err)
@@ -1087,23 +1092,25 @@ func (s *WorkspaceStore) DisconnectWebSocket(key string, done func(error)) {
 	})
 }
 
-// Cleanup ends every session and stops listening.
+// Cleanup ends every request operation and the console flush.
 func (s *WorkspaceStore) Cleanup() {
-	for key, cancel := range s.wsCancels {
-		cancel()
-		delete(s.wsCancels, key)
+	for _, operation := range s.sockets {
+		if operation.connecting != nil {
+			operation.connecting()
+		}
+		s.endWebSocketOperation(operation)
 	}
-	for session, stream := range s.streams {
-		stream.state.IsStreaming, stream.state.StreamSessionID = false, ""
-		s.discardStream(session, false)
-		s.disconnectStream(session)
+	for _, stream := range s.streams {
+		session := stream.sessionID
+		if stream.streaming {
+			stream.state.IsStreaming, stream.state.StreamSessionID = false, ""
+		}
+		s.endHTTPOperation(stream)
+		if session != "" {
+			s.disconnectStream(session)
+		}
 	}
-	if s.stopLogFlush != nil {
-		s.stopLogFlush()
-		s.stopLogFlush = nil
+	if s.logs != nil {
+		s.logs.Close()
 	}
-	for _, off := range s.offs {
-		off()
-	}
-	s.offs = nil
 }

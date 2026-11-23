@@ -9,8 +9,9 @@ import (
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 )
 
-// quitGuard interrupts quitting for unsaved work. It returns true when it took
-// over; proceed continues the quit once the user has resolved the work.
+// quitGuard interrupts quitting for unsaved work. It runs on the main thread
+// and returns true when it took over; proceed continues the quit once the user
+// has resolved the work. A guard never calls proceed while it is being asked.
 type quitGuard func(reason string, proceed func()) (blocked bool)
 
 // Reasons a guard is asked to protect unsaved work.
@@ -33,13 +34,18 @@ type appLifecycle struct {
 	saveGeom    func()
 	coordinator *gracefulShutdownCoordinator
 	guards      []quitGuard
+	// onMain runs a function on the main thread, where the guards read the
+	// windows' state: mygo.RunOnMain, or an immediate call in tests.
+	onMain func(func())
 
 	trayAvailable atomic.Bool
 	relaunch      atomic.Bool
 	mu            sync.Mutex
 }
 
-// RequestQuit begins quitting unless unsaved work needs the user first.
+// RequestQuit begins quitting unless unsaved work needs the user first. It
+// runs on the main thread: the tray, quitting, and closing the window call it
+// there, and a resolved guard continues through onMain.
 func (l *appLifecycle) RequestQuit() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -47,7 +53,7 @@ func (l *appLifecycle) RequestQuit() {
 	if l.coordinator.InProgress() {
 		return
 	}
-	if l.blockedByGuards(quitReasonQuit, func() { go l.RequestQuit() }) {
+	if l.blockedByGuards(quitReasonQuit, func() { l.onMain(l.RequestQuit) }) {
 		return
 	}
 	l.coordinator.Request()
@@ -69,6 +75,7 @@ func (l *appLifecycle) restartForUpdate() error {
 	return nil
 }
 
+// blockedByGuards asks the guards in order; it runs on the main thread.
 func (l *appLifecycle) blockedByGuards(reason string, proceed func()) bool {
 	for _, guard := range l.guards {
 		if guard(reason, proceed) {

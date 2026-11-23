@@ -7,14 +7,6 @@ import (
 	"time"
 )
 
-const (
-	UpdateStateChangedEventName  = "app:update-state-changed"
-	UpdateRestartFailedEventName = "app:update-restart-failed"
-	// UpdateUserRestartEventName asks the application to restart for a staged
-	// update, through the same unsaved-work guards as quitting.
-	UpdateUserRestartEventName = "app:update-user-restart"
-)
-
 type UpdatePhase string
 
 const (
@@ -120,7 +112,11 @@ type updateController struct {
 	mu sync.Mutex
 
 	engine UpdateEngine
-	emit   func(string, ...any) bool
+	// publish receives every new snapshot, outside the state lock.
+	publish func(UpdateSnapshot)
+	// requestRestart asks the application to restart for the staged update,
+	// outside the state lock.
+	requestRestart func()
 
 	snapshot      UpdateSnapshot
 	operation     *updateOperation
@@ -132,11 +128,13 @@ func newUpdateController(
 	engine UpdateEngine,
 	currentVersion string,
 	applyMode UpdateApplyMode,
-	emit func(string, ...any) bool,
+	publish func(UpdateSnapshot),
+	requestRestart func(),
 ) *updateController {
 	return &updateController{
-		engine: engine,
-		emit:   emit,
+		engine:         engine,
+		publish:        publish,
+		requestRestart: requestRestart,
 		snapshot: UpdateSnapshot{
 			Phase:          UpdatePhaseIdle,
 			CurrentVersion: currentVersion,
@@ -302,8 +300,8 @@ func (c *updateController) Restart() error {
 	snapshot := c.reviseLocked()
 	c.mu.Unlock()
 	c.emitState(snapshot)
-	if c.emit != nil {
-		c.emit(UpdateUserRestartEventName)
+	if c.requestRestart != nil {
+		c.requestRestart()
 	}
 	return nil
 }
@@ -434,8 +432,8 @@ func (c *updateController) reviseLocked() UpdateSnapshot {
 }
 
 func (c *updateController) emitState(snapshot UpdateSnapshot) {
-	if c.emit != nil {
-		c.emit(UpdateStateChangedEventName, snapshot)
+	if c.publish != nil {
+		c.publish(snapshot)
 	}
 }
 

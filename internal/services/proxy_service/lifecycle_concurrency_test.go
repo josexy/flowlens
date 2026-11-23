@@ -164,7 +164,8 @@ func TestCaptureTransitionsDoNotLoseTrafficPublishedDuringHistoryFlush(t *testin
 			return service.RestartCapture(true)
 		},
 		"clear cache": func(service *ProxyService) error {
-			return service.ClearCacheFiles()
+			_, err := service.ClearCacheFiles()
+			return err
 		},
 	}
 

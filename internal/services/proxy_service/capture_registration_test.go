@@ -24,11 +24,11 @@ func (closedCaptureFrameWatcher) Receive() <-chan mitmproxy.WsFrame {
 func TestCaptureRegistrationOrdersConcurrentHTTPWebSocketAndTCP(t *testing.T) {
 	svc := newTestProxyService(t, nil)
 	const count = 192
-	batches := make(chan FrontendEventBatch, 1)
-	svc.frontendEventBatcher = newFrontendEventBatcher(frontendEventBatcherOptions{
+	batches := make(chan LiveBatch, 1)
+	svc.liveBatcher = newLiveEventBatcher(liveEventBatcherOptions{
 		FlushInterval: time.Hour, MaxPendingEvents: count * 4, MaxPendingBytes: 4 << 20,
-	}, func(batch FrontendEventBatch) { batches <- batch })
-	t.Cleanup(svc.frontendEventBatcher.Close)
+	}, func(batch LiveBatch) { batches <- batch })
+	t.Cleanup(svc.liveBatcher.Close)
 	var wg sync.WaitGroup
 	for i := range count {
 		wg.Go(func() {
@@ -62,7 +62,7 @@ func TestCaptureRegistrationOrdersConcurrentHTTPWebSocketAndTCP(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	svc.frontendEventBatcher.Close()
+	svc.liveBatcher.Close()
 	batch := <-batches
 	if len(batch.Dropped) != 0 {
 		t.Fatalf("unexpected dropped events: %v", batch.Dropped)
@@ -70,22 +70,16 @@ func TestCaptureRegistrationOrdersConcurrentHTTPWebSocketAndTCP(t *testing.T) {
 	revisions := make(map[uint64]uint64)
 	var lastID uint64
 	for _, event := range batch.Events {
-		switch event.Name {
-		case trafficEventName:
-			entry, ok := event.Data.(*TrafficEntry)
-			if !ok {
-				t.Fatalf("entry payload = %T", event.Data)
-			}
+		switch event := event.(type) {
+		case TrafficEntryEvent:
+			entry := event.Entry
 			if entry.ID != lastID+1 {
 				t.Fatalf("initial event ID = %d after %d", entry.ID, lastID)
 			}
 			lastID = entry.ID
 			revisions[entry.ID] = entry.Revision
-		case trafficPatchEventName:
-			patch, ok := event.Data.(TrafficEntryPatch)
-			if !ok {
-				t.Fatalf("patch payload = %T", event.Data)
-			}
+		case TrafficPatchEvent:
+			patch := event.Patch
 			previous, exists := revisions[patch.TrafficID]
 			if !exists || patch.Revision <= previous {
 				t.Fatalf("patch preceded initial event or regressed: %+v, previous %d", patch, previous)

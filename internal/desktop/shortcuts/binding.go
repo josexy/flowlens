@@ -109,40 +109,6 @@ func BindingsConflict(left, right *Binding, macOS bool) bool {
 	return okLeft && okRight && resolvedLeft == resolvedRight
 }
 
-// Display returns a binding as the platform writes it.
-func Display(binding *Binding, macOS bool) string {
-	resolved, ok := Resolve(binding, macOS)
-	if !ok {
-		return ""
-	}
-	var parts []string
-	add := func(on bool, mac, other string) {
-		if on {
-			if macOS {
-				parts = append(parts, mac)
-			} else {
-				parts = append(parts, other)
-			}
-		}
-	}
-	add(resolved.Control, "⌃", "Ctrl")
-	add(resolved.Alt, "⌥", "Alt")
-	add(resolved.Shift, "⇧", "Shift")
-	add(resolved.Super, "⌘", "Super")
-	key := resolved.Key
-	switch {
-	case key == " ":
-		key = "Space"
-	case len(key) == 1:
-		key = strings.ToUpper(key)
-	}
-	parts = append(parts, key)
-	if macOS {
-		return strings.Join(parts, "")
-	}
-	return strings.Join(parts, "+")
-}
-
 // KbdKeys returns a binding's keys for showing as key caps.
 func KbdKeys(binding *Binding, macOS bool) []string {
 	resolved, ok := Resolve(binding, macOS)

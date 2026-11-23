@@ -99,6 +99,7 @@ func TestSendHTTPRequestRunsRequestPluginBeforeSyntheticNormalization(t *testing
 		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolAuto},
 		" post ", server.URL+"/original", []HTTPHeaderField{{Name: "X-Original", Value: "yes"}},
 		SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "original"},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -150,6 +151,7 @@ func TestSendHTTPRequestWritesPluginMultipartFilename(t *testing.T) {
 		SendRequestConfig{ProxyMode: SendRequestProxyModeNone, Protocol: SendRequestProtocolHTTP1},
 		http.MethodGet, server.URL, nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	); err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
 	}
@@ -181,6 +183,7 @@ func TestSendHTTPRequestPluginRequestBlockAndFailureNeverOpenNetwork(t *testing.
 			response, err := service.SendHTTPRequest(
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -211,6 +214,7 @@ func TestSendHTTPRequestPluginBeginFailureIsStructuredAndFailClosed(t *testing.T
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -234,6 +238,7 @@ func TestSendHTTPRequestPerTabBypassSkipsRunner(t *testing.T) {
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, DisablePlugins: true},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -259,6 +264,7 @@ func TestSendHTTPRequestRunsInlineScriptWhenManagedPluginsAreBypassed(t *testing
 			PluginExecutionID: "request-script-execution", InlinePythonScript: inline,
 		},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -285,6 +291,7 @@ func TestSendHTTPRequestInlineBeginFailureKeepsExecutionID(t *testing.T) {
 			InlinePythonScript: &InlinePythonScript{Enabled: true, Source: "broken"},
 		},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -312,6 +319,7 @@ func TestSendHTTPRequestRunsRequestPluginsOnlyOnceAcrossRedirects(t *testing.T) 
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, MaxRedirects: 1},
 		http.MethodGet, server.URL+"/redirect", nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -383,6 +391,7 @@ func TestSendHTTPRequestStreamsPluginBodyFileAcrossRedirects(t *testing.T) {
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone, MaxRedirects: 1},
 				http.MethodPost, server.URL+"/original", nil,
 				SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)

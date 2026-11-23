@@ -5,6 +5,7 @@ import (
 	"errors"
 	"runtime"
 	"runtime/debug"
+	"sync"
 
 	"github.com/egoist/mygo"
 	"github.com/josexy/flowlens/internal/serviceruntime"
@@ -43,21 +44,54 @@ func Version() string {
 	return "0.0.0-dev"
 }
 
+// Events are the values the application service publishes. Subscribers must
+// not block.
+type Events struct {
+	// UpdateState is the update state after every change.
+	UpdateState serviceruntime.Topic[UpdateSnapshot]
+}
+
 type AppService struct {
-	events          serviceruntime.EventBus
+	// Events publishes update state changes.
+	Events          Events
 	updateEngine    UpdateEngine
 	updateApplyMode UpdateApplyMode
 	updates         *updateController
-	updateEventOffs []func()
+
+	restartMu        sync.Mutex
+	restartRequester func()
 }
 
 func New() *AppService {
 	return &AppService{}
 }
 
-// SetEventBus sets where update state changes are published and where
-// restart failures are heard.
-func (a *AppService) SetEventBus(events serviceruntime.EventBus) { a.events = events }
+// SetRestartRequester sets how a staged update asks the application to
+// restart, through the same unsaved-work guards as quitting. request runs on
+// the goroutine that asked for the restart and must not block.
+func (a *AppService) SetRestartRequester(request func()) {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.restartRequester = request
+}
+
+func (a *AppService) requestRestart() {
+	a.restartMu.Lock()
+	request := a.restartRequester
+	a.restartMu.Unlock()
+	if request != nil {
+		request()
+	}
+}
+
+// RestartFailed records that restarting for the staged update failed. The
+// update stays installed, so the user can restart again.
+func (a *AppService) RestartFailed(err error) {
+	if a.updates == nil || err == nil || err.Error() == "" {
+		return
+	}
+	a.updates.RestartFailed(err.Error())
+}
 
 // SetUpdateEngine sets how updates are found and installed. Without an engine
 // update operations report that the application is not ready.
@@ -70,22 +104,7 @@ func (a *AppService) ServiceStartup(ctx context.Context) error {
 	if a.updateEngine == nil {
 		return nil
 	}
-	var emit func(string, ...any) bool
-	if a.events != nil {
-		emit = a.events.Emit
-	}
-	a.updates = newUpdateController(a.updateEngine, Version(), a.updateApplyMode, emit)
-	if a.events != nil {
-		a.updateEventOffs = []func(){
-			a.events.On(UpdateRestartFailedEventName, func(event serviceruntime.Event) {
-				message, ok := event.Data.(string)
-				if !ok || message == "" {
-					return
-				}
-				a.updates.RestartFailed(message)
-			}),
-		}
-	}
+	a.updates = newUpdateController(a.updateEngine, Version(), a.updateApplyMode, a.Events.UpdateState.Publish, a.requestRestart)
 	return nil
 }
 
@@ -105,10 +124,6 @@ func (a *AppService) ServiceShutdown() error {
 // idempotent because graceful shutdown and the service lifecycle may
 // both reach it.
 func (a *AppService) ShutdownUpdater() {
-	for _, off := range a.updateEventOffs {
-		off()
-	}
-	a.updateEventOffs = nil
 	if a.updates != nil {
 		a.updates.Shutdown()
 	}

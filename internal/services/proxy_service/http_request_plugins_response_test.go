@@ -65,6 +65,7 @@ func TestSendHTTPRequestSpillsOnlyMatchedPluginResponsesAboveInlineLimit(t *test
 			response, err := service.SendHTTPRequest(
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -105,6 +106,7 @@ func TestSendHTTPRequestInvalidPluginResponseFileFailsOpen(t *testing.T) {
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -154,6 +156,7 @@ func TestSendHTTPRequestMaterializesPluginResponseFileAtServiceBoundary(t *testi
 			response, err := service.SendHTTPRequest(
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -197,6 +200,7 @@ func TestSendHTTPRequestCleansSpilledResponseAfterPluginTerminalResult(t *testin
 			response, err := service.SendHTTPRequest(
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -264,6 +268,7 @@ func TestSendHTTPRequestAppliesPluginResponsePresentation(t *testing.T) {
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodPost, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "request"},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -311,6 +316,7 @@ func TestSendHTTPRequestClassifiesXMLPluginResponse(t *testing.T) {
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -351,6 +357,7 @@ func TestSendHTTPRequestPluginResponseFailureRollsBackAndBlockHidesResponse(t *t
 			response, err := service.SendHTTPRequest(
 				context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 				http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("SendHTTPRequest: %v", err)
@@ -409,6 +416,7 @@ func TestSendHTTPRequestRunsSSEPluginBeforeStreamingAndKeepsChunks(t *testing.T)
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)
@@ -455,6 +463,7 @@ func TestSendHTTPRequestBlockedSSENeverStartsStream(t *testing.T) {
 	response, err := service.SendHTTPRequest(
 		context.Background(), SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
 		http.MethodGet, server.URL, nil, SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SendHTTPRequest: %v", err)

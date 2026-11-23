@@ -65,7 +65,7 @@ func TestResendRequestBindingCancellationReturnsNoBackendError(t *testing.T) {
 	select {
 	case err := <-resultCh:
 		if err != nil {
-			t.Fatalf("ResendRequest binding error = %v, want nil after frontend cancellation", err)
+			t.Fatalf("ResendRequest binding error = %v, want nil after the caller cancels", err)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("ResendRequest binding did not finish promptly after cancellation")

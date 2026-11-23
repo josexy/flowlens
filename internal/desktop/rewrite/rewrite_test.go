@@ -18,6 +18,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
+	"github.com/josexy/flowlens/internal/serviceruntime"
 	rewriteservice "github.com/josexy/flowlens/internal/services/rewrite_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
@@ -197,6 +198,19 @@ func (p *previewCall) wasCanceled() bool {
 	return p.canceled
 }
 
+// changesTopic is the rewrite service's change topic, counting subscribers.
+type changesTopic struct {
+	serviceruntime.Topic[rewriteservice.Changed]
+	subscribed int
+}
+
+func (c *changesTopic) Subscribe(fn func(rewriteservice.Changed)) func() {
+	c.subscribed++
+	off := c.Topic.Subscribe(fn)
+	var once sync.Once
+	return func() { once.Do(func() { c.subscribed--; off() }) }
+}
+
 type fixture struct {
 	t        *testing.T
 	backend  *fakeBackend
@@ -206,7 +220,7 @@ type fixture struct {
 	notifier *widgets.Notifier
 	dispatch *shortcuts.Dispatcher
 	view     *View
-	notify   func(int64)
+	changes  *changesTopic
 	mu       sync.Mutex
 	previews []*previewCall
 	matches  int
@@ -241,11 +255,8 @@ func newFixture(t *testing.T, initial ...store.RewriteState) *fixture {
 	rt.Dispatcher.SetMain(window)
 	t.Cleanup(rt.Close)
 	backend := &fakeBackend{server: cloneState(state)}
-	f := &fixture{t: t, backend: backend, window: window, notifier: &widgets.Notifier{}}
-	f.data = store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: settings}, Rewrite: backend, RewriteChanges: func(notify func(int64)) func() {
-		f.notify = notify
-		return func() { f.notify = nil }
-	}})
+	f := &fixture{t: t, backend: backend, window: window, notifier: &widgets.Notifier{}, changes: &changesTopic{}}
+	f.data = store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: settings}, Rewrite: backend, RewriteChanges: f.changes})
 	if err := f.data.Settings.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +343,8 @@ func (f *fixture) idle() {
 }
 
 func (f *fixture) emit(revision int64) {
-	f.notify(revision)
+	f.changes.Publish(rewriteservice.Changed{Revision: revision})
+	f.window.Drain()
 }
 
 func (f *fixture) edit(name string) {
@@ -380,7 +392,7 @@ func (f *fixture) previewCount() int {
 func TestSidebarAndPageShareTheInitialRead(t *testing.T) {
 	f := newFixture(t)
 	f.settle()
-	if f.backend.reads != 1 || f.notify == nil {
+	if f.backend.reads != 1 || f.changes.subscribed != 1 {
 		t.Fatal(f.backend.reads)
 	}
 }
@@ -795,9 +807,9 @@ func TestToggleFeedbackStaysOnActiveSwitch(t *testing.T) {
 	}
 }
 
-func askQuit(f *fixture, reason string) *[]string {
-	replies := &[]string{}
-	f.view.AskQuit(QuitPrompt{Reason: reason, Respond: func(decision string) { *replies = append(*replies, decision) }})
+func askQuit(f *fixture, reason string) *[]QuitDecision {
+	replies := &[]QuitDecision{}
+	f.view.AskQuit(QuitPrompt{Reason: reason, Respond: func(decision QuitDecision) { *replies = append(*replies, decision) }})
 	f.pump()
 	return replies
 }
@@ -857,6 +869,21 @@ func TestQuitGuardKeepsInvalidDraftOpen(t *testing.T) {
 	f.settle()
 	if len(*replies) != 0 || !f.view.QuitPending() || f.backend.count("save") != 0 || !f.has(locales.RewriteRulesValidationNameRequired()) {
 		t.Fatalf("%v %v", *replies, f.tester.Texts())
+	}
+}
+
+func TestQuitGuardCancelledPromptTakesNoLaterDecision(t *testing.T) {
+	f := newFixture(t)
+	f.edit("draft")
+	first := askQuit(f, "quit")
+	f.click(locales.RewriteRulesCancel())
+	if len(*first) != 1 || (*first)[0] != DecisionCancel || f.view.QuitPending() {
+		t.Fatal(*first)
+	}
+	second := askQuit(f, ReasonUpdate)
+	f.click(locales.RewriteRulesDiscardContinue())
+	if len(*first) != 1 || len(*second) != 1 || (*second)[0] != DecisionDiscard {
+		t.Fatalf("first %v, second %v: a later decision reached the cancelled prompt", *first, *second)
 	}
 }
 

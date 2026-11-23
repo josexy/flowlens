@@ -94,12 +94,6 @@ func HexRowCount(byteLength int64, bytesPerRow int) int64 {
 	return (byteLength-1)/int64(bytesPerRow) + 1
 }
 
-// HexRowOf returns the row that holds offset, which stays correct when a new
-// width changes the bytes in a row.
-func HexRowOf(offset, byteLength int64, bytesPerRow int) int64 {
-	return max(0, min(offset, byteLength-1)) / int64(bytesPerRow)
-}
-
 // HexByteAt returns the byte under x in a row, including gaps and positions
 // beyond the row's ends. It returns -1 for an empty body.
 func HexByteAt(x float32, row int64, column HexColumn, layout HexLayout, charWidth float32, byteLength int64) int64 {

@@ -22,11 +22,7 @@ func TestStreamBodySnapshotsSurviveAppendAndNextResponse(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			h := newWorkspaceHarness(t)
 			key := h.store.CreateHTTPRequestTab(logic.DraftNew, nil)
-			state := h.store.FindTab(key).HTTP
-			state.Response = &logic.HTTPResponseView{Kind: logic.ResponseKindSuccess, Body: test.value, BodyBinary: test.binary}
-			if !h.store.RegisterHTTPStream(key, "first") {
-				t.Fatal("stream not registered")
-			}
+			state, sink := h.startStream(key, "first", test.value, test.binary)
 			want := test.value
 			snapshots := []string{state.Response.Body}
 			wants := []string{strings.Clone(want)}
@@ -34,8 +30,8 @@ func TestStreamBodySnapshotsSurviveAppendAndNextResponse(t *testing.T) {
 			// published strings for saving, copying, or background rendering.
 			for _, count := range []int{1, 32, 4096, 2, 65536, 3} {
 				data := strings.Repeat(test.value, count)
-				h.emit(eventHTTPRequest, chunk("first", int64(len(want)), data))
-				h.clock.tick(streamFlushInterval)
+				deliver(sink, chunk("first", int64(len(want)), data))
+				h.flush()
 				want += data
 				if state.Response.Body != want {
 					t.Fatalf("body after append of %d bytes differs", len(data))
@@ -43,19 +39,16 @@ func TestStreamBodySnapshotsSurviveAppendAndNextResponse(t *testing.T) {
 				snapshots = append(snapshots, state.Response.Body)
 				wants = append(wants, strings.Clone(want))
 			}
-			h.emit(eventHTTPRequest, terminal("first", "complete", int64(len(want))))
-			h.clock.tick(streamFlushInterval)
+			deliver(sink, terminal("first", proxyservice.HTTPStreamComplete, int64(len(want))))
+			h.flush()
 			if state.IsStreaming || state.Response.Body != want {
 				t.Fatal("completion lost the response body or left the stream active")
 			}
 
 			// Reusing the tab must create independent storage for the next body.
-			state.Response = &logic.HTTPResponseView{Kind: logic.ResponseKindSuccess, Body: "next:", BodyBinary: test.binary}
-			if !h.store.RegisterHTTPStream(key, "second") {
-				t.Fatal("second stream not registered")
-			}
-			h.emit(eventHTTPRequest, chunk("second", 5, test.value), terminal("second", "complete", int64(5+len(test.value))))
-			h.clock.tick(streamFlushInterval)
+			state, sink = h.startStream(key, "second", "next:", test.binary)
+			deliver(sink, chunk("second", 5, test.value), terminal("second", proxyservice.HTTPStreamComplete, int64(5+len(test.value))))
+			h.flush()
 			if state.Response.Body != "next:"+test.value {
 				t.Fatalf("second response = %q", state.Response.Body)
 			}
@@ -70,7 +63,7 @@ func TestStreamBodySnapshotsSurviveAppendAndNextResponse(t *testing.T) {
 
 func TestStreamTextBodyUsesWireOffsetsAfterDecoding(t *testing.T) {
 	h := newWorkspaceHarness(t)
-	state := h.streamTab("text")
+	state, sink := h.streamTab("text")
 	for _, step := range []struct {
 		offset int64
 		data   string
@@ -83,8 +76,8 @@ func TestStreamTextBodyUsesWireOffsetsAfterDecoding(t *testing.T) {
 		{offset: 4, data: "中\xffB", want: "A中�B"}, // Duplicate contributes nothing.
 		{offset: 9, data: "文", want: "A中�B文"},
 	} {
-		h.emit(eventHTTPRequest, chunk("text", step.offset, step.data))
-		h.clock.tick(streamFlushInterval)
+		deliver(sink, chunk("text", step.offset, step.data))
+		h.flush()
 		if state.Response.Body != step.want {
 			t.Fatalf("chunk at %d: body = %q, want %q", step.offset, state.Response.Body, step.want)
 		}
@@ -130,12 +123,12 @@ func benchmarkHTTPStreamAppend(b *testing.B, binary bool, size int) {
 	var body string
 	for b.Loop() {
 		response := &logic.HTTPResponseView{BodyBinary: binary}
-		stream := &httpStreamRuntime{sessionID: "bench", state: &logic.HTTPEditorState{Response: response}, decoder: &utf8StreamDecoder{}}
-		workspace := &WorkspaceStore{streams: map[string]*httpStreamRuntime{"bench": stream}}
+		stream := &httpStreamRuntime{sessionID: "bench", state: &logic.HTTPEditorState{Response: response}, active: true, streaming: true, decoder: &utf8StreamDecoder{}}
+		workspace := &WorkspaceStore{}
 		// Flush every chunk separately: batching the entire response into one
 		// flush would hide repeated copying of the already-published prefix.
 		for offset := int64(0); offset < int64(size); offset += chunkSize {
-			stream.pending = []proxyservice.HTTPRequestStreamEvent{{SessionID: "bench", EventType: "chunk", Offset: &offset, Chunk: payload}}
+			stream.pending = []proxyservice.HTTPRequestStreamEvent{{SessionID: "bench", EventType: proxyservice.HTTPStreamChunk, Offset: &offset, Chunk: payload}}
 			workspace.flushStream(stream)
 		}
 		body = response.Body

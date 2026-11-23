@@ -17,7 +17,7 @@ func TestPluginEnabledPendingValueSurvivesJoinedCompletion(t *testing.T) {
 	window := &runtimetest.Window{}
 	rt.Dispatcher.SetMain(window)
 	t.Cleanup(rt.Close)
-	s := NewPluginsStore(rt, pluginEnabledBackend{}, nil)
+	s := NewPluginsStore(rt, pluginEnabledBackend{}, PluginEvents{})
 	s.Plugins = []*Plugin{{ID: "first"}}
 	finished := 0
 	s.SetPluginEnabled("first", true, func(_ *Plugin, err error) {
@@ -75,7 +75,7 @@ func pluginFilesStore(t *testing.T) (*PluginsStore, *runtimetest.Window) {
 	window := &runtimetest.Window{}
 	rt.Dispatcher.SetMain(window)
 	t.Cleanup(rt.Close)
-	s := NewPluginsStore(rt, &pluginFilesBackend{files: []string{"main.py", "extra.py"}}, nil)
+	s := NewPluginsStore(rt, &pluginFilesBackend{files: []string{"main.py", "extra.py"}}, PluginEvents{})
 	s.SelectedPluginID, s.editorPluginID, s.SelectedFilePath = "first", "first", "extra.py"
 	s.selectedFiles["first"] = "extra.py"
 	s.EditorContent, s.SavedEditor = "draft", "saved"

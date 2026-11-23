@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
@@ -84,9 +83,9 @@ const (
 
 // RequestFileValue is a file chosen for a request.
 type RequestFileValue struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
-	Size int64  `json:"size"`
+	Path string
+	Name string
+	Size int64
 }
 
 // FormDataItem is one row of a multipart body.
@@ -101,14 +100,14 @@ type FormDataItem struct {
 
 // HTTPSendSettings are how a request is sent.
 type HTTPSendSettings struct {
-	ProxyMode        string `json:"proxyMode"`
-	Protocol         string `json:"protocol"`
-	CustomProxy      string `json:"customProxy"`
-	TimeoutMs        int64  `json:"timeoutMs"`
-	MaxRedirects     int    `json:"maxRedirects"`
-	SkipVerifyTLS    bool   `json:"skipVerifyTls"`
-	TLSClientHelloID string `json:"tlsClientHelloId"`
-	HTTP2Fingerprint string `json:"http2Fingerprint"`
+	ProxyMode        string
+	Protocol         string
+	CustomProxy      string
+	TimeoutMs        int64
+	MaxRedirects     int
+	SkipVerifyTLS    bool
+	TLSClientHelloID string
+	HTTP2Fingerprint string
 }
 
 // HTTPResponseView is the response shown for a request.
@@ -149,11 +148,11 @@ type HTTPEditorState struct {
 
 // WebSocketSettings are how a WebSocket connects.
 type WebSocketSettings struct {
-	ProxyMode        string `json:"proxyMode"`
-	CustomProxy      string `json:"customProxy"`
-	TimeoutMs        int64  `json:"timeoutMs"`
-	SkipVerifyTLS    bool   `json:"skipVerifyTls"`
-	TLSClientHelloID string `json:"tlsClientHelloId"`
+	ProxyMode        string
+	CustomProxy      string
+	TimeoutMs        int64
+	SkipVerifyTLS    bool
+	TLSClientHelloID string
 }
 
 // WebSocketClientState is one WebSocket Client tab.
@@ -173,8 +172,21 @@ type WebSocketClientState struct {
 	DraftType, DraftText   string
 	DraftFile              *RequestFileValue
 	Messages               []WebSocketDisplayMessage
-	ConnectionStatus       string
+	ConnectionStatus       WebSocketConnectionStatus
 }
+
+// WebSocketConnectionStatus is the state of a WebSocket Client tab's
+// connection. It is not saved with the request.
+type WebSocketConnectionStatus string
+
+const (
+	WebSocketIdle       WebSocketConnectionStatus = "idle"
+	WebSocketConnecting WebSocketConnectionStatus = "connecting"
+	WebSocketConnected  WebSocketConnectionStatus = "connected"
+	WebSocketClosed     WebSocketConnectionStatus = "closed"
+	WebSocketError      WebSocketConnectionStatus = "error"
+	WebSocketCancelled  WebSocketConnectionStatus = "cancelled"
+)
 
 // WorkspaceTab is one tab of the traffic workspace.
 type WorkspaceTab struct {
@@ -183,7 +195,7 @@ type WorkspaceTab struct {
 	HistoryKey       string
 	APIID            string
 	APIUpdatedAt     int64
-	SavedSnapshot    string
+	SavedSnapshot    RequestSnapshot
 	HTTP             *HTTPEditorState
 	WebSocket        *WebSocketClientState
 }
@@ -328,7 +340,7 @@ func BuildEmptyHTTPEditorState(source RequestDraftSource) *HTTPEditorState {
 func BuildEmptyWebSocketClientState(source RequestDraftSource) *WebSocketClientState {
 	return &WebSocketClientState{
 		Source: source, ActiveLeftTab: "message", ActiveRightTab: "response-headers", Params: []EditableRow{emptyRow()}, Headers: []EditableRow{emptyRow()},
-		Settings: defaultWebSocketSettings(), DraftType: "text", ConnectionStatus: "idle",
+		Settings: defaultWebSocketSettings(), DraftType: "text", ConnectionStatus: WebSocketIdle,
 	}
 }
 
@@ -506,38 +518,104 @@ func BuildWebSocketClientStateFromSaved(request *apicollectionservice.SavedWebSo
 	return state
 }
 
+// RequestSnapshot is what a request tab would save. Compared with the
+// snapshot taken when the tab was saved, it tells whether the tab has unsaved
+// changes. A snapshot owns copies of the tab's rows and file references, so
+// later edits of the tab never change it. The zero value is the snapshot of a
+// tab that is not a request.
+type RequestSnapshot struct {
+	http      *httpSnapshot
+	webSocket *webSocketSnapshot
+}
+
 type snapshotFormItem struct {
-	Enabled  bool              `json:"enabled"`
-	Name     string            `json:"name"`
-	ItemType string            `json:"itemType"`
-	Value    string            `json:"value"`
-	File     *RequestFileValue `json:"file"`
+	Enabled  bool
+	Name     string
+	ItemType string
+	Value    string
+	File     *RequestFileValue
 }
 
 type httpSnapshot struct {
-	Type         string             `json:"type"`
-	Method       string             `json:"method"`
-	URL          string             `json:"url"`
-	Params       []EditableRow      `json:"params"`
-	Headers      []EditableRow      `json:"headers"`
-	BodyType     string             `json:"requestBodyType"`
-	BodyText     string             `json:"requestBodyText"`
-	BodyFile     *RequestFileValue  `json:"requestBodyFile"`
-	FormData     []snapshotFormItem `json:"requestBodyFormData"`
-	URLEncoded   []EditableRow      `json:"requestBodyUrlEncoded"`
-	InlineScript string             `json:"inlineScriptSource"`
-	Settings     HTTPSendSettings   `json:"settings"`
+	Method       string
+	URL          string
+	Params       []EditableRow
+	Headers      []EditableRow
+	BodyType     string
+	BodyText     string
+	BodyFile     *RequestFileValue
+	FormData     []snapshotFormItem
+	URLEncoded   []EditableRow
+	InlineScript string
+	Settings     HTTPSendSettings
 }
 
 type webSocketSnapshot struct {
-	Type      string            `json:"type"`
-	URL       string            `json:"url"`
-	Params    []EditableRow     `json:"params"`
-	Headers   []EditableRow     `json:"headers"`
-	DraftType string            `json:"draftType"`
-	DraftText string            `json:"draftText"`
-	DraftFile *RequestFileValue `json:"draftFile"`
-	Settings  WebSocketSettings `json:"settings"`
+	URL       string
+	Params    []EditableRow
+	Headers   []EditableRow
+	DraftType string
+	DraftText string
+	DraftFile *RequestFileValue
+	Settings  WebSocketSettings
+}
+
+// RequestSnapshotOf takes the snapshot of a tab's savable content.
+func RequestSnapshotOf(tab *WorkspaceTab) RequestSnapshot {
+	switch {
+	case tab.Type == TabTypeHTTPRequest && tab.HTTP != nil:
+		snapshot := httpSnapshotOf(tab.HTTP)
+		return RequestSnapshot{http: &snapshot}
+	case tab.Type == TabTypeWebSocketClient && tab.WebSocket != nil:
+		snapshot := webSocketSnapshotOf(tab.WebSocket)
+		return RequestSnapshot{webSocket: &snapshot}
+	default:
+		return RequestSnapshot{}
+	}
+}
+
+// IsZero reports whether the snapshot is of a tab that is not a request.
+func (s RequestSnapshot) IsZero() bool { return s.http == nil && s.webSocket == nil }
+
+// Equal reports whether two snapshots hold the same savable content.
+func (s RequestSnapshot) Equal(other RequestSnapshot) bool {
+	switch {
+	case s.http != nil && other.http != nil:
+		return s.http.equal(other.http)
+	case s.webSocket != nil && other.webSocket != nil:
+		return s.webSocket.equal(other.webSocket)
+	default:
+		return s.IsZero() && other.IsZero()
+	}
+}
+
+func (a *httpSnapshot) equal(b *httpSnapshot) bool {
+	return a.Method == b.Method && a.URL == b.URL && slices.Equal(a.Params, b.Params) && slices.Equal(a.Headers, b.Headers) &&
+		a.BodyType == b.BodyType && a.BodyText == b.BodyText && sameFile(a.BodyFile, b.BodyFile) &&
+		slices.EqualFunc(a.FormData, b.FormData, sameFormItem) && slices.Equal(a.URLEncoded, b.URLEncoded) &&
+		a.InlineScript == b.InlineScript && a.Settings == b.Settings
+}
+
+func (a *webSocketSnapshot) equal(b *webSocketSnapshot) bool {
+	return a.URL == b.URL && slices.Equal(a.Params, b.Params) && slices.Equal(a.Headers, b.Headers) &&
+		a.DraftType == b.DraftType && a.DraftText == b.DraftText && sameFile(a.DraftFile, b.DraftFile) && a.Settings == b.Settings
+}
+
+func sameFile(a, b *RequestFileValue) bool {
+	return a == b || (a != nil && b != nil && *a == *b)
+}
+
+func sameFormItem(a, b snapshotFormItem) bool {
+	return a.Enabled == b.Enabled && a.Name == b.Name && a.ItemType == b.ItemType && a.Value == b.Value && sameFile(a.File, b.File)
+}
+
+// copyFile returns a file reference the snapshot owns.
+func copyFile(file *RequestFileValue) *RequestFileValue {
+	if file == nil {
+		return nil
+	}
+	copied := *file
+	return &copied
 }
 
 func meaningfulRows(rows []EditableRow) []EditableRow {
@@ -564,7 +642,7 @@ func meaningfulFormData(rows []FormDataItem) []snapshotFormItem {
 	result := []snapshotFormItem{}
 	for _, row := range rows {
 		if row.Enabled && (strings.TrimSpace(row.Name) != "" || strings.TrimSpace(row.Value) != "" || (row.File != nil && row.File.Path != "")) {
-			result = append(result, snapshotFormItem{row.Enabled, row.Name, row.ItemType, row.Value, row.File})
+			result = append(result, snapshotFormItem{row.Enabled, row.Name, row.ItemType, row.Value, copyFile(row.File)})
 		}
 	}
 	return result
@@ -572,36 +650,17 @@ func meaningfulFormData(rows []FormDataItem) []snapshotFormItem {
 
 func httpSnapshotOf(state *HTTPEditorState) httpSnapshot {
 	return httpSnapshot{
-		Type: "http", Method: strings.TrimSpace(state.Method), URL: strings.TrimSpace(state.URL), Params: meaningfulRows(state.Params), Headers: meaningfulHeaders(state.Headers),
-		BodyType: state.RequestBodyType, BodyText: state.RequestBodyText, BodyFile: state.RequestBodyFile, FormData: meaningfulFormData(state.RequestBodyFormData),
+		Method: strings.TrimSpace(state.Method), URL: strings.TrimSpace(state.URL), Params: meaningfulRows(state.Params), Headers: meaningfulHeaders(state.Headers),
+		BodyType: state.RequestBodyType, BodyText: state.RequestBodyText, BodyFile: copyFile(state.RequestBodyFile), FormData: meaningfulFormData(state.RequestBodyFormData),
 		URLEncoded: meaningfulRows(state.RequestBodyURLEncoded), InlineScript: state.InlineScriptSource, Settings: state.Settings,
 	}
 }
 
 func webSocketSnapshotOf(state *WebSocketClientState) webSocketSnapshot {
 	return webSocketSnapshot{
-		Type: "websocket", URL: strings.TrimSpace(state.URL), Params: meaningfulRows(state.Params), Headers: meaningfulHeaders(state.Headers),
-		DraftType: state.DraftType, DraftText: state.DraftText, DraftFile: state.DraftFile, Settings: state.Settings,
+		URL: strings.TrimSpace(state.URL), Params: meaningfulRows(state.Params), Headers: meaningfulHeaders(state.Headers),
+		DraftType: state.DraftType, DraftText: state.DraftText, DraftFile: copyFile(state.DraftFile), Settings: state.Settings,
 	}
-}
-
-// CreateSnapshotForTab returns a value that changes when a tab's saved content
-// would.
-func CreateSnapshotForTab(tab *WorkspaceTab) string {
-	var payload any
-	switch {
-	case tab.Type == TabTypeHTTPRequest && tab.HTTP != nil:
-		payload = httpSnapshotOf(tab.HTTP)
-	case tab.Type == TabTypeWebSocketClient && tab.WebSocket != nil:
-		payload = webSocketSnapshotOf(tab.WebSocket)
-	default:
-		return ""
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }
 
 // HasMeaningfulRequestDraft reports whether a tab holds anything worth keeping.
@@ -625,7 +684,7 @@ func HasMeaningfulRequestDraft(tab *WorkspaceTab) bool {
 // ApplySavedMetadata links a tab to its saved request.
 func ApplySavedMetadata(tab *WorkspaceTab, request *apicollectionservice.APICollectionRequest) {
 	tab.APIID, tab.APIUpdatedAt = request.ID, request.UpdatedAt
-	tab.SavedSnapshot = CreateSnapshotForTab(tab)
+	tab.SavedSnapshot = RequestSnapshotOf(tab)
 }
 
 // ErrRequestBodyUnavailable reports a captured body that is missing.

@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -253,11 +252,11 @@ func (s *SettingsStore) HiddenTrafficColumns() []string {
 
 // BeginEdit gives the Settings window a private copy of the saved settings.
 func (s *SettingsStore) BeginEdit() {
-	s.Draft = CloneSettings(s.Current)
+	s.Draft = s.Current.Clone()
 	if s.Draft != nil {
 		NormalizeSettings(s.Draft)
 	}
-	s.baseline = CloneSettings(s.Draft)
+	s.baseline = s.Draft.Clone()
 	s.dirtySections = map[SettingsSection]bool{}
 	s.LastProxyApplyResult = nil
 	s.LastShortcutResult = nil
@@ -294,7 +293,7 @@ func (s *SettingsStore) unedited(section SettingsSection) bool {
 // baseline as well.
 func (s *SettingsStore) replaceDraft(next *settingservice.Settings) {
 	if s.baseline != nil {
-		source := CloneSettings(next)
+		source := next.Clone()
 		for _, section := range editableSections {
 			if s.unedited(section) {
 				field := reflect.ValueOf(sectionField(s.baseline, section)).Elem()
@@ -375,7 +374,7 @@ func (s *SettingsStore) Save(done func(SaveResult, error)) bool {
 		return false
 	}
 	s.Saving = true
-	draft := CloneSettings(s.Draft)
+	draft := s.Draft.Clone()
 	sections := s.DirtySections()
 	runtime.Run(s.rt.Jobs, settingsSaveJob, func(context.Context) (saveOutcome, error) {
 		return s.persist(draft, sections)
@@ -399,7 +398,7 @@ func (s *SettingsStore) persist(draft *settingservice.Settings, sections []Setti
 	}
 	var shortcutCandidate *settingservice.ShortcutConfig
 	if slices.Contains(sections, SectionShortcuts) && draft.Shortcuts != nil {
-		shortcutCandidate = cloneShortcuts(draft.Shortcuts)
+		shortcutCandidate = draft.Shortcuts.Clone()
 	}
 	var pythonCandidate *settingservice.PythonPluginConfig
 	if slices.Contains(sections, SectionPythonPlugins) && draft.PythonPluginConfig != nil {
@@ -415,7 +414,7 @@ func (s *SettingsStore) persist(draft *settingservice.Settings, sections []Setti
 	outcome.draft = merged
 
 	if len(ordinary) > 0 {
-		if err := s.deps.Backend.UpdatePreservingShortcuts(CloneSettings(merged)); err != nil {
+		if err := s.deps.Backend.UpdatePreservingShortcuts(merged.Clone()); err != nil {
 			return s.failSave(outcome, shortcutCandidate, err)
 		}
 		if err := s.deps.Backend.Save(); err != nil {
@@ -436,9 +435,9 @@ func (s *SettingsStore) persist(draft *settingservice.Settings, sections []Setti
 	}
 
 	outcome.complete = true
-	outcome.persisted = CloneSettings(outcome.draft)
+	outcome.persisted = outcome.draft.Clone()
 	if shortcutCandidate != nil {
-		result, err := s.deps.Shortcuts.ApplyShortcutConfig(cloneShortcuts(shortcutCandidate))
+		result, err := s.deps.Shortcuts.ApplyShortcutConfig(shortcutCandidate.Clone())
 		if err == nil && (result == nil || result.Config == nil) {
 			err = errors.New("shortcut apply result is not available")
 		}
@@ -447,9 +446,9 @@ func (s *SettingsStore) persist(draft *settingservice.Settings, sections []Setti
 			return s.failSave(outcome, shortcutCandidate, err)
 		}
 		outcome.shortcutResult = result
-		outcome.persisted.Shortcuts = cloneShortcuts(result.Config)
+		outcome.persisted.Shortcuts = result.Config.Clone()
 		if result.Applied {
-			outcome.draft.Shortcuts = cloneShortcuts(result.Config)
+			outcome.draft.Shortcuts = result.Config.Clone()
 		} else {
 			outcome.draft.Shortcuts = shortcutCandidate
 			outcome.complete = false
@@ -526,7 +525,7 @@ func (s *SettingsStore) applySaveOutcome(outcome saveOutcome, err error) {
 	s.Current = outcome.persisted
 	if s.Draft != nil {
 		NormalizeSettings(s.Draft)
-		s.baseline = CloneSettings(s.Current)
+		s.baseline = s.Current.Clone()
 		NormalizeSettings(s.baseline)
 	}
 	s.preview = nil
@@ -698,7 +697,7 @@ func (s *SettingsStore) UpdateProxyConfig(mutate func(*settingservice.ProxyConfi
 	if s.Current == nil || s.Saving {
 		return false
 	}
-	draft := CloneSettings(s.Current)
+	draft := s.Current.Clone()
 	NormalizeSettings(draft)
 	mutate(draft.ProxyConfig)
 	s.Saving = true
@@ -710,8 +709,8 @@ func (s *SettingsStore) UpdateProxyConfig(mutate func(*settingservice.ProxyConfi
 			s.LastProxyApplyResult = outcome.proxyResult
 			s.Current = outcome.persisted
 			if s.unedited(SectionProxy) {
-				s.Draft.ProxyConfig = CloneSettings(outcome.persisted).ProxyConfig
-				s.baseline.ProxyConfig = CloneSettings(outcome.persisted).ProxyConfig
+				s.Draft.ProxyConfig = outcome.persisted.ProxyConfig.Clone()
+				s.baseline.ProxyConfig = outcome.persisted.ProxyConfig.Clone()
 			}
 			s.rt.Dispatcher.InvalidateAll()
 		}
@@ -775,34 +774,6 @@ func (s *SettingsStore) scheduleDetailSave() {
 	})
 }
 
-// CloneSettings returns an independent copy.
-func CloneSettings(settings *settingservice.Settings) *settingservice.Settings {
-	if settings == nil {
-		return nil
-	}
-	data, err := json.Marshal(settings)
-	if err != nil {
-		panic(fmt.Sprintf("copy settings: %v", err))
-	}
-	copied := new(settingservice.Settings)
-	if err := json.Unmarshal(data, copied); err != nil {
-		panic(fmt.Sprintf("copy settings: %v", err))
-	}
-	return copied
-}
-
-func cloneShortcuts(config *settingservice.ShortcutConfig) *settingservice.ShortcutConfig {
-	data, err := json.Marshal(config)
-	if err != nil {
-		panic(fmt.Sprintf("copy shortcuts: %v", err))
-	}
-	copied := new(settingservice.ShortcutConfig)
-	if err := json.Unmarshal(data, copied); err != nil {
-		panic(fmt.Sprintf("copy shortcuts: %v", err))
-	}
-	return copied
-}
-
 // MergeSettingsForSave starts from the latest saved settings and takes only
 // the draft's dirty sections, so preferences saved elsewhere are not lost.
 func MergeSettingsForSave(draft, latest *settingservice.Settings, sections []SettingsSection) *settingservice.Settings {
@@ -811,8 +782,8 @@ func MergeSettingsForSave(draft, latest *settingservice.Settings, sections []Set
 	}
 	NormalizeSettings(draft)
 	NormalizeSettings(latest)
-	merged := CloneSettings(latest)
-	copied := CloneSettings(draft)
+	merged := latest.Clone()
+	copied := draft.Clone()
 	has := func(section SettingsSection) bool { return slices.Contains(sections, section) }
 
 	if has(SectionCommon) {
@@ -969,7 +940,7 @@ func resolveUpstreamMode(config *settingservice.ProxyConfig) settingservice.Upst
 func (s *SettingsStore) ShortcutsChanged(result shortcutservice.ShortcutApplyResult) {
 	s.ShortcutRuntime = result.RuntimeState
 	if result.Config != nil && s.Current != nil {
-		s.Current.Shortcuts = cloneShortcuts(result.Config)
+		s.Current.Shortcuts = result.Config.Clone()
 	}
 }
 

@@ -22,7 +22,6 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/internal/pkg/database"
-	"github.com/josexy/flowlens/internal/serviceruntime"
 	historyservice "github.com/josexy/flowlens/internal/services/history_service"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
@@ -36,7 +35,7 @@ type fakeBackend struct {
 	stats      proxyservice.TrafficStatistics
 	bodies     map[uint64]*proxyservice.TrafficBodyView
 	readBody   func(uint64) (*proxyservice.TrafficBodyView, error)
-	deleted    []int64
+	deleted    []uint64
 	cleared    int
 	status     proxyservice.ProxyStatus
 	system     proxyservice.SystemProxyStatus
@@ -67,7 +66,7 @@ func (f *fakeBackend) ClearTraffic() error {
 	f.cleared++
 	return nil
 }
-func (f *fakeBackend) DeleteTraffic(ids []int64) {
+func (f *fakeBackend) DeleteTraffic(ids []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, ids...)
@@ -312,7 +311,7 @@ func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height 
 	f.tester = ui.NewTester(view, width, height)
 	f.tester.SetLocale("en")
 	t.Cleanup(rt.Close)
-	data.Proxy.Initialize(nopBus{})
+	data.Proxy.Initialize(&proxyservice.Events{})
 	data.Traffic.Initialize(nil)
 	data.Filter.Refresh()
 	if data.History != nil {
@@ -324,11 +323,11 @@ func newFixtureSized(t testing.TB, entries []*logic.TrafficEntry, width, height 
 
 type requestStub struct{}
 
-func (requestStub) SendHTTPRequest(context.Context, proxyservice.SendRequestConfig, string, string, []logic.HeaderField, proxyservice.SendRequestBody) (proxyservice.SendRequestResponse, error) {
+func (requestStub) SendHTTPRequest(context.Context, proxyservice.SendRequestConfig, string, string, []logic.HeaderField, proxyservice.SendRequestBody, proxyservice.HTTPStreamSink) (proxyservice.SendRequestResponse, error) {
 	return proxyservice.SendRequestResponse{}, nil
 }
 func (requestStub) DisconnectHTTPRequestStream(string) error { return nil }
-func (requestStub) ConnectWebSocket(context.Context, proxyservice.WebSocketConnectRequest) (proxyservice.WebSocketConnectResponse, error) {
+func (requestStub) ConnectWebSocket(context.Context, proxyservice.WebSocketConnectRequest, proxyservice.WebSocketSink) (proxyservice.WebSocketConnectResponse, error) {
 	return proxyservice.WebSocketConnectResponse{}, nil
 }
 func (requestStub) SendWebSocketMessage(proxyservice.WebSocketSendRequest) error { return nil }
@@ -336,11 +335,6 @@ func (requestStub) DisconnectWebSocket(string) error                            
 func (requestStub) RecoverRequestBodyForEditing(string, []logic.HeaderField, proxyservice.TrafficBodyView) (proxyservice.RequestBodyRecoveryResult, error) {
 	return proxyservice.RequestBodyRecoveryResult{}, nil
 }
-
-type nopBus struct{}
-
-func (nopBus) Emit(string, ...any) bool                     { return true }
-func (nopBus) On(string, func(serviceruntime.Event)) func() { return func() {} }
 
 func resendConfirmLabel() string { return locales.ResendModalConfirm() }
 
@@ -1217,7 +1211,7 @@ func TestDeleteSingleAndMultiple(t *testing.T) {
 	openRowMenu(t, f, "a.test")
 	f.choose("Delete")
 	f.requireNoText("a.test")
-	if !slices.Equal(f.backend.deleted, []int64{1}) {
+	if !slices.Equal(f.backend.deleted, []uint64{1}) {
 		t.Fatal(f.backend.deleted)
 	}
 	table := f.workspace.Table
@@ -2017,8 +2011,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f.showCategories = true
 	f.settle()
 	view := &f.workspace.category
-	if len(f.workspace.HistoryTable.Rows()) != 2 || view.context != "history:k1" || len(view.entries) != 2 || len(view.roots) == 0 {
-		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.Rows()), view.context, len(view.entries))
+	if len(f.workspace.HistoryTable.rows) != 2 || view.context != "history:k1" || len(view.entries) != 2 || len(view.roots) == 0 {
+		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.rows), view.context, len(view.entries))
 	}
 
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)
@@ -2030,7 +2024,7 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	if history.Traffic.Key != "" || history.Traffic.Entries != nil || len(history.Filter.Base()) != 0 {
 		t.Fatalf("closed history kept its entries: key %q entries %d", history.Traffic.Key, len(history.Traffic.Entries))
 	}
-	if rows := f.workspace.HistoryTable.Rows(); len(rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
+	if rows := f.workspace.HistoryTable.rows; len(rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
 		t.Fatalf("history table kept %d rows", len(rows))
 	}
 	for _, row := range view.entries {
@@ -2048,8 +2042,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f.settle()
 	f.click("session one")
 	f.requireText("saved.test")
-	if len(f.workspace.HistoryTable.Rows()) != 2 {
-		t.Fatalf("reopened history rows = %d", len(f.workspace.HistoryTable.Rows()))
+	if len(f.workspace.HistoryTable.rows) != 2 {
+		t.Fatalf("reopened history rows = %d", len(f.workspace.HistoryTable.rows))
 	}
 }
 
@@ -2068,7 +2062,7 @@ func TestReplacingAndClearingHistoryReleaseHiddenDetails(t *testing.T) {
 	// Deletion can clear the store before the tab is closed.
 	f.data.History.CloseOpened()
 	f.settle()
-	if released != opened+2 || len(f.workspace.HistoryTable.Rows()) != 0 {
+	if released != opened+2 || len(f.workspace.HistoryTable.rows) != 0 {
 		t.Fatal("clearing a history kept hidden view state")
 	}
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)

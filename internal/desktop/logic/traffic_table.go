@@ -24,18 +24,6 @@ type TrafficSort struct {
 
 func (s TrafficSort) active() bool { return s.Key != "" && s.Order != SortNone }
 
-// NextSortOrder cycles a column through ascending, descending, and unsorted.
-func NextSortOrder(order SortOrder) SortOrder {
-	switch order {
-	case SortAsc:
-		return SortDesc
-	case SortDesc:
-		return SortNone
-	default:
-		return SortAsc
-	}
-}
-
 // LatestEdge is where new requests appear in the table.
 type LatestEdge int
 

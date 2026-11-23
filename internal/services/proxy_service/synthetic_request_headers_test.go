@@ -305,6 +305,7 @@ func TestSendHTTPRequestHTTP1WritesExactHeaderLines(t *testing.T) {
 			{Name: "X-B", Value: "three"},
 		},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -434,6 +435,7 @@ func TestSendHTTPRequestAppliesAntiCacheAndAntiComp(t *testing.T) {
 			{Name: "accept-encoding", Value: "br"},
 		},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -469,6 +471,7 @@ func TestSendHTTPRequestAutoRejectsInterleavedDuplicateNames(t *testing.T) {
 			{Name: "A", Value: "last"},
 		},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "cannot preserve interleaved") {
 		t.Fatalf("error = %v, want an exact-order guidance error", err)
@@ -497,6 +500,7 @@ func TestSendHTTPRequestHTTP2WritesExactHeaderBlock(t *testing.T) {
 			{Name: "X-A", Value: "last"},
 		},
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -552,6 +556,7 @@ func TestSendHTTPRequestHTTP2RegeneratesBodyMetadata(t *testing.T) {
 		server.URL+"/body",
 		[]HTTPHeaderField{{Name: "Content-Length", Value: "999"}},
 		SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "body"},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -591,6 +596,7 @@ func TestSendHTTPRequestExplicitProtocolFollowsRedirect(t *testing.T) {
 		redirect.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -625,6 +631,7 @@ func TestSendHTTPRequestExplicitHTTP1GeneratesContentLength(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "body"},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -659,6 +666,7 @@ func TestSendHTTPRequestExplicitHTTP1ReplacesStaleContentLength(t *testing.T) {
 		server.URL,
 		[]HTTPHeaderField{{Name: "Content-Length", Value: "999"}},
 		SendRequestBody{BodyType: SendRequestBodyTypeText, Text: "body"},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -701,6 +709,7 @@ func TestSendHTTPRequestExplicitHTTP1UpdatesMultipartBoundaryInPlace(t *testing.
 				Value:    "value",
 			}},
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -723,6 +732,7 @@ func TestSendHTTPRequestHTTP2H2CRejectsForwardProxy(t *testing.T) {
 		"http://example.test/",
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "do not support HTTP forward proxies") {
 		t.Fatalf("error = %v, want h2c proxy restriction", err)
@@ -749,6 +759,7 @@ func TestSendHTTPRequestHTTP2UsesPriorKnowledgeH2CForDirectRequests(t *testing.T
 		server.URL+"/h2c",
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -774,6 +785,7 @@ func TestSendHTTPRequestHTTP2DoesNotDowngradeToHTTP1(t *testing.T) {
 		server.URL,
 		nil,
 		SendRequestBody{BodyType: SendRequestBodyTypeNone},
+		nil,
 	)
 	if err == nil {
 		t.Fatal("explicit HTTP/2 unexpectedly downgraded to HTTP/1")

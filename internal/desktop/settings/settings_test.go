@@ -11,6 +11,7 @@ import (
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	"github.com/josexy/flowlens/internal/desktop/store"
@@ -57,6 +58,18 @@ func (p *proxyApplier) ApplyCurrentProxyConfig() (proxyservice.ProxyConfigApplyR
 	return p.result, nil
 }
 
+type fakeStorage struct{ f *fixture }
+
+func (s fakeStorage) ClearCacheFiles() (proxyservice.LocalDataClearResult, error) {
+	s.f.note("clear-cache")
+	return proxyservice.LocalDataClearResult{Scope: proxyservice.LocalDataScopeCache, Cleared: true}, s.f.clearErr
+}
+
+func (s fakeStorage) ClearCacheAndHistory() (proxyservice.LocalDataClearResult, error) {
+	s.f.note("clear-all")
+	return proxyservice.LocalDataClearResult{Scope: proxyservice.LocalDataScopeCacheAndHistory, Cleared: true, HistoryCleared: true}, s.f.clearErr
+}
+
 type fixture struct {
 	t         *testing.T
 	service   *settingservice.SettingService
@@ -78,6 +91,7 @@ type fixture struct {
 	trustFail error
 	log       logger.LogStatus
 	size      proxyservice.LocalDataSize
+	clearErr  error
 	python    *pythonpluginservice.RuntimeStatus
 	testErr   error
 	found     []pythonpluginservice.InterpreterCandidate
@@ -127,7 +141,7 @@ func newFixture(t *testing.T) *fixture {
 	f.log = logger.LogStatus{Enabled: true, Level: logger.LogLevelInfo}
 	f.size = proxyservice.LocalDataSize{CacheBytes: 2048, HistoryBytes: 1024}
 	f.python = &pythonpluginservice.RuntimeStatus{Enabled: false}
-	f.data = store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: service, Shortcuts: f.shortcut, Proxy: f.proxy, Python: fakePython{f}}})
+	f.data = store.New(rt, store.Dependencies{Settings: store.SettingsDependencies{Backend: service, Shortcuts: f.shortcut, Proxy: f.proxy, Python: fakePython{f}}, Storage: fakeStorage{f}})
 	if err := f.data.Settings.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -188,8 +202,6 @@ func newFixture(t *testing.T) *fixture {
 		ClearLogs:    func() error { f.note("clear-logs"); return nil },
 		OpenLogDir:   func() error { f.note("open-logs"); return nil },
 		DataSize:     func() (proxyservice.LocalDataSize, error) { return f.size, nil },
-		ClearCache:   func() error { f.note("clear-cache"); return nil },
-		ClearAllData: func() error { f.note("clear-all"); return nil },
 		PythonStatus: func() (*pythonpluginservice.RuntimeStatus, error) { return f.python, nil },
 		TestPython: func(string) (*pythonpluginservice.RuntimeStatus, error) {
 			if f.testErr != nil {
@@ -569,7 +581,7 @@ func TestCustomUpstreamMustBeValid(t *testing.T) {
 
 func TestRestartPromptAfterProxyChange(t *testing.T) {
 	f := newFixture(t)
-	f.proxy.result = proxyservice.ProxyConfigApplyResult{Applied: true, RestartRequired: true, RestartReasons: []string{"listen_address_changed"}}
+	f.proxy.result = proxyservice.ProxyConfigApplyResult{Applied: true, RestartRequired: true, RestartReasons: []proxyservice.ProxyRestartReason{proxyservice.ProxyRestartReasonListenAddress}}
 	f.open(locales.SettingsTabProxy())
 	f.draft().ProxyConfig.UpstreamMode = settingservice.UpstreamProxyModeNone
 	f.settle()
@@ -592,7 +604,7 @@ func TestCustomCAModeRequiresPathsAndDisablesGeneration(t *testing.T) {
 	if !f.has(locales.ToolbarCaCertPath()) || !f.has(locales.ToolbarCaKeyPath()) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
-	if !f.view.proxy.generationDisabled(false, true) || f.view.proxy.generationHint(false, false) != locales.SettingsCaTrustErrorsCaCustomGenerationDisabled() {
+	if ca := f.view.caState(proxy.UseBuiltinCA, f.view.caConfigDirty()); !ca.GenerationDisabled || caGenerationHintText(ca.GenerationHint) != locales.SettingsCaTrustErrorsCaCustomGenerationDisabled() {
 		t.Fatal("generation is off in custom mode")
 	}
 	f.click(locales.SettingsSave())
@@ -615,7 +627,6 @@ func TestCustomCAModeRequiresPathsAndDisablesGeneration(t *testing.T) {
 func TestEveryTrustStatus(t *testing.T) {
 	f := newFixture(t)
 	f.open(locales.SettingsTabProxy())
-	state := &f.view.proxy
 	if !f.has(locales.SettingsCaTrustNotInstalled()) || !f.has(locales.SettingsCaStatusReady()) {
 		t.Fatalf("%v", f.tester.Texts())
 	}
@@ -638,8 +649,8 @@ func TestEveryTrustStatus(t *testing.T) {
 		if !f.has(testCase.want) {
 			t.Fatalf("%s: %v", testCase.name, f.tester.Texts())
 		}
-		if testCase.blocked && !state.trustUnknown() {
-			t.Fatal(testCase.name)
+		if ca := f.view.caState(true, false); testCase.blocked && (ca.ActionHint != logic.CAActionHintUnavailable || !ca.ActionDisabled || !ca.GenerationDisabled) {
+			t.Fatalf("%s: %+v", testCase.name, ca)
 		}
 	}
 	f.trust, f.trustFail = &settingservice.CACertificateTrustStatus{Supported: false}, nil
@@ -967,7 +978,7 @@ func TestShortcutRecordConflictClearRestore(t *testing.T) {
 
 func TestShortcutRuntimeStatusAndScope(t *testing.T) {
 	f := newFixture(t)
-	f.data.Settings.ShortcutRuntime = shortcutservice.ShortcutRuntimeState{Commands: map[string]shortcutservice.ShortcutCommandRuntimeState{shortcuts.AppShowMainWindow: {Status: shortcutservice.ShortcutStatusConflict}}, Warnings: []string{"macNonANSICompatibility"}}
+	f.data.Settings.ShortcutRuntime = shortcutservice.ShortcutRuntimeState{Commands: map[string]shortcutservice.ShortcutCommandRuntimeState{shortcuts.AppShowMainWindow: {Status: shortcutservice.ShortcutStatusConflict}}, Warnings: []shortcutservice.ShortcutWarning{shortcutservice.WarningMacNonANSICompatibility}}
 	f.draft().Shortcuts.Overrides = map[string]settingservice.ShortcutOverride{shortcuts.AppShowMainWindow: {Binding: &settingservice.ShortcutBinding{Key: "h", Modifiers: []settingservice.ShortcutModifier{settingservice.ShortcutModifierPrimary}}, Scope: settingservice.ShortcutScopeGlobal}}
 	f.open(locales.SettingsTabShortcuts())
 	if !f.has(locales.ShortcutsRuntimeConflict()) || !f.has(locales.ShortcutsWarningsMacNonANSICompatibility()) || !f.has(locales.ShortcutsScopeGlobal()) {
@@ -1048,6 +1059,21 @@ func TestStorageUsageAndEveryCleanupConfirms(t *testing.T) {
 	}
 }
 
+func TestStorageCleanupFailureShowsErrorAndUnblocks(t *testing.T) {
+	f := newFixture(t)
+	f.clearErr = errors.New("remove cache directory: busy")
+	f.open(locales.SettingsTabStorage())
+	f.clickAction(locales.SettingsClearCacheFiles())
+	f.confirm.Accept()
+	f.settle()
+	if !f.called("clear-cache") || f.has(locales.SettingsClearCacheSuccess()) || f.view.storage.pending {
+		t.Fatalf("%v", f.tester.Texts())
+	}
+	if !f.has(f.clearErr.Error()) {
+		t.Fatalf("error not shown: %v", f.tester.Texts())
+	}
+}
+
 func TestSaveShortcutRunsSave(t *testing.T) {
 	f := newFixture(t)
 	if f.dispatch.Invoke(shortcuts.AppSave) {
@@ -1077,7 +1103,7 @@ func TestFailedSaveKeepsDraft(t *testing.T) {
 
 func TestPartialShortcutSaveKeepsOnlyUnappliedChangesDirty(t *testing.T) {
 	f := newFixture(t)
-	f.shortcut.result = &shortcutservice.ShortcutApplyResult{Config: store.CloneSettings(f.data.Settings.Current).Shortcuts}
+	f.shortcut.result = &shortcutservice.ShortcutApplyResult{Config: f.data.Settings.Current.Clone().Shortcuts}
 	f.draft().CommonConfig.AppFontSize++
 	wantSize := f.draft().CommonConfig.AppFontSize
 	f.open(locales.SettingsTabShortcuts())

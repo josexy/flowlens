@@ -202,15 +202,7 @@ func (s *SettingService) Snapshot() (*Settings, error) {
 	if s.settings == nil {
 		return nil, errors.New("settings not loaded")
 	}
-	data, err := json.Marshal(s.settings)
-	if err != nil {
-		return nil, fmt.Errorf("copy settings: %w", err)
-	}
-	copied := new(Settings)
-	if err := json.Unmarshal(data, copied); err != nil {
-		return nil, fmt.Errorf("copy settings: %w", err)
-	}
-	return copied, nil
+	return s.settings.Clone(), nil
 }
 
 func (s *SettingService) UpdateWindowConfig(windowConfig *WindowConfig) error {
@@ -388,7 +380,7 @@ func (s *SettingService) setLogLevel(level string) error {
 }
 
 // Update is retained for backend callers that replace the complete in-memory
-// snapshot. Frontend settings must use UpdatePreservingShortcuts.
+// snapshot. Interface settings must use UpdatePreservingShortcuts.
 func (s *SettingService) Update(settings *Settings) error {
 	if settings == nil {
 		return errors.New("settings cannot be nil")
@@ -689,15 +681,12 @@ func (s *SettingService) Save() error {
 
 	s.mu.RLock()
 	s.publishProcessAttributionStateLocked()
-	payload, err := json.Marshal(s.settings)
+	snapshot := s.settings.Clone()
 	s.mu.RUnlock()
-	if err != nil {
-		return fmt.Errorf("snapshot application settings: %w", err)
+	if snapshot == nil {
+		return errors.New("snapshot application settings: settings not loaded")
 	}
-	snapshot := new(Settings)
-	if err := json.Unmarshal(payload, snapshot); err != nil {
-		return fmt.Errorf("decode application settings snapshot: %w", err)
-	}
+	var err error
 	sanitizeShortcutSettings(snapshot)
 	sanitizePythonPluginConfig(snapshot.PythonPluginConfig)
 	if snapshot.ProxyConfig.UseBuiltinCA && (s.savedCAConfig == nil || !s.savedCAConfig.useBuiltinCA) {
@@ -1007,7 +996,7 @@ func (s *SettingService) publishProcessAttributionStateLocked() {
 	s.processAttributionReady.Store(true)
 }
 
-// Keep in sync with frontend/src/utils/traffic-table-columns.ts.
+// Keep in sync with logic.TrafficColumnKeys in internal/desktop/logic.
 var trafficTableColumnOrder = []string{
 	"id",
 	"method",

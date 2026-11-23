@@ -16,7 +16,7 @@ Stack: Go (version in `go.mod`), MyGo native UI, `nuxt-ui-go` (`nui`), Task, SQL
 | Owner | Responsibility |
 | --- | --- |
 | `internal/app` (`main.go` only delegates) | Assembly, database startup, windows/tray, single instance, events, update engines, shutdown |
-| `internal/serviceruntime` | Service lifecycle and the in-process event bus |
+| `internal/serviceruntime` | Service lifecycle and typed event topics |
 | `internal/services/app_service` | App/window APIs, environment info, authoritative update state |
 | `internal/services/proxy_service` | Capture, synthetic requests, WebSocket, resend, metrics, HBIN, shared HAR/traffic export, managed system proxy |
 | `internal/services/history_service` | History reads/deletion/resend and import/export entry points, reusing proxy codecs and writers |
@@ -74,7 +74,7 @@ Scopes, ordering, failure handling, limits, and security are specified in [pytho
 - The managed system proxy restores the original snapshot on normal shutdown only if its configuration still matches.
 - Updates keep one active operation through `app_service` revisions and `store.UpdaterStore`, ignore stale events, cancel/wait on shutdown, install only updates signed with the built-in key, and keep the manual release-page path. Restart uses the quit guards and normal shutdown, even after the update window closes.
 - Take the single-instance lock before opening SQLite.
-- Call every function `EventBus.On` returns when its listener goes away.
+- Call every function `Topic.Subscribe` returns when its listener goes away; subscribers never block.
 
 ### Shortcuts
 

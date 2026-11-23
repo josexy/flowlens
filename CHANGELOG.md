@@ -2,6 +2,11 @@
 
 Each `## <version>` section becomes the release notes that the Software Update window shows for that version.
 
+## Unreleased
+
+- Clearing cache files or all data in `Settings > Storage` refreshes open windows again: the history list and the open history, request editor files from the removed draft cache, and process icons no longer stay stale until restart.
+- When a saved setting needs the proxy to restart, the notice names the changes, such as the proxy mode or listen address, in the current language instead of showing a message key.
+
 ## 2.0.0
 
 FlowLens is now a native desktop application built on MyGo instead of a web view.

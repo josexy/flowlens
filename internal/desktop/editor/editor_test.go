@@ -45,14 +45,14 @@ type fakeRequests struct {
 	wsConnect []proxyservice.WebSocketConnectRequest
 }
 
-func (f *fakeRequests) SendHTTPRequest(_ context.Context, config proxyservice.SendRequestConfig, method, url string, headers []logic.HeaderField, body proxyservice.SendRequestBody) (proxyservice.SendRequestResponse, error) {
+func (f *fakeRequests) SendHTTPRequest(_ context.Context, config proxyservice.SendRequestConfig, method, url string, headers []logic.HeaderField, body proxyservice.SendRequestBody, _ proxyservice.HTTPStreamSink) (proxyservice.SendRequestResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, sentRequest{config, method, url, slices.Clone(headers), body})
 	return f.response, f.sendErr
 }
 func (f *fakeRequests) DisconnectHTTPRequestStream(string) error { return nil }
-func (f *fakeRequests) ConnectWebSocket(_ context.Context, request proxyservice.WebSocketConnectRequest) (proxyservice.WebSocketConnectResponse, error) {
+func (f *fakeRequests) ConnectWebSocket(_ context.Context, request proxyservice.WebSocketConnectRequest, _ proxyservice.WebSocketSink) (proxyservice.WebSocketConnectResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.wsConnect = append(f.wsConnect, request)

@@ -189,8 +189,8 @@ func ResponseViewOf(response proxyservice.SendRequestResponse) (view *HTTPRespon
 	view = &HTTPResponseView{
 		Kind: ResponseKindSuccess, Outcome: response.Outcome, PluginExecution: response.PluginExecution,
 		StatusCode: response.StatusCode, StatusText: response.StatusText, Protocol: response.Protocol,
-		Headers: HeaderFieldsToEditableRows(response.HeaderFields), HeadersHaveWireOrder: response.HeaderFields != nil && !response.HeaderOrderUnavailable, HeadersTruncated: response.HeadersTruncated,
-		Trailers: HeaderFieldsToEditableRows(response.TrailerFields), TrailersHaveWireOrder: response.TrailerFields != nil && !response.TrailerOrderUnavailable, TrailersTruncated: response.TrailersTruncated,
+		Headers: HeaderFieldsToEditableRows(response.HeaderFields), HeadersHaveWireOrder: HasWireOrder(response.HeaderFields, response.HeaderOrderUnavailable), HeadersTruncated: response.HeadersTruncated,
+		Trailers: HeaderFieldsToEditableRows(response.TrailerFields), TrailersHaveWireOrder: HasWireOrder(response.TrailerFields, response.TrailerOrderUnavailable), TrailersTruncated: response.TrailersTruncated,
 		Body: response.Body, BodyBinary: response.BodyBinary,
 	}
 	if view.Outcome == "" {
@@ -265,7 +265,8 @@ func ResponseTrailerCount(view *HTTPResponseView) int {
 	return count
 }
 
-// ResponseSetCookieFields returns a response's Set-Cookie headers.
+// ResponseSetCookieFields returns the header fields to read a response's
+// Set-Cookie headers from.
 func ResponseSetCookieFields(view *HTTPResponseView) []HeaderField {
 	if view == nil {
 		return nil

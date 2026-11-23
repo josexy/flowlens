@@ -58,7 +58,7 @@ func TestHistoryOpensAtTop(t *testing.T) {
 				if first, _ := table.state.List.Visible(); first != 0 {
 					t.Fatalf("opened history starts at row %d, want 0", first)
 				}
-				f.requireText(table.Rows()[0].Host)
+				f.requireText(table.rows[0].Host)
 			}
 			for _, key := range []string{"k1", "k2", "k1"} {
 				before, _ := table.state.List.Visible()
@@ -80,7 +80,7 @@ func TestHistoryOpensAtTop(t *testing.T) {
 			f.click("session one")
 			requireTop()
 			// Explicit navigation can still reveal an entry away from the top.
-			f.data.History.Traffic.PendingFocusID = table.Rows()[150].ID
+			f.data.History.Traffic.PendingFocusID = table.rows[150].ID
 			f.settle()
 			if first, _ := table.state.List.Visible(); first != 150 {
 				t.Fatalf("focused history starts at row %d, want 150", first)

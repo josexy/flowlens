@@ -25,11 +25,6 @@ const (
 	statisticsDebounceInterval = 300 * time.Millisecond
 	trafficPatchBufferPerEntry = 16
 
-	eventTrafficEntry      = "traffic:entry"
-	eventTrafficPatch      = "traffic:patch"
-	eventTrafficLiveUpdate = "traffic:live-update"
-	eventTrafficReset      = "traffic:reset"
-
 	jobTrafficInitial    = "traffic:initial"
 	jobTrafficRecover    = "traffic:recover"
 	jobTrafficStatistics = "traffic:statistics"
@@ -41,7 +36,7 @@ type TrafficBackend interface {
 	GetTraffic() []*logic.TrafficEntry
 	GetStatistics() proxyservice.TrafficStatistics
 	ClearTraffic() error
-	DeleteTraffic(ids []int64)
+	DeleteTraffic(ids []uint64)
 	SetLiveTrafficDetail(id uint64)
 	GetTrafficBodyView(id uint64) (*proxyservice.TrafficBodyView, error)
 }
@@ -561,15 +556,7 @@ func (s *TrafficStore) applyLive(view *proxyservice.TrafficBodyView, sse, ws []p
 	return &next, changed, nil
 }
 
-func (s *TrafficStore) handleLiveUpdate(data any) {
-	update, ok := data.(proxyservice.TrafficLiveUpdate)
-	if !ok {
-		pointer, isPointer := data.(*proxyservice.TrafficLiveUpdate)
-		if !isPointer || pointer == nil {
-			return
-		}
-		update = *pointer
-	}
+func (s *TrafficStore) handleLiveUpdate(update proxyservice.TrafficLiveUpdate) {
 	entryID := s.selectedID()
 	if entryID == 0 || !s.ShowDetailPanel || !s.surfaceActive || update.TrafficID != entryID {
 		return
@@ -1147,9 +1134,9 @@ func (s *TrafficStore) Delete(ids []uint64) {
 	}
 	recoverAfter := s.resyncRequested || s.resyncInFlight
 	s.recoveryEpoch++
-	backendIDs := make([]int64, 0, len(idSet))
+	backendIDs := make([]uint64, 0, len(idSet))
 	for id := range idSet {
-		backendIDs = append(backendIDs, int64(id))
+		backendIDs = append(backendIDs, id)
 		if s.initial != nil {
 			s.initial.entries.Delete(id)
 			s.initial.patches.Delete(id)
@@ -1203,22 +1190,6 @@ func (s *TrafficStore) FocusEntry(id uint64) { s.PendingFocusID = id }
 // ClearPendingFocus forgets a focus request.
 func (s *TrafficStore) ClearPendingFocus() { s.PendingFocusID = 0 }
 
-func asEntry(data any) *logic.TrafficEntry {
-	entry, _ := data.(*logic.TrafficEntry)
-	return entry
-}
-
-func asPatch(data any) *logic.TrafficPatch {
-	switch patch := data.(type) {
-	case logic.TrafficPatch:
-		return &patch
-	case *logic.TrafficPatch:
-		return patch
-	default:
-		return nil
-	}
-}
-
 func (s *TrafficStore) releaseListeners() {
 	for _, off := range s.offs {
 		off()
@@ -1241,22 +1212,19 @@ func (s *TrafficStore) Initialize(done func(error)) {
 	}
 	s.initial = buffer
 
+	recoverDropped := func(uint64) { s.requestRecoveryFor(generation) }
 	s.offs = []func(){
-		s.router.Subscribe(eventTrafficReset, func(any) {
+		s.router.OnTrafficReset(func(uint64) {
 			if generation == s.generation {
 				s.ResetState()
 			}
-		}, nil),
-		s.router.Subscribe(eventTrafficEntry, func(data any) {
+		}),
+		s.router.OnTrafficEntry(func(entry *logic.TrafficEntry) {
 			if generation != s.generation {
 				return
 			}
 			if !s.surfaceActive {
 				s.resyncRequested = true
-				return
-			}
-			entry := asEntry(data)
-			if entry == nil {
 				return
 			}
 			if !buffer.active {
@@ -1270,8 +1238,9 @@ func (s *TrafficStore) Initialize(done func(error)) {
 				buffer.patches.Delete(evicted.ID)
 				buffer.evicted = logic.AdvanceEvictionWatermark(buffer.evicted, evicted.ID)
 			}
-		}, func(uint64) { s.requestRecoveryFor(generation) }),
-		s.router.Subscribe(eventTrafficPatch, func(data any) {
+		}),
+		s.router.OnDropped(proxyservice.LiveTrafficEntry, recoverDropped),
+		s.router.OnTrafficPatch(func(patch *logic.TrafficPatch) {
 			if generation != s.generation {
 				return
 			}
@@ -1279,21 +1248,19 @@ func (s *TrafficStore) Initialize(done func(error)) {
 				s.resyncRequested = true
 				return
 			}
-			patch := asPatch(data)
-			if patch == nil {
-				return
-			}
 			if buffer.active {
 				bufferInitialPatch(buffer, patch)
 				return
 			}
 			s.updatePatch(patch)
-		}, func(uint64) { s.requestRecoveryFor(generation) }),
-		s.router.Subscribe(eventTrafficLiveUpdate, func(data any) {
+		}),
+		s.router.OnDropped(proxyservice.LiveTrafficPatch, recoverDropped),
+		s.router.OnTrafficLiveUpdate(func(update proxyservice.TrafficLiveUpdate) {
 			if generation == s.generation {
-				s.handleLiveUpdate(data)
+				s.handleLiveUpdate(update)
 			}
-		}, func(uint64) {
+		}),
+		s.router.OnDropped(proxyservice.LiveTrafficLiveUpdate, func(uint64) {
 			if generation == s.generation {
 				s.recoverDroppedLiveUpdates()
 			}

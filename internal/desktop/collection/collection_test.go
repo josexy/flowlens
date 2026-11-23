@@ -27,11 +27,11 @@ import (
 
 type requestStub struct{}
 
-func (requestStub) SendHTTPRequest(context.Context, proxyservice.SendRequestConfig, string, string, []logic.HeaderField, proxyservice.SendRequestBody) (proxyservice.SendRequestResponse, error) {
+func (requestStub) SendHTTPRequest(context.Context, proxyservice.SendRequestConfig, string, string, []logic.HeaderField, proxyservice.SendRequestBody, proxyservice.HTTPStreamSink) (proxyservice.SendRequestResponse, error) {
 	return proxyservice.SendRequestResponse{}, nil
 }
 func (requestStub) DisconnectHTTPRequestStream(string) error { return nil }
-func (requestStub) ConnectWebSocket(context.Context, proxyservice.WebSocketConnectRequest) (proxyservice.WebSocketConnectResponse, error) {
+func (requestStub) ConnectWebSocket(context.Context, proxyservice.WebSocketConnectRequest, proxyservice.WebSocketSink) (proxyservice.WebSocketConnectResponse, error) {
 	return proxyservice.WebSocketConnectResponse{}, nil
 }
 func (requestStub) SendWebSocketMessage(proxyservice.WebSocketSendRequest) error { return nil }

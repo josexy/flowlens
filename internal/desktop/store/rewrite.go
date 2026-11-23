@@ -103,7 +103,7 @@ type RuleSaveResult struct {
 type RewriteStore struct {
 	rt      Runtime
 	backend RewriteBackend
-	connect func(func(revision int64)) (off func())
+	connect Topic[rewriteservice.Changed]
 
 	State      RewriteState
 	SelectedID string
@@ -122,8 +122,9 @@ type RewriteStore struct {
 	draftCounter      int
 }
 
-// NewRewriteStore returns an unloaded store. connect subscribes to changes.
-func NewRewriteStore(rt Runtime, backend RewriteBackend, connect func(func(revision int64)) (off func())) *RewriteStore {
+// NewRewriteStore returns an unloaded store that follows changes, when
+// connect is set.
+func NewRewriteStore(rt Runtime, backend RewriteBackend, connect Topic[rewriteservice.Changed]) *RewriteStore {
 	return &RewriteStore{rt: rt, backend: backend, connect: connect, State: RewriteState{Revision: -1}, drafts: map[string]*RuleDraft{}, requestedRevision: -1}
 }
 
@@ -372,7 +373,9 @@ func (s *RewriteStore) finishRefresh() {
 // Initialize follows changes and loads the state once.
 func (s *RewriteStore) Initialize() {
 	if s.off == nil && s.connect != nil {
-		s.off = s.connect(s.handleChanged)
+		s.off = s.connect.Subscribe(func(changed rewriteservice.Changed) {
+			s.rt.Dispatcher.Post(func() { s.handleChanged(changed.Revision) })
+		})
 	}
 	if s.State.Revision < 0 && !s.refreshing {
 		s.Refresh(true, nil)

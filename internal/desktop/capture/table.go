@@ -141,9 +141,6 @@ func (t *Table) Reset() {
 
 func trafficRowID(id uint64) string { return strconv.FormatUint(id, 10) }
 
-// Rows returns the rows in table order.
-func (t *Table) Rows() []*logic.TrafficEntry { return t.rows }
-
 func (t *Table) trafficSort() logic.TrafficSort {
 	if t.state.Sort.Column == "" {
 		return logic.TrafficSort{}

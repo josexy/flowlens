@@ -176,7 +176,7 @@ func TestHTTPExchangeSettlesAfterDeleteOrClearMidExchange(t *testing.T) {
 				t.Fatal(err)
 			}
 			if remove == "delete" {
-				svc.DeleteTraffic([]int64{int64(id)})
+				svc.DeleteTraffic([]uint64{id})
 			} else if err := svc.ClearTraffic(); err != nil {
 				t.Fatal(err)
 			}

@@ -66,10 +66,11 @@ func TestRecordingControlsDimOnceDuringOperations(t *testing.T) {
 				f.data.Proxy.Status = proxyservice.ProxyStatus{Running: state != "stopped", RecordingPaused: state == "paused"}
 				labels := []string{locales.ToolbarStart()}
 				variant, color = nui.Solid, nui.Primary
-				if state == "recording" {
+				switch state {
+				case "recording":
 					labels = []string{locales.ToolbarPauseRecording(), locales.ToolbarProxyActions()}
 					variant, color = nui.Outline, nui.Neutral
-				} else if state == "paused" {
+				case "paused":
 					labels = []string{locales.ToolbarResumeRecording(), locales.ToolbarProxyActions()}
 				}
 				f.tester.Frame()
@@ -152,9 +153,10 @@ func TestRecordingControlGeometryAcrossStates(t *testing.T) {
 					for _, state := range []string{"stopped", "recording", "paused", "recording", "stopped"} {
 						f.data.Proxy.Status = proxyservice.ProxyStatus{Running: state != "stopped", RecordingPaused: state == "paused"}
 						label = locales.ToolbarStart()
-						if state == "recording" {
+						switch state {
+						case "recording":
 							label = locales.ToolbarPauseRecording()
-						} else if state == "paused" {
+						case "paused":
 							label = locales.ToolbarResumeRecording()
 						}
 						for _, busy := range []bool{false, true} {

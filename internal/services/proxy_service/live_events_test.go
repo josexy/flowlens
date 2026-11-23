@@ -9,23 +9,23 @@ import (
 
 func TestTrafficResetMarkerOrdersOldAndNewTrafficAcrossBatches(t *testing.T) {
 	svc := newTestProxyService(t, nil)
-	batches := make(chan FrontendEventBatch, 2)
-	svc.frontendEventBatcher = newFrontendEventBatcher(
-		frontendEventBatcherOptions{
+	batches := make(chan LiveBatch, 2)
+	svc.liveBatcher = newLiveEventBatcher(
+		liveEventBatcherOptions{
 			FlushInterval:    time.Hour,
 			MaxPendingEvents: 16,
 			MaxPendingBytes:  4096,
 		},
-		func(batch FrontendEventBatch) { batches <- batch },
+		func(batch LiveBatch) { batches <- batch },
 	)
-	t.Cleanup(svc.frontendEventBatcher.Close)
+	t.Cleanup(svc.liveBatcher.Close)
 
 	oldEntry := svc.newTrafficEntry(TrafficEntry{Type: "http", URL: "https://old.example/"})
 	if !svc.storeTrafficEntry(oldEntry) {
 		t.Fatal("store old traffic entry")
 	}
 	svc.emitTraffic(oldEntry)
-	svc.frontendEventBatcher.emitPending()
+	svc.liveBatcher.emitPending()
 
 	svc.ClearTraffic()
 	freshEntry := svc.newTrafficEntry(TrafficEntry{Type: "http", URL: "https://new.example/"})
@@ -33,19 +33,18 @@ func TestTrafficResetMarkerOrdersOldAndNewTrafficAcrossBatches(t *testing.T) {
 		t.Fatal("store fresh traffic entry")
 	}
 	svc.emitTraffic(freshEntry)
-	svc.frontendEventBatcher.emitPending()
+	svc.liveBatcher.emitPending()
 
 	first := <-batches
 	second := <-batches
-	if len(first.Events) != 1 || first.Events[0].Name != trafficEventName {
+	if len(first.Events) != 1 || first.Events[0].(TrafficEntryEvent).Entry.ID != oldEntry.ID {
 		t.Fatalf("first batch = %#v, want old traffic entry", first.Events)
 	}
-	if len(second.Events) != 2 || second.Events[0].Name != trafficResetEventName || second.Events[1].Name != trafficEventName {
+	if len(second.Events) != 2 || second.Events[1].(TrafficEntryEvent).Entry.ID != freshEntry.ID {
 		t.Fatalf("second batch = %#v, want reset then fresh traffic entry", second.Events)
 	}
-	reset, ok := second.Events[0].Data.(map[string]uint64)
-	if !ok || reset["captureGeneration"] != 1 {
-		t.Fatalf("reset marker = %#v, want capture generation 1", second.Events[0].Data)
+	if reset, ok := second.Events[0].(TrafficResetEvent); !ok || reset.CaptureGeneration != 1 {
+		t.Fatalf("reset marker = %#v, want capture generation 1", second.Events[0])
 	}
 }
 
@@ -55,48 +54,48 @@ func TestRestartAndCacheClearPublishTrafficResetMarker(t *testing.T) {
 		reset func(*ProxyService) error
 	}{
 		{name: "restart capture", reset: func(service *ProxyService) error { return service.RestartCapture(false) }},
-		{name: "clear cache", reset: (*ProxyService).ClearCacheFiles},
+		{name: "clear cache", reset: func(service *ProxyService) error { _, err := service.ClearCacheFiles(); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setTestConfigDir(t)
 			svc := newTestProxyService(t, nil)
-			batches := make(chan FrontendEventBatch, 1)
-			svc.frontendEventBatcher = newFrontendEventBatcher(
-				frontendEventBatcherOptions{FlushInterval: time.Hour},
-				func(batch FrontendEventBatch) { batches <- batch },
+			batches := make(chan LiveBatch, 1)
+			svc.liveBatcher = newLiveEventBatcher(
+				liveEventBatcherOptions{FlushInterval: time.Hour},
+				func(batch LiveBatch) { batches <- batch },
 			)
-			t.Cleanup(svc.frontendEventBatcher.Close)
+			t.Cleanup(svc.liveBatcher.Close)
 
 			if err := tt.reset(svc); err != nil {
 				t.Fatalf("reset: %v", err)
 			}
-			svc.frontendEventBatcher.emitPending()
+			svc.liveBatcher.emitPending()
 			batch := <-batches
-			if len(batch.Events) != 1 || batch.Events[0].Name != trafficResetEventName {
+			if len(batch.Events) != 1 || batch.Events[0].liveKind() != LiveTrafficReset {
 				t.Fatalf("events = %#v, want one traffic reset", batch.Events)
 			}
 		})
 	}
 }
 
-func TestHighFrequencyFrontendEventsShareOneOrderedBatch(t *testing.T) {
+func TestHighFrequencyLiveEventsShareOneOrderedBatch(t *testing.T) {
 	svc := newTestProxyService(t, nil)
-	batches := make(chan FrontendEventBatch, 1)
-	svc.frontendEventBatcher = newFrontendEventBatcher(
-		frontendEventBatcherOptions{
+	batches := make(chan LiveBatch, 1)
+	svc.liveBatcher = newLiveEventBatcher(
+		liveEventBatcherOptions{
 			FlushInterval:    time.Millisecond,
 			MaxPendingEvents: 16,
 			MaxPendingBytes:  4096,
 		},
-		func(batch FrontendEventBatch) {
+		func(batch LiveBatch) {
 			batches <- batch
 		},
 	)
-	t.Cleanup(svc.frontendEventBatcher.Close)
+	t.Cleanup(svc.liveBatcher.Close)
 
-	svc.emitHTTPRequestEvent(HTTPRequestStreamEvent{SessionID: "http", EventType: "chunk"})
-	svc.emitWebSocketSessionEvent(WebSocketSessionEvent{SessionID: "ws", EventType: "message"})
+	svc.emitHTTPRequestEvent(nil, HTTPRequestStreamEvent{SessionID: "http", EventType: "chunk"})
+	svc.emitWebSocketSessionEvent(nil, WebSocketSessionEvent{SessionID: "ws", EventType: "message"})
 	svc.SetLiveTrafficDetail(7)
 	svc.emitTrafficLiveUpdate(TrafficLiveUpdate{TrafficID: 7, Kind: TrafficLiveUpdateSSEChunk})
 
@@ -105,79 +104,79 @@ func TestHighFrequencyFrontendEventsShareOneOrderedBatch(t *testing.T) {
 		if len(batch.Events) != 3 {
 			t.Fatalf("events = %d, want 3", len(batch.Events))
 		}
-		wantNames := []string{httpRequestEventName, webSocketSessionEventName, trafficLiveUpdateEventName}
-		for index, wantName := range wantNames {
-			if batch.Events[index].Name != wantName {
-				t.Fatalf("event[%d].Name = %q, want %q", index, batch.Events[index].Name, wantName)
+		wantKinds := []LiveEventKind{LiveHTTPStream, LiveWebSocket, LiveTrafficLiveUpdate}
+		for index, want := range wantKinds {
+			if got := batch.Events[index].liveKind(); got != want {
+				t.Fatalf("event[%d] = %s, want %s", index, got, want)
 			}
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for frontend event batch")
+		t.Fatal("timed out waiting for live event batch")
 	}
 }
 
-func TestRequestEditorFrontendEventsBypassSharedBatchLimits(t *testing.T) {
+func TestRequestEditorLiveEventsBypassSharedBatchLimits(t *testing.T) {
 	svc := newTestProxyService(t, nil)
-	batches := make(chan FrontendEventBatch, 1)
-	svc.frontendEventBatcher = newFrontendEventBatcher(
-		frontendEventBatcherOptions{
+	batches := make(chan LiveBatch, 1)
+	svc.liveBatcher = newLiveEventBatcher(
+		liveEventBatcherOptions{
 			FlushInterval:    time.Hour,
 			MaxPendingEvents: 1,
 			MaxPendingBytes:  128,
 		},
-		func(batch FrontendEventBatch) {
+		func(batch LiveBatch) {
 			batches <- batch
 		},
 	)
-	t.Cleanup(svc.frontendEventBatcher.Close)
+	t.Cleanup(svc.liveBatcher.Close)
 
-	svc.emitHTTPRequestEvent(HTTPRequestStreamEvent{
+	svc.emitHTTPRequestEvent(nil, HTTPRequestStreamEvent{
 		SessionID: "http",
 		EventType: "chunk",
 		Chunk:     bytes.Repeat([]byte("h"), 256),
 	})
-	svc.emitWebSocketSessionEvent(WebSocketSessionEvent{
+	svc.emitWebSocketSessionEvent(nil, WebSocketSessionEvent{
 		SessionID: "ws",
 		EventType: "message",
 		Error:     strings.Repeat("w", 256),
 	})
 	svc.SetLiveTrafficDetail(7)
 	svc.emitTrafficLiveUpdate(TrafficLiveUpdate{TrafficID: 7, Kind: TrafficLiveUpdateSSEChunk})
-	svc.frontendEventBatcher.Close()
+	svc.liveBatcher.Close()
 
 	select {
 	case batch := <-batches:
 		if len(batch.Events) != 2 {
 			t.Fatalf("events = %d, want 2", len(batch.Events))
 		}
-		wantNames := []string{httpRequestEventName, webSocketSessionEventName}
-		for index, wantName := range wantNames {
-			if batch.Events[index].Name != wantName {
-				t.Fatalf("event[%d].Name = %q, want %q", index, batch.Events[index].Name, wantName)
+		wantKinds := []LiveEventKind{LiveHTTPStream, LiveWebSocket}
+		for index, want := range wantKinds {
+			if got := batch.Events[index].liveKind(); got != want {
+				t.Fatalf("event[%d] = %s, want %s", index, got, want)
 			}
 		}
-		if batch.Dropped[trafficLiveUpdateEventName] != 1 {
+		if batch.Dropped[LiveTrafficLiveUpdate] != 1 {
 			t.Fatalf("dropped = %#v, want one bounded traffic live update", batch.Dropped)
 		}
-		if _, ok := batch.Dropped[httpRequestEventName]; ok {
+		if _, ok := batch.Dropped[LiveHTTPStream]; ok {
 			t.Fatalf("HTTP Request event was unexpectedly dropped: %#v", batch.Dropped)
 		}
-		if _, ok := batch.Dropped[webSocketSessionEventName]; ok {
+		if _, ok := batch.Dropped[LiveWebSocket]; ok {
 			t.Fatalf("WebSocket Session event was unexpectedly dropped: %#v", batch.Dropped)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for frontend event batch")
+		t.Fatal("timed out waiting for live event batch")
 	}
 }
 
 func TestEmitTrafficSnapshotsAnUnstoredWorkingEntry(t *testing.T) {
 	svc := newTestProxyService(t, nil)
-	batches := make(chan FrontendEventBatch, 1)
-	svc.frontendEventBatcher = newFrontendEventBatcher(
-		frontendEventBatcherOptions{FlushInterval: time.Hour},
-		func(batch FrontendEventBatch) { batches <- batch },
+	batches := make(chan LiveBatch, 1)
+	svc.liveBatcher = newLiveEventBatcher(
+		liveEventBatcherOptions{FlushInterval: time.Hour},
+		func(batch LiveBatch) { batches <- batch },
 	)
-	t.Cleanup(svc.frontendEventBatcher.Close)
+	t.Cleanup(svc.liveBatcher.Close)
 
 	entry := svc.newTrafficEntry(TrafficEntry{
 		Type:    "http",
@@ -187,13 +186,13 @@ func TestEmitTrafficSnapshotsAnUnstoredWorkingEntry(t *testing.T) {
 	svc.emitTraffic(entry)
 	entry.URL = "https://changed.test/"
 	entry.Request.HeaderFields[0].Value = "2"
-	svc.frontendEventBatcher.emitPending()
+	svc.liveBatcher.emitPending()
 
 	batch := <-batches
 	if len(batch.Events) != 1 {
 		t.Fatalf("events = %#v", batch.Events)
 	}
-	published := batch.Events[0].Data.(*TrafficEntry)
+	published := batch.Events[0].(TrafficEntryEvent).Entry
 	if published.URL != "https://example.test/" || published.Request.HeaderFields[0].Value != "1" {
 		t.Fatalf("published entry changed after publishing: %#v", published)
 	}

@@ -250,6 +250,8 @@ Bodies cached during a capture session are removed once they are no longer neede
 
 Storage cleanup removes either caches alone, or caches together with the current capture and readable saved history. Cache-only cleanup first saves a non-empty current capture to history. History files in unsupported or unknown formats are kept. Cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
 
+Open windows follow the cleanup without a restart, even if the Settings window is closed first. The history list shows the archived capture after cache-only cleanup, or empties after clearing all data; an open history that was removed closes and the live capture is shown. Request editor tabs stop referring to bodies, form-data files, and WebSocket draft files that were in the removed draft cache, and keep the rest of each draft. Process icons are loaded again. If part of the cleanup fails, the error is shown after windows refresh what was removed.
+
 ### Check FlowLens Memory Use
 
 Select **Memory** in the sidebar (`Primary+6`). The first time you open it in a run, FlowLens takes one sample. **Start** samples at the chosen interval until you pause, **Refresh** takes one sample, and **Clear** empties the chart until you refresh or start again.

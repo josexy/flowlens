@@ -375,8 +375,8 @@ func (s *ProxyService) GetProcessIcon(iconKey string) (*ProcessIconData, error) 
 		return nil, err
 	}
 	if !found {
-		// Recovery is intentionally read-triggered. The frontend may keep showing
-		// its cached data URL after an external file deletion and will reach this
+		// Recovery is intentionally read-triggered. The interface may keep showing
+		// its cached icon after an external file deletion and will reach this
 		// path only after that window-local entry is cleared, evicted, or reloaded.
 		manager, fallback := s.processIconRecoveryState(iconKey)
 		if manager == nil {

@@ -72,15 +72,6 @@ func (s *proxyState) hasExistingFiles() bool {
 	return s.info != nil && (s.info.CertExists || s.info.KeyExists)
 }
 
-func (s *proxyState) ready() bool {
-	info := s.info
-	return info != nil && info.CertExists && info.KeyExists && info.ValidPair && info.IsCA && info.Error == ""
-}
-
-func (s *proxyState) trustUnknown() bool {
-	return s.loading || s.trustFailed || (s.trust != nil && s.trust.Error != "")
-}
-
 func (s *proxyState) hasTrustEntry() bool {
 	return s.trust != nil && (s.trust.Present || s.trust.Installed)
 }
@@ -95,60 +86,94 @@ func (v *View) caConfigDirty() bool {
 	return draft.UseBuiltinCA != saved.UseBuiltinCA || draft.CACertPath != saved.CACertPath || draft.CAKeyPath != saved.CAKeyPath
 }
 
-func (s *proxyState) generationDisabled(builtin, caDirty bool) bool {
-	return !builtin || caDirty || s.generating || s.loading || s.trustFailed || s.changing ||
-		(s.trust != nil && s.trust.Supported && (s.hasTrustEntry() || (s.trust.Error != "" && s.trust.SHA256Fingerprint != "")))
+// caState derives the certificate panel's state for the draft's CA mode.
+func (v *View) caState(builtin, caDirty bool) logic.CATrustState {
+	s := &v.proxy
+	return logic.DeriveCATrustState(logic.CATrustInput{
+		UseBuiltinCA:     builtin,
+		Info:             s.info,
+		Trust:            s.trust,
+		TrustLoading:     s.loading,
+		TrustLoadFailed:  s.trustFailed,
+		ChangingTrust:    s.changing,
+		SettingsDirty:    caDirty,
+		HasExistingFiles: s.hasExistingFiles(),
+		Generating:       s.generating,
+	})
 }
 
-func (s *proxyState) generationHint(builtin, caDirty bool) string {
-	switch {
-	case !builtin:
-		return locales.SettingsCaTrustErrorsCaCustomGenerationDisabled()
-	case caDirty:
-		return locales.SettingsCaActionsSaveFirst()
-	case s.loading:
+func caActionHintText(hint logic.CAActionHint, action string) string {
+	switch hint {
+	case logic.CAActionHintLoading:
 		return locales.SettingsCaTrustLoading()
-	case s.trust != nil && s.trust.Supported && s.hasTrustEntry():
-		return locales.SettingsCaTrustUninstallFirst()
-	case s.generationDisabled(builtin, caDirty) && s.trustUnknown():
+	case logic.CAActionHintSaveFirst:
+		return locales.SettingsCaActionsSaveFirst()
+	case logic.CAActionHintUnavailable:
 		return locales.SettingsCaTrustStatusUnavailable()
-	case s.hasExistingFiles():
+	default:
+		return action
+	}
+}
+
+func caGenerationHintText(hint logic.CAGenerationHint) string {
+	switch hint {
+	case logic.CAHintCustomDisabled:
+		return locales.SettingsCaTrustErrorsCaCustomGenerationDisabled()
+	case logic.CAHintSaveFirst:
+		return locales.SettingsCaActionsSaveFirst()
+	case logic.CAHintLoading:
+		return locales.SettingsCaTrustLoading()
+	case logic.CAHintUninstallFirst:
+		return locales.SettingsCaTrustUninstallFirst()
+	case logic.CAHintStatusUnavailable:
+		return locales.SettingsCaTrustStatusUnavailable()
+	case logic.CAHintRegenerate:
 		return locales.SettingsRegenerateCa()
 	default:
 		return locales.SettingsGenerateCa()
 	}
 }
 
-func (s *proxyState) trustSummary() (string, *ui.SVG, nui.Color) {
-	switch {
-	case s.loading:
-		return locales.SettingsCaTrustLoading(), lucide.LoaderCircle(), nui.Neutral
-	case s.trustUnknown():
-		return locales.SettingsCaTrustStatusUnavailable(), lucide.ShieldQuestionMark(), nui.Warning
-	case s.hasTrustEntry() && !s.trust.Installed:
-		return locales.SettingsCaTrustPartial(), lucide.ShieldAlert(), nui.Warning
-	case s.trust != nil && s.trust.Installed:
-		return locales.SettingsCaTrustInstalled(), lucide.ShieldCheck(), nui.Success
+func caTrustSummary(summary logic.CATrustSummary) (string, *ui.SVG) {
+	switch summary {
+	case logic.CATrustLoading:
+		return locales.SettingsCaTrustLoading(), lucide.LoaderCircle()
+	case logic.CATrustUnavailable:
+		return locales.SettingsCaTrustStatusUnavailable(), lucide.ShieldQuestionMark()
+	case logic.CATrustPartial:
+		return locales.SettingsCaTrustPartial(), lucide.ShieldAlert()
+	case logic.CATrustInstalled:
+		return locales.SettingsCaTrustInstalled(), lucide.ShieldCheck()
 	default:
-		return locales.SettingsCaTrustNotInstalled(), lucide.ShieldMinus(), nui.Neutral
+		return locales.SettingsCaTrustNotInstalled(), lucide.ShieldMinus()
 	}
 }
 
-func (s *proxyState) statusSummary(builtin bool) string {
-	info := s.info
-	switch {
-	case info == nil:
-		return locales.SettingsCaStatusUnavailable()
-	case s.ready():
+func caStatusText(status logic.CAStatus) string {
+	switch status {
+	case logic.CAStatusReady:
 		return locales.SettingsCaStatusReady()
-	case builtin:
+	case logic.CAStatusBuiltinUnavailable:
 		return locales.SettingsCaTrustErrorsCaBuiltinUnavailable()
-	case !info.CertExists || !info.KeyExists:
+	case logic.CAStatusFilesMissing:
 		return locales.SettingsCaFilesMissing()
-	case info.Error == "" && !info.IsCA:
+	case logic.CAStatusNotCA:
 		return locales.SettingsCaNotCa()
-	default:
+	case logic.CAStatusIncomplete:
 		return locales.SettingsCaStatusIncomplete()
+	default:
+		return locales.SettingsCaStatusUnavailable()
+	}
+}
+
+func caPanelHintText(hint logic.CAPanelHint) string {
+	switch hint {
+	case logic.CAPanelHintSaveFirst:
+		return locales.SettingsCaActionsSaveFirst()
+	case logic.CAPanelHintUninstallFirst:
+		return locales.SettingsCaTrustUninstallFirst()
+	default:
+		return ""
 	}
 }
 
@@ -288,31 +313,21 @@ func (v *View) upstream(c *ui.Context, palette nui.Theme, proxy *settingservice.
 	})
 }
 
-func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin, caDirty bool) {
+func (v *View) certificateActions(c *ui.Context, palette nui.Theme, ca logic.CATrustState) {
 	state := &v.proxy
-	if state.trust != nil && state.trust.Supported {
-		hasEntry := state.hasTrustEntry()
+	if ca.TrustActions {
 		label, icon := locales.SettingsCaTrustInstall(), lucide.ShieldPlus()
-		if hasEntry {
+		if ca.Action == logic.CATrustUninstall {
 			label, icon = locales.SettingsCaTrustUninstall(), lucide.ShieldMinus()
 		}
-		hint := label
-		switch {
-		case state.loading:
-			hint = locales.SettingsCaTrustLoading()
-		case caDirty:
-			hint = locales.SettingsCaActionsSaveFirst()
-		case state.trustUnknown():
-			hint = locales.SettingsCaTrustStatusUnavailable()
-		}
-		disabled := v.committing || state.trustUnknown() || state.generating || state.changing || caDirty || state.trust.SHA256Fingerprint == "" || (!hasEntry && !state.ready())
+		disabled := v.committing || ca.ActionDisabled
 		button := nui.Button(c.Key("trust"), palette, "", nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: icon, AccessibleLabel: label, Disabled: disabled, Loading: state.changing})
 		if !disabled {
 			button.OnClick(v.changeTrust)
 		}
-		nui.Tooltip(c, palette, button, hint, nui.TooltipOptions{})
+		nui.Tooltip(c, palette, button, caActionHintText(ca.ActionHint, label), nui.TooltipOptions{})
 	}
-	disabled := v.committing || state.generationDisabled(builtin, caDirty)
+	disabled := v.committing || ca.GenerationDisabled
 	label, icon := locales.SettingsGenerateCa(), lucide.FilePlus()
 	if state.hasExistingFiles() {
 		label, icon = locales.SettingsRegenerateCa(), lucide.RefreshCw()
@@ -328,7 +343,7 @@ func (v *View) certificateActions(c *ui.Context, palette nui.Theme, builtin, caD
 			v.generateCA(false)
 		})
 	}
-	nui.Tooltip(c, palette, button, state.generationHint(builtin, caDirty), nui.TooltipOptions{})
+	nui.Tooltip(c, palette, button, caGenerationHintText(ca.GenerationHint), nui.TooltipOptions{})
 }
 
 func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
@@ -387,14 +402,14 @@ func (v *View) certificateDetails(c *ui.Context, palette nui.Theme) {
 
 func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *settingservice.ProxyConfig) {
 	state := &v.proxy
-	caDirty := v.caConfigDirty()
-	v.section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, proxy.UseBuiltinCA, caDirty) }, func() {
-		hasTrustActions := state.trust != nil && state.trust.Supported
+	ca := v.caState(proxy.UseBuiltinCA, v.caConfigDirty())
+	v.section(c, palette, "certificate", locales.SettingsSectionCertificate(), false, func() { v.certificateActions(c, palette, ca) }, func() {
 		color := palette.Warning
 		icon := lucide.Info()
-		if state.ready() {
+		switch ca.Status {
+		case logic.CAStatusReady:
 			color, icon = palette.Success, lucide.CircleCheck()
-		} else if state.info == nil {
+		case logic.CAStatusUnavailable:
 			color = palette.Muted
 		}
 		ui.Row(c.Key("summary")).FillWidth().Wrap().Gap(12).AlignItems(ui.Center).Children(func() {
@@ -404,27 +419,20 @@ func (v *View) certificateSection(c *ui.Context, palette nui.Theme, proxy *setti
 					ui.Text(c, text).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).TextColor(color)
 				})
 			}
-			status("files", state.statusSummary(proxy.UseBuiltinCA), icon, color)
-			if hasTrustActions || state.trustFailed {
-				text, trustIcon, tone := state.trustSummary()
+			status("files", caStatusText(ca.Status), icon, color)
+			if ca.ShowSummary {
+				text, trustIcon := caTrustSummary(ca.Summary)
 				toneColor := palette.Muted
-				switch tone {
-				case nui.Warning:
+				switch ca.SummaryTone {
+				case logic.CAToneWarning:
 					toneColor = palette.Warning
-				case nui.Success:
+				case logic.CAToneSuccess:
 					toneColor = palette.Success
 				}
 				status("trust", text, trustIcon, toneColor)
 			}
 		})
-		var hint string
-		switch {
-		case caDirty && (proxy.UseBuiltinCA || hasTrustActions):
-			hint = locales.SettingsCaActionsSaveFirst()
-		case proxy.UseBuiltinCA && hasTrustActions && state.hasTrustEntry() && !state.trustUnknown():
-			hint = locales.SettingsCaTrustUninstallFirst()
-		}
-		if hint != "" {
+		if hint := caPanelHintText(ca.PanelHint); hint != "" {
 			ui.Text(c.Key("action-hint"), hint).FontSize(apptheme.TextSize(c, 14)).TextColor(palette.Muted).FillWidth()
 		}
 		if !proxy.UseBuiltinCA && state.info != nil && state.info.CertExists && state.info.KeyExists && state.info.Error != "" {

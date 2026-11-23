@@ -70,9 +70,6 @@ func (m *MenuStates) Sweep() {
 	clear(m.built)
 }
 
-// Len returns how many menu states are kept.
-func (m *MenuStates) Len() int { return len(m.states) }
-
 // Menu icons are 20 DIP at the menus' MD size, and a swatch 12 DIP across.
 const (
 	menuIconSize   float32 = 20

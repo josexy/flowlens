@@ -3,13 +3,11 @@ package settings
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
@@ -52,9 +50,7 @@ type Host struct {
 	ClearLogs  func() error
 	OpenLogDir func() error
 
-	DataSize     func() (proxyservice.LocalDataSize, error)
-	ClearCache   func() error
-	ClearAllData func() error
+	DataSize func() (proxyservice.LocalDataSize, error)
 
 	PythonStatus func() (*pythonpluginservice.RuntimeStatus, error)
 	TestPython   func(path string) (*pythonpluginservice.RuntimeStatus, error)
@@ -64,8 +60,6 @@ type Host struct {
 	Frame widgets.WindowFrame
 	// Close closes the window.
 	Close func()
-	// DirtyChanged hears whether unsaved changes exist.
-	DirtyChanged func(dirty bool)
 }
 
 // Sections of the window.
@@ -124,26 +118,6 @@ func (v *View) Begin() {
 // Dirty reports whether the window holds unsaved changes.
 func (v *View) Dirty() bool { return v.started && v.Data.Settings.Dirty() }
 
-func message(key string, args ...any) string {
-	if len(args) == 0 {
-		return locales.Catalog.Format(i18n.Locale(), key, nil)
-	}
-	values := map[string]any{}
-	for index := 0; index+1 < len(args); index += 2 {
-		values[fmt.Sprint(args[index])] = args[index+1]
-	}
-	return locales.Catalog.Format(i18n.Locale(), key, values)
-}
-
-// camel turns snake_case into the suffix of a catalog key.
-func camel(value string) string {
-	var out strings.Builder
-	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == '_' || r == '-' || r == '.' }) {
-		out.WriteString(strings.ToUpper(part[:1]) + part[1:])
-	}
-	return out.String()
-}
-
 // syncDirty updates each section's unsaved state and previews the draft.
 func (v *View) syncDirty() {
 	settings := v.Data.Settings
@@ -183,11 +157,8 @@ var caErrorCode = regexp.MustCompile(`\bca_(?:trust|builtin|custom)_[a-z_]+\b`)
 // caErrorMessage translates the error codes of the certificate operations.
 func caErrorMessage(err error) string {
 	detail := err.Error()
-	if code := caErrorCode.FindString(detail); code != "" {
-		key := "settingsCaTrustErrors" + camel(code)
-		if text := message(key); text != "" && text != key {
-			return text
-		}
+	if text, ok := caErrorText(caErrorCode.FindString(detail)); ok {
+		return text
 	}
 	return detail
 }
@@ -224,17 +195,13 @@ func (v *View) setSavedNotice() {
 	v.noticeEnds = time.Time{}
 	switch shortcut, proxy := settings.LastShortcutResult, settings.LastProxyApplyResult; {
 	case shortcut != nil && !shortcut.Applied:
-		code := shortcut.ErrorCode
-		if code == "" {
-			code = "unknown"
-		}
-		v.notice, v.noticeKind = message("shortcutsApplyErrors"+camel(code)), nui.Error
+		v.notice, v.noticeKind = shortcutApplyErrorText(shortcut.ErrorCode), nui.Error
 	case proxy != nil && proxy.Applied && !proxy.RestartRequired:
 		v.notice, v.noticeKind = locales.SettingsSavedAppliedNotice(), nui.Success
 	case proxy != nil && proxy.RestartRequired:
 		reasons := make([]string, len(proxy.RestartReasons))
 		for index, reason := range proxy.RestartReasons {
-			reasons[index] = message("settingsRestartReason" + camel(reason))
+			reasons[index] = restartReasonText(reason)
 		}
 		v.notice, v.noticeKind = locales.SettingsSavedPartialRestartNotice(strings.Join(reasons, ", ")), nui.Warning
 	default:
@@ -374,9 +341,6 @@ func (v *View) Build(c *ui.Context) {
 	}
 	v.Confirm.Build(c, theme)
 	v.Dispatcher.Install(c)
-	if v.Host.DirtyChanged != nil {
-		v.Host.DirtyChanged(v.Dirty())
-	}
 }
 
 func (v *View) nav(c *ui.Context, theme nui.Theme) {

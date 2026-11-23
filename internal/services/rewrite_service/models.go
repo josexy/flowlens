@@ -5,7 +5,6 @@ package rewriteservice
 const (
 	ConfigVersion  = 1
 	MaxBodyBytes   = 8 * 1024 * 1024
-	ChangedEvent   = "rewrite:changed"
 	ActionRedirect = "redirect"
 	ActionRequest  = "request"
 	ActionResponse = "response"
