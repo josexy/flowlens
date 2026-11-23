@@ -2,10 +2,14 @@
 
 Each `## <version>` section becomes the release notes that the Software Update window shows for that version.
 
-## Unreleased
+## 2.0.1
 
-- Clearing cache files or all data in `Settings > Storage` refreshes open windows again: the history list and the open history, request editor files from the removed draft cache, and process icons no longer stay stale until restart.
-- When a saved setting needs the proxy to restart, the notice names the changes, such as the proxy mode or listen address, in the current language instead of showing a message key.
+- Pause recording while the proxy keeps forwarding traffic. Stop Proxy is now in the proxy button's menu.
+- Tighter spacing in every window shows more traffic and editor content.
+- Clearing cache files or all data in `Settings > Storage` refreshes open windows right away.
+- Restart notices name the changed settings in the current language.
+- Fixed proxy restarts failing with "address in use", and flicker in the traffic table and proxy controls.
+- Linux packages no longer depend on WebKitGTK.
 
 ## 2.0.0
 
