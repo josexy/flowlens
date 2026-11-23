@@ -31,7 +31,7 @@ func TestSidebarItemsKeepRightInset(t *testing.T) {
 	}
 }
 
-func TestTableFillsViewportWithSavedOrHiddenPath(t *testing.T) {
+func TestTableKeepsSavedWidthsWithFlexRowFill(t *testing.T) {
 	for _, name := range []string{"saved-path", "hidden-path", "reordered"} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, rendertest.Traffic()...)
@@ -53,27 +53,29 @@ func TestTableFillsViewportWithSavedOrHiddenPath(t *testing.T) {
 				}
 				visible := table.visibleColumns()
 				order := table.displayOrder(visible)
-				var right float32
 				for _, column := range visible {
 					header := headerRect(t, f, column.title())
 					if string(column.key) == order[len(order)-1] {
-						right = header.X + header.W
+						want := column.width
+						if saved := widths[string(column.key)]; saved > 0 {
+							want = saved
+						}
+						if header.W != want {
+							t.Fatalf("last data column width %v, want %v", header.W, want)
+						}
 					}
 					if column.key == logic.ColumnPath && header.W != 150 {
 						t.Fatalf("saved path width changed: %v", header.W)
 					}
 				}
-				if want := viewport.Bounds.X + viewport.Bounds.W; right != want {
-					t.Fatalf("window %d: columns end at %v, table ends at %v", width, right, want)
-				}
+				assertTrafficRowFillsViewport(t, f.tester, viewport.Bounds, "81")
 				_, saved := f.data.Settings.TrafficColumnLayout()
 				if !maps.Equal(saved, widths) {
 					t.Fatalf("automatic fill changed saved widths: %v", saved)
 				}
 			}
 			rendertest.ShootThemes(t, f.tester, "table-fill-"+name, f.setDark)
-			// A narrow viewport must restore the saved width and allow
-			// horizontal scrolling instead of squeezing the other columns.
+			// A narrow viewport keeps saved widths and scrolls horizontally.
 			f.tester.SetSize(1000, 800)
 			f.settle()
 			f.tester.Scroll(500, 200, 3000, 0)
@@ -92,13 +94,14 @@ func TestTableFillsViewportWithSavedOrHiddenPath(t *testing.T) {
 func TestPathColumnDefaultAndUserWidth(t *testing.T) {
 	f := newHistoryFixture(t, entry(1, "a.test"))
 	header, ok := f.tester.AccessByRole(ui.RoleColumnHeader, locales.TrafficPath())
-	if !ok || header.Bounds.W < 300 {
+	if !ok || header.Bounds.W < 120 {
 		t.Fatalf("default path header = %+v", header)
 	}
+	narrowWidth := header.Bounds.W
 	f.tester.SetSize(2000, 800)
 	f.settle()
 	header, ok = f.tester.AccessByRole(ui.RoleColumnHeader, locales.TrafficPath())
-	if !ok || header.Bounds.W <= 300 {
+	if !ok || header.Bounds.W <= narrowWidth {
 		t.Fatalf("default path did not grow into spare room: %+v", header)
 	}
 	f.workspace.Table.state.List.Columns.Widths = map[string]float32{"path": 150}
@@ -107,6 +110,112 @@ func TestPathColumnDefaultAndUserWidth(t *testing.T) {
 	header, ok = f.tester.AccessByRole(ui.RoleColumnHeader, locales.TrafficPath())
 	if !ok || header.Bounds.W != 150 {
 		t.Fatalf("explicit width was not retained: %+v", header)
+	}
+}
+
+// Read committed cell geometry while the frame is being painted. Tester.Click
+// and Frame settle pending redraws internally, which would otherwise hide a
+// gap that repairs itself in a later frame.
+func TestSidebarToggleFillsTrafficRowsInEveryPaint(t *testing.T) {
+	for _, source := range []string{"capture", "history"} {
+		for _, layout := range []string{"default", "saved-path", "hidden-path", "path-last"} {
+			for _, appearance := range []string{"light", "dark"} {
+				t.Run(source+"/"+layout+"/"+appearance, func(t *testing.T) {
+					f := newHistoryFixture(t, entry(1, "first.test"), entry(2, "second.test")).fixture
+					app := shell.New(f.data, shell.Host{})
+					app.Surfaces[store.WorkspaceCapture] = shell.Surface{Sidebar: f.workspace.Sidebar, Content: f.workspace.Content}
+					f.workspace.Dispatcher = app.Dispatcher
+					var tester *ui.Tester
+					var checking bool
+					var paints int
+					rowIDs := []string{"1", "2"}
+					if source == "history" {
+						rowIDs = []string{"11", "12"}
+					}
+					tester = ui.NewTester(func(c *ui.Context) {
+						app.View(c)
+						c.Root().DrawOver(func(_ *ui.Painter, _ ui.Rect) {
+							if !checking {
+								return
+							}
+							paints++
+							viewport, ok := tester.AccessByRole(ui.RoleTable, locales.TrafficColumns())
+							if !ok {
+								t.Fatal("no traffic table during paint")
+							}
+							for _, id := range rowIDs {
+								assertTrafficRowFillsViewport(t, tester, viewport.Bounds, id)
+							}
+						})
+					}, 1920, 800)
+					f.tester = tester
+					f.setDark(appearance == "dark")
+					rendertest.SettleTheme(tester)
+					table := f.workspace.Table
+					if source == "history" {
+						f.click("session one")
+						table = f.workspace.HistoryTable
+					}
+					switch layout {
+					case "saved-path":
+						table.state.List.Columns.Widths = map[string]float32{"path": 150, "size": 110}
+					case "hidden-path":
+						f.data.Settings.SetTrafficColumnVisible(logic.ColumnPath, false, nil)
+					case "path-last":
+						table.state.List.Columns.Order = append(slices.DeleteFunc(slices.Clone(table.state.List.Columns.Order), func(key string) bool { return key == "path" }), "path")
+					}
+					table.replaceSelection(0)
+					f.settle()
+					order, widths := f.data.Settings.TrafficColumnLayout()
+					checking = true
+					for range 6 {
+						if err := tester.Click(locales.MenuCapture()); err != nil {
+							t.Fatal(err)
+						}
+						viewport, _ := tester.AccessByRole(ui.RoleTable, locales.TrafficColumns())
+						first := headerRect(t, f, locales.TrafficId())
+						for _, id := range rowIDs {
+							row, _ := tester.AccessByRole(ui.RoleRow, id)
+							y := row.Bounds.Y + row.Bounds.H/2
+							left := pixel(tester, first.X+first.W-6, y)
+							right := pixel(tester, viewport.Bounds.X+viewport.Bounds.W-8, y)
+							if !near(left, right) {
+								t.Fatalf("row %s background changes at the right edge: %v / %v", id, left, right)
+							}
+						}
+					}
+					for _, width := range []int{2400, 1920} {
+						tester.SetSize(width, 800)
+					}
+					if paints < 8 {
+						t.Fatalf("only checked %d paints", paints)
+					}
+					gotOrder, gotWidths := f.data.Settings.TrafficColumnLayout()
+					if !slices.Equal(order, gotOrder) || !maps.Equal(widths, gotWidths) {
+						t.Fatalf("viewport changes altered saved layout: %v / %v", gotOrder, gotWidths)
+					}
+					rendertest.Shoot(t, tester, "sidebar-flex-"+source+"-"+layout+"-"+appearance)
+				})
+			}
+		}
+	}
+}
+
+func assertTrafficRowFillsViewport(t *testing.T, tester *ui.Tester, viewport ui.Rect, id string) {
+	t.Helper()
+	row, ok := tester.AccessByRole(ui.RoleRow, id)
+	if !ok {
+		t.Fatalf("no traffic row %s", id)
+	}
+	y := row.Bounds.Y + row.Bounds.H/2
+	var right float32
+	for _, node := range tester.AccessAll() {
+		if node.Role == ui.RoleCell && node.Bounds.Y <= y && y < node.Bounds.Y+node.Bounds.H {
+			right = max(right, node.Bounds.X+node.Bounds.W)
+		}
+	}
+	if want := viewport.X + viewport.W; math.Abs(float64(right-want)) > 1 {
+		t.Fatalf("row %s cells end at %v, viewport ends at %v", id, right, want)
 	}
 }
 

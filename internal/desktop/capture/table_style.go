@@ -29,6 +29,10 @@ func headerBackground(theme nui.Theme, hovered bool) ui.Color {
 // overlay lets input through to MyGo's sorting, moving, and resizing controls.
 func (t *Table) headerCell(c *ui.Context, theme nui.Theme, visible []columnDefinition) func(cell ui.Element, col int) {
 	return func(cell ui.Element, col int) {
+		if col == len(visible) {
+			cell.Background(headerBackground(theme, false)).Role(ui.RoleNone)
+			return
+		}
 		if col < 0 || col >= len(visible) {
 			return
 		}

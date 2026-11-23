@@ -704,8 +704,8 @@ func TestSortCycleAndIncompleteValues(t *testing.T) {
 	complete.Response = &proxyservice.HTTPMessage{Metrics: &proxyservice.HTTPMessageMetrics{StartedAtMicros: 3, EndedAtMicros: 9}}
 	f := newFixture(t, entry(1, "a.test"), complete, entry(3, "c.test"))
 	table := f.workspace.Table
-	// The default path column preserves its readable width, so later columns
-	// are reached through the table's native horizontal scrolling.
+	// Column minimum widths can exceed the viewport, so later columns are
+	// reached through the table's native horizontal scrolling.
 	f.tester.Scroll(700, 150, 400, 0)
 	f.settle()
 	f.click("Duration")
@@ -1598,6 +1598,9 @@ func TestDragNearTheEdgeScrollsAndExtends(t *testing.T) {
 
 func TestDraggingAHeaderReordersAndSaves(t *testing.T) {
 	f := newFixture(t, entry(1, "a.test"))
+	// A flex fill is a layout detail, never a persisted/reorderable column.
+	f.workspace.Table.state.List.Columns.Widths = map[string]float32{"path": 150}
+	f.settle()
 	method, ok := f.tester.Find("Method")
 	if !ok {
 		t.Fatal("method header")

@@ -73,6 +73,8 @@ The globe control beside the HTTP cache control opens the DNS cache settings. En
 
 ### Traffic Tables
 
+Drag a column divider to resize it; widths, column order, and hidden columns are saved. Path initially uses the remaining space. Widths set by dragging stay fixed when the sidebar or window changes size. Extra space after fixed columns keeps the row background, and narrow tables scroll horizontally.
+
 In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. With the table focused, the arrow keys move the selection, Shift+arrows extend it, and `Primary+A` selects all.
 
 Double-click a row without modifiers to open or hide the detail panel. Enter or the row menu's **Show** opens it. **Close details** hides it, keeps the selection, and returns focus to the table. Ctrl-click (Cmd-click on macOS) only changes selection; removing the last selected row closes details. Changing the selection updates an open panel but does not reopen a closed one.
