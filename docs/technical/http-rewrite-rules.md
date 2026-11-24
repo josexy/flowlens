@@ -1,104 +1,132 @@
 # Live HTTP Rewrite Rules
 
-For setup and examples, see the [user guide](../user-guide.md#rewrite-rules).
+This document specifies execution semantics, body-processing limits, persistence, preview behavior, and transport contracts for live HTTP rewrite rules. For step-by-step usage and examples, see the [User Guide](../user-guide.md#rewrite-rules).
 
 ## Scope and Ownership
 
-Rules apply only to live HTTP/HTTPS proxy traffic. Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP bypass them, including with `ALL`. Python hooks remain specific to Request Editor.
+Rewrite rules apply **only to live HTTP/HTTPS proxy traffic**. Request Editor sends, resends, imported history, WebSocket upgrades/frames, `CONNECT` tunnels, and raw TCP tunnels bypass rewrite rules (even when a rule uses method `ALL`). Python hooks remain exclusive to the HTTP Request Editor.
 
-`rewrite_service` owns persistence, validation, compiled matchers, and snapshots. `proxy_service` applies actions and records final traffic. `internal/app` owns startup/shutdown and quit guards; the `rewriteRules` store owns drafts and revisions.
+| Owner | Responsibility |
+| --- | --- |
+| `internal/services/rewrite_service` | Persistence, validation, compiled matchers, and immutable rule snapshots |
+| `internal/services/proxy_service` | Applying rule actions and recording final rewritten traffic |
+| `internal/app` | Startup loading, shutdown coordination, and quit guards |
+| `rewriteRules` store (`internal/desktop/store`) | Editor drafts, dirty tracking, and revision reconciliation |
 
-HTTPS interception may require connecting to the original target and completing TLS, so redirects from unreachable HTTPS endpoints may fail.
+Because HTTPS interception may require connecting to the original upstream target and completing TLS first, redirects away from unreachable HTTPS endpoints can fail before the redirect executes.
 
 ## Matching and Execution
 
-Each rule has one action: `redirect`, `request`, or `response`. Match the **original method and complete URL once**, retaining the snapshot and captures for both phases. Rules run in list order within each phase; edits never trigger rematching.
+Each rule defines one action type: `redirect`, `request`, or `response`.
 
-- Apply anti-cache/anti-compression options before request rules. Request actions apply query → headers → body; response actions apply headers → body.
-- URL patterns are anchored. Scheme/authority are case-insensitive; path/query preserve case, encoding, and order. `*` captures any text, including empty text; `\*` matches a literal star and `?` is literal. Other backslash escapes are invalid.
-- Redirect targets expand `${1}`, `${2}`, etc. without re-encoding captures; `$$` inserts `$`. Targets must be absolute HTTP/HTTPS URLs without user information or fragments and include the complete query.
-- Redirects change routing without a 302. The target controls scheme, host, port, and TLS SNI. Host defaults to the target; `preserve` keeps the value immediately before that rule, including HTTP/2 authority.
+- **Single upfront match:** Every enabled rule is matched **once** against the original HTTP method and complete URL. The matched rule snapshot and wildcard captures are retained across both request and response phases; mutations by earlier rules never trigger rematching.
+- **Phase order:** Rules run in list order within each phase. Anti-cache and anti-compression options run before request rules. Request rules apply `query → headers → body`; response rules apply `headers → body`.
+- **URL pattern syntax:** Patterns are anchored to the full URL. Scheme and authority are case-insensitive; path and query preserve case, percent-encoding, and parameter order. `*` captures zero or more characters (including empty strings), `\*` matches a literal `*`, and `?` matches a literal `?`. All other backslash escapes are rejected.
+- **Redirect targets:** Targets expand `${1}`, `${2}`, etc. without re-encoding captured text, and `$$` emits a literal `$`. Targets must be absolute `http` or `https` URLs without userinfo or fragments and must supply the complete query string. Redirects change upstream routing without synthesizing a `302` response: the target determines scheme, host, port, and TLS SNI. The `Host` header defaults to the target authority unless `preserve` is selected, which retains the value immediately preceding that rule (including HTTP/2 `:authority`).
 
-Header/query operations use ordered arrays: `add` appends; `set` replaces the first match and removes later matches, or appends if absent; `delete` removes all matches. Header names are case-insensitive; decoded query names are case-sensitive. Untouched query fields retain encoding, duplicates, and position.
+### Header and Query Mutations
 
-Headers preserve duplicates, casing, empty values, and interleaving; missing wire order stays unavailable. Host permits only a nonempty request-side `set`; pseudo-headers, encoding, framing, and hop-by-hop fields remain backend-owned. Response rules cannot edit queries. Body changes recalculate framing and remove stale validators, digests, range fields, and incompatible trailers.
+Header and query edits use ordered operation lists:
 
-**Failures stop the exchange.** Errors identify the rule/action and wrap `mitmproxy.ErrDropHTTP`: HTTP/1 closes without a substitute final response; HTTP/2 aborts only the affected stream. Terminal paths close bodies and cancel owned work.
+- `add` appends a new field.
+- `set` replaces the first matching field and removes later duplicates, or appends if absent.
+- `delete` removes all matching fields.
+
+Header names are matched case-insensitively; decoded query parameter names are case-sensitive. Untouched query parameters preserve their original encoding, duplicates, and order.
+
+Headers preserve duplicate names, original casing, empty values, and field interleaving; if raw wire order was unavailable, it stays unavailable. `Host` allows only a nonempty request-side `set`. Pseudo-headers, transfer/content encoding, framing headers, and hop-by-hop fields remain backend-owned. Response rules cannot edit query parameters. Whenever a body changes, FlowLens recalculates framing and strips stale validators, digests, range headers, and incompatible trailers.
+
+### Failure Handling
+
+**Any rewrite failure aborts the exchange.** Errors identify the failing rule and action and wrap `mitmproxy.ErrDropHTTP`:
+
+- On HTTP/1, the connection closes without emitting a substitute response.
+- On HTTP/2, only the affected stream is aborted.
+- Terminal paths close open bodies and cancel all rule-owned work.
 
 ## Body Processing and Limits
 
-URL/header/query-only edits remain streaming. Body actions buffer finite UTF-8 text, replace it directly or with Go `regexp`/RE2, then re-encode it. Regexes compile before publication and replace all matches, supporting numbered/named captures and `$$`. No match is a successful no-op; matches may leave content unchanged or produce an empty body.
+URL, header, and query-only rules keep bodies streaming. Body actions buffer finite UTF-8 text, apply literal or Go `regexp` (RE2) replacement, and re-encode the body. Regular expressions are compiled prior to publication and replace all matches, supporting numbered/named capture groups and `$$`. Zero matches succeed as a no-op; matches may leave content unchanged or produce an empty body.
 
 | Resource | Limit |
 | --- | --- |
-| Encoded input, decoded text, replacement, re-encoded output | **8 MiB each** |
-| Concurrent body phases | **4** across requests and responses |
-| Phase deadline | **10 seconds**, including slot wait and all body actions |
-| Buffered payload | Above **4 MiB**, use managed `body_spool` files |
-| Regex match indexes | Approximately **16 MiB**, adjusted for capture count; not a total-memory bound |
+| Encoded input, decoded text, replacement result, and re-encoded output | `8 MiB` each |
+| Concurrent body phases (across requests and responses combined) | `4` |
+| Total body-phase deadline (including concurrency slot wait and all body actions) | `10` seconds |
+| Disk spooling threshold for buffered payloads | Above `4 MiB` (managed `body_spool` files) |
+| Regex match-index buffer | ~`16 MiB`, scaled by capture count (not a total-memory bound) |
 
-Supported encodings: gzip, deflate, br, zstd, and snappy. Body edits reject unsupported encodings/charsets, invalid UTF-8, NULs, SSE/NDJSON/continuous streams, and binary media, validating both original and edited content types. Responses to HEAD or with status below 200, 204, or 304 cannot acquire a body; header-only rules can still apply.
-
-Regex scanning uses a cancellable rune reader that preserves Go matching semantics. Expressions too large for the continuation wrapper use a synchronous fallback, bounded before execution by `(input bytes + 1)² × program cost ≤ 16 × 1024 × 1024` (instructions, rune tables, and capture slots). Cancellation is checked before/after fallback scanning; no regex task outlives its phase.
-
-Spooling does not reduce decoded-text or regex memory costs. Output readers own temporary files until closed; failure/cancellation closes intermediate readers and deletes files. Temporary paths never enter configuration, interface state, or history.
+- **Encodings and media checks:** Supported content encodings are `gzip`, `deflate`, `br`, `zstd`, and `snappy`. Body edits reject unsupported encodings or charsets, invalid UTF-8, embedded NUL bytes, SSE/NDJSON/continuous streams, and binary media types (validating both original and edited `Content-Type` headers). Responses to `HEAD` or with status `< 200`, `204`, or `304` cannot receive a body, though header-only rules still apply.
+- **Bounded regex scanning:** Regex scanning runs through a cancellable rune reader that preserves Go `regexp` semantics. Expressions too large for the continuation wrapper fall back to synchronous matching only when `(input bytes + 1)² × program cost ≤ 16 × 1024 × 1024` (where program cost accounts for instructions, rune tables, and capture slots). Cancellation is checked before and after fallback scans; no regex task outlives its phase.
+- **Spool ownership:** Disk spooling bounds disk/transport buffering but does not reduce decoded-text or regex memory usage. Output readers own temporary spool files until closed, and failure or cancellation closes intermediate readers and deletes files immediately. Temporary spool paths never enter configuration, UI state, or history.
 
 ## Persistence, Publication, and Interface Drafts
 
-SQLite stores the master switch/revision in `rewrite_state` and ordered, versioned configurations in `rewrite_rules`. New rules and a new database's master switch default off.
+SQLite stores the master switch and revision counter in `rewrite_state`, and ordered, versioned rule configurations in `rewrite_rules`. Both the master switch on a new database and newly created rules default to disabled.
 
-Mutations serialize and require the expected revision: validate/compile → commit transaction → publish immutable snapshot → emit `rewrite:changed` with `{ revision }`. Failure retains the previous snapshot. Reuse unchanged matchers and write only affected state, enable/order metadata, or configurations. Requests never query SQLite or compile rules.
+Mutations are serialized and checked against the caller's expected revision:
 
-| Lifecycle | Behavior |
+```text
+validate & compile → commit SQLite transaction → publish immutable snapshot → emit rewrite:changed { revision }
+```
+
+Failures preserve the prior snapshot. Unchanged compiled matchers are reused across updates, and writes touch only affected state, enable/order metadata, or rule configurations. Live traffic never queries SQLite or compiles rules on the request path.
+
+| Lifecycle Stage | Behavior |
 | --- | --- |
-| Startup | One background load, registered after synchronous database consumers; publish only a complete snapshot |
-| Before readiness | `GetState` waits with caller cancellation; proxy `Start` waits before binding; mutations are rejected |
-| Load failure | Log and return the error to reads/proxy startup; app stays usable; restart to retry |
-| Unsupported configuration | Preserve JSON and report why it is unavailable; never execute or silently delete it |
-| Shutdown | Cancel/join loading and join active mutations before closing SQLite; cleanup is idempotent |
+| **Startup** | Starts a single background loader (registered after synchronous DB consumers) and publishes only a complete snapshot. |
+| **Before readiness** | `GetState` waits while honoring caller cancellation; proxy `Start` waits before binding; mutations are rejected. |
+| **Load failure** | Logs and returns the error to reads and proxy startup; the app stays usable and requires restart to retry. |
+| **Unsupported rule version** | Preserves the raw JSON and surfaces why the rule is unavailable; never executes or silently deletes it. |
+| **Shutdown** | Cancels/joins background loading and joins active mutations before closing SQLite; cleanup is idempotent. |
 
-Read cancellation leaves the shared loader running. Database waits/queries are cancellable; JSON decoding and regex compilation check cancellation between operations. Background loading still loads all rule bodies, with the same total work and memory use.
+Canceling an individual read leaves the shared startup loader running. Database waits and queries honor cancellation, and JSON decoding and regex compilation poll cancellation between items. Background loading still loads all rule bodies, using the same total work and memory as synchronous loading.
 
-The interface loads rules on first opening. Drafts share immutable strings, cache comparisons per rule, and merge snapshots in one batch. Ignore stale revisions; refresh clean drafts and retain dirty drafts with conflict flags. Saved changes affect new requests, including on existing connections.
+### UI Drafts and Editing Lifecycle
 
-Writes serialize while forms remain editable. A save captures the submitted draft; later edits remain unsaved against the returned baseline. Metadata-only snapshots preserve rule objects, editor state, and previews. Show progress on the active save button/switch and initial/manual loads; event refreshes stay silent.
-
-Rule deletion offers cancel/delete and removes the confirmed rule and its draft without saving or validating the draft first. Unsaved new rules are discarded locally; failed deletion retains the draft and keeps the dialog open for retry. Quitting and update restart offer save/discard/cancel. Failed saves retain drafts and block continuation. Backend quit confirmation validates the main-window sender and request identity. Drafts are not crash recovery data; event subscriptions use returned disposers.
+- The UI loads rules on first open. Drafts share immutable strings, cache dirty comparisons per rule, and merge incoming snapshots in a single batch.
+- Stale revisions are ignored; clean drafts refresh automatically, while dirty drafts stay intact with conflict flags.
+- Saved changes take effect for new requests immediately (including on reused connections).
+- Writes serialize while forms stay editable. Saving snapshots the submitted draft so subsequent edits remain dirty relative to the returned baseline. Metadata-only snapshots preserve rule objects, editor state, and previews.
+- Progress indicators appear on the active save button/switch and on initial/manual reloads; background event refreshes stay silent.
+- Deleting a rule offers **Cancel** or **Delete** and removes the confirmed rule and its draft without saving or validating the draft first. Unsaved new rules discard locally; failed deletes retain the draft and keep the dialog open for retry.
+- Quitting and update restarts prompt to save, discard, or cancel. Failed saves preserve drafts and abort shutdown/restart. Backend quit confirmation validates both the main-window sender and request identity. Drafts are not crash-recovery storage, and event subscriptions are cleaned up via their returned disposers.
 
 ## Regex Replacement Preview
 
-`PreviewBody` validates and tests an unsaved regex using the live body-action compiler, bounded matcher, and replacement expansion. One scan returns match count and output, with **8 MiB** sample/output limits, a **10-second** deadline, and caller cancellation. It bypasses URL matching and creates no network traffic, rule mutations, or traffic records.
+`PreviewBody` validates and executes an unsaved regex replacement using the live body-action compiler, bounded matcher, and replacement expander:
 
-The panel keeps samples only while mounted and always previews the original sample. Pattern/replacement edits debounce by **300 ms**; obsolete calls are canceled and stale results ignored. The sample editor stays mounted to preserve undo/view state. Pending or failed results cannot be copied; errors reveal the sample.
-
-The read-only inline diff includes whitespace changes and has a **1-second** computation limit. If either input or output reaches **512 Ki characters** total or **128 Ki on one line**, show the complete plain result without diffing or wrapping. Fonts/themes use the existing stores. See the [user guide](../user-guide.md#rewrite-rules) for controls.
+- A single scan returns the match count and output under the same `8 MiB` sample/output cap, `10`-second deadline, and caller cancellation rules.
+- Previews bypass URL matching and produce no network traffic, rule mutations, or traffic records.
+- The preview panel keeps sample text only while mounted and always evaluates against the original sample. Pattern and replacement edits debounce by `300 ms`; superseded calls are canceled and stale responses ignored. The sample editor remains mounted to preserve undo history and view state.
+- Pending or failed results cannot be copied, and errors automatically switch back to reveal the sample.
+- The read-only inline diff highlights whitespace changes under a `1`-second computation limit. If either input or output reaches `524,288` characters (`512 Ki`) total or `131,072` characters (`128 Ki`) on a single line, the panel shows the complete plain result without diffing or wrapping. Fonts and themes follow the shared desktop stores.
 
 ## Capture, Metrics, History, and Export
 
-Capture records final fields, bodies, URL, Host, and protocol. Request metrics use upstream transport events. Changed responses use downstream send events (`responseMetricsSource: downstream`); unchanged responses, including regex no-ops, retain upstream metrics. Upstream EOF during buffering never proves downstream completion.
-
-Use the shared [size and timing conventions](traffic-metrics-and-har.md). `BodySize` counts encoded entity bytes actually sent; failures and incomplete sends retain unknown/incomplete metrics.
-
-Live summaries retain the latest **64 actions**, cap reasons at **512 characters**, and follow traffic retention. HBIN writes v3/reads v1/v2/v3, storing final content/errors without live summaries or the metrics-source label. Shared exports preserve final fields/metrics and missing-body counts; sensitive data is not automatically redacted.
+- **Recorded content:** Capture records final rewritten headers, bodies, URL, `Host`, and protocol.
+- **Metrics attribution:** Request metrics come from upstream transport events. Rewritten responses record downstream send events (`responseMetricsSource: downstream`), while unchanged responses (including regex no-ops) keep upstream metrics. Upstream EOF during body buffering never proves downstream delivery.
+- **Shared conventions:** Timing and sizes follow [Traffic Metrics and HAR](traffic-metrics-and-har.md). `BodySize` counts encoded entity bytes actually transmitted; failures and incomplete sends preserve unknown (`-1`) or incomplete metrics.
+- **Live summaries and HBIN:** Live rewrite summaries retain up to `64` recent actions per exchange, truncate reasons at `512` characters, and follow normal traffic retention. HBIN writes v3 (and reads v1–v3), storing final content and errors without live summaries or the `responseMetricsSource` label. Shared exports emit final fields, metrics, and missing-body counts without automatic redaction.
 
 ## Transport Dependencies
 
 | Transport API | Contract |
 | --- | --- |
-| `WithHTTPUpstreamTarget` | Validate original authority; route to the final target while preserving proxy/TLS/cancellation settings. Same-origin edits reuse connections; cross-origin edits own a transport |
-| HeaderBlock overrides and request-send observer | Preserve ordered fields and capture the actual emitted request head |
-| `ErrDropHTTP` / response-send observer | Terminate failures and report final protocol, headers, timestamps, bytes, and send outcome |
-| `AbortHTTPRequestRead` | Interrupt request-body reads; an aborted HTTP/1 body must not advance pipeline parsing |
-| `xhttp.FinishResponse` | Finish HTTP/2 body/trailer/END_STREAM writes before reporting completion; idempotent, with no peer-acknowledgement guarantee |
+| `WithHTTPUpstreamTarget` | Validates original authority and routes to the final target while preserving proxy, TLS, and cancellation settings. Same-origin edits reuse connections; cross-origin edits own an isolated transport. |
+| `HeaderBlock` overrides and request-send observer | Preserve exact ordered fields and report the actual emitted request head. |
+| `ErrDropHTTP` / response-send observer | Abort failed exchanges and report final protocol, headers, timestamps, byte counts, and send outcome. |
+| `AbortHTTPRequestRead` | Interrupts request-body reads; an aborted HTTP/1 body must not advance pipeline parsing. |
+| `xhttp.FinishResponse` | Completes HTTP/2 body, trailer, and `END_STREAM` writes before reporting completion (idempotent; does not guarantee peer acknowledgment). |
 
-`xhttp.HeaderOrder` orders name groups under normal serialization; exact `xhttp.HeaderBlock` sending supplies and strictly validates every occurrence. Both share HTTP/1 serialization and HTTP/2 HPACK encoding. The HTTP/1 transfer writer generates framing once; ordered trailers need no serialize/parse round trip.
-
-mitmproxy block overrides reconcile occurrences with sanitized values and regenerate protocol-owned fields. HTTP/1 response ordering uses one parsed head and one serialization pass. Received metadata stays separate; bodies remain streaming.
-
-`go.mod` and `go.sum` pin published transport commits. A local `go.work` can use sibling checkouts; standalone builds and tests use `GOWORK=off`.
+- `xhttp.HeaderOrder` orders name groups under standard serialization, whereas `xhttp.HeaderBlock` supplies and strictly validates every individual occurrence. Both share HTTP/1 serialization and HTTP/2 HPACK encoding. The HTTP/1 transfer writer generates framing once, and ordered trailers avoid serialize/parse round trips.
+- `mitmproxy-go` block overrides reconcile field occurrences with sanitized values and regenerate protocol-owned fields. HTTP/1 response ordering uses a single parsed head and one serialization pass while keeping received metadata separate and bodies streaming.
+- `go.mod` and `go.sum` pin published transport commits. A local `go.work` may point to sibling checkouts during development; standalone builds and tests run with `GOWORK=off`.
 
 ## Verification
 
-Follow [repository checks](../../AGENTS.md#verification), including rewrite/proxy/history/app tests, relevant race checks, and the `internal/desktop/rewrite`, `internal/desktop/store`, and `internal/desktop/logic` tests.
+Run the checks mapped in [AGENTS.md](../../AGENTS.md#verification), including rewrite, proxy, history, and app tests, race checks where relevant, and the `internal/desktop/rewrite`, `internal/desktop/store`, and `internal/desktop/logic` test suites.
 
-Transport tests cover real HTTP/1 and HTTP/2 routing, ordered headers, stream isolation, partial writes, cancellation, and timeout cleanup. Lifecycle tests cover async readiness, first-request enforcement, failures, and shutdown. Desktop acceptance should cover editing, preview, ordering, conflicts, quit/update choices, persistence, and exports.
+- **Transport tests:** Cover real HTTP/1 and HTTP/2 routing, ordered headers, HTTP/2 stream isolation, partial writes, cancellation, and timeout cleanup.
+- **Lifecycle tests:** Cover asynchronous readiness, first-request enforcement, startup failures, and clean shutdown.
+- **Desktop acceptance:** Verify rule editing, regex preview, drag reordering, revision conflicts, quit/update prompts, persistence, and exports.

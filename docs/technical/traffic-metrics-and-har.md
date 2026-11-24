@@ -1,82 +1,86 @@
 # Traffic Metrics and HAR
 
-This reference defines how FlowLens measures timing and sizes, and how those values map to HAR and HBIN. For importing and exporting in the app, see the [user guide](../user-guide.md#history-and-har).
+This reference specifies how FlowLens measures timings and sizes, maps traffic to HAR 1.2, persists sessions in HBIN, enforces recording admission, and bounds capture memory. For UI import/export workflows, see the [User Guide](../user-guide.md#history-and-har).
 
 ## Timing Sources
 
-FlowLens records the request-attempt start, request-write end, and response first-byte and body-end events at the upstream transport boundary. Responses changed by rewrite rules use the actual downstream send events instead. Live traffic and HBIN history keep these as Unix microsecond timestamps, together with each exchange's terminal state.
+FlowLens captures request-attempt start, request-write end, response first-byte, and response body-end timestamps at the upstream transport boundary. Responses modified by live rewrite rules record downstream send events instead. Live traffic and HBIN histories store all timestamps as Unix microseconds together with each exchange's terminal state.
 
-- A retry replaces the data of the stale attempt.
-- Failed, canceled, pending, or incomplete exchanges keep unknown values (`-1`) instead of synthetic completion data.
-- DNS, TCP connect, and TLS handshake durations come from mitmproxy-go's connection metadata. They describe the connection, are shared by every request that reuses it, and are not added to an exchange's Total Duration.
-- An application DNS cache hit reports a DNS duration of `0`. First lookups, expired entries, and shared in-flight queries keep their measured duration; cache lookup overhead stays in the connection setup interval.
-- On Windows, connection setup and HTTP exchange timings share one high-resolution clock.
+- **Retries:** A retry replaces the timestamps of the stale attempt.
+- **Unknown values:** Failed, canceled, pending, and incomplete exchanges keep `-1` rather than fabricating completion timings.
+- **Connection phases:** DNS, TCP connect, and TLS handshake durations come from `mitmproxy-go` connection metadata. They belong to the underlying connection, are shared by every request reusing that connection, and are **not** added to an exchange's Total Duration.
+- **DNS cache hits:** A shared DNS cache hit records a DNS duration of `0`. Initial lookups, expired entries, and coalesced in-flight queries keep their measured durations; cache-lookup overhead remains inside the connection setup interval.
+- **Clock alignment on Windows:** Connection setup and HTTP exchange timestamps share a single high-resolution monotonic clock.
 
 ## Header and Body Sizes
 
-`metrics.headerSize` is computed once, as the UTF-8 byte size of the complete head shown in the Raw panel: the start line and CRLF, each displayed field line and CRLF, and the final CRLF. Detail views, traffic totals, HAR `headersSize`, and HBIN all read this value directly.
-
-HTTP/2 uses synthesized start lines such as `GET /path HTTP/2.0` and `HTTP/2.0 200`. Pseudo-headers follow the Raw panel: `:authority` becomes `host`, `:scheme` is omitted, and method, path, and status move into the start line. The result is a logical text size that excludes TCP/TLS bytes, HPACK compression, and frame overhead. HTTP/1 uses origin-form paths, authority-form targets for CONNECT, and `*` for OPTIONS.
-
-Missing metrics, truncated headers, or an unavailable start line give `-1`. Normalized fallback fields without raw wire order can still have a known size.
-
-`BodySize` counts entity bytes after transport encoding, as actually sent or received.
+- **Header size (`metrics.headerSize`):** Computed once as the UTF-8 byte length of the complete head rendered in the **Raw** panel: the start line plus `CRLF`, each displayed header line plus `CRLF`, and the trailing blank `CRLF`. Detail views, traffic totals, HAR `headersSize`, and HBIN all consume this value directly.
+  - **HTTP/2:** Uses synthesized start lines (such as `GET /path HTTP/2.0` and `HTTP/2.0 200`). Pseudo-headers mirror the **Raw** panel: `:authority` maps to `host`, `:scheme` is omitted, and `:method`, `:path`, and `:status` move into the start line. This is a logical text size that excludes TCP/TLS framing, HPACK compression, and HTTP/2 frame overhead.
+  - **HTTP/1:** Uses origin-form paths, authority-form targets for `CONNECT`, and `*` for `OPTIONS`.
+  - **Unknown sentinel:** Missing metrics, truncated headers, or an unavailable start line produce `-1`. Normalized fallback headers without raw wire order can still produce a known size.
+- **Body size (`BodySize`):** Counts entity bytes after transport encoding, matching the bytes actually sent or received on the wire.
 
 ## HAR Export
 
-HAR output is streamed to a temporary file in the destination directory and atomically replaces the target when complete. Entries whose cached body is missing are exported without the body and counted in the result.
+HAR exports stream to a temporary file in the destination directory and atomically rename into place upon completion. Entries whose cached body is missing still export without a body and increment the skipped/unavailable body count in the result.
 
 ### Timings
 
-- Timestamps keep microsecond precision; elapsed times are milliseconds with fractional digits.
-- Each complete DNS, TCP connect, and TLS phase is assigned once, to the earliest request in the source capture or history that carries that connection's metadata. This is independent of selection and export order, so exporting only a later request on a reused connection leaves its connection phases at `-1`.
-- When connection setup precedes the HTTP exchange, as with HTTPS CONNECT, `startedDateTime` moves to the setup start and `time` includes setup.
-- `blocked` covers setup and forwarding gaps before the exchange. Only the part of a connection phase that overlaps the request interval is subtracted from `send`.
-- HAR `connect` includes TLS, so `ssl` is not added again when summing `time`. For complete, non-overlapping exchanges, `time` equals the sum of the known `blocked`, `dns`, `connect`, `send`, `wait`, and `receive` values. Remaining preparation and retry overhead stays in `send`, as `timings.comment` notes.
-- Unavailable or incomplete phases stay `-1`. A failed HTTP send does not erase a completed connection phase.
-- Overlapping upload and response phases cannot be expressed as a serial waterfall, so `wait` and `time` stay `-1`.
-- `_connectionTimings` keeps the original connection timestamps; other extension fields keep the original request and response timestamps and terminal states.
+- Timestamps retain microsecond precision; elapsed durations export as fractional milliseconds.
+- Each completed DNS, TCP connect, and TLS phase is attributed **once**, to the earliest request in the source capture or history carrying that connection's metadata—regardless of row selection or export order. Exporting only a later request on a reused connection leaves its connection phases at `-1`.
+- When connection setup precedes the HTTP exchange (as with HTTPS `CONNECT`), `startedDateTime` shifts to setup start and `time` includes setup.
+- `blocked` captures setup and forwarding gaps prior to the exchange. Only the portion of a connection phase overlapping the request interval is subtracted from `send`.
+- HAR `connect` includes TLS (`ssl`), so `ssl` is not double-counted when summing `time`. For complete, non-overlapping exchanges, `time` equals the sum of known `blocked`, `dns`, `connect`, `send`, `wait`, and `receive` values. Remaining preparation and retry overhead stays in `send` (noted in `timings.comment`).
+- Unavailable or incomplete phases stay `-1`. A failed HTTP send does not clear an already-completed connection phase.
+- Overlapping upload and response phases cannot be represented as a serial waterfall, so `wait` and `time` remain `-1`.
+- `_connectionTimings` preserves original connection timestamps; other FlowLens extension fields preserve original request/response timestamps and terminal states.
 
 ### Request Bodies
 
-Complete URL-encoded and multipart bodies up to 4 MiB and 1,000 parameters export as `postData.params`, keeping parameter order, duplicates, empty values, filenames, and part content types. Binary multipart values use Base64 with a per-parameter `_encoding` extension. Structured forms omit `postData.text`, as HAR requires, and multipart boundaries are represented structurally rather than as raw text.
-
-Larger forms, incomplete or malformed bodies, and unsupported form representations keep the raw `postData.text`; binary raw bodies use `_encoding: "base64"`. Readers that ignore `_encoding` cannot reconstruct those binary values.
+- **Structured forms:** Complete URL-encoded and multipart bodies up to `4 MiB` and `1,000` parameters export as `postData.params`, preserving parameter order, duplicates, empty values, filenames, and part content types. Binary multipart values use Base64 with a per-parameter `_encoding` extension. Per the HAR spec, structured forms omit `postData.text`, and multipart boundaries are represented structurally rather than as raw text.
+- **Raw fallback:** Larger forms, incomplete or malformed bodies, and unsupported form encodings export as raw `postData.text`; binary raw bodies add `_encoding: "base64"`. HAR readers that ignore `_encoding` cannot reconstruct those binary payloads.
 
 ## HAR Import
 
-- Header arrays keep their order, duplicates, case, and empty values; wire order is marked unavailable.
-- Text and Base64 bodies are supported. Decoded content is not decompressed again.
-- URL-encoded parameters can rebuild a request body. Multipart parameters without raw body text cannot reproduce the original bytes and are marked unavailable. A missing payload stays distinct from a genuinely empty body.
-- Valid FlowLens timestamp and state extensions take precedence. Other HAR timings convert from milliseconds to microseconds, keeping the total duration and known stages. Pre-send waiting and connection costs join the request interval, and TLS is not counted twice. Missing, inconsistent, and failed timings stay unknown.
-- Header size is recalculated with the Raw display convention. Body sizes come from HAR `bodySize`, not decoded text length.
-- Pages, cache details, standalone cookie attributes, WebSocket frames, and unsupported extensions are dropped. Re-export therefore does not reproduce every original field, and `blocked` may become part of `send`.
-
-Import maps values into the existing traffic fields without source labels and without changing the HBIN version.
+- **Headers:** Header arrays preserve order, duplicates, casing, and empty values, with wire order marked unavailable.
+- **Bodies:** Text and Base64 bodies are supported; decoded payloads are not decompressed again. URL-encoded `postData.params` can reconstruct a request body, whereas multipart parameters without raw text cannot reproduce original wire bytes and are marked unavailable. Missing bodies stay distinct from genuinely empty bodies.
+- **Timings:** Valid FlowLens timestamp and state extensions take precedence. Standard HAR timings convert from milliseconds to microseconds while preserving total duration and known stages; pre-send waiting and connection costs join the request interval without double-counting TLS. Missing, inconsistent, or failed timings remain unknown (`-1`).
+- **Sizes:** Header size is recomputed using FlowLens's **Raw** panel convention. Body sizes are taken from HAR `bodySize` rather than decoded text length.
+- **Unsupported fields:** Pages, cache entries, standalone cookie attributes, WebSocket frames, and unknown extensions are dropped. Re-exporting an imported history therefore does not reproduce every original field, and `blocked` may merge into `send`.
+- **Storage mapping:** Imported entries map directly into standard traffic fields with no special source label and without changing the HBIN format version.
 
 ## HBIN History Format
 
-FlowLens writes HBIN v3 and reads v1, v2, and v3. v2 added upstream connection timestamps; v3 stores binary WebSocket messages as their original bytes instead of Base64. v1 and v2 binary WebSocket messages are decoded on read, and v1 histories show connection timings as unavailable. Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted. Body records are zstd frames, written with a 1 MiB window; frames with any window are read, including the 8 MiB ones earlier builds wrote.
+| Version | Read / Write | Notes |
+| --- | --- | --- |
+| **v3** | Read and write | Stores binary WebSocket messages as raw bytes instead of Base64 |
+| **v2** | Read only | Added upstream connection timestamps; binary WebSocket payloads decoded from Base64 on read |
+| **v1** | Read only | Connection timings display as unavailable (`—`); binary WebSocket payloads decoded from Base64 on read |
 
-**Saving the current capture.** The capture is saved to its history pair every 60 seconds while it changes, and at once on shutdown, restart, and cache cleanup. After a periodic save, the next one waits five times that save's duration, and never less than 60 seconds: a save that takes 30 seconds is followed by one 150 seconds later. Each save rewrites the pair through temporary files and an atomic rename. Spilled entries (see below) are copied as their encoded bytes and indexed at their new offsets; entries in memory are encoded as they are saved, and bodies still being received are read from their cache files up to the bytes received so far, without loading them into memory.
+Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted. Body records use `zstd` frames written with a `1 MiB` window; frames compressed with any window size (including the `8 MiB` frames written by older builds) are readable.
 
-**Size limit.** HBIN v3 indexes entries with 32-bit offsets, so one history holds at most 4 GiB of encoded data. A save that would pass that limit fails and is logged; the capture's cached data stays available for export until the session ends.
+- **Periodic and terminal saves:** Live capture persists to its history pair every `60` seconds while modified, and immediately on shutdown, restart, and cache cleanup. After a periodic save completes, the next save waits `max(60s, 5 × saveDuration)` (for example, a 30-second save schedules the next save 150 seconds later). Each save writes to temporary files and swaps atomically. Spilled entries are copied as raw encoded bytes and re-indexed at their new offsets; in-memory entries are encoded during save; bodies still streaming are copied from their cache files up to bytes received so far without loading them into memory.
+- **4 GiB limit:** HBIN v3 indexes entries using 32-bit offsets, capping any single history at `4 GiB` of encoded data. A save exceeding that limit fails and is logged, while the session's cached data stays exportable until the session ends.
 
 ## Recording Admission
 
-Pause Recording changes capture admission, not proxy forwarding. Admission is decided once when the HTTP interceptor registers a request, the WebSocket interceptor registers a successful handshake, or the raw TCP interceptor observes a new tunnel. HTTP requests on a reused connection are admitted independently. Skipped exchanges create no entry, captured body, metrics, or record-attribution subscription, and are not added later when recording resumes. WebSocket frames are still consumed, forwarded, and released even when their handshake was not recorded.
+**Pause Recording** controls capture admission without interrupting proxy forwarding:
 
-Exchanges admitted before pausing continue recording to completion, including downloads, SSE responses, and all messages on existing WebSocket connections. As a result, existing rows and totals can still update while recording is paused. TLS, rewrite rules, upstream configuration, and live request options keep working. Pause does not change system proxy settings or interrupt connections. Connection-level process lookup remains available for later admitted requests on reused connections.
-
-Pause is process-local and never written to settings or history. Explicit Start Proxy enables recording; a configuration-driven listener restart preserves pause before accepting traffic. Clear Traffic and capture-session restart preserve pause while retaining their normal generation and cleanup rules. Existing data remains readable, periodically savable, and exportable during a pause; HBIN and HAR formats are unchanged.
+- **One-time decision:** Admission is evaluated once when the HTTP interceptor registers a request, the WebSocket interceptor registers a successful handshake, or the raw TCP interceptor sees a new tunnel. HTTP requests on reused connections are admitted independently.
+- **Skipped traffic:** Unadmitted exchanges create no traffic entry, cached body, metrics record, or process-attribution subscription, and are never retroactively added when recording resumes. Unrecorded WebSocket frames are still read, forwarded, and released normally.
+- **In-flight traffic:** Exchanges admitted before pausing continue recording to completion—including downloads, SSE streams, and every message on existing WebSocket connections—so existing rows and totals can still update while paused.
+- **Unchanged proxy behavior:** TLS handling, rewrite rules, upstream proxy settings, live request options, and system proxy settings continue operating without dropping connections. Connection-level process lookup stays available for subsequent admitted requests on reused connections.
+- **State lifetime:** Pause state is process-local and never saved to settings or history. An explicit **Start Proxy** enables recording; configuration-driven listener restarts preserve pause before accepting connections. **Clear Traffic** and capture-session restarts preserve pause while keeping their standard generation and cleanup rules. Existing entries remain readable, periodically savable, and exportable while paused; HBIN and HAR formats are unchanged.
 
 ## Capture Memory
 
-A capture session keeps in memory only its newest 5000 entries and the entries whose exchange is still in progress: an HTTP exchange until its response ends or fails, a captured body until it is read to its end or closed, a WebSocket entry until its connection closes, and a process lookup until its result is final. These are the entries the interface shows.
+A live capture session retains in memory only its newest `5,000` settled entries plus exchanges still in progress (HTTP exchanges until response completion/failure, captured bodies until fully read/closed, WebSocket entries until connection close, and process lookups until final). These entries back the live UI table.
 
-Older entries that are finished move to the session's spill store in batches of up to 256. New entries wake the spiller once in-memory entries pass 5000 + 256; the final producer of an exchange also wakes it whenever more than 5000 entries remain, so an old exchange can move to disk after traffic stops. The status bar, saved history, capture-wide exports, and the actions on an entry (details, resend, edit, copy, export, delete) include spilled entries as before.
+Older settled entries spill to disk in batches of up to `256`:
 
-- **Location.** Spill segments are `spill-NNNN.hbin` files in the session's body-cache directory, `cache/<session-uuid>/`. A new segment starts once the current one reaches 1 GiB.
-- **Encoding.** Each spilled entry is written with the HBIN v3 entry encoding: its header, then its zstd body record with both bodies and its WebSocket messages. An in-memory index of about 24 bytes per entry locates it. Deleting a spilled entry overwrites its bytes with zeros.
-- **WebSocket payloads.** A captured WebSocket message larger than the body-cache threshold is written to `<id>_ws.body` in the same directory as soon as it is captured. Only its metadata stays in memory.
-- **Lifetime.** A deleted entry's data is removed with it, and clearing the capture removes all of it. The whole body-cache directory is removed when capture restarts after Save or Discard, after the final save at shutdown succeeds, and at the next start after a crash or a failed final save. If the body cache is unavailable, the capture keeps every entry in memory.
+- **Spill trigger:** New entries wake the spiller once in-memory entries exceed `5,000 + 256`; the final producer completing an exchange also wakes the spiller whenever more than `5,000` entries remain, allowing older exchanges to spill after traffic subsides.
+- **Transparency:** Status-bar totals, saved histories, capture-wide exports, and per-entry actions (details, resend, edit, copy, export, delete) seamlessly include spilled entries.
+- **Location:** Spill segments are stored as `spill-NNNN.hbin` files inside the session body-cache directory (`cache/<session-uuid>/`), rolling to a new segment at `1 GiB`.
+- **Encoding:** Spilled entries use the HBIN v3 entry layout (header followed by a `zstd` body record containing both bodies and WebSocket messages) tracked by a ~`24`-byte in-memory index entry. Deleting a spilled entry zeroes its bytes on disk.
+- **Large WebSocket payloads:** Any captured WebSocket message exceeding the body-cache threshold writes immediately to `<id>_ws.body` in the session cache directory, keeping only metadata in memory.
+- **Lifetime:** Deleting an entry removes its cached data; clearing capture removes all session data. The entire session body-cache directory is deleted when restarting capture (after Save or Discard), after a clean shutdown save succeeds, and on the next launch following a crash or failed final save. If the body cache directory is unavailable, capture keeps all entries in memory.

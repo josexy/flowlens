@@ -1,68 +1,70 @@
 # Contributing to FlowLens
 
-Thank you for helping improve FlowLens. This guide covers the contribution path. The engineering rules (module ownership, high-risk contracts, and which tests each area needs) are in [AGENTS.md](AGENTS.md); read it before changing code.
+Thank you for helping improve FlowLens. This guide covers the contribution workflow. For architectural boundaries, high-risk contracts, and package-level verification rules, read [AGENTS.md](AGENTS.md) before making code changes.
 
 ## Before You Start
 
-- Search existing issues and pull requests before opening a duplicate.
-- Open a focused issue first for changes to persisted data, public models, capture semantics, security boundaries, or user-facing workflows.
-- Report security vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
+- Search existing issues and pull requests to avoid duplicate work.
+- Open a focused issue first before changing persisted data formats, public models, capture semantics, security boundaries, or core user-facing workflows.
+- Report security vulnerabilities through [SECURITY.md](SECURITY.md), never in a public issue.
 - Never attach unredacted captures, HAR files, databases, certificates, private keys, API Collections, logs, or screenshots containing sensitive data.
 
 ## Development Setup
 
-You need Go 1.27.3 or newer and, preferably, [Task](https://taskfile.dev). Ordinary builds and tests need no C/Objective-C compiler. macOS requires version 13.0 or later; signing and DMG packaging still use macOS platform tools. Python 3 is needed only to test Python plugins. There is no JavaScript toolchain.
+You need Go 1.27.3 or newer and, preferably, [Task](https://taskfile.dev). Ordinary builds and tests run with `CGO_ENABLED=0` and require no C/Objective-C compiler or JavaScript toolchain. macOS requires version 13.0 or later, and macOS signing and DMG packaging require macOS platform tools. Python 3 is required only for testing Python plugins.
 
 ```shell
 task dev
 ```
 
-Without Task, run `go tool mygo dev` with `CGO_ENABLED=0`. The Taskfile selects this mode on Windows, Linux, and macOS. See [Building and Packaging](docs/technical/building.md) for the macOS linker and packaging configuration.
+Without Task, run `go tool mygo dev` with `CGO_ENABLED=0`. The Taskfile sets `CGO_ENABLED=0` automatically on Windows, Linux, and macOS. See [Building and Packaging](docs/technical/building.md) for macOS linker flags, packaging, and release details.
+
+### Common Commands
 
 | Command | Purpose |
 | --- | --- |
-| `task dev` | Run with live reload |
+| `task dev` | Run FlowLens with live reload |
 | `task run` | Build with MyGo and launch once |
 | `task package` | Build release packages for the current platform |
+| `task icons:generate` | Regenerate application and tray icons from SVG sources |
 | `task test` | Run all Go tests |
-| `task test:race` | Run the concurrency-heavy packages, or those passed after `--`, with the race detector |
-| `task verify` | Run formatting, lint, UI lifecycle, catalog, and test checks |
+| `task test:race` | Run concurrency-heavy packages (or packages passed after `--`) with the race detector |
+| `task verify` | Run formatting, Go lint, UI lifecycle, message catalog, and test checks |
 | `task lint:go` / `task lint:go:fix` | Check Go lint and formatting, or apply safe fixes |
-| `task vet:ui` | Check native UI lifecycle rules |
-| `task i18n:generate` / `task i18n:check` | Regenerate or check the message catalogs |
-
-See [Building and Packaging](docs/technical/building.md) for cgo, packaging, and release details.
+| `task vet:ui` | Verify native MyGo UI lifecycle rules |
+| `task i18n:generate` / `task i18n:check` | Regenerate or validate the message catalogs |
 
 ## Making Changes
 
-- Keep each change inside its owning package, as listed in [AGENTS.md](AGENTS.md#module-ownership).
-- Put new user-visible text in both `locales/en.json` and `locales/zh-Hans.json`, then run `task i18n:generate`.
-- Update the user guide, technical docs, and `openspec/specs/` when you change the behavior they describe.
-- Write commits as English [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <summary>`, one kind of change per commit.
+- Keep changes within their owning package, as defined in [AGENTS.md](AGENTS.md#module-ownership).
+- Add new user-visible text to both `locales/en.json` and `locales/zh-Hans.json` with matching keys and placeholders, then run `task i18n:generate`.
+- Update the [User Guide](docs/user-guide.md), relevant [technical docs](docs/technical/), and `openspec/specs/` whenever you change documented behavior.
+- Write commit messages as English [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <summary>`, with one class of change per commit and concrete details describing the change or fix.
 
 ## Validation
 
-Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#verification) maps each area to its packages. Before requesting review, run:
+Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#verification) maps each area to its test packages. Before requesting review, run the full check:
 
 ```shell
 task verify
 ```
 
-Changes to Python Workers must run the integration tests with a real Python 3 interpreter rather than skipping them. For concurrency-sensitive changes, run `task test:race` with a supported C compiler installed. This task enables cgo on all desktop platforms.
+- **Python Worker changes:** Run the Python 3 integration tests with a real Python 3 interpreter instead of skipping them.
+- **Concurrency-sensitive changes:** Run `task test:race` with a supported C compiler installed (`task test:race` sets `CGO_ENABLED=1` on all desktop platforms):
 
 ```shell
-task test:race                                       # desktop, process attribution, proxy service
+task test:race                                       # desktop, process attribution, and proxy service
 task test:race -- ./internal/services/proxy_service  # only the packages you changed
 ```
 
 ## Pull Requests
 
-Keep a pull request focused and describe:
+Keep pull requests focused and clearly describe:
 
-- the user-visible or architectural problem;
-- the chosen behavior and important non-goals;
-- effects on persisted data, privacy, compatibility, and each platform;
-- the tests and manual checks performed;
-- screenshots only when they help review, with sensitive data removed.
+- **Problem:** The user-visible or architectural issue being solved.
+- **Design:** The chosen behavior and important non-goals.
+- **Impact:** Effects on persisted data, privacy, backward compatibility, and each supported platform.
+- **Verification:** The automated tests and manual checks performed.
+- **Screenshots:** Include only when helpful for review, with all sensitive data removed.
 
-Do not include unrelated formatting, generated files that the change did not affect, local agent settings, credentials, captures, databases, certificates, logs, or build output.
+Exclude unrelated formatting, unaffected generated files, local agent settings, credentials, captures, databases, certificates, logs, and build artifacts.

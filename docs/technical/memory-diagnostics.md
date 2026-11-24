@@ -1,56 +1,72 @@
 # Memory Diagnostics
 
-How FlowLens's memory behaves after heavy use, what it keeps on purpose, and how to profile a running instance.
+This guide explains how to profile a running FlowLens instance, why memory can remain elevated while idle after heavy capture bursts, and what state FlowLens retains intentionally.
 
 ## Profiling a Running Instance
 
-Profiling is off unless FlowLens starts with `FLOWLENS_PPROF_ADDR` set to a loopback IP and port. Any other address is refused and logged, and the server stops when FlowLens exits.
+The diagnostic HTTP server is disabled by default. To enable it, start FlowLens with `FLOWLENS_PPROF_ADDR` set to a loopback IP and port. Any non-loopback address is rejected and logged, and the server shuts down automatically when FlowLens exits.
 
 ```sh
 # macOS
 FLOWLENS_PPROF_ADDR=127.0.0.1:6060 /Applications/FlowLens.app/Contents/MacOS/FlowLens
+
 # Linux
 FLOWLENS_PPROF_ADDR=127.0.0.1:6060 flowlens
+
 # Windows (PowerShell)
 $env:FLOWLENS_PPROF_ADDR = "127.0.0.1:6060"; & "$env:LOCALAPPDATA\Programs\FlowLens\FlowLens.exe"
 ```
 
-| Endpoint | Use |
+### Diagnostic Endpoints
+
+| Endpoint | Purpose |
 | --- | --- |
-| `/debug/pprof/` | Index of the Go runtime profiles: `heap`, `allocs`, `goroutine`, `goroutineleak`, `threadcreate`, `profile` (CPU), and `trace` |
-| `POST /debug/flowlens/collect` | Runs two collections with cleanups between them, returns free memory to the OS, and reports process memory, heap in use, kept for reuse, and held memory at each step |
+| `/debug/pprof/` | Standard Go runtime profiles: `heap`, `allocs`, `goroutine`, `goroutineleak`, `threadcreate`, `profile` (CPU), and `trace` |
+| `POST /debug/flowlens/collect` | Runs two GC cycles with cleanups between them, returns free heap pages to the OS, and reports process memory, heap in use, kept-for-reuse memory, and held memory at each step |
+
+### Useful Profiling Commands
 
 ```sh
+# Trigger forced GC and OS memory return, and print step-by-step memory stats
 curl -X POST http://127.0.0.1:6060/debug/flowlens/collect
+
+# Inspect live heap usage
 go tool pprof -sample_index=inuse_space http://127.0.0.1:6060/debug/pprof/heap?gc=1
-curl -o before.pprof 'http://127.0.0.1:6060/debug/pprof/heap?gc=1'   # later, again as after.pprof
+
+# Capture before/after heap snapshots and diff them
+curl -o before.pprof 'http://127.0.0.1:6060/debug/pprof/heap?gc=1'
+# ... perform the action, then capture after.pprof ...
 go tool pprof -sample_index=inuse_space -top -base before.pprof after.pprof
+
+# Check for leaked goroutines
 curl 'http://127.0.0.1:6060/debug/pprof/goroutineleak?debug=1'
 ```
 
-Read the collect report from its last line:
+### Interpreting the Collect Report
 
-- Process memory falls to about the held memory: the memory was garbage or free heap waiting for the runtime, not a leak.
-- Heap in use stays high: live objects keep it. Diff heap profiles taken before and after an action to find what holds them.
-- Kept for reuse stays high while heap in use is low: the heap is fragmented. Live objects are spread over many partly used pages that cannot go back to the OS.
-- Process memory stays well above held memory: the rest is outside the Go heap, such as GPU textures, fonts, and native libraries. Go profiles cannot show it; use the platform's tools.
+Read the last line of the `POST /debug/flowlens/collect` output:
+
+- **Process memory drops close to held memory:** The extra memory was uncollected garbage or idle heap awaiting runtime reclamation, not a leak.
+- **Heap in use stays high:** Live Go objects are still retaining memory. Compare `before.pprof` and `after.pprof` heap profiles around the suspect action to identify the retainer.
+- **Kept for reuse stays high while heap in use is low:** The Go heap is fragmented—surviving objects are scattered across partially used pages that cannot yet be returned to the OS.
+- **Process memory stays well above held memory:** The difference lives outside the Go heap (such as GPU textures, font caches, and native libraries). Go profiles cannot inspect it; use platform-native profiling tools instead.
 
 ## Why Memory Stays High While Idle
 
-The Go runtime starts a collection when allocation reaches the heap goal, which is twice the heap left live by the previous collection. An idle FlowLens allocates almost nothing, so after a burst of capture nothing collects the garbage until the runtime's forced collection, which runs every two minutes. Process memory can therefore stay at its peak for up to two minutes.
+Three runtime mechanisms can keep process memory elevated for several minutes after a traffic burst stops:
 
-Pooled objects outlive their last use by one more collection: `sync.Pool` keeps an idle object through the first collection and drops it at the second. The largest are the zstd encoders that write spill segments, saved histories, and zstd request bodies. An encoder that has written a body over 128 KiB keeps a history buffer twice its 1 MiB window, about 5 MiB in all, and a capture burst can leave several in the pool. mitmproxy-go also keeps each proxied response's request context, and with it the connection's TLS state, in a table keyed by a weak pointer until a cleanup runs after the response is collected. After a burst, an idle FlowLens frees this memory about four minutes after the traffic stops.
-
-After each collection the runtime returns free pages to the OS in the background and keeps about 10% over what the heap needs. Pages that still hold a live object stay in use. Entries kept from a burst are spread over many such pages, so "kept for reuse" can stay larger than the entries themselves until they are evicted or cleared.
+- **Forced GC interval (up to ~2 minutes):** Go normally triggers garbage collection when allocations reach the heap goal (twice the live heap from the previous cycle). An idle FlowLens allocates very little, so garbage from a capture burst can remain until the runtime's periodic forced collection runs every 2 minutes.
+- **Pooled encoders and weak-pointer cleanups (up to ~4 minutes):** `sync.Pool` retains idle objects across the first GC cycle and drops them on the second. The largest pooled objects are `zstd` encoders used for spill segments, saved histories, and `zstd` request bodies—an encoder that processed a body larger than 128 KiB retains a history buffer twice its 1 MiB window (~5 MiB total), and a burst can leave several in the pool. Likewise, `mitmproxy-go` stores each proxied response's request context (and its connection TLS state) in a weak-pointer-keyed table until cleanup runs after the response is collected. Together, these release roughly 4 minutes after traffic stops.
+- **Background page scavenging and fragmentation:** After each collection, the Go runtime returns free spans to the OS in the background while retaining roughly 10% headroom above current heap demand. Pages that still hold even one live object stay mapped, so **Kept for reuse** can exceed the size of retained burst entries until those entries are evicted or cleared.
 
 ## What FlowLens Keeps on Purpose
 
-| Kept | Bound | Released when |
+| Retained State | Bound | Released When |
 | --- | --- | --- |
-| Live capture | The newest 5000 settled entries plus in-progress exchanges; bodies above the cache threshold (10 KiB by default) are on disk | Older entries spill to disk; Clear or restarting capture releases the rest |
-| Opened history | Every entry of that history, headers without bodies | Its tab closes or another history opens |
-| Selected entry | Its bodies and the viewers' formatted, Raw, Hex, and image state | Selection changes, details close, or the capture is cleared |
-| History indexes | The four most recently used histories | Least recently used first |
-| Pooled zstd encoders | About 5 MiB each after a body over 128 KiB, as many as wrote at once | The second collection after their last use |
-| MyGo text layouts | About 8 MiB normally, up to 64 MiB while recent frames use them | Trimmed only while frames are drawn, not while all windows are idle |
-| MyGo element state and frame arena | The largest frame drawn so far, plus up to 256 recycled element states | Kept for reuse |
+| Live capture | Newest 5,000 settled entries plus in-progress exchanges; bodies above the cache threshold (10 KiB default) spill to disk | Older entries spill to disk; **Clear** or restarting capture releases the rest |
+| Opened history | All entries of the active history (headers/metadata without bodies) | The history tab closes or another history opens |
+| Selected entry | Decoded bodies and viewer state (formatted, Raw, Hex, and image caches) | Selection changes, details close, or capture is cleared |
+| History indexes | Up to 4 most recently accessed histories | Evicted least-recently-used first |
+| Pooled `zstd` encoders | ~5 MiB each after writing a body over 128 KiB, scaled by peak concurrent writers | Second GC cycle after last use |
+| MyGo text layouts | ~8 MiB steady state, up to 64 MiB while actively used by recent frames | Trimmed only during frame rendering, not while all windows are idle |
+| MyGo element state and frame arena | Largest frame drawn so far, plus up to 256 recycled element states | Kept for reuse across frames |

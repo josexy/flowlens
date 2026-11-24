@@ -1,40 +1,40 @@
 # Security Policy
 
-FlowLens is a local MITM proxy and traffic inspection tool. Security reports are welcome, especially when an issue could expose captured data, weaken TLS or certificate handling, cross a local trust boundary, execute code unexpectedly, or compromise release artifacts.
+FlowLens is a local MITM proxy and traffic inspection tool. We welcome security reports—especially issues that could expose captured data, weaken TLS or certificate handling, cross a local trust boundary, execute code unexpectedly, or compromise release artifacts.
 
 ## Supported Versions
 
-Security fixes are developed against the current `main` branch and released in a subsequent version. The project does not currently guarantee a separate security-support window for older releases. Before reporting a problem found only in an older build, reproduce it with the latest release or current source when it is safe to do so.
+Security fixes are developed on the `main` branch and shipped in subsequent releases. FlowLens does not currently maintain separate security-support windows for older versions. When safe to do so, verify that an issue reproduces on the latest release or current `main` before reporting it.
 
 ## Reporting a Vulnerability
 
-Prefer GitHub Private Vulnerability Reporting: open the repository's [security advisory form](https://github.com/josexy/flowlens/security/advisories/new) when the **Report a vulnerability** option is available.
+Please use GitHub Private Vulnerability Reporting through the repository's [security advisory form](https://github.com/josexy/flowlens/security/advisories/new) whenever **Report a vulnerability** is available.
 
-Include only what is needed to reproduce and assess the issue:
+Include only the details needed to reproduce and assess the issue:
 
-- affected version, commit, and operating system;
-- attack preconditions and trust boundary;
-- minimal reproduction steps or a small proof of concept;
-- expected and observed behavior;
-- likely impact and any known mitigation.
+- Affected version, commit SHA, and operating system.
+- Preconditions and the trust boundary crossed.
+- Minimal reproduction steps or a compact proof of concept.
+- Expected versus observed behavior.
+- Likely impact and any known mitigations.
 
-Do not put real credentials, captured traffic, HAR files, databases, API Collections, private keys, certificates, signing material, personal paths, or unredacted logs in a report. Use synthetic data and redact secrets even in a private report unless a maintainer explicitly requests a safer transfer method.
+Do not include real credentials, captured traffic, HAR files, databases, API Collections, private keys, certificates, signing material, personal file paths, or unredacted logs. Use synthetic test data and redact secrets even in private reports unless a maintainer explicitly requests a safer transfer channel.
 
-If private vulnerability reporting is unavailable, open a minimal [public issue](https://github.com/josexy/flowlens/issues/new) that says a potential vulnerability needs a private reporting channel. Do not describe the exploit, affected secrets, or sensitive environment details in that issue.
+If private vulnerability reporting is unavailable, open a minimal [public issue](https://github.com/josexy/flowlens/issues/new) stating only that a potential vulnerability requires a private reporting channel. Do not include exploit details, affected secrets, or sensitive environment information in that issue.
 
-Please allow maintainers time to reproduce and remediate a confirmed issue before public disclosure. There is no guaranteed response-time SLA at present.
+Please give maintainers reasonable time to reproduce and fix a confirmed issue before public disclosure. There is no guaranteed response-time SLA at present.
 
 ## Scope Notes
 
-Examples of useful reports include:
+Examples of in-scope reports include:
 
-- unauthorized file access or deletion outside FlowLens-managed storage;
-- unintended exposure of captures, history, API Collections, logs, certificates, or process metadata;
-- TLS verification, CA, client-certificate, proxy-boundary, or request-routing flaws;
-- escaping documented limits around body files, Worker communication, or process isolation;
-- release workflow or artifact integrity weaknesses;
-- vulnerabilities in bundled dependencies that are reachable through FlowLens.
+- Unauthorized file access or deletion outside FlowLens-managed storage directories.
+- Unintended exposure of captures, history, API Collections, logs, certificates, or process metadata.
+- TLS verification, CA trust, client-certificate, proxy-boundary, or request-routing flaws.
+- Bypassing documented limits for body files, Worker protocol communication, or process isolation.
+- Release workflow or artifact integrity weaknesses.
+- Vulnerabilities in bundled dependencies that are reachable through FlowLens.
 
-Expected behavior is not by itself a vulnerability: FlowLens intentionally decrypts traffic trusted through its generated CA, can listen on non-loopback interfaces when configured, and stores requested capture data locally. Python plugins are trusted user code and are not a security sandbox. Reports showing an unexpected boundary crossing or an unsafe default are still welcome.
+Expected behavior is not a vulnerability by itself: FlowLens intentionally decrypts traffic routed through its trusted CA, can listen on non-loopback interfaces when configured to do so, and stores captured data locally. Python plugins run as trusted user code and are not a security sandbox. Reports demonstrating an unexpected boundary crossing or an unsafe default are always welcome.
 
 Use FlowLens only on traffic and systems you own or are authorized to test.

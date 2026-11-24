@@ -2,47 +2,74 @@
 
 **English** | [简体中文](python-plugins.zh-CN.md)
 
-This guide is for FlowLens users who want to customize HTTP requests and responses with Python. It covers setup, the two scripting scopes, the API, examples, limits, security, and troubleshooting.
+This guide covers configuring Python 3, choosing between scripting scopes, writing `onRequest` and `onResponse` hooks, working with the Body API, respecting limits and security boundaries, and troubleshooting plugins in FlowLens.
 
-FlowLens provides two Python scripting scopes for HTTP Request Editor: global Python plugins, which are managed in the **Python Plugins** workbench and selected by matching rules, and a current-request script bound to one HTTP request. Either scope can inspect or mutate a request before transport and inspect or mutate the returned response. This feature applies only to HTTP Request Editor and never enters ordinary MITM capture, resend, or WebSocket Client. A current-request script source can be saved with an HTTP request in API Collection, but it is not written to Settings, HAR, history, or HBIN data.
+FlowLens supports two Python scripting scopes exclusively inside the **HTTP Request Editor**:
+
+1. **Global Python plugins:** Managed in the **Python Plugins** workbench and selected automatically by matching rules.
+2. **Current-request scripts:** Bound to a single HTTP Request Editor tab.
+
+Both scopes can inspect or modify a request before transport and inspect or modify the returned response. Python hooks never run during MITM capture, resend, or in the WebSocket Client. A current-request script's source can be saved alongside an HTTP request in **API Collections**, but is never written to Settings, HAR, history, or HBIN data.
 
 Python plugin support is optional and disabled by default.
 
-## Choose a scripting scope
+## Contents
 
-| Scope | Best for | Configuration | Persistence |
+- [Choose a Scripting Scope](#choose-a-scripting-scope)
+- [In-App API Help and System Prompt](#in-app-api-help-and-system-prompt)
+- [Security Model](#security-model)
+- [Set Up Python](#set-up-python)
+- [Five-Minute Quick Start](#five-minute-quick-start)
+- [Create and Run a Global Plugin](#create-and-run-a-global-plugin)
+- [Configure Plugin Params](#configure-plugin-params)
+- [Use a Script for the Current Request](#use-a-script-for-the-current-request)
+- [Read Script Output in the Console](#read-script-output-in-the-console)
+- [Package Layout and Manifest](#package-layout-and-manifest)
+- [Matching Rules and Ordering](#matching-rules-and-ordering)
+- [Hook Contract](#hook-contract)
+- [Context API](#context-api)
+- [Request and Response API](#request-and-response-api)
+- [Body API](#body-api)
+- [Tested Examples](#tested-examples)
+- [Streaming, Size, and Failure Limits](#streaming-size-and-failure-limits)
+- [Logging and Diagnostics](#logging-and-diagnostics)
+- [Troubleshooting](#troubleshooting)
+
+## Choose a Scripting Scope
+
+| Scope | Best For | Configuration | Persistence |
 | --- | --- | --- | --- |
-| Global Python plugin | Reusable behavior for multiple requests or endpoints | Managed files, matching rules, per-plugin params, plugin order, and an enable switch | Saved by FlowLens and available in later sessions |
-| Current-request script | Testing or customizing one HTTP request | One script and a per-tab enable switch; no matching rules or configurable params | Source can be saved with an API Collection HTTP request; the enable switch is not saved and defaults off when reopened |
+| **Global Python plugin** | Reusable behavior across multiple requests or endpoints | Managed files, matching rules, per-plugin JSON params, execution order, and enable switch | Saved by FlowLens across sessions |
+| **Current-request script** | Testing or customizing a single HTTP request | Single script and per-tab enable switch; no matching rules or configurable params | Source saves with an API Collection HTTP request; enable switch is never saved and defaults off when reopened |
 
-Both scopes use the same synchronous `onRequest` and `onResponse` API. If you only want to try scripting, start with a current-request script. Use a global plugin when the behavior should be reusable or selected automatically by method and URL.
+Both scopes share the same synchronous `onRequest` and `onResponse` API. Start with a current-request script to experiment quickly, and promote reusable or rule-matched logic to a global plugin.
 
-## In-app API help and system prompt
+## In-App API Help and System Prompt
 
-Open **Python API Help** with the book icon in the **Python Plugins** sidebar heading or the HTTP Request Editor **Script** toolbar. Help is available even before Python is configured or a plugin is created. It slides in as a 420 px panel at the window's right edge and closes with Escape or a click beside it. Leaving the workbench or switching request tabs also closes help without changing the script.
+Open **Python API Help** using the book icon in the **Python Plugins** sidebar header or the HTTP Request Editor **Script** toolbar—even before configuring Python or creating a plugin. The 420 px panel slides in from the right edge and closes on `Esc`, an outside click, leaving the workbench, or switching request tabs without modifying your script.
 
-**Quick start** shows three setup steps and the essential hook behavior; expand the minimal script or runtime rules when needed. The searchable **API reference** groups interfaces by type and expands matching groups as you search. Signatures include parameters and return types; usage notes and import guidance can be expanded separately.
+- **Quick start:** Lists three setup steps and core hook behavior, with expandable sections for the minimal script and runtime rules.
+- **API reference:** Searchable interfaces grouped by type (matching groups expand automatically). Signatures include parameter and return types, with expandable usage notes and import guidance.
+- **Copy system prompt:** Copies the complete API v1 contract, runtime constraints, a minimal two-hook script template, and a requirement placeholder in the active UI language. The button you open help from determines whether the prompt targets a global plugin (`main.py`, Params, and matching rules) or a current-request script. Search text and the active help tab never truncate the copied prompt. Paste it into an AI assistant, replace the placeholder with your task, and review the generated code before enabling it. The prompt contains only product documentation and a template—never your plugin source, request data, or parameter values.
 
-**Copy system prompt** copies the complete API v1 contract, runtime constraints, a minimal script with both hooks, and a requirement placeholder in the current interface language. The opening entry determines whether the prompt explains global `main.py`, Params and matching rules, or the current-request script. Search and the selected help tab do not limit the copied prompt. Paste it into an AI tool and replace the requirement placeholder with your task; review the generated script before enabling it. The copied prompt contains product documentation and a template, without your plugin source, request data or parameter values.
+## Security Model
 
-## Security model
+Run only code you trust. Plugins execute as standard local Python code with the same operating-system user permissions as FlowLens: they can read and write local files, make network connections, spawn processes, import installed packages, and log sensitive data. FlowLens runs Workers in Python isolated mode (`-I`) for predictable imports, **not** as a security sandbox.
 
-Run only code you trust. Plugins are normal local Python code and run with the same operating-system user permissions as FlowLens. They can read and write local files, access the network, start processes, import installed packages, and expose data through logs. The Worker's isolated Python mode (`-I`) makes imports more predictable; it is not a security sandbox.
+Review both plugin source code and all third-party dependencies before enabling them. FlowLens never installs Python packages automatically.
 
-Review both the plugin source and every third-party dependency before enabling them. FlowLens does not install Python packages automatically.
+## Set Up Python
 
-## Set up Python
+Install CPython 3 or create a dedicated virtual environment to isolate plugin dependencies from other Python installations.
 
-Install CPython 3 or newer, or create a dedicated virtual environment. A dedicated environment keeps plugin dependencies separate from other Python applications.
-
-Windows:
+**Windows (PowerShell):**
 
 ```powershell
 py -3 -m venv C:\venvs\flowlens-plugins
 C:\venvs\flowlens-plugins\Scripts\python.exe -m pip install requests
 ```
 
-macOS or Linux:
+**macOS / Linux:**
 
 ```shell
 python3 -m venv "$HOME/.venvs/flowlens-plugins"
@@ -52,29 +79,27 @@ python3 -m venv "$HOME/.venvs/flowlens-plugins"
 Then configure FlowLens:
 
 1. Open **Settings > Python**.
-2. Select **Detect** to search platform registrations, `PATH`, the active environment, and common installation locations, then choose an interpreter. You can also choose an absolute executable path manually; for a virtual environment, choose its `python.exe` on Windows or `bin/python` on macOS/Linux.
-3. Select **Test** and confirm that FlowLens reports the interpreter as available.
-4. Set the per-hook timeout. The default is 5,000 ms; accepted values are 100–60,000 ms.
+2. Click **Detect** to scan platform registrations, `PATH`, the active environment, and common install locations, then select an interpreter—or pick an absolute executable path manually (`python.exe` on Windows or `bin/python` on macOS/Linux for virtual environments).
+3. Click **Test** and confirm FlowLens reports the interpreter as available.
+4. Configure the per-hook timeout (default `5,000 ms`, allowed range `100–60,000 ms`).
 5. Enable Python plugins and accept the trusted-code warning.
 
-Detection is bounded and does not scan the entire disk. Select a virtual environment manually when it is outside the active environment or common installation locations.
+### Interpreter Detection Notes
 
-On Windows, detection also searches Microsoft Store Python packages registered for the current user and existing runtimes listed by Python Install Manager. Store Python uses a package-specific execution alias such as `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`; FlowLens accepts this alias for detection, testing, and plugin execution. Prefer the detected alias over a versioned installation path under `C:\Program Files\WindowsApps`, which may change after a Store update. No WindowsApps permission changes are needed.
+- Detection is bounded and does not scan the entire disk; select custom virtual environments manually if they live outside common locations.
+- On Windows, detection also discovers current-user Microsoft Store Python packages and installed runtimes listed by Python Install Manager. Store Python exposes a package-specific execution alias such as `%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe`; FlowLens supports this alias for detection, testing, and execution. Prefer the detected alias over versioned paths under `C:\Program Files\WindowsApps`, which can change after Store updates (no `WindowsApps` permission changes are needed).
+- Only successfully probed CPython 3 runtimes appear in detection results. Global Store install shortcuts and Python Install Manager itself are excluded, and FlowLens disables automatic runtime installation during detection and execution. If only the manager is present, install a Python runtime yourself and run **Detect** again.
+- FlowLens does not enforce a specific Python 3 minor version—use **Test** to verify that the bundled Worker and SDK start cleanly under your chosen interpreter, and ensure your script syntax and third-party packages match it.
+- If runtime validation fails, FlowLens refuses to save the enabled state. FlowLens launches normally when Python is absent or the feature is disabled.
 
-Only successfully probed CPython 3 runtimes appear in the results. Global Store installation shortcuts and Python Install Manager itself are not automatic interpreter candidates. FlowLens disables the manager's automatic runtime installation during detection and plugin execution; if only the manager is installed, install a Python runtime yourself and detect again.
-
-FlowLens does not enforce a Python minor version. Use **Test** to verify that the bundled Worker and SDK can start in the selected interpreter. Plugin syntax and third-party dependencies must also be compatible with that interpreter.
-
-If runtime validation fails, FlowLens does not save the enabled state. FlowLens starts normally when Python is missing or the feature is disabled.
-
-## Five-minute quick start
+## Five-Minute Quick Start
 
 After configuring and enabling Python in **Settings > Python**:
 
-1. Open an HTTP Request Editor tab and select **Script**.
+1. Open an **HTTP Request Editor** tab and switch to the **Script** tab.
 2. Paste the script below and turn on the script switch.
 3. Send the request.
-4. Open the response-side **Console** tab. It should contain the request URL and response status.
+4. Open the response **Console** tab to see the logged request URL and response status.
 
 ```python
 from flowlens import *
@@ -91,26 +116,28 @@ def onResponse(context, response):
     return response
 ```
 
-This script changes only the request sent from that Request Editor tab. It does not affect ordinary captured traffic. Continue with the global-plugin workflow below when you want to reuse the behavior.
+This script affects only requests sent from that tab and never touches captured proxy traffic. To reuse logic across tabs, create a global plugin next.
 
-## Create and run a global plugin
+## Create and Run a Global Plugin
 
-1. Open the **Python Plugins** workbench and create a plugin.
-2. Edit `main.py`. Both `onRequest` and `onResponse` must be present, callable, synchronous functions.
-3. Add at least one enabled matching rule in the **Rules** tab.
-4. Optionally add a JSON object in **Params**. Params are available to both hooks as `context.params`.
+1. Open the **Python Plugins** workbench and create a new plugin.
+2. Edit `main.py` so both `onRequest` and `onResponse` are defined as callable, synchronous functions.
+3. Add at least one enabled matching rule under the **Rules** tab.
+4. Optionally define a JSON object under **Params** (accessible in both hooks via `context.params`).
 5. Save and validate the plugin, then enable it in the plugin list.
-6. Open an HTTP Request Editor tab and leave its global Python plugin switch on when sending.
+6. In an **HTTP Request Editor** tab, turn on the tab's global Python plugin switch before sending.
 
-The global-plugin switch in HTTP Request Editor is transient and defaults off for a new tab. It is a per-tab bypass only; it is not saved in API Collection requests. A global plugin runs only when the Python plugin master switch in Settings, the current request's global-plugin switch, the plugin's own switch, its validation state, and at least one rule all allow it.
+**Activation rules:**
 
-Saving or validating creates an immutable revision. A request send snapshots the matched plugin order, revision, and params before the first hook, so edits made during an in-flight request affect only later sends. If a changed package fails validation, the last good revision remains active.
+- The Request Editor's global-plugin switch is transient, defaults off on every new tab, and is not saved in API Collections (it acts solely as a per-tab bypass).
+- A global plugin runs only when all five conditions hold: the **Settings > Python** master switch is on, the tab's global-plugin switch is on, the plugin's own switch is on, the plugin has a valid revision, and at least one enabled rule matches.
+- Saving or validating creates an immutable revision. Every send snapshots matched plugin order, revisions, and params before the first hook executes, so concurrent edits affect only later sends. If an updated plugin fails validation, the last valid revision stays active.
 
-## Configure plugin params
+## Configure Plugin Params
 
-**Params** are configuration values for one global plugin. They are not HTTP query parameters and are not automatically added to the URL, headers, or body. They affect a request only when the plugin reads `context.params` and uses a value to change or block that request.
+**Params** hold per-plugin configuration for a global plugin. They are **not** HTTP query parameters and are never injected into the URL, headers, or body automatically; they take effect only when your code reads `context.params`.
 
-The Params editor accepts one JSON object. For example:
+Enter a single top-level JSON object in the **Params** editor:
 
 ```json
 {
@@ -120,7 +147,7 @@ The Params editor accepts one JSON object. For example:
 }
 ```
 
-Read the values from either hook:
+Read values in either hook:
 
 ```python
 def onRequest(context, request):
@@ -130,42 +157,47 @@ def onRequest(context, request):
     return request
 ```
 
-- Params are saved with the global plugin and are isolated from every other plugin.
-- Each request send receives a deeply read-only snapshot. Nested objects are read-only and JSON arrays appear as tuples.
-- Saving new params affects later sends, not a request that is already running.
-- The value must be a JSON object such as `{}`; arrays, strings, numbers, booleans, and `null` are not accepted as the top-level value.
-- The encoded object is limited to 1 MiB.
-- Current-request scripts have no Params editor and receive an empty `context.params` object.
+- Params persist with the global plugin and are isolated from all other plugins.
+- Each send receives a deeply read-only snapshot (nested objects are read-only; JSON arrays become Python `tuple`s).
+- Saving updated params affects only future sends, not in-flight requests.
+- The top-level value must be a JSON object (e.g., `{}`); arrays, strings, numbers, booleans, and `null` are rejected.
+- Maximum encoded size: `1 MiB`.
+- Current-request scripts have no Params editor and always receive an empty `context.params`.
 
-Use `context.shared`, not `context.params`, for mutable state that must pass from `onRequest` to `onResponse`. Params are persisted configuration rather than a secret store. FlowLens does not automatically send or log them, but plugin code can read, transmit, or print them, so avoid storing credentials unless you trust the complete script and its dependencies.
+Use `context.shared`—not `context.params`—for mutable state passed from `onRequest` to `onResponse`. Params are plain configuration rather than a secret vault: FlowLens does not transmit or log them automatically, but plugin code can read, send, or print them, so avoid storing secrets unless you trust the entire plugin and its dependencies.
 
-## Use a script for the current request
+## Use a Script for the Current Request
 
-For a single request, open the **Script** tab inside HTTP Request Editor, edit the template, and enable it. Saving or updating the HTTP request in API Collection writes the script source to SQLite. Reopening that request restores the source but always leaves the enable switch off, preventing persisted code from running automatically. Closing a new tab that has not been saved to API Collection still discards its script. The source is not written to Settings, HAR, history, or HBIN, and source edits count as unsaved tab changes. Both synchronous `onRequest` and `onResponse` hooks are required, just as they are for global plugins.
+Open the **Script** tab inside an HTTP Request Editor tab, edit the template, and enable the script switch:
 
-Current-request scripts share the configured interpreter, Worker pool, hook timeout, SDK, permissions, and trusted-code security model. The source is limited to 1 MiB. Each send receives an isolated temporary revision, so module globals are not reused by a later send; use `context.shared` to pass JSON state from the request hook to the response hook.
+- Saving or updating the HTTP request in **API Collections** persists the script source in SQLite. Reopening that request restores the source with the enable switch **off** to prevent saved code from executing automatically.
+- Closing an unsaved tab discards its script. Script source is never written to Settings, HAR, history, or HBIN, and script edits mark the tab as unsaved.
+- Both synchronous `onRequest` and `onResponse` functions are required, matching global plugins.
+- Current-request scripts share the configured interpreter, Worker pool, hook timeout, SDK, OS permissions, and trusted-code model. Maximum source size is `1 MiB`.
+- Each send loads an isolated temporary revision, so module globals never persist between sends; use `context.shared` for request-to-response JSON state.
 
-When global plugins and a current-request script are both active, request hooks run in this order:
-
-```text
-global plugins -> current-request script -> network
-```
-
-Response hooks unwind in the opposite order:
+When both global plugins and a current-request script are active, hooks execute as a nested wrapper around the network call:
 
 ```text
-network -> current-request script -> global plugins
+Request phase:   global plugins -> current-request script -> network
+Response phase:  network -> current-request script -> global plugins
 ```
 
-This places the current-request script closest to the network boundary. Turning off the global-plugin switch for the current request does not turn off its script; use the switch in the **Script** tab for that script.
+The current-request script sits closest to the network boundary. Disabling the tab's global-plugin switch does not disable its current-request script—toggle the switch inside the **Script** tab instead.
 
-## Read script output in the Console
+## Read Script Output in the Console
 
-The response-side **Console** tab streams `stdout`, `stderr`, and `context.log` entries while the current send is running. Entries are correlated by the send's execution ID, so output from other Request Editor tabs is excluded. The console renders the latest 1,000 entries for the tab's latest send in a virtualized log table with time, type, source, and Python output columns. Click a row to open its full text in a detail window, where wrapping, copying, and saving are available; the toolbar can also copy all output, save it to a local file, or clear the tab's current output. The console includes every global plugin and the current-request script in the same execution chain; global plugins use their plugin name, while the current-request script is shown as **Current script**. Each `print()` call becomes one log entry, and embedded newlines remain inside that entry.
+The response-side **Console** tab streams `stdout`, `stderr`, and `context.log` entries live while a send executes:
 
-## Package layout and manifest
+- Entries are tagged with the send's execution ID, isolating output per Request Editor tab.
+- The console displays up to the latest `1,000` entries for the tab's most recent send in a virtualized table showing time, level/type, source, and message.
+- Click any row to open the full entry in a detail window with wrap, copy, and save actions; the toolbar also supports copying all entries, saving to a file, or clearing the console.
+- All hooks in the execution chain appear together: global plugins use their plugin name, and the current-request script appears as **Current script**.
+- Each `print()` call produces one log entry, preserving embedded newlines inside that entry.
 
-FlowLens creates and owns each plugin directory:
+## Package Layout and Manifest
+
+FlowLens creates and manages each global plugin directory:
 
 ```text
 <plugin-id>/
@@ -174,15 +206,16 @@ FlowLens creates and owns each plugin directory:
 `-- helpers.py
 ```
 
-`main.py` is the fixed entry point. Import other files in the package relatively, for example:
+- `main.py` is the fixed entry point. Import sibling modules inside the plugin using relative imports:
 
 ```python
 from .helpers import build_token
 ```
 
-Workers load revisions under private module names. FlowLens currently uses two Worker processes, so module globals are not guaranteed to carry between calls. Use `context.shared` for request-to-response state and external storage for intentionally persistent state.
+- Workers load revisions under private module names. Because FlowLens runs two Worker processes, module globals are not guaranteed to persist across calls—use `context.shared` for per-request state and external files/storage for long-lived state.
+- There is no PyPI `flowlens` package to install; FlowLens injects the API v1 `flowlens` module directly into the Worker runtime.
 
-Manifest schema v1 is strict and rejects unknown fields:
+`manifest.json` uses strict schema v1 validation and rejects unknown fields:
 
 ```json
 {
@@ -194,26 +227,23 @@ Manifest schema v1 is strict and rejects unknown fields:
 }
 ```
 
-The `id` must be the canonical lowercase UUID assigned to the package and must match its managed directory. Prefer editing name and description through the FlowLens UI so the database and manifest stay consistent.
+The `id` must match the canonical lowercase UUID assigned to the managed directory. Prefer updating `name` and `description` through the FlowLens UI so SQLite and `manifest.json` stay in sync.
 
-There is no separate `flowlens` package to install with pip. FlowLens supplies the API v1 module to its Worker process.
+## Matching Rules and Ordering
 
-## Matching rules and ordering
+Each rule specifies an enabled switch, an HTTP method, and a URL wildcard pattern:
 
-A rule contains an enabled state, an HTTP method, and a URL wildcard:
+- **Method:** An uppercase HTTP token (such as `GET` or `POST`), or `*` to match any method.
+- **URL pattern:** Matched against the normalized full URL. `*` matches zero or more characters and `?` matches exactly one character (regular expressions are not supported). For standard absolute URL patterns, scheme and host are case-insensitive while path and query remain case-sensitive.
+- **Deduplication:** A plugin matched by multiple rules still executes only once per send.
+- **Single snapshot match:** All global plugins match once against the original method and URL before the first hook runs; mutating the URL in an earlier hook never adds or removes plugins from the current send.
+- **Execution order:** Request hooks run in plugin-list order; response hooks unwind in reverse order for middleware-style wrapping.
 
-- Method is an uppercase exact HTTP token such as `GET` or `POST`, or `*` for every method.
-- URL matching uses the normalized full URL. `*` matches zero or more characters and `?` matches exactly one character; regular expressions are not supported.
-- Scheme and host are case-insensitive for normal absolute URL patterns. Path and query matching remain case-sensitive.
-- A plugin with multiple matching rules still runs only once.
-- All plugins are matched once against the original HTTP method and URL. A preceding hook changing the URL does not change the already-snapshotted plugin set.
-- Request hooks run in plugin-list order. Response hooks run in the reverse order, which gives wrapper-style behavior.
+Example: method `GET` with `https://api.example.com/v?/items/*` matches `https://api.example.com/v1/items/42`.
 
-For example, `GET` plus `https://api.example.com/v?/items/*` matches `https://api.example.com/v1/items/42`.
+## Hook Contract
 
-## Hook contract
-
-The minimal plugin is:
+Minimal valid script:
 
 ```python
 from flowlens import *
@@ -227,106 +257,117 @@ def onResponse(context, response):
     return response
 ```
 
-Hooks must not be `async def` and must return the same SDK object they received or `None`:
+Hooks must be synchronous (`def`, never `async def`) and must return either the SDK object passed in or `None`:
 
-- `onRequest` returning `Request` continues to the next plugin and then transport.
-- `onRequest` returning `None` blocks the request before a network connection is opened.
-- `onResponse` returning `Response` continues the reverse response chain.
+- `onRequest` returning `request` passes the request to the next hook and then to transport.
+- `onRequest` returning `None` blocks the request before opening a network connection.
+- `onResponse` returning `response` continues the reverse response chain.
 - `onResponse` returning `None` marks the network response as blocked and suppresses its transformed presentation.
-- Returning another type, raising an exception, timing out, crashing, or producing invalid HTTP data fails the hook.
+- Returning any other type, raising an uncaught exception, timing out, crashing the Worker, or producing invalid HTTP data fails the hook.
 
-A Request-hook failure is fail-closed: no request is sent. A Response-hook failure is fail-open: FlowLens returns the untouched wire response with plugin diagnostics. Response mutations change the HTTP Request Editor result presentation; they do not rewrite captured wire truth or transport metrics.
+**Failure policies:**
+
+- **Request hooks fail closed:** No network request is sent.
+- **Response hooks fail open:** FlowLens returns the untouched wire response along with plugin diagnostics. Response mutations alter only the HTTP Request Editor's displayed result—they never rewrite captured wire truth or transport metrics.
 
 ## Context API
 
-`context` exposes these properties:
+`context` exposes the following properties:
 
-| Property | Type and semantics |
+| Property | Type and Semantics |
 | --- | --- |
-| `id` | Request execution ID. |
-| `timestamp` | Send start time as Unix microseconds. |
-| `original_url` | URL before any plugin mutation. |
-| `original_method` | Method before any plugin mutation. |
-| `plugin_id`, `plugin_name` | Current plugin identity. |
-| `params` | Deeply read-only values from the plugin's JSON object. JSON arrays appear as tuples. |
-| `transport` | Deeply read-only transport metadata. |
-| `shared` | Mutable, JSON-serializable object isolated to this plugin and request send. |
-| `log` | `debug`, `info`, `warning`, and `error` methods. |
+| `id` | Unique execution ID for this send. |
+| `timestamp` | Send start timestamp in Unix microseconds. |
+| `original_url` | Request URL prior to any plugin mutations. |
+| `original_method` | HTTP method prior to any plugin mutations. |
+| `plugin_id`, `plugin_name` | Identity of the active plugin. |
+| `params` | Deeply read-only snapshot of the plugin's JSON params (JSON arrays become tuples). |
+| `transport` | Deeply read-only transport metadata (`protocol`, `proxy_mode`, `tls_client_hello_profile`, `http2_fingerprint`; proxy credentials are excluded). |
+| `shared` | Mutable JSON-serializable object scoped to this plugin and send. |
+| `log` | Structured logger with `debug()`, `info()`, `warning()`, and `error()` methods. |
 
-`context.transport` contains `protocol`, `proxy_mode`, `tls_client_hello_profile`, and `http2_fingerprint`. Proxy credentials are not exposed.
+`context.shared` round-trips through Go after each hook and is restored for the same plugin during `onResponse`, even when executed by a different Worker process. It must remain a JSON object not exceeding `1 MiB` when encoded, and is never shared across different plugins or different sends.
 
-`context.shared` is returned to Go after each hook and passed back to that same plugin in the response phase, even if a different Worker executes it. It must remain a JSON object and its encoded size must not exceed 1 MiB. State is not shared between different plugins or different sends.
+## Request and Response API
 
-## Request and response API
+### `request`
 
-`request` has mutable `method`, `url`, `path`, `queries`, `headers`, and `body` properties. `scheme`, `host`, `port`, and `content_type` are read-only views derived from the current URL and headers. Assigning `url` reparses `path` and `queries`; changing `path` or `queries` rebuilds `url`. The final result is revalidated and then passed through the existing request URL, generated-header, framing, content-encoding, proxy, protocol, TLS, and fingerprint pipeline. Methods must remain uppercase and generated/pseudo/framing headers remain authoritative.
+- **Mutable properties:** `method`, `url`, `path`, `queries`, `headers`, `body`.
+- **Read-only derived views:** `scheme`, `host`, `port`, `content_type`.
+- **URL synchronization:** Assigning `url` reparses `path` and `queries`; mutating `path` or `queries` rebuilds `url`.
+- **Normalization:** The final request is revalidated and fed into FlowLens's request pipeline (URL routing, generated headers, framing, content encoding, proxy, protocol, TLS, and HTTP/2 fingerprint). Methods must stay uppercase, and FlowLens retains ownership of pseudo-headers, generated headers, and framing headers.
 
-`response` has mutable `code`, `headers`, `trailers`, and `body` properties. `protocol` is the actual upstream response protocol, such as `HTTP/1.1` or `HTTP/2.0`, and is read-only. `status_text` initially preserves the upstream status line text and is also read-only; assigning a different `code` updates it to the standard text for the new code. `content_type` is also read-only.
+### `response` and `response.request`
 
-`response.request` is a read-only semantic snapshot of the request handed to transport. It exposes `method`, `url`, `scheme`, `host`, `port`, `path`, `queries`, `content_type`, `headers`, and `body`. The snapshot does not expose FlowLens body-storage fields or managed temporary-file paths.
+- **Mutable properties on `response`:** `code`, `headers`, `trailers`, `body`.
+- **Read-only properties on `response`:** `protocol` (actual upstream protocol such as `HTTP/1.1` or `HTTP/2.0`), `status_text` (initial upstream reason phrase; automatically updated to standard text if `code` changes), and `content_type`.
+- **`response.request`:** Read-only semantic snapshot of the request handed to transport (`method`, `url`, `scheme`, `host`, `port`, `path`, `queries`, `content_type`, `headers`, `body`). It never exposes FlowLens storage internals or managed temporary-file paths.
 
-`Headers` preserves field order, duplicate names, original casing, and empty values. Name lookup is case-insensitive:
+### `Headers`
 
-| Operation | Behavior |
+Preserves field order, duplicate names, original casing, and empty values. Lookups are case-insensitive:
+
+| Method | Behavior |
 | --- | --- |
-| `headers.get(name, default=None)` | Return the first matching value. |
-| `headers.get_all(name)` | Return all matching values in field order. |
-| `headers.set(name, value)` | Replace all matches at the first match position, or append. |
-| `headers.add(name, value)` | Append another field, including a duplicate. |
-| `headers.remove(name)` | Remove every matching field. |
-| `headers.clear()` | Remove every field. |
+| `headers.get(name, default=None)` | Returns the first matching value, or `default`. |
+| `headers.get_all(name)` | Returns all matching values in field order. |
+| `headers.set(name, value)` | Replaces all matches at the first match's position, or appends if absent. |
+| `headers.add(name, value)` | Appends a new field (allowing duplicates). |
+| `headers.remove(name)` | Removes every matching field. |
+| `headers.clear()` | Removes all fields. |
 
-Iteration yields `HeaderField` objects with mutable `name` and `value`. The frozen request snapshot instead yields `(name, value)` tuples.
+Iterating mutable `headers` yields `HeaderField` objects with mutable `name` and `value`. Iterating `response.request.headers` yields `(name, value)` tuples.
 
-`Queries` preserves field order, duplicate names, empty values, and an unchanged URL's original query encoding. Query names are case-sensitive:
+### `Queries`
 
-| Operation | Behavior |
+Preserves parameter order, duplicate names, empty values, and—while untouched—the original URL query encoding. Parameter names are case-sensitive:
+
+| Method | Behavior |
 | --- | --- |
-| `queries.get(name, default=None)` | Return the first matching decoded value. |
-| `queries.get_all(name)` | Return all matching decoded values in order. |
-| `queries.set(name, value)` | Replace all matches at the first match position, or append. |
-| `queries.add(name, value)` | Append another field, including a duplicate. |
-| `queries.remove(name)` | Remove every matching field. |
-| `queries.clear()` | Remove every field. |
-| `queries.to_string()` | Return the query string without the leading `?`. |
+| `queries.get(name, default=None)` | Returns the first matching decoded value, or `default`. |
+| `queries.get_all(name)` | Returns all matching decoded values in order. |
+| `queries.set(name, value)` | Replaces all matches at the first match's position, or appends if absent. |
+| `queries.add(name, value)` | Appends a new parameter (allowing duplicates). |
+| `queries.remove(name)` | Removes every matching parameter. |
+| `queries.clear()` | Removes all parameters. |
+| `queries.to_string()` | Returns the encoded query string without a leading `?`. |
 
-Iteration over mutable queries yields `QueryField` objects. The frozen request snapshot yields `(name, value)` tuples and only supports `get`, `get_all`, and `to_string`. Once queries are modified, FlowLens encodes the rebuilt query with Python's standard URL encoding rules; for example, a space becomes `+`.
+Iterating mutable `queries` yields `QueryField` objects. `response.request.queries` yields `(name, value)` tuples and exposes only `get`, `get_all`, and `to_string`. Once modified, FlowLens re-encodes the query using Python's standard URL encoding rules (for example, spaces encode as `+`).
 
-`content_type` is a read-only view of the first `Content-Type` header on `request`, `response`, and `response.request`. For a non-empty request Body, FlowLens replaces the outgoing value according to the final Body kind. To change a response Content-Type, use `response.headers.set("Content-Type", value)` or `response.headers.remove("Content-Type")`.
+### `content_type`
+
+`content_type` is a read-only view of the first `Content-Type` header on `request`, `response`, and `response.request`. For any non-empty request body, FlowLens sets the outgoing `Content-Type` from the final body kind. To alter a response's `Content-Type`, call `response.headers.set("Content-Type", value)` or `response.headers.remove("Content-Type")`.
 
 ## Body API
 
 `Body` exposes two read-only semantic properties:
 
-| Member | Semantics |
+| Property | Semantics |
 | --- | --- |
-| `kind` | `none`, `text`, `json`, `xml`, `binary`, `file`, `urlencoded`, `multipart`, or `unavailable`. |
-| `value` | The Python value associated with `kind`. Reading ordinary content may materialize the complete Body in Worker memory. |
+| `kind` | One of `none`, `text`, `json`, `xml`, `binary`, `file`, `urlencoded`, `multipart`, or `unavailable`. |
+| `value` | Python representation for `kind`. Reading ordinary bodies may load the entire body into Worker memory. |
 
-The value types are:
+Value types by `kind`:
 
-| `kind` | `value` |
+| `kind` | `value` Type |
 | --- | --- |
 | `none` | `None` |
 | `text`, `xml` | `str` |
-| `json` | A decoded JSON value, normally `dict` or `list` |
+| `json` | Decoded JSON value (typically `dict` or `list`) |
 | `binary` | `bytes` |
-| `file` | Read-only `FileDescriptor` with `path`, `name`, and `size` |
+| `file` | Read-only `FileDescriptor` (`path`, `name`, `size`) |
 | `urlencoded` | Mutable `list[URLEncodedField]` |
 | `multipart` | Mutable `list[MultipartPart]` |
-| `unavailable` | Reading raises `ValueError` |
+| `unavailable` | Raises `ValueError` on read |
 
-FlowLens may transparently store large text, JSON, XML, or binary content in a managed file. This does not change `kind`; reading `value` still returns the semantic `str`, JSON value, or `bytes` and may load all content into memory. The `file` kind is different: it represents a user-selected request file, so its value remains a `FileDescriptor`.
+- **Transparent large-body backing:** FlowLens may back large `text`, `json`, `xml`, or `binary` bodies with managed files transparently without changing `kind`. Reading `value` still returns `str`, decoded JSON, or `bytes` (materializing it in memory). By contrast, `file` represents a user-selected upload file and keeps a `FileDescriptor` value.
+- **Multipart parts:** Each `MultipartPart` has mutable `enabled`, `name`, `value`, `file`, and `filename` properties (`filename` is independent of the descriptor's source filename). FlowLens builds each part's `Content-Disposition` from `name` and `filename` (falling back to the descriptor name for file parts) and uses `application/octet-stream` for file parts.
+- **Frozen request body (`response.request.body`):** Read-only `BodySnapshot` preserving `kind`. Ordinary values are immutable snapshots; `file` values and multipart file parts expose path-free `FileSnapshot` objects (`name`, `size`). Use `response.request.body.write_file(absolute_path)` to copy readable ordinary or file bodies without touching managed paths.
+- **Response kind inference:** Determined from `Content-Type` and received bytes—valid JSON becomes `json`; valid UTF-8 with `application/xml`, `text/xml`, or `*+xml` becomes `xml`; binary media types or invalid UTF-8 become `binary`; remaining valid UTF-8 becomes `text`.
 
-Each `MultipartPart` has mutable `enabled`, `name`, `value`, `file`, and `filename` properties. `filename` is independent from the descriptor's source name. FlowLens generates each part's `Content-Disposition` from `name` and `filename`, falling back to the descriptor name for a file part. File parts use `application/octet-stream` as their `Content-Type`.
+### Direct Assignment
 
-`response.request.body` is a read-only `BodySnapshot`. Its `kind` keeps the same semantic meaning. Ordinary values are immutable snapshots; a `file` value is a `FileSnapshot` exposing only `name` and `size`, and multipart file parts use the same path-free snapshot. Call `response.request.body.write_file(absolute_path)` to copy a readable ordinary or file Body without accessing its managed storage path. As with `Body`, reading a large ordinary snapshot value may materialize it completely in Worker memory.
-
-Response kinds are inferred from `Content-Type` and the received bytes. Valid JSON responses use `json`; valid UTF-8 responses with `application/xml`, `text/xml`, or a media type ending in `+xml` use `xml`; binary media types or invalid UTF-8 use `binary`; other UTF-8 responses use `text`.
-
-### Direct assignment
-
-Assign common Python values directly to either a request or response Body:
+Assign ordinary Python values directly to `request.body` or `response.body`:
 
 ```python
 request.body = None
@@ -336,17 +377,17 @@ request.body = {"name": "FlowLens", "enabled": True}
 request.body = ["one", "two"]
 ```
 
-| Assigned value | Result |
+| Assigned Value | Resulting Body |
 | --- | --- |
-| `None` | Empty Body |
-| `str` | UTF-8 text |
-| `bytes`, `bytearray`, or `memoryview` | Binary Body |
-| `dict` or `list` | Compact JSON Body |
-| `Body` | Explicit semantic kind, or reuse an existing Body |
+| `None` | Empty body (`none`) |
+| `str` | UTF-8 text (`text`) |
+| `bytes`, `bytearray`, or `memoryview` | Binary body (`binary`) |
+| `dict` or `list` | Compact JSON body (`json`) |
+| `Body` | Explicit semantic kind or existing `Body` instance |
 
-Other values raise `TypeError`. During request normalization, FlowLens derives the outgoing `Content-Type` from the final non-empty Body kind and replaces any existing value. Clearing a Body does not remove an existing `Content-Type`; remove that header explicitly when necessary.
+Other types raise `TypeError`. During request normalization, FlowLens derives outgoing `Content-Type` from a non-empty final body kind and replaces any existing value. Clearing a body (`None`) does not delete an existing `Content-Type`; remove it explicitly if needed.
 
-Use an explicit `Body` when an ordinary Python value cannot identify the intended kind:
+Construct an explicit `Body` whenever a plain Python value cannot convey the intended kind:
 
 ```python
 request.body = Body("xml", "<root>FlowLens</root>")
@@ -371,9 +412,9 @@ request.body = Body(
 )
 ```
 
-`kind` and `value` cannot be reassigned on an existing Body. To replace content, assign a new value or `Body` to `request.body` or `response.body`. Structured item objects and their containing lists remain mutable.
+`kind` and `value` cannot be mutated directly on an existing `Body`—assign a new value or `Body` to `request.body` or `response.body` instead (though structured `urlencoded`/`multipart` lists and items are mutable in place).
 
-For JSON, read the value, modify it, and assign it back. Reassignment is important because a large JSON Body may have been materialized from a managed file:
+For JSON bodies, always assign the modified object back (essential when a large JSON body was materialized from a managed file):
 
 ```python
 value = request.body.value
@@ -384,11 +425,11 @@ if isinstance(value, dict):
     request.body = value
 ```
 
-### File workflow and memory responsibility
+### File Workflow and Memory Responsibility
 
-The public API has no Body-size threshold or storage mode. Reading `value` for ordinary content may load the complete Body into Python memory. The script author owns that memory use and the time it consumes within the hook deadline.
+The public API exposes no body-size threshold or storage mode. Accessing `body.value` on ordinary content may load the entire payload into Python memory, and the script author is responsible for that memory footprint and processing time within the hook timeout.
 
-Use `write_file(path)` to copy raw Body bytes to an absolute destination without first materializing them. To replace a Body from a local file, construct a `FileDescriptor` and explicitly select the semantic kind:
+To process large bodies without loading them into memory, export raw bytes with `write_file(absolute_path)` and replace the body via `FileDescriptor.from_file(absolute_path)` with an explicit kind:
 
 ```python
 response.body.write_file("C:/response-original.bin")
@@ -404,45 +445,41 @@ response.body = Body(
 )
 ```
 
-`FileDescriptor.from_file(path)` validates the path and reads the file's name and size. Use it with `Body("file", ...)` when a request should keep the semantic `file` kind, or as a `MultipartPart` file, as shown in [Direct assignment](#direct-assignment).
-
-Descriptor-backed request Bodies support `text`, `json`, `xml`, `binary`, and `file`. Descriptor-backed response Bodies support `text`, `json`, `xml`, and `binary`; `file` and `multipart` are request-only. `write_file()` does not support URL-encoded or multipart Bodies.
-
-The kind is always explicit; there is no extension-based inference. Assigning the path string itself creates a text Body rather than reading the file:
+- `FileDescriptor.from_file(path)` validates the path and populates `name` and `size`. Use it with `Body("file", ...)` to preserve the semantic `file` kind, or inside a `MultipartPart`.
+- Descriptor-backed **request** bodies support `text`, `json`, `xml`, `binary`, and `file`. Descriptor-backed **response** bodies support `text`, `json`, `xml`, and `binary` (`file` and `multipart` are request-only). `write_file()` does not support `urlencoded` or `multipart` bodies.
+- Body kind is always explicit—there is no filename-extension inference, and assigning a path string creates a `text` body containing the string itself:
 
 ```python
 request.body = Body("binary", FileDescriptor.from_file("C:/files/request.bin"))
-request.body = "C:/files/request.bin"  # text containing the path
+request.body = "C:/files/request.bin"  # creates a text body containing the literal path
 ```
 
-### Temporary-file ownership and failures
+### Temporary-File Ownership and Failures
 
-- Paths passed to `FileDescriptor.from_file()` must be absolute, non-symlink regular files. Close writers before constructing the descriptor.
-- Assigning `Body(kind, descriptor)` to a request or response copies the source into managed temporary storage before the assignment returns. The script may then delete its source, including on Windows.
-- New multipart file parts are mutable list items and therefore stage during request serialization rather than owner assignment. Do not delete or replace their source before the hook returns.
-- FlowLens removes managed files after success, blocking, hook failure, timeout, cancellation, or Worker exit.
-- Invalid request files fail closed. Invalid response files fail open and return the untouched response with diagnostics.
-- An `unavailable` or streaming SSE Body rejects reads and modification. Python never receives SSE event chunks.
+- Paths passed to `FileDescriptor.from_file()` must be absolute paths to non-symlink regular files, with any writers closed beforehand.
+- Assigning `Body(kind, descriptor)` copies the file into FlowLens-managed temporary storage before the assignment returns, so your script can immediately delete its source file (including on Windows).
+- New `MultipartPart` file items are staged during request serialization rather than at list insertion—keep their source files intact until `onRequest` returns.
+- FlowLens cleans up all managed temporary files after success, blocking, hook error, timeout, cancellation, or Worker exit.
+- Invalid request files fail closed; invalid response files fail open (returning the untouched wire response with diagnostics).
+- `unavailable` (SSE) bodies reject all reads and writes; SSE chunks never pass through Python.
 
-## Tested examples
+## Tested Examples
 
-The following copy-ready files are executed by the real-CPython Worker integration tests.
+All example files under `docs/examples/python-plugins/` are executed directly by FlowLens's real-CPython Worker integration tests.
 
-### Handling different Body kinds
+### Handling Different Body Kinds
 
-[`docs/examples/python-plugins/body-kinds.py`](../examples/python-plugins/body-kinds.py) demonstrates every request Body kind plus the `unavailable` SSE response state. The important patterns are:
+[`docs/examples/python-plugins/body-kinds.py`](../examples/python-plugins/body-kinds.py) handles every request body kind plus the `unavailable` SSE response state:
 
-- `none`: assign `None` to clear it, or assign another ordinary Python value to replace it.
-- `text`: `value` is `str`; assign the replacement string to `request.body` or `response.body`.
-- `xml`: `value` is `str`; use `Body("xml", value)` for inline XML or `Body("xml", FileDescriptor.from_file(absolute_path))` for file-sourced XML.
-- `json`: `value` is decoded JSON; after editing, assign it back to the owner Body.
+- `none`: Assign `None` to clear or any supported Python value to populate.
+- `text`: `value` is `str`; assign a replacement string directly.
+- `xml`: `value` is `str`; assign `Body("xml", value)` or `Body("xml", FileDescriptor.from_file(absolute_path))`.
+- `json`: `value` is decoded JSON; mutate and assign it back.
 - `binary`: `value` is `bytes`; assign bytes directly or use `Body("binary", FileDescriptor.from_file(absolute_path))`.
-- `file`: this request semantic kind represents a user-selected file. `value` is a read-only `FileDescriptor`; create a replacement with `Body("file", FileDescriptor.from_file(absolute_path))`, or use `write_file()` to copy existing bytes without materializing them.
-- `urlencoded`: `body.value` is a mutable `list[URLEncodedField]`; edit fields or append `URLEncodedField("name", "value")`.
-- `multipart`: `body.value` is a mutable `list[MultipartPart]`; append text with `MultipartPart("name", "value")` or files with `MultipartPart("upload", file=FileDescriptor.from_file(absolute_path), filename="upload.bin")`. Existing upload parts expose a read-only `part.file` descriptor, while `part.filename` remains independently editable.
-- `unavailable`: this appears only for an SSE response. Do not access or replace the Body; change only the status or headers before streaming begins.
-
-For example, structured request Bodies are edited as objects rather than raw bytes:
+- `file`: User-selected upload file (`value` is a read-only `FileDescriptor`); replace via `Body("file", FileDescriptor.from_file(absolute_path))`, or copy raw bytes with `write_file()`.
+- `urlencoded`: `value` is a mutable `list[URLEncodedField]`; edit fields or append `URLEncodedField("name", "value")`.
+- `multipart`: `value` is a mutable `list[MultipartPart]`; append `MultipartPart("name", "value")` or `MultipartPart("upload", file=FileDescriptor.from_file(absolute_path), filename="upload.bin")`. Existing file parts expose a read-only `part.file` descriptor with an independently editable `part.filename`.
+- `unavailable`: Appears only on SSE responses. Modify only status or headers before streaming begins.
 
 ```python
 if request.body.kind == "urlencoded":
@@ -454,11 +491,9 @@ elif request.body.kind == "multipart":
     )
 ```
 
-FlowLens's internal transport representation does not change `kind` and is intentionally invisible to scripts. The complete example covers every existing kind and restricts `unavailable` handling to response headers.
+### Header Injection, JSON Mutation, and `context.shared`
 
-### Header injection, JSON mutation, and `context.shared`
-
-[`docs/examples/python-plugins/header-json-shared.py`](../examples/python-plugins/header-json-shared.py) injects a request header, mutates JSON in both phases, and carries a flag to the response hook:
+[`docs/examples/python-plugins/header-json-shared.py`](../examples/python-plugins/header-json-shared.py) injects a request header, updates JSON in both phases, and passes state via `context.shared`:
 
 ```python
 import json
@@ -503,7 +538,7 @@ def onResponse(context, response):
     return response
 ```
 
-Use this params object:
+Example params:
 
 ```json
 {
@@ -511,9 +546,9 @@ Use this params object:
 }
 ```
 
-### Request blocking
+### Request Blocking
 
-[`docs/examples/python-plugins/block-request.py`](../examples/python-plugins/block-request.py) returns `None` for a configured URL prefix:
+[`docs/examples/python-plugins/block-request.py`](../examples/python-plugins/block-request.py) returns `None` when the URL matches a configured prefix:
 
 ```python
 from flowlens import *
@@ -539,14 +574,15 @@ Example params:
 }
 ```
 
-### File-based large-Body processing and replacement
+### File-Based Large-Body Processing and Replacement
 
-[`docs/examples/python-plugins/large-body-file.py`](../examples/python-plugins/large-body-file.py) uses `write_file()` before processing request and response Bodies with ordinary Python file APIs:
+Excerpt from [`docs/examples/python-plugins/large-body-file.py`](../examples/python-plugins/large-body-file.py), using `write_file()` and chunked Python file I/O (the complete file also skips empty, structured, and unavailable bodies and defines `_new_temp_path`):
 
 ```python
+from flowlens import *
+
 import hashlib
 import os
-import tempfile
 
 
 def onRequest(context, request):
@@ -582,17 +618,17 @@ def onResponse(context, response):
     return response
 ```
 
-The complete example skips empty, structured, and unavailable Bodies and is executed by the real-CPython integration test. The script owns and removes its working files; assigning the descriptor-backed Body copies the finished replacement before the assignment returns.
+Your script owns and cleans up its temporary working files; assigning the descriptor-backed `Body` copies the replacement file into FlowLens-managed storage before returning.
 
-### Third-party package import
+### Third-Party Package Import
 
-Install a dependency with the exact interpreter selected in Settings:
+Install packages into the exact Python interpreter configured in **Settings > Python**:
 
 ```shell
 /absolute/path/to/python -m pip install requests
 ```
 
-Then import the dependency in your plugin:
+Then import them normally:
 
 ```python
 from flowlens import *
@@ -609,39 +645,36 @@ def onResponse(context, response):
     return response
 ```
 
-FlowLens has no automatic dependency installer and v1 uses one configured interpreter for every plugin. Restart or reload the Python runtime after changing packages if an existing Worker has already cached imports.
+API v1 uses one shared interpreter for all plugins and never installs dependencies automatically. Reload the Python runtime or restart FlowLens after installing or upgrading packages if running Workers have cached earlier imports.
 
-## Streaming, size, and failure limits
+## Streaming, Size, and Failure Limits
 
-- SSE response hooks run after status and headers arrive but before FlowLens starts forwarding events. `response.body.kind` is `unavailable`.
-- SSE hooks may change only status and headers. Chunks never pass through Python, and response trailer or body mutation is rejected. Returning `None` blocks the response before streaming starts.
-- Reading `body.value` for ordinary content may materialize the complete Body in Python memory. The script author is responsible for the resulting memory use and hook time.
-- FlowLens may transparently use managed files while transporting Body data to and from a Worker. This is not a public storage mode. Use `write_file()` and ordinary Python file APIs when file-based processing is preferable.
-- A Worker protocol frame is limited to 64 MiB.
-- `context.shared` and the params JSON object are each limited to 1 MiB.
-- One managed source file is limited to 32 MiB and a complete plugin package to 64 MiB.
-- Each hook has the configured 100–60,000 ms deadline. A timed-out, canceled, crashed, or protocol-corrupt Worker is terminated and replaced.
-- Hooks are synchronous. Blocking file or network I/O consumes the hook timeout.
+- **SSE responses:** `onResponse` runs after status and headers arrive, before event streaming begins, with `response.body.kind == "unavailable"`. Hooks may modify only `code` and headers (or return `None` to block before streaming); event chunks never enter Python, and trailer/body mutations are rejected.
+- **Memory and spooling:** Reading `body.value` on ordinary content may materialize the full body in Python memory. FlowLens may transparently spool large bodies to managed files during Worker transport, which is not a public storage mode—use `write_file()` when file-based streaming is preferred.
+- **Worker protocol frame limit:** `64 MiB`.
+- **`context.shared` and params JSON limits:** `1 MiB` each.
+- **Source size limits:** `32 MiB` per managed plugin file, `64 MiB` per complete plugin package, and `1 MiB` for a current-request script.
+- **Hook deadline:** Configurable from `100` to `60,000 ms` (default `5,000 ms`). Timed-out, canceled, crashed, or protocol-corrupt Workers are terminated (including child process trees on Windows) and replaced automatically.
+- **Synchronous execution:** Blocking file or network I/O counts toward the hook deadline.
 
-## Logging and diagnostics
+## Logging and Diagnostics
 
-Use `context.log.debug()`, `info()`, `warning()`, or `error()`. `print()`, `sys.stdout.write()`, and `sys.stderr.write()` preserve embedded newlines within each call instead of splitting them into separate entries. `print()` and stdout are captured as `info`; stderr is captured as `error`. Execution output is shown in the HTTP Request Editor **Console** tab for the current send. The plugin workbench intentionally has no separate log history: rules, params, files, and validation stay in the workbench, while runtime output stays with the request execution that produced it.
-
-Do not use `os.write(1, ...)`, `sys.__stdout__`, or let child processes inherit the Worker's stdout. These paths bypass the log wrapper and can write non-protocol bytes into the Worker channel, causing execution failure. `os.write(2, ...)`, `sys.__stderr__`, and child-process stderr inheritance also bypass the Console and remain only in the Worker's diagnostic stderr.
-
-Hook outcomes, matched revisions, per-phase durations, transformations, and sanitized diagnostics appear with the HTTP Request Editor result. Log messages are your plugin's responsibility and may contain sensitive data, so avoid printing credentials or request bodies.
+- Use `context.log.debug()`, `info()`, `warning()`, or `error()`, or standard `print()` / `sys.stdout.write()` (`info`) and `sys.stderr.write()` (`error`). Multi-line writes stay within a single log entry rather than splitting per line.
+- Runtime output appears exclusively in the active HTTP Request Editor tab's **Console** tab. The **Python Plugins** workbench intentionally maintains no separate log history.
+- **Do not bypass the log wrapper:** Never call `os.write(1, ...)`, write to `sys.__stdout__`, or allow child processes to inherit Worker `stdout`—non-protocol bytes written to stdout corrupt the Worker channel and fail execution. Direct `os.write(2, ...)`, `sys.__stderr__`, and inherited child `stderr` bypass the Console and remain in Worker diagnostic stderr only.
+- Hook outcomes, matched revisions, phase durations, transformations, and sanitized diagnostics appear alongside the Request Editor response. Avoid printing credentials or sensitive payloads in plugin logs.
 
 ## Troubleshooting
 
-- **Enabling Python plugins fails:** select an absolute path to a Python 3 executable or a Windows Store Python execution alias and run **Test**. For a venv, select that venv's interpreter, not its directory. If Store Python has been removed or its alias is unavailable, reinstall it or choose another interpreter and detect again.
-- **Validation reports an import error:** install the dependency with `selected-python -m pip install ...`. For files inside the plugin package, use a relative import such as `from .helpers import value`.
-- **The plugin does not run:** check the Python plugin master switch in Settings, the global-plugin switch in the HTTP Request Editor tab, the plugin switch, the validation marker, and at least one enabled rule. Matching uses the original full URL.
-- **Params have no effect:** save a top-level JSON object, then read it through `context.params` in the plugin. Params are configuration and are never added to the HTTP request automatically.
-- **The Console is empty:** send the request again after enabling the relevant global plugin or current-request script, and make sure the hook calls `print()` or `context.log`. The Console shows only the latest send from its own Request Editor tab.
-- **A current-request script disappeared:** only HTTP requests saved or updated in API Collection persist their script source; closing an unsaved new tab discards it. A reopened saved request leaves the script disabled until you turn it on. Use a global plugin to reuse behavior across requests.
-- **A response Body is unavailable:** the response is SSE. Restrict that hook to `code` and headers; ordinary responses remain available through the Body API.
-- **Body processing uses too much memory:** avoid reading `body.value` for that Body. Export it with `write_file()` and process the resulting file with ordinary Python APIs instead.
-- **`FileDescriptor.from_file()` or a descriptor-backed Body assignment fails:** close the source writer, pass an absolute non-symlink regular-file path, and keep the copy within the hook timeout.
-- **Edits fail validation:** the last good immutable revision stays active. Correct the saved source and validate again; unsaved editor content remains local to the current FlowLens window.
+- **Cannot enable Python plugins:** Provide an absolute path to a Python 3 executable (or a Windows Store Python execution alias) and click **Test**. For a virtual environment, select the interpreter executable rather than the venv folder. If a Store Python alias is broken, reinstall Store Python or detect another runtime.
+- **Validation reports an import error:** Install third-party packages via `<selected-python> -m pip install ...`. For sibling files inside a plugin package, use relative imports (`from .helpers import value`).
+- **Plugin never runs:** Verify all five gates—the Settings master switch, the Request Editor tab's global-plugin switch, the plugin's own switch, a valid revision marker, and at least one enabled rule matching the original full URL.
+- **Params have no effect:** Save a valid top-level JSON object in **Params** and explicitly read it via `context.params` in your hook.
+- **Console is empty:** Re-send the request after enabling the global plugin or current-request script, and verify your hook calls `print()` or `context.log`. The Console shows only the latest send for its own tab.
+- **Current-request script disappeared:** Only requests saved to **API Collections** persist their script source; closing an unsaved tab discards it. Reopened saved requests always start with the script switch off.
+- **Response body is `unavailable`:** The response is SSE—restrict `onResponse` to `code` and headers.
+- **High memory usage when handling bodies:** Stop reading `body.value` directly; export with `write_file()` and process the file in chunks.
+- **`FileDescriptor.from_file()` or descriptor-backed assignment fails:** Ensure the source file writer is closed, the path is an absolute non-symlink regular file, and copying completes within the hook timeout.
+- **Edits fail validation:** The previous valid immutable revision stays active. Fix the saved source and revalidate; unsaved editor changes remain local to the current window.
 
-Plugin package import/export, automatic dependency installation, regex rules, directory watching, asynchronous hooks, and per-plugin interpreters are not part of API v1.
+Plugin package import/export, automatic dependency installation, regex matching rules, filesystem watching, asynchronous hooks, and per-plugin interpreters are out of scope for API v1.

@@ -1,291 +1,335 @@
 # FlowLens User Guide
 
-This guide covers day-to-day use of FlowLens. For installation, start with the [README](../README.md).
+This guide covers day-to-day workflows in FlowLens. For installation and building from source, see the [README](../README.md).
 
-Capture, history, categories, API Collections, rewrite rules, Python plugins, and memory statistics share one workbench window. Settings open in a separate window.
+Capture, history, categories, API Collections, rewrite rules, Python plugins, and memory statistics share a single workbench window; settings open in a separate window. The interface uses compact controls, toolbars, and table rows to maximize visible content. Drag the sidebar divider to resize the sidebar, or click the active navigation icon to collapse it. Interface and code font sizes can be adjusted independently in **Settings > General**.
 
-The interface uses compact controls, toolbars, and data rows to keep more content visible. Drag the sidebar divider to adjust its width, or click the active navigation icon to collapse it. Interface and code font sizes remain independently adjustable in **Settings > General**.
+## Contents
+
+- [Set Up Capture](#set-up-capture)
+- [Inspect Traffic](#inspect-traffic)
+- [History and HAR](#history-and-har)
+- [Request Editor and WebSocket Client](#request-editor-and-websocket-client)
+- [API Collections](#api-collections)
+- [Rewrite Rules](#rewrite-rules)
+- [Python Plugins](#python-plugins)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Windows and Tray](#windows-and-tray)
+- [Settings, Logs, and Storage](#settings-logs-and-storage)
+- [Update FlowLens](#update-flowlens)
+- [Security](#security)
 
 ## Set Up Capture
 
-Start the proxy from the toolbar and configure your client to use it. Defaults:
+Start the proxy from the toolbar and point your client to its listener address.
 
 | Setting | Default |
 | --- | --- |
-| Mode | HTTP |
+| Mode | `HTTP` |
 | Host | `127.0.0.1` |
 | Port | `8080` |
 | Process attribution | Enabled |
-| Upstream proxy | System Proxy |
-| Use built-in CA certificate | Enabled for new installations |
+| Upstream proxy | `System Proxy` |
+| Use built-in CA certificate | Enabled on new installations |
 
-Changing the listener, proxy mode, or CA may require restarting the running proxy. Listening on `ALL` (`0.0.0.0`) exposes the proxy to every device that can reach this machine.
+Changing the listener address, proxy mode, or CA certificate may require restarting a running proxy. Listening on `ALL` (`0.0.0.0`) exposes the proxy to every device that can reach this machine.
 
-Upstream proxy modes: `No Proxy` sends traffic directly, `System Proxy` uses the operating-system or environment proxy, and `Custom Proxy` uses the configured URL.
+Upstream proxy modes:
+
+- **`No Proxy`:** Sends traffic directly to upstream targets.
+- **`System Proxy`:** Uses the operating-system or environment proxy configuration.
+- **`Custom Proxy`:** Routes upstream traffic through the configured proxy URL.
 
 ### Pause Recording Without Disconnecting Clients
 
-The toolbar uses one split button sized to its labels. **Start Proxy** starts forwarding and recording. While it runs, choose **Pause** to stop collecting new requests without stopping the listener or changing the system proxy. The status continues to show the proxy address, and the button changes to **Resume**. Choose **Resume** to collect new traffic in the same session; traffic skipped during the pause is not recovered.
+The toolbar provides a split proxy button sized to its active labels:
 
-Requests and connections already being recorded finish recording normally. This includes downloads, SSE streams, and existing WebSocket connections, so existing rows can still update while paused. A request or WebSocket/TCP connection started during the pause stays unrecorded even if it ends after you resume. Each new HTTP request on a reused connection gets its own recording decision.
+- **Start Proxy** begins forwarding and recording traffic.
+- While running, **Pause** stops recording new traffic without stopping the listener or changing the system proxy. The status bar keeps showing the listener address, and the button switches to **Resume**.
+- **Resume** collects new traffic in the same capture session; traffic skipped while paused is not recovered.
+- To stop forwarding completely, open the button's dropdown menu and choose **Stop Proxy**.
 
-Existing records remain available for inspection, saving, and export. Clearing traffic or restarting the capture session keeps recording paused. Configuration-driven proxy restarts also preserve pause. An explicit stop followed by **Start Proxy** enables recording, and pause is not remembered when the application restarts.
+Recording behavior while paused:
 
-To stop forwarding, open the button's arrow menu and choose **Stop Proxy**. This menu item shows no shortcut hint; view or change the binding in **Settings > Shortcuts**. Existing **Toggle Proxy** shortcuts keep their start/stop behavior. **Settings > Shortcuts** offers a separate **Toggle Recording** command with no default binding.
+- Requests and connections admitted before pausing continue recording to completion (including downloads, SSE streams, and active WebSocket connections), so existing rows can still update while paused.
+- Requests and WebSocket/TCP connections started while paused stay unrecorded even if they finish after resuming. Each new HTTP request on a reused connection receives an independent recording decision.
+- Existing records remain inspectable, savable, and exportable.
+- Clearing traffic, restarting the capture session, and configuration-driven proxy restarts preserve the paused state. An explicit **Stop Proxy** followed by **Start Proxy** re-enables recording, and pause state is not persisted across application restarts.
+- The **Stop Proxy** menu item intentionally displays no shortcut hint (view or customize bindings in **Settings > Shortcuts**). Existing **Toggle Proxy** shortcuts keep their start/stop behavior, and **Settings > Shortcuts** provides a separate **Toggle Recording** command with no default binding.
 
 ### MITM Certificates
 
-HTTPS capture requires a CA certificate that the client application trusts. Inspect the selected CA under `Settings > Proxy`, add it to the trust store the client uses, then restart the proxy when prompted.
+Decrypting HTTPS traffic requires a CA certificate trusted by the client application. Inspect or configure the CA under **Settings > Proxy**, add it to your client's trust store, and restart the proxy when prompted.
 
-**Built-in CA.** New installations enable **Use built-in CA certificate**. FlowLens manages the certificate and private key internally without showing their paths. It checks them at startup and when you switch to built-in mode, generating a pair only if both files are absent. Existing certificates are reused. Incomplete, invalid, expired, or unreadable files are left intact for repair with **Generate CA / Regenerate CA**; these failures do not prevent opening Settings.
+- **Built-in CA:** Enabled by default on new installations via **Use built-in CA certificate**. FlowLens manages the certificate and private key internally without exposing file paths. It checks them on startup and when switching to built-in mode, generating a new pair only if both files are absent. Existing valid certificates are reused; incomplete, invalid, expired, or unreadable files are left intact for manual repair via **Generate CA / Regenerate CA** without blocking access to Settings.
+- **Custom CA:** Disable **Use built-in CA certificate** to select your own certificate and private key (both are required to start the proxy). Generation and regeneration are disabled in custom mode, so FlowLens never overwrites your files. Switching modes preserves custom paths and never installs, uninstalls, moves, or replaces certificates. Upgrades from earlier versions retain their previous paths in custom mode.
 
-**Custom CA.** Turn the switch off to select your own certificate and private key; both are required to start the proxy. Generation and regeneration are disabled in this mode, so FlowLens never overwrites your files. Switching modes keeps your custom paths and does not install, uninstall, move, or replace certificates. Installations upgraded from earlier versions keep their previous paths in custom mode.
+#### Current-User Trust on Windows and macOS
 
-**Trust on Windows and macOS.** The shield button beside **Generate CA / Regenerate CA** installs or uninstalls the saved CA for the **current user**. Save changes to the CA mode or file paths first; other settings can stay unsaved. Installation requires a valid CA certificate with a matching private key, and installs only the public certificate. The status reflects the current user's store; some applications use their own trust stores.
+The shield button beside **Generate CA / Regenerate CA** installs or uninstalls the saved CA for the **current user**. Save any changes to the CA mode or file paths first (other settings may remain unsaved). Installation requires a valid CA certificate paired with its matching private key and installs only the public certificate. The status reflects the current user's trust store; some applications maintain separate trust stores.
 
-- **Windows** installs into the current user's **Trusted Root Certification Authorities** store without a confirmation dialog. Certificates inherited from the local computer store are not shown or removed.
-- **macOS** uses `/usr/bin/security` to add the certificate to the **login keychain** and trust it for the `ssl` and `basic` policies. macOS may ask for authentication; FlowLens does not use `sudo` or change the System keychain. Canceling authentication can leave the certificate imported without trust, shown as **installation incomplete**; uninstall it before retrying. An orphaned trust record can be removed even if its certificate is gone.
-
-Uninstall removes only the exact configured certificate and its user trust settings, and leaves the certificate and key files in place. It stays available when the private key is missing or the certificate has expired. Uninstall an installed or incomplete CA before regenerating it. FlowLens does not replace trust automatically or clean up older CAs. Linux, machine-wide trust, and application-specific stores need manual management. If the store cannot be queried, the button stays disabled until you reopen Proxy settings.
+- **Windows:** Installs into the current user's **Trusted Root Certification Authorities** store without a confirmation dialog. Certificates inherited from the local computer store are neither shown nor removed.
+- **macOS:** Uses `/usr/bin/security` to add the certificate to the **login keychain** and trust it for the `ssl` and `basic` policies. macOS may prompt for authentication; FlowLens never uses `sudo` or modifies the System keychain. Canceling authentication can leave the certificate imported without trust (**installation incomplete**)—uninstall it before retrying. Orphaned trust records can still be removed even if the certificate is gone.
+- **Uninstall and limits:** Uninstalling removes only the exact configured certificate and its user trust record while leaving the certificate and key files on disk, and remains available even if the private key is missing or the certificate is expired. Uninstall an installed or incomplete CA before regenerating it. FlowLens never automatically replaces trust or cleans up older CAs. Linux, machine-wide trust, and application-specific stores require manual management. If the trust store cannot be queried, the button stays disabled until you reopen **Settings > Proxy**.
 
 ### Managed System Proxy
 
-The toolbar's system-proxy control temporarily points the operating-system proxy settings at the active FlowLens listener.
+The toolbar's system-proxy control temporarily points operating-system proxy settings at the active FlowLens listener:
 
-- Windows supports HTTP/HTTPS. SOCKS5 is disabled because WinINet clients do not reliably support a SOCKS system proxy.
-- macOS supports HTTP/HTTPS and SOCKS5.
-- Linux does not offer this control.
-- A listener on `ALL` (`0.0.0.0`) is configured as `127.0.0.1`.
+- **Windows:** Supports HTTP/HTTPS. SOCKS5 is disabled because WinINet clients do not reliably support a SOCKS system proxy.
+- **macOS:** Supports HTTP/HTTPS and SOCKS5.
+- **Linux:** Not offered.
+- **Bind address:** A listener bound to `ALL` (`0.0.0.0`) configures the system proxy as `127.0.0.1`.
 
-FlowLens keeps the original settings in memory and restores them on a normal shutdown. If another application or the user changes the proxy in the meantime, FlowLens leaves that newer configuration alone. A crash, forced termination, or power loss can leave the system proxy pointing at FlowLens; restore it manually in the operating-system network settings, because restarting FlowLens cannot recover the lost snapshot.
+FlowLens snapshots the original system proxy settings in memory and restores them on normal shutdown. If you or another application modifies the system proxy in the meantime, FlowLens leaves the newer configuration untouched. After a crash, forced termination, or power loss, restore the system proxy manually in OS network settings—restarting FlowLens cannot recover a lost in-memory snapshot.
 
 ### DNS Cache
 
-The globe control beside the HTTP cache control opens the DNS cache settings. Enable the cache, choose a duration from 1 to 3600 seconds, and select **Apply**. It is off by default with a 60-second duration, and the setting persists across restarts.
+Click the globe button beside the HTTP cache control to configure the shared DNS cache. Enable it, set an expiration duration between `1` and `3600` seconds, and click **Apply**. The cache defaults to disabled with a 60-second duration and persists across restarts.
 
-- Capture, Request Editor, resend, and WebSocket connections share up to 1024 cached domains. Only successful lookups are cached.
-- The duration is FlowLens's own expiration period, not the DNS record's TTL. When an upstream proxy resolves the destination, its resolver is used instead.
-- **Clear cache** removes records without interrupting existing HTTP, HTTP/2, or WebSocket connections; new connections resolve again. Disabling the cache or changing its duration also clears it.
-- Stopping capture keeps the cache for the Request Editor; quitting FlowLens releases it.
-- These controls do not clear operating-system or upstream DNS caches, and do not affect update checks.
+- Capture, Request Editor, resend, and WebSocket connections share up to `1,024` cached domains. Only successful lookups are cached.
+- The duration is FlowLens's own expiration period rather than the DNS record TTL. When an upstream proxy resolves the destination host, the upstream proxy's resolver is used instead.
+- **Clear cache** evicts cached entries without interrupting active HTTP, HTTP/2, or WebSocket connections; subsequent new connections resolve freshly. Disabling the cache or changing its duration also clears it.
+- Stopping capture retains the cache for the Request Editor; quitting FlowLens releases it.
+- These controls do not clear OS or upstream DNS caches and do not affect update checks.
 
 ## Inspect Traffic
 
 ### Traffic Tables
 
-Drag a column divider to resize it; widths, column order, and hidden columns are saved. Path initially uses the remaining space. Widths set by dragging stay fixed when the sidebar or window changes size. Extra space after fixed columns keeps the row background, and narrow tables scroll horizontally.
-
-In capture and history tables, a click selects one row, Ctrl-click (Cmd-click on macOS) adds or removes a row, and Shift-click selects a range. With the table focused, the arrow keys move the selection, Shift+arrows extend it, and `Primary+A` selects all.
-
-Double-click a row without modifiers to open or hide the detail panel. Enter or the row menu's **Show** opens it. **Close details** hides it, keeps the selection, and returns focus to the table. Ctrl-click (Cmd-click on macOS) only changes selection; removing the last selected row closes details. Changing the selection updates an open panel but does not reopen a closed one.
-
-Clearing or restarting a capture releases its detail-view, table, filter, and category caches, including hidden views. Closing details or selecting another record releases the previous record's viewer caches; opening details again reloads the selected record. Stopping the proxy keeps the captured records available. Freed memory is returned to the operating system gradually; see [Check FlowLens Memory Use](#check-flowlens-memory-use).
-
-Capture, history, and row context menus export all or selected entries as CSV or HAR. Row menus can also export a request, response, headers, body, or the combined exchange.
+- **Columns:** Drag column dividers to resize columns; widths, column order, and hidden columns persist automatically. **Path** initially fills remaining space, while manually dragged widths stay fixed when the sidebar or window resizes. Extra space after fixed columns keeps the row background, and narrow tables scroll horizontally.
+- **Selection:** Click selects one row, `Ctrl`-click (`Cmd`-click on macOS) toggles a row, and `Shift`-click selects a range. When the table has focus, arrow keys move selection, `Shift` + arrow keys extend it, and `Primary+A` selects all rows.
+- **Details panel:** Double-click a row without modifiers to toggle the detail panel, or press `Enter` / choose **Show** from the row menu to open it. **Close details** hides the panel, keeps the current selection, and returns focus to the table. `Ctrl`/`Cmd`-click only modifies selection (deselecting the last row closes details). Changing selection updates an open panel without reopening a closed one.
+- **Memory cleanup:** Clearing or restarting a capture releases its detail-view, table, filter, and category caches (including hidden views). Closing details or selecting another record releases the previous record's viewer caches; reopening details reloads the selected record. Stopping the proxy preserves captured records. Freed memory returns to the OS gradually; see [Check FlowLens Memory Use](#check-flowlens-memory-use).
+- **Exports:** Capture, history, and row context menus export all or selected entries to CSV or HAR. Row menus also export individual requests, responses, headers, bodies, or combined exchanges.
 
 ### Categories
 
-Categories filter traffic by domain, process, and URL structure; the three groups share one scrollbar. Tab reaches each group and its list. Up/Down moves between entries and Enter or Space toggles the highlighted filter. Several filters can stay selected, including ones hidden by the sidebar search. In the structure tree, Left/Right collapses or expands branches, and Enter or Space toggles a branch or selects a request. Right-click a request, or press the Menu key or Shift+F10, for its context menu.
+The **Categories** sidebar filters traffic by domain, process, and URL structure within a single shared scroll area:
+
+- Press `Tab` to navigate between groups and lists, `Up`/`Down` to highlight entries, and `Enter` or `Space` to toggle filters. Multiple filters can stay active simultaneously, including ones hidden by the sidebar search.
+- In the URL structure tree, `Left`/`Right` collapses or expands branches, and `Enter` or `Space` toggles a branch or selects a request.
+- Right-click a request (or press the `Menu` key / `Shift+F10`) to open its context menu.
 
 ### Bodies
 
-- **Text and Raw** viewers show the complete content without pagination; search, selection, copy, and save cover all of it. Wrapping can be toggled at any size. Documents of 512K characters or more, or with a line of 128K characters or more, are shown as plain text without syntax highlighting or bracket matching.
-- **Binary bodies** hide Raw and Fmt because their content cannot be shown as text. Images open in Image; other binary bodies without a specialized view open in Hex. Switching bodies automatically replaces an unavailable selected view. Text bodies, including SVG, retain Raw.
-- **Images**: PNG, JPEG, GIF, WebP, BMP, SVG, AVIF, and ICO (including transparency) are previewed. Animated images show a still frame; ICO files show one stored image, including PNG and DIB representations up to 256 pixels per side. Unsupported or undecodable images stay available in Hex, and in Raw when their content is text. Saving keeps the original bytes.
-- **Hex** renders only the visible rows, so large bodies are not paged.
+- **Text and Raw:** Render the full body without pagination so search, selection, copy, and save cover the entire content. Line wrapping can be toggled at any size. Bodies of `524,288` characters (`512 Ki`) or more—or containing any line of `131,072` characters (`128 Ki`) or more—render as plain text without syntax highlighting or bracket matching.
+- **Binary bodies:** Hide **Raw** and **Fmt** because binary bytes cannot be displayed as text. Images open in **Image**; other binary bodies without a specialized viewer open in **Hex**. Switching between bodies automatically switches away from an unavailable tab. Text bodies (including SVG) retain **Raw**.
+- **Images:** Preview PNG, JPEG, GIF, WebP, BMP, SVG, AVIF, and ICO (with transparency). Animated images show a still frame; ICO files preview one stored image (PNG or DIB representations up to 256×256 px). Unsupported or undecodable images remain viewable in **Hex** (and **Raw** if text-based). Saving always preserves the original bytes.
+- **Hex:** Virtualizes rendering to visible rows so large bodies load without pagination.
 
-**SSE** responses (`text/event-stream`) open on the **SSE** tab in the Request Editor and in capture and history details. The list shows complete events in order with their type, effective ID, and a data preview; drag a column divider to resize it. Click a row to see its full data or original event block, with a formatted view for small JSON messages. Scrolling up pauses following new messages; **Jump to latest message** resumes it.
+#### Server-Sent Events (SSE)
 
+`text/event-stream` responses open on the **SSE** tab in the Request Editor and in capture/history details:
+
+- Complete events appear in arrival order with their event type, effective ID, and a data preview (drag column dividers to resize). Click any row to inspect the full data or original event block, with formatted JSON for small JSON payloads.
+- Scrolling up pauses auto-scrolling; click **Jump to latest message** to resume following new events.
 - Heartbeats and control-only blocks appear only in the **Raw** tab.
-- An event without a terminating blank line is incomplete and is not listed, even after the stream stops.
-- Encoded binary bodies cannot be parsed as SSE; save them or use the Hex view.
-- The response toolbar copies or saves the entire response; the message dialog copies or saves only its selected view. The list is rebuilt from the body and adds no per-message timestamps.
+- Incomplete events lacking a terminating blank line are omitted, even after the stream closes.
+- Encoded binary bodies cannot be parsed as SSE; save them or inspect them in **Hex**.
+- The response toolbar copies or saves the full response, whereas the message dialog copies or saves only its selected view. The event list is reconstructed from the response body and adds no per-message timestamps.
 
 ### Timing and Sizes
 
-The Timing panel shows the request and response timeline measured at the upstream connection, plus the DNS, TCP connect, and TLS handshake durations of the connection that carried it. Connection phases are shared by requests that reuse the connection and are not added to the request's Total Duration. Unavailable or incomplete values show `—`. A DNS cache hit shows a DNS duration of `0`.
+The **Timing** panel reports the request and response timeline measured at the upstream transport boundary, along with DNS, TCP connect, and TLS handshake durations for the underlying connection:
 
-Header sizes count the text shown in the Raw panel; for HTTP/2 they exclude HPACK compression and frame overhead. Body sizes count bytes as transferred, before decompression. See [Traffic Metrics and HAR](technical/traffic-metrics-and-har.md) for the exact definitions.
+- Connection-setup phases are shared across requests that reuse a connection and are not added to an individual request's **Total Duration**.
+- Unavailable or incomplete values display `—`.
+- A shared DNS cache hit reports a DNS duration of `0`.
+- Header sizes measure the UTF-8 text displayed in the **Raw** panel (excluding HPACK compression and HTTP/2 frame overhead). Body sizes measure bytes as transferred on the wire before decompression.
+
+See [Traffic Metrics and HAR](technical/traffic-metrics-and-har.md) for exact definitions.
 
 ### Process Attribution
 
-Process attribution is enabled by default under `Settings > Proxy`. It applies only to direct local connections; remote clients are marked as remote and skipped.
+Process attribution is enabled by default under **Settings > Proxy** and applies only to direct local connections (remote clients are marked as remote and skipped).
 
-- The traffic list shows the app icon and name when available. Details include process name, PID, app ID, executable path, and lookup status.
-- Lookup never delays a connection. Text details may appear before the icon.
-- Process details are saved with history; icons are loaded separately and cached under `cache/process-icons`.
-- Missing permissions or metadata show a placeholder without interrupting capture.
+- The traffic list shows each process's icon and name when available; the detail panel includes process name, PID, app ID, executable path, and lookup status.
+- Lookups run asynchronously and never delay proxy connections, so text metadata may appear before the icon finishes loading.
+- Process metadata is saved with history; icons are loaded separately and cached under `cache/process-icons`.
+- Missing permissions or unavailable metadata display a placeholder without interrupting capture.
 
 ## History and HAR
 
-Saved capture sessions appear under History and survive restarts. Only the open history's decoded entries and bodies are kept in memory: opening another history replaces them, and closing the history tab frees them, including detail-view caches, and returns to the capture. FlowLens may retain compact indexes for up to four recently accessed histories. Reopening a history shows the same entries.
+Saved capture sessions appear under **History** and persist across restarts. Only the currently open history's decoded entries and loaded bodies stay in memory: opening another history replaces them, and closing the history tab releases them (including detail-view caches) and returns to live capture. FlowLens retains compact indexes for up to four recently accessed histories so reopening them stays fast.
 
-**Import.** Use **Import HAR** beside the History refresh button, or drop `.har` files onto the capture or history table. Files are imported one at a time, each into a new history named after the file; importing the same file again creates another history. The first imported history opens in the history tab. The result reports imported files and entries, skipped entries, unavailable bodies, and failed files. Canceling the file picker does nothing.
+### Importing HAR Files
 
-- HAR 1.2 and the common fields of 1.1 are supported, including files with a UTF-8 BOM.
-- Limits: 512 MiB per file, 32 MiB per entry, and 100,000 entries per file.
-- Invalid JSON, cancellation, or a write failure rolls back that file; invalid entries are skipped.
-- An imported history's creation date is the import date; requests keep their original timestamps. The source file is not modified or copied.
-- A request whose body is missing from the archive cannot be resent, edited, or copied as a complete request.
+Click **Import HAR** beside the History refresh button, or drag and drop `.har` files onto the capture or history table:
 
-**Export.** HTTP/HTTPS exchanges and WebSocket handshakes export as HAR 1.2; raw TCP tunnels and WebSocket frames are skipped. Entries whose cached body is missing are still exported and counted in the result. Re-exporting an imported history does not reproduce every original HAR field.
+- Files import one by one, each into a new history named after the file (re-importing the same file creates another history). The first imported history opens automatically.
+- The import summary reports imported files and entries, skipped entries, unavailable bodies, and failed files. Canceling the file picker makes no changes.
+- Supports HAR 1.2 and common HAR 1.1 fields, including UTF-8 BOM files.
+- Limits: `512 MiB` per file, `32 MiB` per entry, and `100,000` entries per file.
+- Invalid JSON, cancellation, or write errors roll back that file; invalid individual entries are skipped.
+- The history's creation date reflects the import date while individual requests preserve their original timestamps. Source files are never modified or copied.
+- Requests whose bodies were absent from the HAR archive cannot be resent, edited, or copied as complete requests.
 
-**Format.** New histories use HBIN v3, which needs FlowLens 2.0.0 or later. HBIN v1 and v2 histories still open; v1 histories show connection timings as `—`. Files in unknown formats are skipped without being deleted.
+### Exporting and HBIN Format
 
-HAR files and other exports are not redacted. They can contain authorization headers, cookies, bodies, and process paths; review them before sharing.
+- **HAR export:** HTTP/HTTPS exchanges and WebSocket handshakes export as HAR 1.2; raw TCP tunnels and WebSocket frames are skipped. Entries with missing cached bodies still export and are counted in the summary. Re-exporting an imported history does not reproduce every original HAR field.
+- **HBIN format:** New histories write HBIN v3 (requiring FlowLens 2.0.0+). HBIN v1 and v2 histories still open (v1 histories show `—` for connection timings). Files with unknown format versions are skipped without being deleted.
+- **Privacy warning:** HAR files and other exports are never redacted—they can include authorization headers, cookies, payloads, and local process paths. Review them before sharing.
 
 ## Request Editor and WebSocket Client
 
-Open a new HTTP Request Editor or WebSocket Client tab with the **+** button in the tab bar, edit a captured request from its row menu, or open a saved request from API Collections.
+Open a new **HTTP Request Editor** or **WebSocket Client** tab using the **+** button in the tab bar, edit a captured request from its row menu, or open a saved request from **API Collections**.
 
-- **Proxy**: `No Proxy`, `System Proxy`, `MITM Proxy`, or `Custom Proxy`.
-- **Protocol**: automatic negotiation, or force `HTTP/1.1` or `HTTP/2`.
-- **Max Redirects** (`Settings` tab): defaults to `0`, which follows no redirects. The initial request does not count: `1` allows A → B and returns B's response even if it redirects again. Reaching the limit returns the last response without an error. The request timeout covers the whole chain.
-- **TLS profile**: HTTPS and WSS requests can use a Go, Chrome, Firefox, Safari, Edge, iOS, Android 11 OkHttp, or randomized-ALPN ClientHello.
-- **Skip TLS Verification** (`Settings` tab): per tab and off by default. It covers the client's own TLS connections, including HTTPS proxies; a MITM proxy still verifies upstream certificates according to its own settings.
-- **HTTP/2 fingerprint**: a four-part `SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_HEADER_ORDER` value. Requests forced to HTTP/1.1 ignore it.
+### Request Transport Settings
 
-Header rows are sent in the order shown. The URL decides where the request goes; FlowLens sets pseudo-headers, `Host`, body framing, generated content types, and the fallback `User-Agent`. A header layout the selected protocol cannot send exactly is rejected rather than reordered.
+- **Proxy:** `No Proxy`, `System Proxy`, `MITM Proxy`, or `Custom Proxy`.
+- **Protocol:** Automatic negotiation, or forced `HTTP/1.1` or `HTTP/2`.
+- **Max Redirects** (**Settings** tab): Defaults to `0` (do not follow redirects). The initial request does not count—`1` follows `A → B` and returns `B`'s response even if `B` redirects again. Reaching the limit returns the last response without an error, and the request timeout covers the entire redirect chain.
+- **TLS profile:** HTTPS and WSS requests support Go, Chrome, Firefox, Safari, Edge, iOS, Android 11 OkHttp, and randomized-ALPN ClientHello profiles.
+- **Skip TLS Verification** (**Settings** tab): Per-tab and off by default. Applies to the client's own TLS connections (including HTTPS proxies); a MITM proxy still verifies upstream certificates according to its own settings.
+- **HTTP/2 fingerprint:** Four-part `SETTINGS|WINDOW_UPDATE|PRIORITY|PSEUDO_HEADER_ORDER` string (ignored when `HTTP/1.1` is forced).
 
-In key/value grids, Tab reaches editable cells and Enter or Space opens one with its text selected. Enter commits without a line break; Tab or Shift+Tab commits and moves on; Escape restores the original value; clicking elsewhere also commits. Confirming input-method composition keeps the editor open.
+### Headers, Key/Value Grids, and WebSocket Controls
 
-The WebSocket Client lists messages; the arrow button cycles between all, sent, and received messages. **Clear Messages** empties the list without closing the connection.
-
-The HTTP Request Editor can run Python hooks; see [Python Plugins](#python-plugins).
+- **Header order:** Headers are sent in the exact order shown. The URL controls routing, while FlowLens manages pseudo-headers, `Host`, body framing, generated `Content-Type`, and fallback `User-Agent`. A header layout that the selected protocol cannot emit losslessly is rejected rather than silently reordered.
+- **Key/value grid editing:** Press `Tab` to move between editable cells and `Enter` or `Space` to start editing with text selected. `Enter` commits without inserting a newline, `Tab`/`Shift+Tab` commits and advances, `Esc` reverts, and clicking outside commits. Confirming an IME composition keeps the cell editor open.
+- **WebSocket Client:** Lists sent and received frames; click the direction button to cycle between all, sent, and received messages. **Clear Messages** empties the list without closing the connection.
+- **Python scripting:** The HTTP Request Editor supports global plugins and per-request scripts; see [Python Plugins](#python-plugins).
 
 ## API Collections
 
-Save an HTTP Request Editor or WebSocket Client tab into a folder from its tab menu. Pick the destination in the dialog's folder tree, which opens at the last selected folder and shows the chosen folder's path below it. Saving a tab that is already linked to a collection entry updates that entry. Saved requests keep their protocol, redirect limit, TLS verification setting, TLS profile, HTTP/2 fingerprint, ordered headers, body, and Python script source. Script switches are off when a request is reopened.
+Save an HTTP Request Editor or WebSocket Client tab into a folder from its tab menu. Choose the destination in the folder tree dialog (which opens at the last selected folder and displays its full path below). Saving a tab already linked to an entry updates that entry. Saved requests preserve protocol, redirect limit, TLS verification, TLS profile, HTTP/2 fingerprint, ordered headers, body, and Python script source—script enable switches always default to off when reopened.
 
-**Organize.** **New Folder** in the toolbar and **New Child Folder** in a folder's menu open a name dialog; press Enter or **Create** to save. Drag a row or its grip onto a folder to move it; hovering over a collapsed folder expands it, and holding near the edge scrolls. Nested folders can also move to the top level with **Move to Root**, by menu or by dropping them on the drop zone; requests must stay inside a folder. Press Escape to cancel a drag.
-
-**Keyboard.** Tab enters the tree. Up/Down moves the highlight, Left/Right collapses or expands folders, and Enter or Space selects a folder or opens a request. Clicking a folder toggles it; its arrow only expands or collapses. In multi-select mode, a click or Space toggles a row's selection and Shift selects a range; selecting a folder does not select its children. Right-click a row, or press the Menu key or Shift+F10, for its actions.
+- **Organize:** **New Folder** (toolbar) and **New Child Folder** (folder menu) open a name dialog (`Enter` or **Create** saves). Drag a row or its grip onto a folder to move it (hovering over a collapsed folder expands it; dragging near the edges scrolls). Move nested folders to the top level with **Move to Root** via the menu or root drop zone (requests must live inside a folder). Press `Esc` to cancel a drag.
+- **Keyboard navigation:** Press `Tab` to enter the tree, `Up`/`Down` to move focus, `Left`/`Right` to collapse/expand folders, and `Enter`/`Space` to select a folder or open a request. Clicking a folder toggles it, while its chevron only expands/collapses. In multi-select mode, click or `Space` toggles a row and `Shift` selects a range (selecting a folder does not select its children). Right-click or press `Menu` / `Shift+F10` for row actions.
 
 ## Rewrite Rules
 
-**Rewrite Rules** in the sidebar redirect URLs and edit headers, query parameters, and UTF-8 bodies. They apply only to live HTTP/HTTPS proxy traffic; the Request Editor, resend, imported history, WebSocket, CONNECT tunnels, and raw TCP are not affected.
+**Rewrite Rules** in the sidebar redirect URLs and modify headers, query parameters, and UTF-8 bodies on **live HTTP/HTTPS proxy traffic only**. The Request Editor, resend, imported history, WebSocket, `CONNECT` tunnels, and raw TCP bypass rewrite rules.
 
-To redirect an endpoint:
+### Example: Redirect an Endpoint
 
-1. Create and name a rule; select `GET` or `ALL`.
+1. Create and name a new rule, and choose method `GET` or `ALL`.
 2. Set the URL pattern to `https://api.example.com/users/*?token=*` and the **Redirect** target to `https://test.example.com/accounts/${1}?token=${2}`.
-3. Use **Match test** to check the result without sending a request.
-4. Save, enable the rule, and turn on the master switch. New rules start disabled.
+3. Use **Match test** to verify the expanded target without sending network traffic.
+4. Save the rule, enable it, and turn on the master switch (new rules start disabled).
 
-**Patterns** match the complete URL: scheme and host ignore case; path and query keep case and encoding. Each `*` captures text, `\*` matches a literal star, and `?` is literal. Targets use `${1}`, `${2}`, and so on for captures and `$$` for `$`, and must be absolute HTTP/HTTPS URLs including the full query. A redirect changes where the request goes without returning a 302; **Keep current Host** keeps the original Host header.
+### Matching, Actions, and Lifecycle
 
-**Header and query operations** run in row order: **Add** appends; **Set** replaces the first match and removes duplicates, or adds if absent; **Delete** removes all matches. Header names ignore case; query names do not.
+- **URL patterns and redirect targets:** Patterns match the full URL—scheme and host are case-insensitive, while path and query preserve case and encoding. Each `*` captures text, `\*` matches a literal `*`, and `?` is literal. Targets substitute `${1}`, `${2}`, etc. and use `$$` for a literal `$`; targets must be absolute HTTP/HTTPS URLs including the complete query. Redirects change upstream routing without issuing a `302`; **Keep current Host** preserves the existing `Host` header.
+- **Header and query operations:** Execute in row order: **Add** appends, **Set** replaces the first match and removes duplicates (or appends if absent), and **Delete** removes all matches. Header names are case-insensitive; query parameter names are case-sensitive.
+- **Rule order:** Drag saved rules to reorder them (saved automatically on release; clear the search filter first, and press `Esc` to cancel). All rules match once against the original request and run top to bottom in each phase. Saved edits apply to new requests; in-flight requests retain the rules active when they started.
+- **Drafts and saving:** **Save** (`Primary+S`) commits edits and **Revert** restores the saved rule. Switching between rules preserves unsaved drafts; enable switches and reordering save immediately. Resolve external conflicts before overwriting. Deleting a rule offers **Cancel** or **Delete** and permanently removes the rule and its unsaved edits. Quitting or restarting for an update prompts to save, discard, or cancel. Failed saves or deletes retain drafts; forced exits lose unsaved drafts.
+- **Body edits:** Replace UTF-8 text literally or with Go regular expressions (`$1`, `$$`). Each stage is capped at `8 MiB` and each body phase at `10` seconds, with additional regex safety bounds. Streaming, binary, non-UTF-8, and bodyless responses (`HEAD`, `204`, `304`) reject body edits. **Any rewrite failure aborts the exchange.**
+- **Regex preview:** Select **Regex replace**, paste a sample under **Match test**, and click **Preview** for the match count and an inline diff. Edits refresh the preview automatically; click the edit (pencil) icon to return to the sample. Copy copies the sample while editing or the result while previewing (disabled when pending or failed). Large inputs show the complete plain result without diffing or wrapping. Previews never send network requests, save rules, or persist samples.
+- **Startup:** Both the rule page and the proxy wait for rules to load. A load error blocks rule editing and starting the proxy—fix the error and restart. Unsupported saved rules remain visible but do not run.
 
-- **Order**: drag saved rules to reorder them; the new order saves on release. Clear the search before reordering; Escape cancels. All rules match the original request, and each phase runs them from top to bottom. Saved changes affect new requests; requests in flight keep the rules they started with.
-- **Drafts**: **Save** or `Primary+S` saves and **Revert** restores the saved rule. Switching rules keeps drafts; switches and ordering save immediately. Resolve external conflicts before overwriting. Deleting a rule offers **Cancel** or **Delete**, and Delete permanently removes the rule and its unsaved edits. Quitting or restarting for an update offers save, discard, or cancel. A failed save or delete keeps the draft; a forced exit loses it.
-- **Bodies**: replace UTF-8 text directly or with Go regular expressions (`$1`, `$$`). Each stage is limited to **8 MiB** and each body phase to **10 seconds**, with additional regex limits. Streaming, binary, non-UTF-8, and bodyless responses (HEAD, 204, 304) reject body edits. **A rewrite failure interrupts the exchange.**
-- **Regex preview**: select **Regex replace**, paste a sample under **Match test**, and click **Preview** for the match count and an inline diff. Edits refresh the preview; the pencil returns to the sample. Copy uses the sample while editing and the result while previewing, and is disabled for pending or failed results. Large text shows the full result without a diff or wrapping. Previews send no requests, save no rules, and do not keep the sample.
-- **Startup**: the rule page and the proxy wait for rules to load. A loading error blocks editing and starting the proxy; fix the error and restart. Unsupported saved rules stay visible but do not run.
-
-Capture, history, and exports record the rewritten content. See [HTTP Rewrite Rules](technical/http-rewrite-rules.md) for protocol details and resource limits.
+Capture, history, and exports record rewritten traffic. See [HTTP Rewrite Rules](technical/http-rewrite-rules.md) for protocol semantics and limits.
 
 ## Python Plugins
 
-The HTTP Request Editor can run global Python plugins and a script for the current request. Configure an interpreter under `Settings > Python`, then see the [Python plugin guide](technical/python-plugins.md) for setup, the API, limits, and examples.
+The HTTP Request Editor can run global Python plugins and a per-request script. Configure a Python 3 interpreter under **Settings > Python**, then see the [Python Plugin Guide](technical/python-plugins.md) for setup, the Hook/Body API, limits, and examples.
 
-In **Python Plugins**, the file toolbar creates, renames, and deletes a plugin's files. New files never replace an existing one, renaming keeps unsaved edits, and deleting discards them after confirmation. `main.py` and `manifest.json` can be edited but not renamed or deleted. Dialogs close on success and stay open on failure so you can retry. Drag plugins to reorder them, as with rewrite rules. Open the plugins directory from the sidebar toolbar.
+In the **Python Plugins** workbench, the file toolbar creates, renames, and deletes plugin files:
+
+- New files never overwrite existing ones; renaming keeps unsaved edits; deleting discards them after confirmation.
+- `main.py` and `manifest.json` can be edited but cannot be renamed or deleted.
+- File dialogs close on success and stay open on failure so you can retry.
+- Drag plugins to reorder them (as with rewrite rules), and use the sidebar toolbar to open the managed plugins directory.
 
 ## Keyboard Shortcuts
 
-`Settings > Shortcuts` lets you search commands, record or clear a binding, and restore one or all defaults. `Primary` means Command on macOS and Ctrl on Windows and Linux. Menus and tooltips show your current bindings.
+Open **Settings > Shortcuts** to search commands, record or clear bindings, and restore individual or all defaults. `Primary` maps to `Cmd` on macOS and `Ctrl` on Windows and Linux. Menus and tooltips display your active bindings.
 
-| Command | Default binding |
+| Command | Default Binding |
 | --- | --- |
-| Save the active request, settings, Python file or parameters, or rewrite rule | `Primary+S` |
-| Open settings | `Primary+,` |
-| Capture / categories / API Collections / rewrite rules / Python plugins / memory statistics | `Primary+1` through `Primary+6` |
+| Save active request, settings, Python file/params, or rewrite rule | `Primary+S` |
+| Open Settings | `Primary+,` |
+| Switch workbench: Capture / Categories / API Collections / Rewrite Rules / Python Plugins / Memory | `Primary+1` – `Primary+6` |
 | New HTTP / WebSocket request | `Primary+N` / `Primary+Shift+N` |
-| Close the active tab | `Primary+W` |
+| Close active tab | `Primary+W` |
 | Next / previous tab | `Control+Tab` / `Control+Shift+Tab` |
-| Send the active request | `Primary+Enter` |
-| Focus the capture or history filter | `Primary+F` |
+| Send active request | `Primary+Enter` |
+| Focus capture or history filter | `Primary+F` |
 
-Toggling the proxy or the system proxy, clearing traffic, and showing the main window have no default binding.
+**Toggle Proxy**, **Toggle Recording**, **Toggle System Proxy**, **Clear Traffic**, and **Show Main Window** have no default binding.
 
-- Shortcuts work only while a FlowLens window has focus and the command applies to the current page, tab, or dialog. Text fields and code editors keep their normal keys when no command applies.
-- Each command has one single-step binding; chords and alternate bindings are not supported.
-- Optional system-wide shortcuts can show the main window and toggle the proxy. They are off by default. The operating system may ask for approval or report a conflict, and Wayland portals may choose the final key.
-
-Tab and Shift+Tab move between sidebar entries, settings sections, and their controls; Enter or Space activates the focused entry. Row checkboxes and switches are separate stops. Hidden sidebars and inactive pages ignore these keys, and code editors keep Tab for indentation.
+- **Scope:** Application shortcuts trigger only while a FlowLens window is focused and the command applies to the active page, tab, or dialog. Text inputs and code editors retain normal keystrokes unless a command explicitly applies.
+- **Single-step bindings:** Each command takes one binding; multi-key chords and alternate bindings are not supported.
+- **System-wide shortcuts:** Optional global shortcuts for **Show Main Window** and **Toggle Proxy** are off by default. The OS may request approval or report conflicts, and Wayland portals may select the final key combination.
+- **Keyboard navigation:** `Tab` and `Shift+Tab` move across sidebar entries, settings sections, and controls; `Enter` or `Space` activates focused entries. Row checkboxes and switches are separate tab stops. Collapsed sidebars and inactive pages ignore navigation keys, and code editors keep `Tab` for indentation.
 
 ## Windows and Tray
 
-- Closing the main window hides FlowLens to the system tray; use the tray menu to restore it or quit.
-- Only one FlowLens runs per build mode. Starting it again focuses the existing window.
-- Window size, position, and maximized state are restored when possible.
-- Settings open in their own window and ask before discarding unsaved changes.
-- Switching between the custom and native title bar takes effect after a restart. The native title bar follows the FlowLens theme; switch between light, dark, and system appearance from the sidebar.
+- Closing the main window hides FlowLens to the system tray; use the tray menu to restore or quit.
+- Only one instance runs per build mode; launching FlowLens again focuses the existing window.
+- Window size, position, and maximized state persist across launches when possible.
+- Settings open in a dedicated window and prompt before discarding unsaved edits.
+- Switching between the custom and native title bar takes effect after restart. The native title bar follows the active theme; switch between light, dark, and system appearance from the sidebar.
 
 ## Settings, Logs, and Storage
 
-| Page | Contents |
+| Section | Contents |
 | --- | --- |
-| General | Theme colors, interface and code fonts, animations, title bar |
-| Proxy | Process attribution, upstream proxy, built-in or custom CA, extra trusted roots, per-host client certificates |
-| Python | Interpreter and global Python plugin behavior |
-| Shortcuts | Application bindings and optional system-wide shortcuts |
-| Logs | Logging state, level, and file actions |
-| Storage | Body-cache threshold, WebSocket and history retention, cache cleanup, and storage statistics |
+| **General** | Theme colors, UI and code fonts, animations, and title-bar mode |
+| **Proxy** | Process attribution, upstream proxy, built-in or custom CA, extra trusted roots, and per-host client certificates |
+| **Python** | Interpreter selection, hook timeout, and global plugin master switch |
+| **Shortcuts** | In-app bindings and optional system-wide shortcuts |
+| **Logs** | Log enablement, level, and log file actions |
+| **Storage** | Body-cache threshold, WebSocket and history retention, cache cleanup, and storage usage |
 
-Appearance changes preview in every window immediately; save to keep them or discard to restore the saved look. Animations are on by default and follow the system's reduced-motion preference; turning them off makes transitions and loading indicators static.
+Appearance edits preview across every open window immediately—save to keep them or discard to restore the saved theme. Animations default to on and respect the OS reduced-motion preference; turning them off makes transitions and loading indicators static.
 
 ### Logs
 
-Logging is enabled at `info` level. The current file is `flowlens.log` in the `logs` directory of the configuration folder; it rotates at 10 MB and keeps five backups. Development builds also log to the console. `Settings > Logs` controls enablement and level, and can clear, refresh, or open the log folder.
+Logging defaults to enabled at `info` level. Logs write to `flowlens.log` inside the `logs` directory of your FlowLens configuration folder, rotating at `10 MiB` with up to five backups. Development builds also log to stdout/stderr. Use **Settings > Logs** to toggle logging, change the level, clear logs, refresh, or open the log folder.
 
-If startup fails, FlowLens stays open and shows the failed step and its error. **Retry** starts again, **Open Log Folder** shows the logs, and **Quit** exits. The failure is always logged, even when logging is turned off.
+If startup fails, FlowLens remains open and displays the failed step and error with **Retry**, **Open Log Folder**, and **Quit**. Startup failures are always logged even when logging is disabled.
 
-Logs can contain hosts, paths, API Collection names, and local file paths. Review them before sharing.
+Logs can contain hostnames, paths, API Collection names, and local file paths—review them before sharing.
 
 ### Local Storage
 
-FlowLens keeps `flowlens.db`, history, API Collection files (`api_collections/files`), logs, and caches (including `cache/process-icons`) in the operating system's user configuration directory. On Unix-like systems, its directories are owner-only (`0700`) and its database, history, log, and body-cache files are `0600`. Windows relies on the permissions of the user's configuration directory.
+FlowLens stores all data in the operating system's user configuration directory:
 
-Bodies cached during a capture session are removed once they are no longer needed: after **Save and Restart** or **Discard and Restart**, after the final save when FlowLens quits, and at the next start if FlowLens did not quit cleanly or the final save failed. Saved histories and cached process icons stay.
+- `flowlens.db`: Settings, rewrite rules, API Collection metadata, and plugin registry.
+- History files (`.hbin` pairs) and `api_collections/files`: Saved histories and managed request-body files.
+- `logs/` and `cache/` (including `cache/process-icons`): Application logs, session body caches, and process icons.
 
-Storage cleanup removes either caches alone, or caches together with the current capture and readable saved history. Cache-only cleanup first saves a non-empty current capture to history. History files in unsupported or unknown formats are kept. Cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
+On Unix-like systems, FlowLens creates directories with mode `0700` and database, history, log, and body-cache files with mode `0600`. Windows relies on the user's configuration directory permissions.
 
-Open windows follow the cleanup without a restart, even if the Settings window is closed first. The history list shows the archived capture after cache-only cleanup, or empties after clearing all data; an open history that was removed closes and the live capture is shown. Request editor tabs stop referring to bodies, form-data files, and WebSocket draft files that were in the removed draft cache, and keep the rest of each draft. Process icons are loaded again. If part of the cleanup fails, the error is shown after windows refresh what was removed.
+#### Cache Lifecycle and Cleanup
+
+- Capture session body caches are deleted automatically once no longer needed: after **Save and Restart** or **Discard and Restart**, after the final shutdown save succeeds, and on the next launch if a previous exit was unclean or the final save failed. Saved histories and cached process icons remain intact.
+- **Storage cleanup** (**Settings > Storage**) removes either caches only, or caches together with the current capture and readable saved histories. Cache-only cleanup archives a non-empty current capture to history first. History files in unsupported/unknown formats are preserved, and cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
+- Open windows react to cleanup immediately without restarting, even if Settings is closed first: the history list reflects archived or cleared histories, a removed open history closes back to live capture, Request Editor tabs clear references to deleted draft-cache files while keeping the rest of each draft, and process icons reload. If cleanup partially fails, the error appears after windows refresh what succeeded.
 
 ### Check FlowLens Memory Use
 
-Select **Memory** in the sidebar (`Primary+6`). The first time you open it in a run, FlowLens takes one sample. **Start** samples at the chosen interval until you pause, **Refresh** takes one sample, and **Clear** empties the chart until you refresh or start again.
+Open **Memory** from the sidebar (`Primary+6`). Opening it for the first time in a run records one sample. **Start** polls at the selected interval until paused, **Refresh** records one sample immediately, and **Clear** resets the chart until you refresh or start again.
 
-**Memory** is the FlowLens process's own memory, measured the way your system's process tool measures it. The two figures can differ by one sampling interval and by rounding.
+**Memory** reports the FlowLens process's own memory using your operating system's primary process metric (figures can differ from OS tools by one sampling interval and rounding):
 
-| System | Compare Memory with |
+| Platform | Equivalent OS Metric |
 | --- | --- |
-| Windows | The Memory column of the FlowLens process row in Task Manager. Expand the FlowLens group: the group total also counts Python Workers and other child processes |
-| macOS | The Memory column in Activity Monitor |
-| Linux | `RES` in `top` or `htop` (`RSS` in `ps`) |
+| **Windows** | The **Memory** column on the FlowLens process row in Task Manager (expand the group—the group total also counts Python Workers and other child processes) |
+| **macOS** | The **Memory** column in Activity Monitor |
+| **Linux** | `RES` in `top`/`htop` (`RSS` in `ps`) |
 
-Memory never includes Python Workers, which run as separate processes. If the system value cannot be read, Memory shows `-` and says that it is not available.
-
-**Heap in use** is the memory held by Go objects such as captured traffic and caches. It rises between garbage collections and drops after each one.
-
-Memory can stay high after you clear a capture or close a history. The Go runtime keeps freed memory for reuse and returns it to the operating system gradually. Expand **Go runtime details** to see how much the Go runtime holds, how much is **Kept for reuse**, and how much has been **Returned to the OS**. Memory also counts the interface renderer, fonts, and system libraries, which Go does not track.
+- **Memory** never includes Python Workers, which run as separate processes. If the OS metric cannot be read, it shows `-` as unavailable.
+- **Heap in use** tracks live Go objects (such as captured traffic and caches), rising between garbage collections and falling after each cycle.
+- Process memory can stay elevated after clearing traffic or closing a history because Go retains freed pages for reuse and returns them to the OS gradually. Expand **Go runtime details** to inspect total runtime memory, **Kept for reuse**, and **Returned to the OS**. Process memory also includes the native renderer, fonts, and system libraries outside Go's heap. For deep profiling, see [Memory Diagnostics](technical/memory-diagnostics.md).
 
 ## Update FlowLens
 
-Open **Software Update** from the status bar and select **Check for updates**. Review the new version and release notes, then select **Install and restart**. **Restart automatically when finished** is on by default; clear it to install now and choose when to restart. This choice lasts for the current session, including when you close and reopen the update window.
+Open **Software Update** from the status bar and click **Check for updates**. Review the new version and release notes, then click **Install and restart**.
 
-During an update, **Hide** or the window's close button lets it continue in the background. **Cancel** stops a check or requests download cancellation while available. Once the download finishes, FlowLens waits for installation to finish and no longer offers cancellation. If an installation completes before cancellation takes effect, it remains ready for a later restart.
-
-Automatic restart happens only after installation succeeds. Unsaved settings, editor work, and rewrite-rule drafts still require your decision before restarting. Canceling that decision keeps FlowLens open; use the status bar to reopen the window and restart later. A restart error can be retried without downloading again. **Restart later** leaves the update ready for the next launch.
-
-For development builds or installations that cannot update themselves, select **Open release page** and install the package for your platform manually.
+- **Restart automatically when finished** defaults to on for the current session (persisting if you close and reopen the update window); clear it to install now and restart manually later.
+- **Hide** or the window close button lets an active update continue in the background. **Cancel** stops a check or an active download; once downloading finishes, installation runs to completion without cancellation. If installation completes before a concurrent cancel takes effect, the update remains ready for restart.
+- Automatic restart triggers only after installation succeeds and still honors unsaved settings, editor tabs, and rewrite-rule drafts. Canceling a quit guard keeps FlowLens running—reopen **Software Update** from the status bar to restart later. Failed restarts can be retried without re-downloading, and **Restart later** applies the update on next launch.
+- Development builds and non-writable installations show **Open release page** for manual installation.
 
 ## Security
 
-- Use FlowLens only for traffic you own or are authorized to inspect.
-- Listening on `ALL` exposes the proxy to reachable devices; apply suitable firewall and network controls.
-- Anyone with the CA private key can impersonate sites that trust the CA. Keep it private, and remove or regenerate it when no longer needed.
-- Captures, history, exports, API Collections, logs, cached bodies, and process details may contain sensitive data.
-- Python plugins run as trusted local code. Interpreter isolation is not a security sandbox.
+- Use FlowLens only on traffic and systems you own or are authorized to inspect.
+- Listening on `ALL` (`0.0.0.0`) exposes the proxy to reachable network devices; apply appropriate firewall and network controls.
+- Anyone possessing your MITM CA private key can impersonate sites that trust that CA. Protect it carefully and remove or regenerate it when no longer needed.
+- Captures, history, exports, API Collections, logs, cached bodies, and process metadata can contain sensitive secrets.
+- Python plugins run as trusted local code with your user permissions; interpreter isolation (`-I`) is not a security sandbox.
 
-Report vulnerabilities as described in [SECURITY.md](../SECURITY.md), not in a public issue.
+Report security vulnerabilities through [SECURITY.md](../SECURITY.md), never in a public issue.
