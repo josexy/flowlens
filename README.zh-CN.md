@@ -20,6 +20,16 @@
 
 FlowLens 能够捕获代理流量、识别本地来源进程，并支持对请求进行查看、编辑、重放与整理。它是一款使用 Go、[`MyGo`](https://github.com/egoist/mygo) 和 [`nuxt-ui-go`](https://github.com/josexy/nuxt-ui-go) 构建的原生桌面应用程序。
 
+## 界面预览
+
+### 浅色主题
+
+![FlowLens 浅色主题流量检视界面](screenshots/screenshot_light.png)
+
+### 深色主题
+
+![FlowLens 深色主题流量检视界面](screenshots/screenshot_dark.png)
+
 ## 核心特性
 
 - **流量捕获：** 支持 HTTP/HTTPS MITM 抓包、SOCKS5 代理、不断开客户端连接即可暂停/恢复录制、实时 SSE 事件流与逐条消息查看，以及 WebSocket 消息捕获。

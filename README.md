@@ -20,6 +20,16 @@
 
 FlowLens captures proxy traffic, attributes connections to local processes, and lets you inspect, edit, replay, and organize requests. It is a native desktop application written in Go with [MyGo](https://github.com/egoist/mygo) and [nuxt-ui-go](https://github.com/josexy/nuxt-ui-go).
 
+## Screenshots
+
+### Light Theme
+
+![FlowLens traffic inspector in light theme](screenshots/screenshot_light.png)
+
+### Dark Theme
+
+![FlowLens traffic inspector in dark theme](screenshots/screenshot_dark.png)
+
 ## Highlights
 
 - **Traffic capture:** HTTP/HTTPS MITM capture, SOCKS5 proxying, pause/resume recording without disconnecting clients, live SSE event streams with per-message inspection, and WebSocket message capture.
