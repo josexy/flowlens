@@ -33,6 +33,7 @@ Stack: Go (version in `go.mod`), MyGo native UI, `nuxt-ui-go` (`nui`), Task, SQL
 | `internal/desktop/pythonapi` | Python API help, its copy, and copied system prompts |
 | `internal/desktop/theme`, `internal/desktop/locale`, `locales/` | Appearance, language, message catalogs |
 | Other `internal/desktop/*` | `shell` (main window frame) and one package per surface or window |
+| `_website/` | Optional Astro/TypeScript homepage and download navigation; the leading underscore keeps it out of Go's `./...`, and it is outside `task verify` |
 
 ## High-Risk Contracts
 
@@ -110,6 +111,7 @@ Run the smallest checks that match the risk; `task verify` is the full check and
 
 - Worker/SDK/interpreter changes run the Python 3 integration tests without skips.
 - View changes run `task vet:ui`. To inspect renders, run `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
+- Website changes run `task website:check website:build` (Node.js 24). The application's checks never need Node.js.
 
 ## Docs, Releases, and Completion
 
@@ -118,4 +120,5 @@ Run the smallest checks that match the risk; `task verify` is the full check and
 - Commits are English Conventional Commits, `<type>(<scope>): <summary>`, one class of change each, with only verified in-scope files.
 - Every `git commit` message should describe the actual changes as concretely as possible. For fixes, explain the problem and how the change resolves it; use the commit body when the summary cannot capture the relevant details.
 - The version lives only in `mygo.json`; releases need a matching tag and a `## <version>` section in `CHANGELOG.md`. All ordinary builds keep `CGO_ENABLED=0`. macOS packaging keeps the 13.0 bundle and Mach-O deployment metadata (`MYGO_LDFLAGS=-macos=13.0`); runtime acceptance still requires native tests on both architectures. See [Building and Packaging](docs/technical/building.md).
+- `_website/src/lib/release.ts` and its tests match release asset names exactly as the `check-assets` job requires them; change both together.
 - Report the result, checks run, and unresolved risks. If verification was unavailable, say why; feasibility alone is not completion.
