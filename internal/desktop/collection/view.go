@@ -11,6 +11,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/store"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
+	apicollectionservice "github.com/josexy/flowlens/internal/services/api_collection_service"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
@@ -366,19 +367,20 @@ func rowIcon(row store.CollectionRow) *ui.SVG {
 		return lucide.FolderOpen()
 	case row.Folder:
 		return lucide.Folder()
-	case row.Request != nil && row.Request.WebSocket != nil:
-		return lucide.Radio()
+	case row.Request != nil && row.Request.Type == apicollectionservice.APICollectionNodeTypeWebSocket:
+		return lucide.MessagesSquare()
 	default:
-		return lucide.FileText()
+		return lucide.Braces()
 	}
 }
 
 // requestMethod is a request's method, or WS, in 14 px semibold in its color.
 func (v *View) requestMethod(c *ui.Context, theme nui.Theme, row store.CollectionRow) {
-	method := "WS"
-	if row.Request != nil && row.Request.WebSocket == nil {
-		method = "GET"
-		if row.Request.HTTP != nil && strings.TrimSpace(row.Request.HTTP.Method) != "" {
+	method := "GET"
+	if row.Request != nil {
+		if row.Request.Type == apicollectionservice.APICollectionNodeTypeWebSocket {
+			method = "WS"
+		} else if row.Request.HTTP != nil && strings.TrimSpace(row.Request.HTTP.Method) != "" {
 			method = strings.ToUpper(strings.TrimSpace(row.Request.HTTP.Method))
 		}
 	}

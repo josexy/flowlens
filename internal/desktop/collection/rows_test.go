@@ -8,6 +8,7 @@ import (
 
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/theme"
+	apicollectionservice "github.com/josexy/flowlens/internal/services/api_collection_service"
 )
 
 func TestFolderShowsChildCountPill(t *testing.T) {
@@ -116,10 +117,24 @@ func TestRenderNarrowCollectionTree(t *testing.T) {
 	parent := f.folder("", "A long collection folder name")
 	nested := f.folder(parent, "Nested folder")
 	id := f.request(nested, "A long request name in a narrow sidebar", "https://example.test")
+	socket, err := f.service.SaveWebSocketRequest(nested, "WebSocket echo", &apicollectionservice.SavedWebSocketRequest{URL: "wss://example.test", ProxyMode: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.reload()
 	f.data.Collection.SelectNode(id)
 	f.settle()
-	for _, label := range []string{"A long collection folder name", "Nested folder", "A long request name in a narrow sidebar"} {
+	// Tree summaries omit WebSocket details until the request is opened.
+	if f.data.Collection.Request(socket.ID).WebSocket != nil {
+		t.Fatal("expected an unloaded WebSocket summary")
+	}
+	if !f.has("POST") || !f.has("WS") || f.has("GET") {
+		t.Fatalf("request type labels: %v", f.tester.Texts())
+	}
+	if rowIcon(f.view.treeItems[id].row) == rowIcon(f.view.treeItems[socket.ID].row) {
+		t.Fatal("HTTP and WebSocket requests have the same icon")
+	}
+	for _, label := range []string{"A long collection folder name", "Nested folder", "A long request name in a narrow sidebar", "WebSocket echo"} {
 		row, ok := f.tester.Find(label)
 		if !ok || row.W <= 0 || row.X+row.W > f.sidebarWidth {
 			t.Fatalf("row %q overflows narrow sidebar: %+v", label, row)
