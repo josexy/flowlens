@@ -100,3 +100,29 @@ tasks:
       - task: vet:ui
       - task: i18n:check
       - task: test
+
+  # The project website is optional and needs Node.js; verify never runs it.
+  # The leading underscore keeps Go tooling (./...) out of _website.
+  website:install:
+    desc: Installs the project website's locked npm dependencies (requires Node.js)
+    dir: _website
+    cmds:
+      - npm ci
+
+  website:dev:
+    desc: Serves the project website with live reload
+    dir: _website
+    cmds:
+      - npm run dev
+
+  website:check:
+    desc: Type-checks and unit-tests the project website
+    dir: _website
+    cmds:
+      - npm run check
+
+  website:build:
+    desc: Builds the static project website into _website/dist
+    dir: _website
+    cmds:
+      - npm run build

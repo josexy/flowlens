@@ -1,0 +1,110 @@
+name: Website
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - _website/**
+      - screenshots/**
+      - assets/icons/app-icon.svg
+      - resources/icon.png
+      - mygo.json
+      - .github/workflows/website.yml
+  pull_request:
+    paths:
+      - _website/**
+      - screenshots/**
+      - assets/icons/app-icon.svg
+      - resources/icon.png
+      - mygo.json
+      - .github/workflows/website.yml
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Deployments queue instead of canceling each other; any later run rebuilds
+  # with the latest release. Pull request runs replace their own older runs.
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # A release run executes on the tag ref, which the github-pages environment
+  # does not allow to deploy by default. Rebuild from main instead; a
+  # workflow_dispatch created with GITHUB_TOKEN still starts a new run.
+  redeploy-on-release:
+    name: Redeploy for the published release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the website workflow on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          gh workflow run website.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Requested a website deployment for $TAG_NAME." >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build website
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: _website
+    env:
+      ASTRO_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: _website/.node-version
+          cache: npm
+          cache-dependency-path: _website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and test
+        run: npm run check
+
+      - name: Build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Deployments must carry real release links; pull requests tolerate API outages.
+          SITE_REQUIRE_RELEASE: ${{ github.event_name != 'pull_request' }}
+        run: npm run build
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _website/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

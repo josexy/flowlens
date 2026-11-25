@@ -1,0 +1,19 @@
+---
+/** Inlines a lucide-static SVG string as a decorative icon. */
+interface Props {
+  svg: string;
+  size?: number;
+  class?: string;
+}
+
+const { svg, size = 20, class: className } = Astro.props;
+const classes = ['icon', className].filter(Boolean).join(' ');
+// Rewrite only the outer <svg> tag; inner shapes such as <rect> keep their own width and height.
+const html = svg.trim().replace(/<svg\b[^>]*>/, (tag) =>
+  tag
+    .replace(/\s(class|width|height)="[^"]*"/g, '')
+    .replace('<svg', `<svg class="${classes}" width="${size}" height="${size}" aria-hidden="true" focusable="false"`),
+);
+---
+
+<Fragment set:html={html} />

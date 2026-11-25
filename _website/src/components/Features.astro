@@ -1,0 +1,91 @@
+---
+import { AppWindow, Library, Radio, Replace, ScanSearch, Send } from 'lucide-static';
+import { dictionary, type Dictionary, type Locale } from '../i18n';
+import Icon from './Icon.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+
+const order: [keyof Dictionary['features']['items'], string][] = [
+  ['capture', Radio],
+  ['apps', AppWindow],
+  ['inspect', ScanSearch],
+  ['replay', Send],
+  ['rewrite', Replace],
+  ['organize', Library],
+];
+---
+
+<section id="features" class="section section-soft" aria-labelledby="features-title">
+  <div class="container">
+    <div class="section-head centered">
+      <h2 id="features-title">{t.features.title}</h2>
+      <p>{t.features.lead}</p>
+    </div>
+    <ul class="grid">
+      {
+        order.map(([key, svg]) => (
+          <li class="card">
+            <span class="card-icon">
+              <Icon svg={svg} size={22} />
+            </span>
+            <h3>{t.features.items[key].title}</h3>
+            <p>{t.features.items[key].body}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    list-style: none;
+  }
+
+  .card {
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .card-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 18px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-text);
+  }
+
+  h3 {
+    font-size: 1.125rem;
+  }
+
+  p {
+    margin-top: 8px;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 960px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 600px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

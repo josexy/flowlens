@@ -1,0 +1,397 @@
+---
+import { Apple, CircleAlert, Download, Monitor, Package, RefreshCw, ShieldCheck, Terminal } from 'lucide-static';
+import { LATEST_RELEASE_URL, MIN_MACOS, RELEASES_URL } from '../config';
+import { dictionary, format, type Locale } from '../i18n';
+import { downloadHref, formatBytes, formatDate, type DownloadKey, type ReleaseModel } from '../lib/release';
+import Icon from './Icon.astro';
+
+interface Props {
+  locale: Locale;
+  release: ReleaseModel;
+}
+
+const { locale, release } = Astro.props;
+const t = dictionary(locale);
+const d = t.download;
+
+const releaseLine = release.version
+  ? format(d.release, { version: release.version, date: formatDate(release.publishedAt, t.lang) })
+  : d.releaseUnknown;
+const notesHref = release.version ? release.htmlUrl : LATEST_RELEASE_URL;
+
+const FORMATS: Partial<Record<DownloadKey, string>> = {
+  'linux-x64-deb': '.deb',
+  'linux-x64-rpm': '.rpm',
+  'linux-x64-tar': '.tar.gz',
+  'linux-arm64-deb': '.deb',
+  'linux-arm64-rpm': '.rpm',
+  'linux-arm64-tar': '.tar.gz',
+};
+
+function asset(key: DownloadKey) {
+  const item = release.items[key];
+  return {
+    key,
+    label: d.assets[key],
+    format: FORMATS[key],
+    href: downloadHref(release, key),
+    size: item ? formatBytes(item.size) : '',
+    name: item?.name,
+  };
+}
+
+const windows = (['windows-x64', 'windows-arm64'] as const).map(asset);
+const macos = (['macos-arm64', 'macos-universal'] as const).map(asset);
+const linux = (['x64', 'arm64'] as const).map((arch) => ({
+  arch,
+  assets: ([`linux-${arch}-deb`, `linux-${arch}-rpm`, `linux-${arch}-tar`] as const).map(asset),
+}));
+const installScript = asset('install-sh');
+const checksums = asset('checksums');
+// "{script}" becomes the install.sh link and "{command}" the shell command.
+const scriptParts = d.installScript.split(/(\{script\}|\{command\})/);
+---
+
+<section id="download" class="section section-soft" aria-labelledby="download-title">
+  <div class="container">
+    <div class="section-head centered">
+      <h2 id="download-title">{d.title}</h2>
+      <p data-release-line>{releaseLine}</p>
+      <p class="release-links">
+        <a href={notesHref} data-release-notes>{d.releaseNotes}</a>
+        <span aria-hidden="true">·</span>
+        <a href={RELEASES_URL}>{d.allReleases}</a>
+      </p>
+    </div>
+
+    <div class="platforms">
+      <article class="platform" id="download-windows" data-platform="windows" aria-labelledby="windows-title">
+        <header>
+          <span class="platform-icon"><Icon svg={Monitor} size={24} /></span>
+          <div>
+            <h3 id="windows-title">{d.platforms.windows.name}</h3>
+            <p>{d.platforms.windows.detail}</p>
+          </div>
+        </header>
+        <span class="badge">{d.detected}</span>
+        <ul class="assets">
+          {
+            windows.map((a) => (
+              <li>
+                <a class="asset" href={a.href} title={a.name} data-asset-key={a.key}>
+                  <Icon svg={Download} size={18} />
+                  <span class="asset-label">{a.label}</span>
+                  <span class="asset-size" data-asset-size>
+                    {a.size}
+                  </span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </article>
+
+      <article class="platform" id="download-macos" data-platform="macos" aria-labelledby="macos-title">
+        <header>
+          <span class="platform-icon"><Icon svg={Apple} size={24} /></span>
+          <div>
+            <h3 id="macos-title">{d.platforms.macos.name}</h3>
+            <p>{format(d.platforms.macos.detail, { minimum: MIN_MACOS.replace(/\.0$/, '') })}</p>
+          </div>
+        </header>
+        <span class="badge">{d.detected}</span>
+        <ul class="assets">
+          {
+            macos.map((a) => (
+              <li>
+                <a class="asset" href={a.href} title={a.name} data-asset-key={a.key}>
+                  <Icon svg={Download} size={18} />
+                  <span class="asset-label">{a.label}</span>
+                  <span class="asset-size" data-asset-size>
+                    {a.size}
+                  </span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </article>
+
+      <article class="platform platform-wide" id="download-linux" data-platform="linux" aria-labelledby="linux-title">
+        <header>
+          <span class="platform-icon"><Icon svg={Terminal} size={24} /></span>
+          <div>
+            <h3 id="linux-title">{d.platforms.linux.name}</h3>
+            <p>{d.platforms.linux.detail}</p>
+          </div>
+        </header>
+        <span class="badge">{d.detected}</span>
+        <div class="arches">
+          {
+            linux.map((group) => (
+              <div class="arch" data-linux-arch={group.arch}>
+                <h4 id={`linux-${group.arch}-title`}>{d.linuxArch[group.arch]}</h4>
+                <ul class="assets" aria-labelledby={`linux-${group.arch}-title`}>
+                  {group.assets.map((a) => (
+                    <li>
+                      <a class="asset" href={a.href} title={a.name} data-asset-key={a.key}>
+                        <Icon svg={Download} size={18} />
+                        <span class="asset-label">
+                          <span class="asset-name">{a.label}</span>
+                          <span class="asset-format">{a.format}</span>
+                        </span>
+                        <span class="asset-size" data-asset-size>
+                          {a.size}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          }
+        </div>
+        <p class="script">
+          {
+            scriptParts.map((part) =>
+              part === '{script}' ? (
+                <a href={installScript.href} data-asset-key="install-sh">
+                  <code>install.sh</code>
+                </a>
+              ) : part === '{command}' ? (
+                <code>sh install.sh</code>
+              ) : (
+                part
+              ),
+            )
+          }
+        </p>
+      </article>
+    </div>
+
+    <div class="notes">
+      <h3>{d.notes.title}</h3>
+      <ul>
+        <li>
+          <Icon svg={CircleAlert} size={20} />
+          <span>{d.notes.warning}</span>
+        </li>
+        <li>
+          <Icon svg={RefreshCw} size={20} />
+          <span>{d.notes.updates}</span>
+        </li>
+        <li>
+          <Icon svg={Package} size={20} />
+          <span>{d.notes.linux}</span>
+        </li>
+        <li>
+          <Icon svg={ShieldCheck} size={20} />
+          <span>
+            {d.notes.checksums.before}<a href={checksums.href} data-asset-key="checksums">{d.notes.checksums.link}</a
+            >{d.notes.checksums.after}
+          </span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  .section-head .release-links {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .platforms {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .platform {
+    position: relative;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    scroll-margin-top: calc(var(--header-height) + 16px);
+  }
+
+  .platform-wide {
+    grid-column: 1 / -1;
+  }
+
+  .platform[data-detected] {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 1px var(--accent),
+      var(--shadow);
+  }
+
+  .platform header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .platform h3 {
+    font-size: 1.25rem;
+  }
+
+  .platform header p {
+    color: var(--text-muted);
+    font-size: 0.925rem;
+  }
+
+  .platform-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-text);
+  }
+
+  .badge {
+    display: none;
+    position: absolute;
+    top: -11px;
+    right: 20px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .platform[data-detected] .badge {
+    display: inline-block;
+  }
+
+  .assets {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+  }
+
+  .asset {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .asset:hover,
+  .asset[data-recommended] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .asset :global(.icon) {
+    color: var(--accent-soft-text);
+  }
+
+  .asset-label {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 8px;
+    font-weight: 600;
+  }
+
+  /* Keep each label whole; the format moves to its own line when space runs out. */
+  .asset-name {
+    white-space: nowrap;
+  }
+
+  .asset-format {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .asset-size {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .arches {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 28px;
+  }
+
+  .arch h4 {
+    margin: 0 0 10px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .arch[data-recommended] h4 {
+    color: var(--accent-soft-text);
+  }
+
+  .arch[data-recommended] .asset {
+    border-color: var(--accent);
+  }
+
+  .script {
+    margin-top: 18px;
+    color: var(--text-muted);
+    font-size: 0.925rem;
+  }
+
+  .notes {
+    margin-top: 32px;
+  }
+
+  .notes h3 {
+    margin-bottom: 16px;
+    font-size: 1.125rem;
+  }
+
+  .notes ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 28px;
+    list-style: none;
+  }
+
+  .notes li {
+    display: flex;
+    gap: 12px;
+    color: var(--text-muted);
+  }
+
+  .notes li :global(.icon) {
+    margin-top: 3px;
+    color: var(--accent-soft-text);
+  }
+
+  @media (max-width: 760px) {
+    .platforms,
+    .arches,
+    .notes ul {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .platform {
+      padding: 22px;
+    }
+  }
+</style>

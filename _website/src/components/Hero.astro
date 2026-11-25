@@ -1,0 +1,97 @@
+---
+import { Download } from 'lucide-static';
+import { REPO_URL } from '../config';
+import { dictionary, type Locale } from '../i18n';
+import GitHubMark from './GitHubMark.astro';
+import Icon from './Icon.astro';
+import Screenshot from './Screenshot.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="container hero-inner">
+    <h1 id="hero-title">{t.hero.title}</h1>
+    <p class="lead">{t.hero.lead}</p>
+    <div class="actions">
+      <a class="btn btn-primary btn-lg" href="#download" data-primary-download>
+        <Icon svg={Download} size={20} />
+        <span data-primary-label>{t.hero.download}</span>
+      </a>
+      <a class="btn btn-secondary btn-lg" href={REPO_URL}>
+        <GitHubMark size={20} />
+        <span>{t.hero.viewOnGitHub}</span>
+      </a>
+    </div>
+    <p class="caption" data-primary-caption aria-live="polite">{t.hero.caption}</p>
+    <p class="caption" data-all-downloads hidden>
+      <a href="#download">{t.hero.allDownloads}</a>
+    </p>
+  </div>
+  <div class="container">
+    <Screenshot locale={locale} />
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-block: clamp(56px, 8vw, 96px) clamp(64px, 8vw, 104px);
+    overflow: hidden;
+    background: var(--glow);
+  }
+
+  .hero-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  h1 {
+    max-width: 880px;
+    font-size: clamp(2.25rem, 5.4vw, 3.75rem);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  .lead {
+    max-width: 680px;
+    margin-top: 20px;
+    color: var(--text-muted);
+    font-size: clamp(1.075rem, 1.8vw, 1.25rem);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 32px;
+  }
+
+  .caption {
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-size: 0.925rem;
+  }
+
+  .caption + .caption {
+    margin-top: 4px;
+  }
+
+  .caption[hidden] {
+    display: none;
+  }
+
+  @media (max-width: 520px) {
+    .actions {
+      flex-direction: column;
+      align-self: stretch;
+    }
+  }
+</style>

@@ -1,0 +1,142 @@
+---
+import { Languages } from 'lucide-static';
+import appIcon from '../../../assets/icons/app-icon.svg';
+import { REPO_URL } from '../config';
+import { dictionary, homePath, type Locale } from '../i18n';
+import GitHubMark from './GitHubMark.astro';
+import Icon from './Icon.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+const otherLocale: Locale = locale === 'en' ? 'zh-cn' : 'en';
+const other = dictionary(otherLocale);
+---
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href={homePath(locale)} aria-label={t.nav.home}>
+      <img src={appIcon.src} width="32" height="32" alt="" />
+      <span>FlowLens</span>
+    </a>
+    <nav class="nav" aria-label={t.nav.label}>
+      <ul class="nav-links">
+        <li><a href="#features">{t.nav.features}</a></li>
+        <li><a href="#how-it-works">{t.nav.howItWorks}</a></li>
+        <li><a href="#download">{t.nav.download}</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a
+          class="nav-action"
+          href={homePath(otherLocale)}
+          hreflang={other.lang}
+          lang={other.lang}
+          aria-label={t.nav.otherLanguageLabel}
+          data-locale-switch
+        >
+          <Icon svg={Languages} size={18} />
+          <span>{t.nav.otherLanguage}</span>
+        </a>
+        <a class="nav-action" href={REPO_URL}>
+          <GitHubMark size={18} />
+          <span>{t.nav.github}</span>
+        </a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: saturate(1.4) blur(12px);
+    -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    height: var(--header-height);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-size: 1.125rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 24px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-muted);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .nav-links a:hover {
+    color: var(--text);
+  }
+
+  .nav-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 0.925rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .nav-action:hover {
+    border-color: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .nav-links {
+      display: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .nav-action span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+  }
+</style>

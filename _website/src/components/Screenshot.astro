@@ -1,0 +1,150 @@
+---
+import { Picture } from 'astro:assets';
+import screenshotDark from '../../../screenshots/screenshot_dark.png';
+import screenshotLight from '../../../screenshots/screenshot_light.png';
+import { dictionary, type Locale } from '../i18n';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+const widths = [800, 1120, 1680, 2240];
+const sizes = '(min-width: 1160px) 1120px, calc(100vw - 40px)';
+---
+
+<figure class="shot" data-shot="auto">
+  <div class="shot-toolbar" role="group" aria-label={t.screenshot.label} data-shot-toggle hidden>
+    <button type="button" data-shot-option="light" aria-pressed="false">{t.screenshot.light}</button>
+    <button type="button" data-shot-option="dark" aria-pressed="false">{t.screenshot.dark}</button>
+  </div>
+  <div class="shot-frame">
+    <Picture
+      src={screenshotLight}
+      alt={t.screenshot.altLight}
+      widths={widths}
+      sizes={sizes}
+      formats={['avif', 'webp']}
+      loading="lazy"
+      decoding="async"
+      class="shot-img"
+      pictureAttributes={{ class: 'shot-variant shot-light' }}
+    />
+    <Picture
+      src={screenshotDark}
+      alt={t.screenshot.altDark}
+      widths={widths}
+      sizes={sizes}
+      formats={['avif', 'webp']}
+      loading="lazy"
+      decoding="async"
+      class="shot-img"
+      pictureAttributes={{ class: 'shot-variant shot-dark' }}
+    />
+  </div>
+</figure>
+
+<style>
+  .shot {
+    margin: clamp(40px, 6vw, 64px) 0 0;
+  }
+
+  .shot-toolbar {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    width: fit-content;
+    margin: 0 auto 16px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+  }
+
+  .shot-toolbar[hidden] {
+    display: none;
+  }
+
+  .shot-toolbar button {
+    min-width: 72px;
+    min-height: 32px;
+    padding: 4px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .shot-toolbar button[aria-pressed='true'] {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .shot-frame {
+    aspect-ratio: 2560 / 1528;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shot-frame :global(.shot-variant),
+  .shot-frame :global(.shot-img) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* Hidden variants are display:none, so their lazy images never load. */
+  .shot-frame :global(.shot-dark) {
+    display: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .shot[data-shot='auto'] :global(.shot-light) {
+      display: none;
+    }
+
+    .shot[data-shot='auto'] :global(.shot-dark) {
+      display: block;
+    }
+  }
+
+  .shot[data-shot='light'] :global(.shot-light),
+  .shot[data-shot='dark'] :global(.shot-dark) {
+    display: block;
+  }
+
+  .shot[data-shot='light'] :global(.shot-dark),
+  .shot[data-shot='dark'] :global(.shot-light) {
+    display: none;
+  }
+</style>
+
+<script>
+  const figure = document.querySelector<HTMLElement>('.shot');
+  const toggle = figure?.querySelector<HTMLElement>('[data-shot-toggle]');
+  if (figure && toggle) {
+    const buttons = [...toggle.querySelectorAll<HTMLButtonElement>('[data-shot-option]')];
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+    const current = () => (figure.dataset.shot === 'auto' ? (prefersDark.matches ? 'dark' : 'light') : figure.dataset.shot);
+    const sync = () => {
+      for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.shotOption === current()));
+    };
+    for (const button of buttons) {
+      button.addEventListener('click', () => {
+        figure.dataset.shot = button.dataset.shotOption ?? 'auto';
+        sync();
+      });
+    }
+    prefersDark.addEventListener('change', sync);
+    toggle.hidden = false;
+    sync();
+  }
+</script>

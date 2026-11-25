@@ -1,0 +1,184 @@
+{
+  "tag_name": "v2.0.1",
+  "name": "FlowLens v2.0.1",
+  "html_url": "https://github.com/josexy/flowlens/releases/tag/v2.0.1",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-11-23T08:45:56Z",
+  "assets": [
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-darwin-arm64.delta",
+      "size": 1771455,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-darwin-arm64.delta"
+    },
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-darwin-universal.delta",
+      "size": 3871638,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-darwin-universal.delta"
+    },
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-linux-amd64.delta",
+      "size": 1512257,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-linux-amd64.delta"
+    },
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-linux-arm64.delta",
+      "size": 1450359,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-linux-arm64.delta"
+    },
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-windows-amd64.delta",
+      "size": 1614298,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-windows-amd64.delta"
+    },
+    {
+      "name": "flowlens-2.0.0-to-2.0.1-windows-arm64.delta",
+      "size": 1495854,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.0-to-2.0.1-windows-arm64.delta"
+    },
+    {
+      "name": "flowlens-2.0.1-1.aarch64.rpm",
+      "size": 13985861,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-1.aarch64.rpm"
+    },
+    {
+      "name": "flowlens-2.0.1-1.x86_64.rpm",
+      "size": 15309839,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-1.x86_64.rpm"
+    },
+    {
+      "name": "flowlens-2.0.1-arm64.dmg",
+      "size": 10428928,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-arm64.dmg"
+    },
+    {
+      "name": "flowlens-2.0.1-darwin-arm64.tar.gz",
+      "size": 14092779,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-darwin-arm64.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1-darwin-universal.tar.gz",
+      "size": 29585066,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-darwin-universal.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1-linux-amd64.tar.gz",
+      "size": 15328320,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-linux-amd64.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1-linux-arm64.tar.gz",
+      "size": 14003825,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-linux-arm64.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1-windows-amd64.tar.gz",
+      "size": 15296625,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-windows-amd64.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1-windows-arm64.tar.gz",
+      "size": 13776161,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1-windows-arm64.tar.gz"
+    },
+    {
+      "name": "flowlens-2.0.1.dmg",
+      "size": 22516736,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-2.0.1.dmg"
+    },
+    {
+      "name": "flowlens-setup-2.0.1-amd64.exe",
+      "size": 11361612,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-setup-2.0.1-amd64.exe"
+    },
+    {
+      "name": "flowlens-setup-2.0.1-arm64.exe",
+      "size": 9645697,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens-setup-2.0.1-arm64.exe"
+    },
+    {
+      "name": "flowlens_2.0.1_amd64.deb",
+      "size": 15307826,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens_2.0.1_amd64.deb"
+    },
+    {
+      "name": "flowlens_2.0.1_arm64.deb",
+      "size": 13984356,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/flowlens_2.0.1_arm64.deb"
+    },
+    {
+      "name": "install.ps1",
+      "size": 6940,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/install.ps1"
+    },
+    {
+      "name": "install.sh",
+      "size": 21137,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/install.sh"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 2164,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/SHA256SUMS"
+    },
+    {
+      "name": "update-darwin-arm64.json",
+      "size": 1426,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-darwin-arm64.json"
+    },
+    {
+      "name": "update-darwin-universal.json",
+      "size": 1438,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-darwin-universal.json"
+    },
+    {
+      "name": "update-linux-amd64.json",
+      "size": 1423,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-linux-amd64.json"
+    },
+    {
+      "name": "update-linux-arm64.json",
+      "size": 1423,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-linux-arm64.json"
+    },
+    {
+      "name": "update-windows-amd64.json",
+      "size": 1429,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-windows-amd64.json"
+    },
+    {
+      "name": "update-windows-arm64.json",
+      "size": 1429,
+      "state": "uploaded",
+      "browser_download_url": "https://github.com/josexy/flowlens/releases/download/v2.0.1/update-windows-arm64.json"
+    }
+  ]
+}

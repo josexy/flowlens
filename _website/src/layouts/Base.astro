@@ -1,0 +1,56 @@
+---
+import { getImage } from 'astro:assets';
+import appIcon from '../../../assets/icons/app-icon.svg';
+import appIconPng from '../../../resources/icon.png';
+import screenshotLight from '../../../screenshots/screenshot_light.png';
+import { dictionary, homePath, LOCALES, type Locale } from '../i18n';
+import '../styles/global.css';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+const site = Astro.site;
+if (!site) throw new Error('`site` must be set in astro.config.mjs for canonical and social URLs.');
+const canonical = new URL(homePath(locale), site).href;
+
+const touchIcon = await getImage({ src: appIconPng, width: 180, height: 180, format: 'png' });
+const ogImage = await getImage({ src: screenshotLight, width: 1200, format: 'png' });
+const ogImageUrl = new URL(ogImage.src, site).href;
+---
+
+<!doctype html>
+<html lang={t.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.description} />
+    <link rel="canonical" href={canonical} />
+    {
+      LOCALES.map((other) => (
+        <link rel="alternate" hreflang={dictionary(other).lang} href={new URL(homePath(other), site).href} />
+      ))
+    }
+    <link rel="alternate" hreflang="x-default" href={new URL(homePath('en'), site).href} />
+    <link rel="icon" type="image/svg+xml" href={appIcon.src} />
+    <link rel="apple-touch-icon" href={touchIcon.src} />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FlowLens" />
+    <meta property="og:title" content={t.meta.title} />
+    <meta property="og:description" content={t.meta.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:alt" content={t.screenshot.altLight} />
+    <meta property="og:locale" content={locale === 'en' ? 'en_US' : 'zh_CN'} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t.nav.skip}</a>
+    <slot />
+  </body>
+</html>

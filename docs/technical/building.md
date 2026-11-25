@@ -89,3 +89,18 @@ To cut a release:
 - Build jobs run sequentially (`max-parallel: 1`) because MyGo merges and replaces the shared `SHA256SUMS` file on each upload.
 - The final `check-assets` job verifies both Windows installers, both macOS DMGs, all six platform update archives, both Debian and RPM architectures, `install.sh`, their `SHA256SUMS` entries, and all six `update-<target>.json` manifests (which MyGo intentionally excludes from `SHA256SUMS`).
 - Windows executables and installers are unsigned; macOS bundles use MyGo's default ad-hoc signing and are not notarized. No platform-signing certificates or secrets are required beyond `MYGO_UPDATER_PRIVATE_KEY`.
+
+## Project Website
+
+The project homepage is a static Astro and TypeScript site in `_website/`. It is separate from the application:
+
+- Go skips directories whose names start with `_`, so Go builds, tests, lint, and `go mod tidy` never read it, even with `node_modules` installed.
+- `task verify`, CI, and release packaging never need Node.js.
+
+To work on the site, install Node.js 24 and use the opt-in `website:install`, `website:dev`, `website:check`, and `website:build` tasks. See [_website/README.md](../../_website/README.md) for details.
+
+- **Download links:** `_website/src/lib/release.ts` maps release assets to download buttons using the same names that the release workflow's `check-assets` job requires. Keep the two in step when asset names change. A missing asset links to its release page.
+- **Deployment:** `.github/workflows/website.yml` deploys from `main` to GitHub Pages on a custom domain, which is set as `site` in `_website/astro.config.mjs`. Domain and DNS setup are in [_website/README.md](../../_website/README.md#custom-domain). The workflow:
+  - Runs on pushes that change the site's inputs, on manual dispatch, and when a release is published (by dispatching a rebuild on `main`).
+  - Pull requests only build and check the site.
+  - Deployment builds fail rather than publish fallback links if the GitHub API cannot supply the latest release.
