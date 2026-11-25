@@ -1,0 +1,27 @@
+{
+  "name": "flowlens-website",
+  "private": true,
+  "type": "module",
+  "description": "FlowLens project homepage",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check && vitest run",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "astro": "7.4.13",
+    "lucide-static": "1.80.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.1"
+  }
+}

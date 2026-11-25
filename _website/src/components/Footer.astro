@@ -1,0 +1,85 @@
+---
+import appIcon from '../../../assets/icons/app-icon.svg';
+import { COPYRIGHT, LICENSE_NAME, RELEASES_URL, REPO_URL, repoFile } from '../config';
+import { dictionary, format, type Locale } from '../i18n';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+---
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <img src={appIcon.src} width="28" height="28" alt="" />
+      <div>
+        <p class="name">FlowLens</p>
+        <p class="legal">
+          {COPYRIGHT.replace('Copyright (c)', '©')} · <a href={repoFile('LICENSE')}>{format(t.footer.license, { license: LICENSE_NAME })}</a>
+        </p>
+      </div>
+    </div>
+    <ul class="footer-links">
+      <li><a href={repoFile('docs/user-guide.md')}>{t.footer.guide}</a></li>
+      <li><a href={RELEASES_URL}>{t.footer.releases}</a></li>
+      <li><a href={`${REPO_URL}/issues`}>{t.footer.issues}</a></li>
+      <li><a href={repoFile('SECURITY.md')}>{t.footer.security}</a></li>
+      <li><a href={REPO_URL}>{t.footer.github}</a></li>
+    </ul>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    padding-block: 40px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .name {
+    font-weight: 700;
+  }
+
+  .legal {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+  }
+
+  .legal a {
+    color: inherit;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    list-style: none;
+  }
+
+  .footer-links a {
+    color: var(--text-muted);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .footer-links a:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+</style>

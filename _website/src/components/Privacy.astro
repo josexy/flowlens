@@ -1,0 +1,99 @@
+---
+import { Check, HardDrive } from 'lucide-static';
+import { repoFile } from '../config';
+import { dictionary, type Locale } from '../i18n';
+import Icon from './Icon.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+---
+
+<section class="section" aria-labelledby="privacy-title">
+  <div class="container">
+    <div class="panel">
+      <div class="intro">
+        <span class="icon-tile"><Icon svg={HardDrive} size={24} /></span>
+        <h2 id="privacy-title">{t.privacy.title}</h2>
+        <p>{t.privacy.lead}</p>
+        <a class="more" href={repoFile('docs/user-guide.md#security')}>{t.privacy.more}</a>
+      </div>
+      <ul class="points">
+        {
+          t.privacy.points.map((point) => (
+            <li>
+              <Icon svg={Check} size={18} />
+              <span>{point}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  .panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 48px;
+    align-items: center;
+    padding: clamp(28px, 5vw, 48px);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) + 4px);
+    background: var(--bg-soft);
+  }
+
+  .icon-tile {
+    display: inline-grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-text);
+  }
+
+  h2 {
+    font-size: clamp(1.5rem, 2.8vw, 2rem);
+  }
+
+  .intro p {
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+  }
+
+  .more {
+    display: inline-block;
+    margin-top: 16px;
+    font-weight: 600;
+  }
+
+  .points {
+    display: grid;
+    gap: 16px;
+    list-style: none;
+  }
+
+  .points li {
+    display: flex;
+    gap: 12px;
+  }
+
+  .points :global(.icon) {
+    margin-top: 4px;
+    color: var(--accent-soft-text);
+  }
+
+  @media (max-width: 860px) {
+    .panel {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+  }
+</style>

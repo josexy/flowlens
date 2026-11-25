@@ -1,0 +1,60 @@
+---
+import { LATEST_RELEASE_API, REPO } from '../config';
+import { dictionary, type Locale } from '../i18n';
+import Base from '../layouts/Base.astro';
+import { loadRelease } from '../lib/github';
+import type { DownloadConfig } from '../scripts/downloads';
+import Downloads from './Downloads.astro';
+import Features from './Features.astro';
+import Footer from './Footer.astro';
+import Header from './Header.astro';
+import Hero from './Hero.astro';
+import HowItWorks from './HowItWorks.astro';
+import Privacy from './Privacy.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+const release = await loadRelease();
+
+const config: DownloadConfig = {
+  repo: REPO,
+  api: LATEST_RELEASE_API,
+  lang: t.lang,
+  release,
+  strings: {
+    downloadFor: t.hero.downloadFor,
+    captions: t.download.captions,
+    release: t.download.release,
+    releaseUnknown: t.download.releaseUnknown,
+  },
+};
+// Escape "<" so the JSON can never close its <script> element.
+const configJson = JSON.stringify(config).replace(/</g, '\\u003c');
+---
+
+<Base locale={locale}>
+  <Header locale={locale} />
+  <main id="main" tabindex="-1">
+    <Hero locale={locale} />
+    <Features locale={locale} />
+    <HowItWorks locale={locale} />
+    <Downloads locale={locale} release={release} />
+    <Privacy locale={locale} />
+  </main>
+  <Footer locale={locale} />
+  <script id="download-config" type="application/json" set:html={configJson} />
+</Base>
+
+<script>
+  import '../scripts/downloads';
+</script>
+
+<style>
+  main:focus {
+    outline: none;
+  }
+</style>

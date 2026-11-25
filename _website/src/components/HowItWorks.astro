@@ -1,0 +1,121 @@
+---
+import { BookOpen } from 'lucide-static';
+import { repoFile } from '../config';
+import { dictionary, type Locale } from '../i18n';
+import Icon from './Icon.astro';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = dictionary(locale);
+const ADDRESS = '127.0.0.1:8080';
+---
+
+<section id="how-it-works" class="section" aria-labelledby="how-title">
+  <div class="container">
+    <div class="section-head centered">
+      <h2 id="how-title">{t.howItWorks.title}</h2>
+    </div>
+    <ol class="steps">
+      {
+        t.howItWorks.steps.map((step, index) => {
+          const [before = '', after = ''] = step.body.split('{address}');
+          return (
+            <li class="step">
+              <span class="step-number" aria-hidden="true">
+                {index + 1}
+              </span>
+              <h3>{step.title}</h3>
+              <p>
+                {before}
+                {step.body.includes('{address}') && <code>{ADDRESS}</code>}
+                {after}
+              </p>
+            </li>
+          );
+        })
+      }
+    </ol>
+    <p class="guide">
+      <a href={repoFile('docs/user-guide.md')}>
+        <Icon svg={BookOpen} size={18} />
+        {t.howItWorks.guide}
+      </a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .steps {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
+    list-style: none;
+  }
+
+  /* A line linking the step numbers on wide screens. */
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 26px;
+    left: calc(100% / 6);
+    right: calc(100% / 6);
+    border-top: 2px dashed var(--border-strong);
+  }
+
+  .step {
+    position: relative;
+    text-align: center;
+  }
+
+  .step-number {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 18px;
+    border: 4px solid var(--bg);
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+    box-sizing: content-box;
+  }
+
+  h3 {
+    font-size: 1.15rem;
+  }
+
+  p {
+    max-width: 340px;
+    margin: 8px auto 0;
+    color: var(--text-muted);
+  }
+
+  .guide {
+    margin-top: 40px;
+    text-align: center;
+  }
+
+  .guide a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 860px) {
+    .steps {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+
+    .steps::before {
+      display: none;
+    }
+  }
+</style>
