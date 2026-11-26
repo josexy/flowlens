@@ -153,6 +153,8 @@ Process attribution is enabled by default under **Settings > Proxy** and applies
 
 Saved capture sessions appear under **History** and persist across restarts. Only the currently open history's decoded entries and loaded bodies stay in memory: opening another history replaces them, and closing the history tab releases them (including detail-view caches) and returns to live capture. FlowLens retains compact indexes for up to four recently accessed histories so reopening them stays fast.
 
+History details show complete headers and metadata before loading bodies. Open **Raw**, **Body**, or **WebSocket** when you need payload content; other detail tabs do not wait for it. During loading, the panel keeps its layout and close button, and quick reads do not flash a spinner. Raw copying becomes available after the payload loads.
+
 ### Importing HAR Files
 
 Click **Import HAR** beside the History refresh button, or drag and drop `.har` files onto the capture or history table:

@@ -152,6 +152,10 @@ func TestHistoryBinaryWebSocketMessageMatchesAcrossV2AndV3(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(detail.Body, view) {
 			t.Fatalf("on-demand %s detail differs: %v", key, err)
 		}
+		staged, err := service.GetHistoryBody(context.Background(), key, 9001)
+		if err != nil || !reflect.DeepEqual(staged, view) {
+			t.Fatalf("staged %s body differs: %v", key, err)
+		}
 	}
 	v2, v3 := views["ws-v2"].WebSocketMessages[0], views["ws-v3"].WebSocketMessages[0]
 	if v2.Data != v3.Data || v2.DataSize != v3.DataSize {

@@ -15,6 +15,8 @@ type controlledHistory struct {
 	*fakeHistory
 	list   func(context.Context, string) ([]*logic.TrafficEntry, error)
 	detail func(context.Context, string, uint64) (historyservice.HistoryDetail, error)
+	entry  func(context.Context, string, uint64) (*proxyservice.TrafficEntry, error)
+	body   func(context.Context, string, uint64) (*proxyservice.TrafficBodyView, error)
 }
 
 func (b *controlledHistory) ListHistoryEntries(ctx context.Context, key string) ([]*logic.TrafficEntry, error) {
@@ -25,7 +27,26 @@ func (b *controlledHistory) ListHistoryEntries(ctx context.Context, key string) 
 }
 
 func (b *controlledHistory) GetHistoryDetail(ctx context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
+	if b.detail == nil {
+		return b.fakeHistory.GetHistoryDetail(ctx, key, id)
+	}
 	return b.detail(ctx, key, id)
+}
+
+func (b *controlledHistory) GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error) {
+	if b.entry != nil {
+		return b.entry(ctx, key, id)
+	}
+	detail, err := b.GetHistoryDetail(ctx, key, id)
+	return detail.Entry, err
+}
+
+func (b *controlledHistory) GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error) {
+	if b.body != nil {
+		return b.body(ctx, key, id)
+	}
+	detail, err := b.GetHistoryDetail(ctx, key, id)
+	return detail.Body, err
 }
 
 func waitHistoryLoad(t *testing.T, started <-chan context.Context) context.Context {

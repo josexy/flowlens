@@ -40,12 +40,20 @@ type fakeData struct {
 	body    *proxyservice.TrafficBodyView
 	version uint64
 	loading bool
+	pending *logic.TrafficEntry
+	request func()
 }
 
 func (d *fakeData) SelectedEntry() *logic.TrafficEntry      { return d.entry }
 func (d *fakeData) BodyView() *proxyservice.TrafficBodyView { return d.body }
 func (d *fakeData) BodyVersion() uint64                     { return d.version }
 func (d *fakeData) BodyLoading() bool                       { return d.loading }
+func (d *fakeData) PendingEntry() *logic.TrafficEntry       { return d.pending }
+func (d *fakeData) RequestBody() {
+	if d.request != nil {
+		d.request()
+	}
+}
 
 type fixture struct {
 	t        testing.TB
