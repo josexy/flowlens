@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+	"weak"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/snappy"
@@ -350,6 +352,80 @@ func TestPooledZstdDecoderRejectsWindowsOverCap(t *testing.T) {
 	if got := readDecodedPayload(t, NewPooledZstdReadCloser, windowDescriptor(23)); string(got) != "A" {
 		t.Fatalf("frame with an 8 MiB window decoded %q, want %q", got, "A")
 	}
+}
+
+// A stalled peer leaves the source open after the frame it sent. Once that
+// frame is decoded, Read and Close must return instead of waiting for more.
+func TestPooledZstdReaderDoesNotWaitOnOpenSource(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(strings.Repeat("zstd-open-source-", 64))
+	frame := mustEncodeForTest(t, encodeZstdWithPool, payload)
+	corrupted := append([]byte(nil), frame...)
+	corrupted[len(corrupted)-1] ^= 0xff // content checksum
+
+	open := func(t *testing.T, encoded []byte) io.ReadCloser {
+		t.Helper()
+		source, peer := io.Pipe()
+		t.Cleanup(func() { _ = peer.Close() })
+		go func() { _, _ = peer.Write(encoded) }()
+		reader, err := NewPooledZstdReadCloser(source)
+		if err != nil {
+			t.Fatalf("open pooled reader: %v", err)
+		}
+		return reader
+	}
+	returnsPromptly := func(t *testing.T, call string, fn func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			fn()
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s waited on the open source", call)
+		}
+	}
+
+	t.Run("close after a partial read", func(t *testing.T) {
+		reader := open(t, frame)
+		if _, err := io.ReadFull(reader, make([]byte, len(payload)/2)); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		returnsPromptly(t, "Close", func() { _ = reader.Close() })
+	})
+	t.Run("checksum error", func(t *testing.T) {
+		reader := open(t, corrupted)
+		var err error
+		returnsPromptly(t, "Read", func() { _, err = io.ReadAll(reader) })
+		if !errors.Is(err, zstd.ErrCRCMismatch) {
+			t.Fatalf("read error = %v, want %v", err, zstd.ErrCRCMismatch)
+		}
+		_ = reader.Close()
+	})
+}
+
+// A released decoder stays pooled until the second collection after its
+// release, so it must not keep the reader it last decoded reachable.
+func TestReleasedZstdDecoderDropsItsSource(t *testing.T) {
+	encoded := mustEncodeForTest(t, encodeZstdWithPool, zstdTestBody(256<<10))
+	source := bytes.NewReader(encoded)
+	sourceRef := weak.Make(source)
+	dec, err := AcquireZstdDecoder(source)
+	if err != nil {
+		t.Fatalf("acquire zstd decoder: %v", err)
+	}
+	if _, err := io.Copy(io.Discard, dec); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ReleaseZstdDecoder(dec)
+	runtime.GC()
+	if sourceRef.Value() != nil {
+		t.Fatal("released decoder keeps its last source reachable")
+	}
+	runtime.KeepAlive(dec)
 }
 
 // An idle pooled encoder stays in memory until the second collection after

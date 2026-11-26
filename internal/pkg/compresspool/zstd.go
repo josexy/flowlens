@@ -36,7 +36,14 @@ func AcquireZstdDecoder(r io.Reader) (*zstd.Decoder, error) {
 		}
 		return dec, nil
 	}
-	return zstd.NewReader(r, zstd.WithDecoderMaxWindow(zstdDecoderMaxWindow))
+	return zstd.NewReader(r,
+		// Decode only as Read asks. The library's read-ahead goroutines made a
+		// Read after a decoding error, and Close, wait on a source Read that an
+		// open, stalled response never finishes, and kept the last source
+		// reachable from the pooled decoder.
+		zstd.WithDecoderConcurrency(1),
+		zstd.WithDecoderMaxWindow(zstdDecoderMaxWindow),
+	)
 }
 
 func ReleaseZstdDecoder(dec *zstd.Decoder) {
