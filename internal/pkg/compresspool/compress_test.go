@@ -6,7 +6,9 @@ import (
 	"compress/flate"
 	stdgzip "compress/gzip"
 	stdzlib "compress/zlib"
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -304,6 +306,49 @@ func TestPooledZstdEncoderUsesBoundedWindow(t *testing.T) {
 	}
 	if got := readDecodedPayload(t, NewPooledZstdReadCloser, legacy.Bytes()); !bytes.Equal(got, body) {
 		t.Fatalf("legacy frame decoded %d bytes, want the %d-byte body", len(got), len(body))
+	}
+}
+
+// A frame header sets the window a decoder allocates before decoding anything,
+// and a pooled decoder keeps that allocation. Windows over the cap must fail
+// without being allocated.
+func TestPooledZstdDecoderRejectsWindowsOverCap(t *testing.T) {
+	rawBlock := []byte{0x09, 0x00, 0x00, 'A'} // last block, raw, 1 byte
+	windowDescriptor := func(windowLog byte) []byte {
+		return append([]byte{0x28, 0xb5, 0x2f, 0xfd, 0x00, (windowLog - 10) << 3}, rawBlock...)
+	}
+	// A single-segment frame's window is its content size.
+	singleSegment := binary.LittleEndian.AppendUint64([]byte{0x28, 0xb5, 0x2f, 0xfd, 0xe0}, 256<<20)
+	singleSegment = append(singleSegment, rawBlock...)
+
+	for _, tc := range []struct {
+		name  string
+		frame []byte
+	}{
+		{name: "512 MiB window descriptor", frame: windowDescriptor(29)},
+		{name: "256 MiB single segment", frame: singleSegment},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			reader, err := NewPooledZstdReadCloser(bytes.NewReader(tc.frame))
+			if err != nil {
+				t.Fatalf("open pooled reader: %v", err)
+			}
+			_, err = io.ReadAll(reader)
+			_ = reader.Close()
+			runtime.ReadMemStats(&after)
+			if !errors.Is(err, zstd.ErrWindowSizeExceeded) && !errors.Is(err, zstd.ErrDecoderSizeExceeded) {
+				t.Fatalf("decode error = %v, want a window size error", err)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8<<20 {
+				t.Fatalf("a %d-byte frame allocated %.1f MiB", len(tc.frame), float64(allocated)/(1<<20))
+			}
+		})
+	}
+
+	if got := readDecodedPayload(t, NewPooledZstdReadCloser, windowDescriptor(23)); string(got) != "A" {
+		t.Fatalf("frame with an 8 MiB window decoded %q, want %q", got, "A")
 	}
 }
 
