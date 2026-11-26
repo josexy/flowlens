@@ -3,6 +3,7 @@ package capture
 import (
 	"image/color"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -315,6 +316,16 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 				}
 			}
 		}
+		if rendertest.Enabled() {
+			f.tester.SetScale(1)
+			f.tester.SetZoom(1)
+			f.settle()
+			name := "traffic-row-outline-light"
+			if dark {
+				name = "traffic-row-outline-dark"
+			}
+			rendertest.Shoot(t, f.tester, name)
+		}
 	}
 }
 
@@ -324,6 +335,54 @@ func TestDurationAndSizeUseTabularNumerals(t *testing.T) {
 	b, _ := f.tester.Find("99 ms")
 	if a.W == 0 || a.W != b.W {
 		t.Fatalf("11 ms is %v wide, 99 ms %v", a.W, b.W)
+	}
+}
+
+func TestTrafficRowDecorationFollowsDisplayedColumns(t *testing.T) {
+	f := newFixtureSized(t, []*logic.TrafficEntry{entry(1, "highlight.test"), entry(2, "plain.test")}, 2400, 640)
+	table := f.workspace.Table
+	f.data.Traffic.SetHighlight(1, "#ef4444")
+	for _, layout := range []string{"default", "hidden-reordered", "fixed-path"} {
+		if layout == "hidden-reordered" {
+			f.data.Settings.SetTrafficColumnVisible(logic.ColumnID, false, nil)
+			table.state.List.Columns.Order = append([]string{"host"}, slices.DeleteFunc(slices.Clone(table.fullOrder), func(key string) bool { return key == "host" })...)
+		}
+		if layout == "fixed-path" {
+			table.state.List.Columns.Widths = map[string]float32{"path": 150}
+		}
+		for _, dark := range []bool{false, true} {
+			f.setDark(dark)
+			for _, scale := range []float32{1, 1.5, 2, 4} {
+				f.tester.SetScale(scale)
+				f.settle()
+				row, _ := f.tester.AccessByRole(ui.RoleRow, "1")
+				viewport, _ := f.tester.AccessByRole(ui.RoleTable, locales.TrafficColumns())
+				frame := f.tester.Image()
+				at := func(v float32) int { return int(math.Round(float64(v * scale))) }
+				tint, alpha := float32(0.15), float32(0.25)
+				if dark {
+					tint, alpha = 0.35, 0.45
+				}
+				red := ui.Hex("#ef4444")
+				background := red.Alpha(tint).Over(f.theme().Background)
+				line := rgba(red.Alpha(alpha).Over(background))
+				left, right := at(row.Bounds.X), at(viewport.Bounds.X+viewport.Bounds.W)
+				top, bottom := at(row.Bounds.Y), at(row.Bounds.Y+row.Bounds.H)
+				for x := left + at(4); x < right; x++ {
+					for _, y := range []int{top, bottom - 1} {
+						if got := frame.RGBAAt(x, y); !near(got, line) {
+							t.Fatalf("%s dark=%v scale=%v: broken border at %d,%d: %v, want %v", layout, dark, scale, x, y, got, line)
+						}
+					}
+				}
+				if got := frame.RGBAAt(left+at(1), (top+bottom)/2); !near(got, rgba(red)) {
+					t.Fatalf("%s: marker did not follow the first displayed column: %v", layout, got)
+				}
+				if got := frame.RGBAAt(right-1, (top+bottom)/2); !near(got, line) {
+					t.Fatalf("%s: missing last-cell border: %v", layout, got)
+				}
+			}
+		}
 	}
 }
 

@@ -77,18 +77,26 @@ func (t *Table) displayOrder(visible []columnDefinition) []string {
 	return order
 }
 
-// rowOutline draws the 1 px outline of a marked row along one cell: its top
-// and bottom, and its start or end on the row's first or last cell.
-func rowOutline(c *ui.Context, color ui.Color, first, last bool) {
-	left, right := float32(0), float32(0)
-	if first {
-		left = 1
-	}
-	if last {
-		right = 1
-	}
-	ui.Box(c.Key("outline")).Absolute().Top(0).Bottom(0).Left(0).Right(0).IgnoreInput(true).
-		BorderWidth(1, right, 1, left).BorderColor(color).Label("row-outline")
+// rowOutlineStyle is copied into a drawing method value. It owns only visual
+// scalars, never a table, record, context, or frame element.
+type rowOutlineStyle struct {
+	outline, marker ui.Color
+	zoom            float32
+	first, last     bool
+}
+
+func (s rowOutlineStyle) paint(p *ui.Painter, r ui.Rect) {
+	p.Clip(r, 0, func() {
+		w := s.zoom
+		p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: w}, s.outline, 0)
+		p.Fill(ui.Rect{X: r.X, Y: r.Y + r.H - w, W: r.W, H: w}, s.outline, 0)
+		if s.last {
+			p.Fill(ui.Rect{X: r.X + r.W - w, Y: r.Y + w, W: w, H: max(0, r.H-2*w)}, s.outline, 0)
+		}
+		if s.first {
+			p.Fill(ui.Rect{X: r.X, Y: r.Y, W: min(3*w, r.W), H: r.H}, s.marker, 0)
+		}
+	})
 }
 
 // Badge tones of 1.0.5's badgeToneClass, by status class.

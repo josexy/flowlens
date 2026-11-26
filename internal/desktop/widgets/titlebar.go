@@ -2,11 +2,9 @@ package widgets
 
 import (
 	"runtime"
-	"sync"
 
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
-	"github.com/josexy/flowlens/resources"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -17,21 +15,6 @@ const (
 	windowControlWidth = 42
 	windowControlIcon  = 16
 )
-
-var (
-	appIconOnce   sync.Once
-	appIconBitmap *ui.Bitmap
-)
-
-// appIcon returns the decoded application icon, or nil when it cannot be read.
-func appIcon() *ui.Bitmap {
-	appIconOnce.Do(func() {
-		if bitmap, err := ui.DecodeBitmap(resources.AppIcon); err == nil {
-			appIconBitmap = bitmap
-		}
-	})
-	return appIconBitmap
-}
 
 // WindowFrame is the title bar a window draws in custom title bar mode.
 type WindowFrame struct {
@@ -65,7 +48,7 @@ func (f WindowFrame) Build(c *ui.Context, theme nui.Theme) {
 			title.Padding(0, 0, 0, 12)
 		}
 		title.Children(func() {
-			if icon := appIcon(); icon != nil {
+			if icon := AppIcon(); icon != nil {
 				ui.Image(c, icon).Size(titleBarIconSize, titleBarIconSize).Fit(ui.Contain).Shrink(0)
 			}
 			weight := 600
