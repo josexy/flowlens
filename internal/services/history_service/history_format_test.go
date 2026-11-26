@@ -2,11 +2,13 @@ package historyservice
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -146,6 +148,10 @@ func TestHistoryBinaryWebSocketMessageMatchesAcrossV2AndV3(t *testing.T) {
 			t.Fatalf("%s messages = %+v", key, view.WebSocketMessages)
 		}
 		views[key] = view
+		detail, err := service.GetHistoryDetail(context.Background(), key, 9001)
+		if err != nil || !reflect.DeepEqual(detail.Body, view) {
+			t.Fatalf("on-demand %s detail differs: %v", key, err)
+		}
 	}
 	v2, v3 := views["ws-v2"].WebSocketMessages[0], views["ws-v3"].WebSocketMessages[0]
 	if v2.Data != v3.Data || v2.DataSize != v3.DataSize {

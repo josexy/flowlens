@@ -186,6 +186,7 @@ func TestHistoryDetailReleaseDropsRenderedCachesAndReopens(t *testing.T) {
 		history.Traffic.Load("saved-session", []*logic.TrafficEntry{entry})
 		history.SelectedKey = "saved-session"
 		history.Traffic.Selected, history.Traffic.BodyView, history.Traffic.ShowDetailPanel = entry, body, true
+		history.Traffic.DetailEntry = entry
 		f.panel.responseTab = tabResponseBody
 		f.tester.Frame()
 	}

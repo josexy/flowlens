@@ -1650,16 +1650,25 @@ type fakeHistoryBackend struct {
 	deleted []string
 	cleared int
 	import_ func(path string) (proxyservice.HARImportResult, error)
+	details map[uint64]historyservice.HistoryDetail
 }
 
 func (b *fakeHistoryBackend) ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error) {
 	return b.list, nil
 }
-func (b *fakeHistoryBackend) GetHistory(key string) ([]*logic.TrafficEntry, error) {
+func (b *fakeHistoryBackend) ListHistoryEntries(_ context.Context, key string) ([]*logic.TrafficEntry, error) {
 	return b.entries[key], nil
 }
-func (b *fakeHistoryBackend) GetHistoryTrafficBodyView(string, uint64) (*proxyservice.TrafficBodyView, error) {
-	return &proxyservice.TrafficBodyView{}, nil
+func (b *fakeHistoryBackend) GetHistoryDetail(_ context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
+	if detail, ok := b.details[id]; ok {
+		return detail, nil
+	}
+	for _, entry := range b.entries[key] {
+		if entry != nil && entry.ID == id {
+			return historyservice.HistoryDetail{Entry: entry, Body: &proxyservice.TrafficBodyView{}}, nil
+		}
+	}
+	return historyservice.HistoryDetail{}, fmt.Errorf("missing history entry %d", id)
 }
 func (b *fakeHistoryBackend) DeleteHistory(key string) error {
 	b.deleted = append(b.deleted, key)

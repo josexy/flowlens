@@ -55,12 +55,18 @@ func statusColor(code int) nui.Color {
 	}
 }
 
-func (r *responseView) build(c *ui.Context, theme nui.Theme) {
-	state := r.state
-	if state.Response != r.seen {
-		r.seen = state.Response
+func (r *responseView) syncResponse() {
+	if r.state.Response != r.seen {
+		r.body.Reset()
+		r.cookies = inspect.NewCookieList(r.editor.Host.Inspect)
+		r.seen = r.state.Response
 		r.identity++
 	}
+}
+
+func (r *responseView) build(c *ui.Context, theme nui.Theme) {
+	r.syncResponse()
+	state := r.state
 	hasResponse, hasConsole := logic.HasResponse(state), logic.HasRequestConsole(state)
 	fields := logic.ResponseSetCookieFields(state.Response)
 	hasCookies := logic.HasCookieHeader(fields, "set-cookie")

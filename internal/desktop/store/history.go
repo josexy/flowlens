@@ -16,6 +16,8 @@ import (
 const (
 	jobHistoryList   = "history:list"
 	jobHistoryLoad   = "history:load"
+	jobHistoryDetail = "history:detail"
+	jobHistoryAction = "history:action:"
 	jobHistoryDelete = "history:delete"
 	jobHistoryClear  = "history:clear"
 	jobHistoryImport = "history:import"
@@ -24,8 +26,8 @@ const (
 // HistoryBackend is the history service as the stores use it.
 type HistoryBackend interface {
 	ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error)
-	GetHistory(key string) ([]*logic.TrafficEntry, error)
-	GetHistoryTrafficBodyView(key string, id uint64) (*proxyservice.TrafficBodyView, error)
+	ListHistoryEntries(ctx context.Context, key string) ([]*logic.TrafficEntry, error)
+	GetHistoryDetail(ctx context.Context, key string, id uint64) (historyservice.HistoryDetail, error)
 	DeleteHistory(key string) error
 	ClearHistories() error
 	ImportHAR(ctx context.Context, request historyservice.HARImportRequest) (proxyservice.HARImportResult, error)
@@ -40,6 +42,7 @@ type HistoryTraffic struct {
 	Entries         []*logic.TrafficEntry
 	EntriesVersion  uint64
 	Selected        *logic.TrafficEntry
+	DetailEntry     *logic.TrafficEntry
 	SelectedCount   int
 	BodyView        *proxyservice.TrafficBodyView
 	BodyViewVersion uint64
@@ -63,6 +66,10 @@ func (t *HistoryTraffic) setBodyView(view *proxyservice.TrafficBodyView) {
 }
 
 func (t *HistoryTraffic) clearBody() {
+	if t.rt.Jobs != nil {
+		t.rt.Jobs.Cancel(jobHistoryDetail)
+	}
+	t.DetailEntry = nil
 	t.bodyToken++
 	if t.BodyView != nil {
 		t.setBodyView(nil)
@@ -107,24 +114,20 @@ func (t *HistoryTraffic) loadBody() {
 	if entry == nil || !t.ShowDetailPanel || t.Key == "" {
 		return
 	}
-	if !logic.CapabilitiesOf(entry).CanLoadBody {
-		t.clearBody()
-		return
-	}
-	if t.BodyView != nil && t.loadedBodyEntry == entry.ID {
+	if (t.DetailEntry != nil && t.loadedBodyEntry == entry.ID) || t.BodyViewLoading {
 		return
 	}
 	t.bodyToken++
 	token, key, id := t.bodyToken, t.Key, entry.ID
 	t.BodyViewLoading = true
-	t.bodySequence++
-	runtime.Run(t.rt.Jobs, fmt.Sprintf("history:body:%d", t.bodySequence), func(context.Context) (*proxyservice.TrafficBodyView, error) {
-		return t.backend.GetHistoryTrafficBodyView(key, id)
-	}, func(view *proxyservice.TrafficBodyView, err error) {
+	runtime.Run(t.rt.Jobs, jobHistoryDetail, func(ctx context.Context) (historyservice.HistoryDetail, error) {
+		return t.backend.GetHistoryDetail(ctx, key, id)
+	}, func(detail historyservice.HistoryDetail, err error) {
 		if token != t.bodyToken {
 			return
 		}
 		t.BodyViewLoading = false
+		t.DetailEntry = detail.Entry
 		if err != nil {
 			logger.G().Errorf("Failed to get history traffic body view: %v", err)
 			if t.BodyView != nil {
@@ -133,30 +136,28 @@ func (t *HistoryTraffic) loadBody() {
 			t.loadedBodyEntry = 0
 			return
 		}
-		t.setBodyView(view)
+		t.setBodyView(detail.Body)
 		t.loadedBodyEntry = id
 	})
 }
 
-// GetBodyView loads the bodies of any entry. done receives nil for raw TCP
-// entries and on failure.
-func (t *HistoryTraffic) GetBodyView(id uint64, done func(*proxyservice.TrafficBodyView)) {
-	index := slices.IndexFunc(t.Entries, func(entry *logic.TrafficEntry) bool { return entry.ID == id })
-	if t.Key == "" || (index >= 0 && logic.IsRawTCP(t.Entries[index])) {
-		done(nil)
+// GetEntry loads complete action inputs without adding them to the row list.
+func (t *HistoryTraffic) GetEntry(id uint64, done func(*logic.TrafficEntry, *proxyservice.TrafficBodyView)) {
+	if t.Key == "" {
+		done(nil, nil)
 		return
 	}
 	key := t.Key
 	t.bodySequence++
-	runtime.Run(t.rt.Jobs, fmt.Sprintf("history:body:%d", t.bodySequence), func(context.Context) (*proxyservice.TrafficBodyView, error) {
-		return t.backend.GetHistoryTrafficBodyView(key, id)
-	}, func(view *proxyservice.TrafficBodyView, err error) {
+	runtime.Run(t.rt.Jobs, fmt.Sprintf("%s%d", jobHistoryAction, t.bodySequence), func(ctx context.Context) (historyservice.HistoryDetail, error) {
+		return t.backend.GetHistoryDetail(ctx, key, id)
+	}, func(detail historyservice.HistoryDetail, err error) {
 		if err != nil {
 			logger.G().Errorf("Failed to get history traffic body view: %v", err)
-			done(nil)
+			done(nil, nil)
 			return
 		}
-		done(view)
+		done(detail.Entry, detail.Body)
 	})
 }
 
@@ -170,6 +171,9 @@ func (t *HistoryTraffic) Load(key string, entries []*logic.TrafficEntry) {
 
 // Reset empties the store.
 func (t *HistoryTraffic) Reset() {
+	if t.rt.Jobs != nil {
+		t.rt.Jobs.CancelPrefix(jobHistoryAction)
+	}
 	t.clearBody()
 	t.Key, t.Entries, t.Selected, t.SelectedCount, t.ShowDetailPanel, t.PendingFocusID = "", nil, nil, 0, false, 0
 	t.EntriesVersion++
@@ -303,8 +307,8 @@ func (s *HistoryStore) Select(key string) {
 		previous = s.SelectedKey
 	}
 	s.SelectedKey, s.LoadingHistory, s.LoadingHistoryKey = key, true, key
-	runtime.Run(s.rt.Jobs, jobHistoryLoad, func(context.Context) ([]*logic.TrafficEntry, error) {
-		return s.backend.GetHistory(key)
+	runtime.Run(s.rt.Jobs, jobHistoryLoad, func(ctx context.Context) ([]*logic.TrafficEntry, error) {
+		return s.backend.ListHistoryEntries(ctx, key)
 	}, func(entries []*logic.TrafficEntry, err error) {
 		s.LoadingHistory, s.LoadingHistoryKey = false, ""
 		if err != nil {
@@ -417,7 +421,7 @@ func (s *HistoryStore) ImportHAR(paths []string, windows bool, done func(HARImpo
 type HistoryDetailData struct{ History *HistoryStore }
 
 // SelectedEntry returns the selected entry.
-func (d HistoryDetailData) SelectedEntry() *logic.TrafficEntry { return d.History.Traffic.Selected }
+func (d HistoryDetailData) SelectedEntry() *logic.TrafficEntry { return d.History.Traffic.DetailEntry }
 
 // BodyView returns the selected entry's bodies.
 func (d HistoryDetailData) BodyView() *proxyservice.TrafficBodyView {

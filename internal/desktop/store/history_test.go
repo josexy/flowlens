@@ -26,11 +26,16 @@ type fakeHistory struct {
 func (f *fakeHistory) ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error) {
 	return slices.Clone(f.list), nil
 }
-func (f *fakeHistory) GetHistory(key string) ([]*logic.TrafficEntry, error) {
+func (f *fakeHistory) ListHistoryEntries(_ context.Context, key string) ([]*logic.TrafficEntry, error) {
 	return f.entries[key], f.getErr
 }
-func (f *fakeHistory) GetHistoryTrafficBodyView(string, uint64) (*proxyservice.TrafficBodyView, error) {
-	return &proxyservice.TrafficBodyView{ResponseBody: "stored"}, nil
+func (f *fakeHistory) GetHistoryDetail(_ context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
+	for _, entry := range f.entries[key] {
+		if entry != nil && entry.ID == id {
+			return historyservice.HistoryDetail{Entry: entry, Body: &proxyservice.TrafficBodyView{ResponseBody: "stored"}}, nil
+		}
+	}
+	return historyservice.HistoryDetail{}, errors.New("missing history entry")
 }
 func (f *fakeHistory) DeleteHistory(key string) error {
 	f.deleted = append(f.deleted, key)

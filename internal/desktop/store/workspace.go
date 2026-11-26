@@ -90,6 +90,9 @@ type WorkspaceStore struct {
 	Tabs      []*logic.WorkspaceTab
 	ActiveKey string
 	seed      int
+	// OnResponseChanged releases derived response views on the main thread,
+	// including when the request tab is not being rendered.
+	OnResponseChanged func(key string)
 
 	// streams and sockets hold each tab's current request operation.
 	streams map[string]*httpStreamRuntime
@@ -767,6 +770,11 @@ func (s *WorkspaceStore) SendTab(key string, pythonEnabled bool) string {
 }
 
 func (s *WorkspaceStore) finishSend(stream *httpStreamRuntime, response proxyservice.SendRequestResponse, err error, cancelled bool) {
+	defer func() {
+		if s.OnResponseChanged != nil {
+			s.OnResponseChanged(stream.key)
+		}
+	}()
 	state := stream.state
 	elapsed := time.Since(state.SentAt).Microseconds()
 	if err != nil {

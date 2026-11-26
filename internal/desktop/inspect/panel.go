@@ -195,8 +195,17 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 	entry := p.data.SelectedEntry()
 	if entry == nil {
 		p.entryID = 0
-		ui.Column(c).Fill().Center().Children(func() {
-			widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.MousePointerClick(), Title: locales.DetailSelectRequest()})
+		ui.Column(c).Fill().Children(func() {
+			if p.OnClose != nil {
+				widgets.PaneToolbar(c, nil, func() { p.closeButton(c, theme) })
+			}
+			ui.Column(c).Fill().Center().Children(func() {
+				if p.data.BodyLoading() {
+					widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted)
+				} else {
+					widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.MousePointerClick(), Title: locales.DetailSelectRequest()})
+				}
+			})
 		})
 		return
 	}
