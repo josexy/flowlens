@@ -86,9 +86,19 @@ func (v *CodeView) applyLanguage() {
 // SetText replaces the text, without an undo step and without OnChange.
 func (v *CodeView) SetText(text string) {
 	v.large = RequiresPlainText(text)
-	v.state.Buffer.Reset(text)
+	if v.state.ReadOnly {
+		// Reset keeps the buffer's version log, including old complete texts.
+		// A read-only replacement has no edits to preserve. Synchronize State
+		// now as well, so a hidden editor releases its previous buffer/layout.
+		v.state.Buffer = editor.NewBuffer(text)
+	} else {
+		v.state.Buffer.Reset(text)
+	}
 	v.version = v.state.Buffer.Version()
 	v.applyLanguage()
+	if v.state.ReadOnly {
+		v.state.Select(0, 0)
+	}
 }
 
 // AppendText adds text at the end, as a stream delivers it.

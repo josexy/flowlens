@@ -3,6 +3,7 @@ package inspect
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -41,9 +42,10 @@ type BodyViewer struct {
 	// tabChoice is the tab the tab bar edits.
 	tabChoice string
 
-	formatted *widgets.CodeView
-	raw       *widgets.CodeView
-	bodyText  string
+	formatted                *widgets.CodeView
+	raw                      *widgets.CodeView
+	bodyText                 string
+	rawReady, formattedReady bool
 
 	hex   *HexView
 	sse   *SSEView
@@ -72,6 +74,16 @@ func (b *BodyViewer) release() {
 	}
 }
 
+// Reset releases the previous body's viewers and jobs even while hidden.
+// Viewing preferences and a save already in progress belong to this viewer.
+func (b *BodyViewer) Reset() {
+	b.release()
+	next := NewBodyViewer(b.deps, b.enableSSE)
+	next.copyPreferences(b)
+	next.exporting = b.exporting
+	*b = *next
+}
+
 func (b *BodyViewer) copyPreferences(previous *BodyViewer) {
 	b.active, b.tabChoice, b.tabs = previous.active, previous.tabChoice, previous.tabs
 	b.raw.SetWordWrap(previous.raw.WordWrap())
@@ -96,6 +108,7 @@ func (b *BodyViewer) set(content BodyContent) {
 	b.content, b.shown = content, true
 	b.category = logic.ClassifyBody(content.ContentType, content.Binary)
 	if !changed {
+		b.prepareText()
 		return
 	}
 	b.bodyText = content.Body
@@ -108,8 +121,11 @@ func (b *BodyViewer) set(content BodyContent) {
 		b.sse.identity, b.sse.body, b.sse.binary = 0, "", false
 		b.image.reset()
 	}
-	b.formatted.SetLanguage(logic.EditorLanguage(b.category))
-	if streamingText {
+	if b.formattedReady {
+		b.formatted.SetText("")
+		b.formattedReady = false
+	}
+	if b.rawReady {
 		if grew {
 			chunk := content.Body[len(previousBody):]
 			// The editor normalizes CR and CRLF to LF. When a chunk splits a
@@ -119,17 +135,24 @@ func (b *BodyViewer) set(content BodyContent) {
 			}
 			b.raw.AppendText(chunk)
 		} else {
-			b.raw.SetText(content.Body)
-			// SSE has no Formatted tab. Retaining a second full copy here
-			// would undo the store's incremental body updates.
-			b.formatted.SetText("")
+			b.raw.SetText("")
+			b.rawReady = false
 		}
-	} else if !content.Binary {
-		b.formatted.SetText(logic.FormatBody(content.Body, b.category))
-		b.raw.SetText(content.Body)
-	} else {
-		b.formatted.SetText("")
-		b.raw.SetText("")
+	}
+	b.prepareText()
+}
+
+// prepareText materializes only the requested mode, and never formats a
+// body whose Formatted tab is unavailable (notably large JSON responses).
+func (b *BodyViewer) prepareText() {
+	switch {
+	case b.active == logic.BodyTabRaw && !b.rawReady && slices.Contains(b.tabs, logic.BodyTabRaw):
+		b.raw.SetText(b.content.Body)
+		b.rawReady = true
+	case b.active == logic.BodyTabFormatted && !b.formattedReady && slices.Contains(b.tabs, logic.BodyTabFormatted):
+		b.formatted.SetLanguage(logic.EditorLanguage(b.category))
+		b.formatted.SetText(logic.FormatBody(b.content.Body, b.category))
+		b.formattedReady = true
 	}
 }
 
@@ -226,6 +249,7 @@ func (b *BodyViewer) toolbar(c *ui.Context, theme nui.Theme) {
 			widgets.PillTabs(c.Key("body-tabs"), theme, &b.tabChoice, items, locales.DetailBodyViews())
 		})
 		b.active = logic.BodyTab(b.tabChoice)
+		b.prepareText()
 	}, func() { b.actions(c, theme) })
 }
 
@@ -241,6 +265,7 @@ func (b *BodyViewer) wrapTarget() *widgets.CodeView {
 }
 
 func (b *BodyViewer) copyable() string {
+	b.prepareText()
 	if b.content.Body == "" {
 		return ""
 	}
@@ -257,6 +282,7 @@ func (b *BodyViewer) copyable() string {
 // saveTarget returns the bytes Save writes: the formatted text on the
 // Formatted tab, and the raw body otherwise.
 func (b *BodyViewer) saveTarget() (body string, ok bool) {
+	b.prepareText()
 	if b.content.Body == "" {
 		return "", false
 	}
@@ -279,15 +305,14 @@ func (b *BodyViewer) actions(c *ui.Context, theme nui.Theme) {
 		button.OnClick(func() { target.SetWordWrap(!target.WordWrap()) })
 		nui.Tooltip(c, theme, button, locales.DetailWrapBody(), nui.TooltipOptions{})
 	}
-	if text := b.copyable(); text != "" {
+	if b.active == logic.BodyTabFormatted || (b.active == logic.BodyTabRaw || b.active == logic.BodyTabSSE) && !b.content.Binary {
 		iconButton(c, theme, "copy", lucide.Copy(), locales.DetailCopyBody(), false, func() {
+			text := b.copyable()
 			b.clipboard = &text
 			b.deps.Notifier.Success(locales.DetailBodyCopied())
 		})
 	}
-	if _, ok := b.saveTarget(); ok {
-		iconButton(c, theme, "save", lucide.Download(), locales.DetailSaveBody(), b.exporting, b.saveCurrent)
-	}
+	iconButton(c, theme, "save", lucide.Download(), locales.DetailSaveBody(), b.exporting, b.saveCurrent)
 }
 
 func (b *BodyViewer) suggestedName() string {

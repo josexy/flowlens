@@ -237,12 +237,19 @@ func (s *HistoryService) forgetHistoryLocked(key string) {
 // is not cached. Callers hold storageMu so the history cannot be deleted while
 // they use the index.
 func (s *HistoryService) historyIndex(key string) (*historyFileIndex, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadIndexLocked(key)
+	return s.historyIndexContext(context.Background(), key)
 }
 
-func (s *HistoryService) loadIndexLocked(key string) (*historyFileIndex, error) {
+func (s *HistoryService) historyIndexContext(ctx context.Context, key string) (*historyFileIndex, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadIndexLocked(ctx, key)
+}
+
+func (s *HistoryService) loadIndexLocked(ctx context.Context, key string) (*historyFileIndex, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if _, known := s.histories[key]; !known {
 		return nil, fmt.Errorf("history not found: %s", key)
 	}
@@ -263,7 +270,7 @@ func (s *HistoryService) loadIndexLocked(key string) (*historyFileIndex, error) 
 	}
 	defer file.Close()
 	entries := newOrderedIndexList()
-	if err := initializeIndexMap(bufio.NewReader(file), entries); err != nil {
+	if err := initializeIndexMap(bufio.NewReader(historyContextReader{ctx: ctx, reader: file}), entries); err != nil {
 		return nil, fmt.Errorf("load history index %s: %w", key, err)
 	}
 	index := &historyFileIndex{formatVersion: metadata.FormatVersion, entries: entries}
@@ -272,9 +279,22 @@ func (s *HistoryService) loadIndexLocked(key string) (*historyFileIndex, error) 
 }
 
 func (s *HistoryService) GetHistory(key string) ([]*proxyservice.TrafficEntry, error) {
+	return s.readHistory(context.Background(), key, false)
+}
+
+// ListHistoryEntries keeps the complete searchable table but not every
+// record's large headers and certificates. Details/actions use GetHistoryDetail.
+func (s *HistoryService) ListHistoryEntries(ctx context.Context, key string) ([]*proxyservice.TrafficEntry, error) {
+	return s.readHistory(ctx, key, true)
+}
+
+func (s *HistoryService) readHistory(ctx context.Context, key string, summaries bool) ([]*proxyservice.TrafficEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	fileIndex, err := s.historyIndex(key)
+	fileIndex, err := s.historyIndexContext(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -292,21 +312,89 @@ func (s *HistoryService) GetHistory(key string) ([]*proxyservice.TrafficEntry, e
 	defer hbinFile.Close()
 
 	entries := make([]*proxyservice.TrafficEntry, 0, idxMap.Len())
+	reader := bufio.NewReader(historyContextReader{ctx: ctx, reader: hbinFile})
+	decode := proxyservice.DecodeTrafficEntryWithVersion
+	if summaries {
+		decode = proxyservice.DecodeTrafficEntrySummaryWithVersion
+	}
 	var lastErr error
 	idxMap.ForEachValue(func(value historyIndex) bool {
+		if lastErr = ctx.Err(); lastErr != nil {
+			return false
+		}
 		if _, lastErr = hbinFile.Seek(int64(value.headerIndex), io.SeekStart); lastErr != nil {
 			return false
 		}
 		var entry *proxyservice.TrafficEntry
-		entry, lastErr = proxyservice.DecodeTrafficEntryWithVersion(hbinFile, fileIndex.formatVersion)
+		reader.Reset(historyContextReader{ctx: ctx, reader: hbinFile})
+		entry, lastErr = decode(reader, fileIndex.formatVersion)
 		if lastErr != nil {
 			return false
 		}
 		entries = append(entries, entry)
 		return true
 	})
+	if lastErr == nil {
+		lastErr = ctx.Err()
+	}
 	logger.G().Infof("Fetch History traffic entries[%d/%d] for %s took %v", len(entries), idxMap.Len(), key, time.Since(start))
 	return entries, lastErr
+}
+
+// HistoryDetail is a complete record and its payload, kept apart from the
+// lightweight list. Entry can remain available if only body decoding fails.
+type HistoryDetail struct {
+	Entry *proxyservice.TrafficEntry
+	Body  *proxyservice.TrafficBodyView
+}
+
+func (s *HistoryService) GetHistoryDetail(ctx context.Context, key string, id uint64) (HistoryDetail, error) {
+	if err := ctx.Err(); err != nil {
+		return HistoryDetail{}, err
+	}
+	s.storageMu.RLock()
+	defer s.storageMu.RUnlock()
+	index, err := s.historyIndexContext(ctx, key)
+	if err != nil {
+		return HistoryDetail{}, err
+	}
+	position, ok := index.entries.Get(id)
+	if !ok {
+		return HistoryDetail{}, fmt.Errorf("traffic entry not found: %d", id)
+	}
+	directory, err := getHistoryStoragePath()
+	if err != nil {
+		return HistoryDetail{}, err
+	}
+	file, err := os.Open(filepath.Join(directory, fs.GetHBinFileName(key)))
+	if err != nil {
+		return HistoryDetail{}, err
+	}
+	defer file.Close()
+	if _, err = file.Seek(int64(position.headerIndex), io.SeekStart); err != nil {
+		return HistoryDetail{}, err
+	}
+	reader := bufio.NewReader(historyContextReader{ctx: ctx, reader: file})
+	entry, err := proxyservice.DecodeTrafficEntryWithVersion(reader, index.formatVersion)
+	if err != nil {
+		return HistoryDetail{}, err
+	}
+	if entry.ID != id {
+		return HistoryDetail{}, fmt.Errorf("history entry ID %d does not match index %d", entry.ID, id)
+	}
+	detail := HistoryDetail{Entry: entry}
+	if entry.Type == "tcp" {
+		return detail, ctx.Err()
+	}
+	if _, err = file.Seek(int64(position.bodyIndex), io.SeekStart); err != nil {
+		return detail, err
+	}
+	reader.Reset(historyContextReader{ctx: ctx, reader: file})
+	detail.Body, err = proxyservice.DecodeTrafficBodyWithVersion(reader, index.formatVersion)
+	if err == nil {
+		err = ctx.Err()
+	}
+	return detail, err
 }
 
 func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*proxyservice.TrafficBodyView, error) {

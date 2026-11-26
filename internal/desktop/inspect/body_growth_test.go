@@ -17,6 +17,8 @@ func TestSSEBodyViewerAppendsWithoutCopyingTheSnapshot(t *testing.T) {
 	viewer := NewBodyViewer(Dependencies{}, true)
 	content := BodyContent{Identity: 1, ContentType: "text/event-stream", Body: body.String()}
 	viewer.set(content)
+	viewer.active = logic.BodyTabRaw
+	viewer.prepareText()
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -92,12 +94,18 @@ func TestSSEBodyViewerHandlesReplacementAndTextBoundaries(t *testing.T) {
 		if content.Binary {
 			continue
 		}
+		viewer.active = logic.BodyTabRaw
+		viewer.prepareText()
 		want := strings.ReplaceAll(strings.ReplaceAll(content.Body, "\r\n", "\n"), "\r", "\n")
 		if got := viewer.raw.Text(); got != want {
 			t.Fatalf("raw text = %q, want %q", got, want)
 		}
-		if content.ContentType == "application/json" && viewer.formatted.Text() != logic.FormatBody(content.Body, logic.BodyJSON) {
-			t.Fatal("switching away from SSE did not restore formatted text")
+		if content.ContentType == "application/json" {
+			viewer.active = logic.BodyTabFormatted
+			viewer.prepareText()
+			if viewer.formatted.Text() != logic.FormatBody(content.Body, logic.BodyJSON) {
+				t.Fatal("switching away from SSE did not restore formatted text")
+			}
 		}
 	}
 }

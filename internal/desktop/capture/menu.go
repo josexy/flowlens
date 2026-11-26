@@ -320,11 +320,12 @@ func (t *Table) collectBodies(entries []*logic.TrafficEntry, done func([]*proxys
 			done(bodies, nil)
 			return
 		}
-		t.source.BodyView(entries[index].ID, func(view *proxyservice.TrafficBodyView) {
-			if view == nil || view.RequestBodyUnavailable {
+		t.source.LoadEntry(entries[index], func(entry *logic.TrafficEntry, view *proxyservice.TrafficBodyView) {
+			if entry == nil || view == nil || view.RequestBodyUnavailable {
 				done(nil, errRequestBodyUnavailable)
 				return
 			}
+			entries[index] = entry
 			bodies = append(bodies, view)
 			next(index + 1)
 		})
@@ -377,8 +378,8 @@ func (t *Table) editEntries(entries []*logic.TrafficEntry) {
 			return
 		}
 		entry := entries[index]
-		t.source.BodyView(entry.ID, func(view *proxyservice.TrafficBodyView) {
-			if view != nil && view.RequestBodyUnavailable {
+		t.source.LoadEntry(entry, func(entry *logic.TrafficEntry, view *proxyservice.TrafficBodyView) {
+			if entry == nil || view != nil && view.RequestBodyUnavailable {
 				t.deps.Notifier.Error(locales.DetailRequestBodyUnavailable())
 				open(index + 1)
 				return
@@ -411,8 +412,8 @@ func (t *Table) quickResend(entry *logic.TrafficEntry, count int) {
 	if t.deps.Resend == nil {
 		return
 	}
-	t.source.BodyView(entry.ID, func(view *proxyservice.TrafficBodyView) {
-		if view != nil && view.RequestBodyUnavailable {
+	t.source.LoadEntry(entry, func(entry *logic.TrafficEntry, view *proxyservice.TrafficBodyView) {
+		if entry == nil || view != nil && view.RequestBodyUnavailable {
 			t.deps.Notifier.Error(locales.DetailRequestBodyUnavailable())
 			return
 		}

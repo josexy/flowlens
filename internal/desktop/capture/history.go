@@ -55,9 +55,9 @@ func (s HistorySource) SetHighlight(id uint64, color string) {
 // Delete implements Source.
 func (s HistorySource) Delete(ids []uint64) { s.History.Traffic.Delete(ids) }
 
-// BodyView implements Source.
-func (s HistorySource) BodyView(id uint64, done func(*proxyservice.TrafficBodyView)) {
-	s.History.Traffic.GetBodyView(id, done)
+// LoadEntry implements Source, replacing the row summary with full action inputs.
+func (s HistorySource) LoadEntry(entry *logic.TrafficEntry, done func(*logic.TrafficEntry, *proxyservice.TrafficBodyView)) {
+	s.History.Traffic.GetEntry(entry.ID, done)
 }
 
 // PendingFocus implements Source.

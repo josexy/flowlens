@@ -23,7 +23,7 @@ type Source interface {
 	Highlight(id uint64) string
 	SetHighlight(id uint64, color string)
 	Delete(ids []uint64)
-	BodyView(id uint64, done func(*proxyservice.TrafficBodyView))
+	LoadEntry(entry *logic.TrafficEntry, done func(*logic.TrafficEntry, *proxyservice.TrafficBodyView))
 	PendingFocus() uint64
 	ClearPendingFocus()
 	SetSelectedCount(count int)
@@ -61,9 +61,9 @@ func (s LiveSource) SetHighlight(id uint64, color string) { s.Traffic.SetHighlig
 // Delete implements Source.
 func (s LiveSource) Delete(ids []uint64) { s.Traffic.Delete(ids) }
 
-// BodyView implements Source.
-func (s LiveSource) BodyView(id uint64, done func(*proxyservice.TrafficBodyView)) {
-	s.Traffic.GetBodyView(id, done)
+// LoadEntry implements Source. Live rows already contain the full entry.
+func (s LiveSource) LoadEntry(entry *logic.TrafficEntry, done func(*logic.TrafficEntry, *proxyservice.TrafficBodyView)) {
+	s.Traffic.GetBodyView(entry.ID, func(body *proxyservice.TrafficBodyView) { done(entry, body) })
 }
 
 // PendingFocus implements Source.

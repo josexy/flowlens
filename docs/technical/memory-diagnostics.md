@@ -64,11 +64,18 @@ Three runtime mechanisms can keep process memory elevated for several minutes af
 | Retained State | Bound | Released When |
 | --- | --- | --- |
 | Live capture | Newest 5,000 settled entries plus in-progress exchanges; bodies above the cache threshold (10 KiB default) spill to disk | Older entries spill to disk; **Clear** or restarting capture releases the rest |
-| Opened history | All entries of the active history (headers/metadata without bodies) | The history tab closes or another history opens |
+| Opened history | Lightweight rows of the active history: table/filter fields, message metrics/content types, addresses, and process information | The history tab closes or another history opens |
 | Selected entry | Decoded bodies and viewer state (formatted, Raw, Hex, and image caches) | Selection changes, details close, or capture is cleared |
+| Request-editor response text | Current response only; read-only replacements discard previous editor versions, including hidden viewers | Response replacement or tab close |
 | History indexes | Up to 4 most recently accessed histories | Evicted least-recently-used first |
 | Pooled `zstd` encoders | ~5 MiB each after writing a body over 128 KiB, scaled by peak concurrent writers | Second GC cycle after last use |
 | Pooled `zstd` decoders | ~1.5 MiB each after FlowLens's own 1 MiB-window frames, up to ~8.5 MiB at the 8 MiB window cap, scaled by peak concurrent readers | Second GC cycle after last use |
 | Pooled Brotli readers | Up to ~16 MiB each, sized by the largest window read, scaled by peak concurrent readers | Second GC cycle after last use |
 | MyGo text layouts | ~8 MiB steady state, up to 64 MiB while actively used by recent frames | Trimmed only during frame rendering, not while all windows are idle |
-| MyGo element state and frame arena | Largest frame drawn so far, plus up to 256 recycled element states | Kept for reuse across frames |
+| MyGo element state and frame arena | Current frame's arena plus spare capacity and recycled element states | Excess arena chunks and stale references are trimmed during subsequent frames |
+
+Body text editors are created on demand for the selected mode. Formatted text is never generated for bodies at or above 512 KiB, where the Formatted tab is unavailable. Switching modes can retain both representations of the current body; replacement releases them. SSE Raw text, once opened, appends new chunks without rebuilding the preceding text or retaining undo steps. Copy and Save continue using the selected mode, with original raw bytes and line endings preserved outside the formatted editor.
+
+History browsing selectively decodes one record at a time. It retains the first Content-Type in each message and skips other header names/values (including Cookie and Set-Cookie), all trailers, certificates, and unneeded TLS fields using their encoded lengths. Skipped strings and collections are not materialized; a bounded reusable buffer consumes their bytes while still detecting truncation and cancellation. This reduces initial scan allocations and GC work, but does not necessarily reduce disk reads or immediately lower Task Manager process memory. TCP rows retain selected ALPN for the protocol column.
+
+Complete selected details are held separately, never inserted back into the row list. Copy as cURL and Edit Request load the complete record for the action; export and resend continue reading their full source records. Switching or closing a history/detail cancels obsolete reads and rejects late results. Switching to another workspace tab keeps an open history's rows; closing the history tab releases them. The list still scales with the number of records and the fields it needs so search, categories, and sorting cover the whole history.

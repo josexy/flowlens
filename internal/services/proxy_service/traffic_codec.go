@@ -152,7 +152,18 @@ func DecodeTrafficEntryWithVersion(r io.Reader, formatVersion uint16) (*TrafficE
 	if !isSupportedHistoryFormatVersion(formatVersion) {
 		return nil, fmt.Errorf("hbin: unsupported version %d", formatVersion)
 	}
-	return hbinReadEntryHeader(r, formatVersion)
+	return hbinReadEntryHeader(r, formatVersion, false)
+}
+
+// DecodeTrafficEntrySummaryWithVersion reads the fields needed by history rows,
+// skipping other header values, trailers, certificates, and unused TLS details
+// without materializing their payloads. The result is not a complete record:
+// inspection and actions must use DecodeTrafficEntryWithVersion instead.
+func DecodeTrafficEntrySummaryWithVersion(r io.Reader, formatVersion uint16) (*TrafficEntry, error) {
+	if !isSupportedHistoryFormatVersion(formatVersion) {
+		return nil, fmt.Errorf("hbin: unsupported version %d", formatVersion)
+	}
+	return hbinReadEntryHeader(r, formatVersion, true)
 }
 
 func isSupportedHistoryFormatVersion(version uint16) bool {
@@ -189,6 +200,14 @@ func convertToTrafficBodyView(bvi *trafficBodyViewInner) (*TrafficBodyView, erro
 // readBodyOfSize reads a body whose size is known in advance with a single
 // allocation. A wrong size only costs extra growth, never data.
 func readBodyOfSize(r io.Reader, size int64) ([]byte, error) {
+	if owned, ok := r.(*hbinBodyReader); ok {
+		// HBIN decoded these bytes into an exclusively owned allocation.
+		// Ordinary capture readers can reference mutable capture buffers and
+		// must still take the copying path below.
+		data := owned.data[len(owned.data)-owned.Len():]
+		owned.Close()
+		return data, nil
+	}
 	if size <= 0 || size >= math.MaxInt {
 		return io.ReadAll(r)
 	}
@@ -359,7 +378,7 @@ func (w *hbinCountingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func hbinReadEntryHeader(r io.Reader, formatVersion uint16) (*TrafficEntry, error) {
+func hbinReadEntryHeader(r io.Reader, formatVersion uint16, summary bool) (*TrafficEntry, error) {
 	te := new(TrafficEntry)
 	if err := binary.Read(r, binary.BigEndian, &te.ID); err != nil {
 		return nil, err
@@ -391,13 +410,13 @@ func hbinReadEntryHeader(r io.Reader, formatVersion uint16) (*TrafficEntry, erro
 	if te.Status, err = hbinReadString(r); err != nil {
 		return nil, err
 	}
-	if te.Metadata, err = hbinReadEntryMetadata(r); err != nil {
+	if te.Metadata, err = hbinReadEntryMetadata(r, summary, te.Type == "tcp"); err != nil {
 		return nil, err
 	}
-	if te.Request, err = hbinReadOptHTTPMessage(r); err != nil {
+	if te.Request, err = hbinReadOptHTTPMessage(r, summary); err != nil {
 		return nil, err
 	}
-	if te.Response, err = hbinReadOptHTTPMessage(r); err != nil {
+	if te.Response, err = hbinReadOptHTTPMessage(r, summary); err != nil {
 		return nil, err
 	}
 	if te.Error, err = hbinReadOptTrafficError(r); err != nil {
@@ -423,7 +442,7 @@ func hbinReadEntryHeader(r io.Reader, formatVersion uint16) (*TrafficEntry, erro
 	return te, nil
 }
 
-func hbinReadEntryMetadata(r io.Reader) (*Metadata, error) {
+func hbinReadEntryMetadata(r io.Reader, summary, tcp bool) (*Metadata, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, err
@@ -457,10 +476,10 @@ func hbinReadEntryMetadata(r io.Reader) (*Metadata, error) {
 	if md.SSLHandshakeCompletedAt, err = hbinReadTime(r); err != nil {
 		return nil, err
 	}
-	if md.TLS, err = hbinReadOptTLSState(r); err != nil {
+	if md.TLS, err = hbinReadOptTLSState(r, summary, tcp); err != nil {
 		return nil, err
 	}
-	if md.Certificate, err = hbinReadOptServerCertificate(r); err != nil {
+	if md.Certificate, err = hbinReadOptServerCertificate(r, !summary); err != nil {
 		return nil, err
 	}
 	if md.Process, err = hbinReadOptProcessInfo(r); err != nil {
@@ -779,7 +798,7 @@ func hbinReadEntryBody(r io.Reader, formatVersion uint16) (bv *trafficBodyViewIn
 	}
 	if reqBodyReader != nil {
 		bv.RequestBodySize = reqBodySize
-		bv.RequestBodyReader = io.NopCloser(reqBodyReader)
+		bv.RequestBodyReader = reqBodyReader
 	}
 	// decode response body
 	var rspEnc uint8
@@ -804,7 +823,7 @@ func hbinReadEntryBody(r io.Reader, formatVersion uint16) (bv *trafficBodyViewIn
 	}
 	if rspBodyReader != nil {
 		bv.ResponseBodySize = rspBodySize
-		bv.ResponseBodyReader = io.NopCloser(rspBodyReader)
+		bv.ResponseBodyReader = rspBodyReader
 	}
 	// decode WebSocket messages
 	var wsMsgCount uint32
@@ -861,7 +880,7 @@ func hbinWriteOptHTTPMessage(w io.Writer, msg *HTTPMessage) error {
 	return hbinWriteOptHTTPMessageMetrics(w, msg.Metrics)
 }
 
-func hbinReadOptHTTPMessage(r io.Reader) (*HTTPMessage, error) {
+func hbinReadOptHTTPMessage(r io.Reader, summary bool) (*HTTPMessage, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, err
@@ -873,11 +892,15 @@ func hbinReadOptHTTPMessage(r io.Reader) (*HTTPMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	headerFields, headersTruncated, headerOrderUnavailable, err := hbinReadHeaderFields(r)
+	headerMode, trailerMode := hbinHeadersAll, hbinHeadersAll
+	if summary {
+		headerMode, trailerMode = hbinHeadersContentType, hbinHeadersNone
+	}
+	headerFields, headersTruncated, headerOrderUnavailable, err := hbinReadHeaderFields(r, headerMode)
 	if err != nil {
 		return nil, err
 	}
-	trailerFields, trailersTruncated, trailerOrderUnavailable, err := hbinReadHeaderFields(r)
+	trailerFields, trailersTruncated, trailerOrderUnavailable, err := hbinReadHeaderFields(r, trailerMode)
 	if err != nil {
 		return nil, err
 	}
@@ -987,7 +1010,15 @@ func hbinWriteHeaderFields(
 	return binary.Write(w, binary.BigEndian, orderUnavailableValue)
 }
 
-func hbinReadHeaderFields(r io.Reader) ([]HTTPHeaderField, bool, bool, error) {
+type hbinHeaderReadMode uint8
+
+const (
+	hbinHeadersAll hbinHeaderReadMode = iota
+	hbinHeadersContentType
+	hbinHeadersNone
+)
+
+func hbinReadHeaderFields(r io.Reader, mode hbinHeaderReadMode) ([]HTTPHeaderField, bool, bool, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, false, false, err
@@ -1004,17 +1035,32 @@ func hbinReadHeaderFields(r io.Reader) ([]HTTPHeaderField, bool, bool, error) {
 		if count > hbinMaxHeaderFields {
 			return nil, false, false, fmt.Errorf("hbin: too many header fields: %d", count)
 		}
-		fields = make([]HTTPHeaderField, int(count))
-		for index := range fields {
-			name, err := hbinReadString(r)
+		if mode == hbinHeadersAll {
+			fields = make([]HTTPHeaderField, int(count))
+		}
+		for index := uint32(0); index < count; index++ {
+			var name string
+			var err error
+			switch {
+			case mode == hbinHeadersAll:
+				name, err = hbinReadString(r)
+			case mode == hbinHeadersContentType && len(fields) == 0:
+				name, err = hbinReadContentTypeName(r)
+			default:
+				_, err = hbinReadStringValue(r, false)
+			}
 			if err != nil {
 				return nil, false, false, err
 			}
-			value, err := hbinReadString(r)
+			value, err := hbinReadStringValue(r, mode == hbinHeadersAll || name != "")
 			if err != nil {
 				return nil, false, false, err
 			}
-			fields[index] = HTTPHeaderField{Name: name, Value: value}
+			if mode == hbinHeadersAll {
+				fields[index] = HTTPHeaderField{Name: name, Value: value}
+			} else if name != "" {
+				fields = []HTTPHeaderField{{Name: name, Value: value}}
+			}
 		}
 	}
 	var truncated uint8
@@ -1035,6 +1081,26 @@ func hbinReadHeaderFields(r io.Reader) ([]HTTPHeaderField, bool, bool, error) {
 		)
 	}
 	return fields, truncated == 1, orderUnavailable == 1, nil
+}
+
+// Content-Type has no non-ASCII case-fold equivalents. Its encoded length lets
+// us skip arbitrary (potentially large) names before reading any name bytes.
+func hbinReadContentTypeName(r io.Reader) (string, error) {
+	var length uint32
+	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+		return "", err
+	}
+	var name [len("Content-Type")]byte
+	if length != uint32(len(name)) {
+		return "", hbinSkipBytes(r, length)
+	}
+	if _, err := io.ReadFull(r, name[:]); err != nil {
+		return "", err
+	}
+	if bytes.EqualFold(name[:], []byte("Content-Type")) {
+		return string(name[:]), nil
+	}
+	return "", nil
 }
 
 func hbinWriteOptTrafficError(w io.Writer, e *TrafficError) error {
@@ -1169,6 +1235,10 @@ func hbinWriteString(w io.Writer, s string) error {
 
 // hbinReadString reads a string written by hbinWriteString.
 func hbinReadString(r io.Reader) (string, error) {
+	return hbinReadStringValue(r, true)
+}
+
+func hbinReadStringValue(r io.Reader, retain bool) (string, error) {
 	var length uint32
 	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
 		return "", err
@@ -1176,11 +1246,30 @@ func hbinReadString(r io.Reader) (string, error) {
 	if length == 0 {
 		return "", nil
 	}
+	if !retain {
+		return "", hbinSkipBytes(r, length)
+	}
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return "", err
 	}
-	return string(buf), nil
+	// This allocation belongs only to the decoded string; no pool or writer
+	// can mutate it. Avoid allocating its bytes a second time during scans.
+	return bytes2String(buf), nil
+}
+
+// Consume the bytes rather than seeking: even discarded fields must detect
+// truncation and propagate reader errors/cancellation. io.Discard uses a bounded
+// reusable buffer, so the allocation does not grow with the field's length.
+func hbinSkipBytes(r io.Reader, length uint32) error {
+	if length == 0 {
+		return nil
+	}
+	n, err := io.CopyN(io.Discard, r, int64(length))
+	if err == io.EOF && n > 0 {
+		return io.ErrUnexpectedEOF
+	}
+	return err
 }
 
 // hbinWriteBytes writes u32(len) + raw bytes.
@@ -1241,12 +1330,26 @@ func hbinReadBytes(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-func hbinReadBytesAsReader(r io.Reader) (io.Reader, int64, error) {
+// hbinBodyReader owns its freshly decoded payload. Only readBodyOfSize may
+// transfer that allocation into an immutable view; other readers consume it
+// normally. Neither decoder pools nor capture buffers own these bytes.
+type hbinBodyReader struct {
+	*bytes.Reader
+	data []byte
+}
+
+func (r *hbinBodyReader) Close() error {
+	r.Reset(nil)
+	r.data = nil
+	return nil
+}
+
+func hbinReadBytesAsReader(r io.Reader) (io.ReadCloser, int64, error) {
 	data, err := hbinReadBytes(r)
 	if err != nil {
 		return nil, 0, err
 	}
-	return bytes.NewReader(data), int64(len(data)), nil
+	return &hbinBodyReader{Reader: bytes.NewReader(data), data: data}, int64(len(data)), nil
 }
 
 // hbinWriteTime writes a time.Time as i64 Unix nanoseconds.
@@ -1290,7 +1393,7 @@ func hbinWriteStringSlice(w io.Writer, ss []string) error {
 }
 
 // hbinReadStringSlice reads a string slice written by hbinWriteStringSlice.
-func hbinReadStringSlice(r io.Reader) ([]string, error) {
+func hbinReadStringSlice(r io.Reader, retain bool) ([]string, error) {
 	var count uint16
 	if err := binary.Read(r, binary.BigEndian, &count); err != nil {
 		return nil, err
@@ -1298,13 +1401,18 @@ func hbinReadStringSlice(r io.Reader) ([]string, error) {
 	if count == 0 {
 		return nil, nil
 	}
-	ss := make([]string, 0, count)
+	var ss []string
+	if retain {
+		ss = make([]string, 0, count)
+	}
 	for i := uint16(0); i < count; i++ {
-		s, err := hbinReadString(r)
+		s, err := hbinReadStringValue(r, retain)
 		if err != nil {
 			return nil, err
 		}
-		ss = append(ss, s)
+		if retain {
+			ss = append(ss, s)
+		}
 	}
 	return ss, nil
 }
@@ -1337,7 +1445,7 @@ func hbinWriteOptTLSState(w io.Writer, t *TLSState) error {
 	return hbinWriteString(w, t.SelectedCipherSuite)
 }
 
-func hbinReadOptTLSState(r io.Reader) (*TLSState, error) {
+func hbinReadOptTLSState(r io.Reader, summary, tcp bool) (*TLSState, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, err
@@ -1345,30 +1453,34 @@ func hbinReadOptTLSState(r io.Reader) (*TLSState, error) {
 	if present == 0 {
 		return nil, nil
 	}
-	t := new(TLSState)
+	var t TLSState
 	var err error
-	if t.ServerName, err = hbinReadString(r); err != nil {
+	if t.ServerName, err = hbinReadStringValue(r, !summary); err != nil {
 		return nil, err
 	}
-	if t.SupportedALPN, err = hbinReadStringSlice(r); err != nil {
+	if t.SupportedALPN, err = hbinReadStringSlice(r, !summary); err != nil {
 		return nil, err
 	}
-	if t.SupportedVersion, err = hbinReadStringSlice(r); err != nil {
+	if t.SupportedVersion, err = hbinReadStringSlice(r, !summary); err != nil {
 		return nil, err
 	}
-	if t.SupportedCipherSuites, err = hbinReadStringSlice(r); err != nil {
+	if t.SupportedCipherSuites, err = hbinReadStringSlice(r, !summary); err != nil {
 		return nil, err
 	}
-	if t.SelectedALPN, err = hbinReadString(r); err != nil {
+	if t.SelectedALPN, err = hbinReadStringValue(r, !summary || tcp); err != nil {
 		return nil, err
 	}
-	if t.SelectedVersion, err = hbinReadString(r); err != nil {
+	if t.SelectedVersion, err = hbinReadStringValue(r, !summary); err != nil {
 		return nil, err
 	}
-	if t.SelectedCipherSuite, err = hbinReadString(r); err != nil {
+	if t.SelectedCipherSuite, err = hbinReadStringValue(r, !summary); err != nil {
 		return nil, err
 	}
-	return t, nil
+	if summary && !tcp {
+		return nil, nil
+	}
+	result := t
+	return &result, nil
 }
 
 func hbinWriteOptServerCertificate(w io.Writer, c *ServerCertificate) error {
@@ -1407,7 +1519,7 @@ func hbinWriteOptServerCertificate(w io.Writer, c *ServerCertificate) error {
 	return hbinWriteStringSlice(w, c.IPAddresses)
 }
 
-func hbinReadOptServerCertificate(r io.Reader) (*ServerCertificate, error) {
+func hbinReadOptServerCertificate(r io.Reader, retain bool) (*ServerCertificate, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, err
@@ -1415,44 +1527,50 @@ func hbinReadOptServerCertificate(r io.Reader) (*ServerCertificate, error) {
 	if present == 0 {
 		return nil, nil
 	}
-	c := new(ServerCertificate)
+	var c ServerCertificate
 	var version int32
 	if err := binary.Read(r, binary.BigEndian, &version); err != nil {
 		return nil, err
 	}
 	c.Version = int(version)
 	var err error
-	if err := binary.Read(r, binary.BigEndian, &c.NotBeforeMicros); err != nil {
+	var notBefore, notAfter int64
+	if err := binary.Read(r, binary.BigEndian, &notBefore); err != nil {
 		return nil, err
 	}
-	if err := binary.Read(r, binary.BigEndian, &c.NotAfterMicros); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &notAfter); err != nil {
 		return nil, err
 	}
-	if c.SerialNumber, err = hbinReadString(r); err != nil {
+	c.NotBeforeMicros, c.NotAfterMicros = notBefore, notAfter
+	if c.SerialNumber, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	if c.SignatureAlgorithm, err = hbinReadString(r); err != nil {
+	if c.SignatureAlgorithm, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	if c.Sha1Fingerprint, err = hbinReadString(r); err != nil {
+	if c.Sha1Fingerprint, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	if c.Sha256Fingerprint, err = hbinReadString(r); err != nil {
+	if c.Sha256Fingerprint, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	if c.Subject, err = hbinReadOptPkixName(r); err != nil {
+	if c.Subject, err = hbinReadOptPkixName(r, retain); err != nil {
 		return nil, err
 	}
-	if c.Issuer, err = hbinReadOptPkixName(r); err != nil {
+	if c.Issuer, err = hbinReadOptPkixName(r, retain); err != nil {
 		return nil, err
 	}
-	if c.DNSNames, err = hbinReadStringSlice(r); err != nil {
+	if c.DNSNames, err = hbinReadStringSlice(r, retain); err != nil {
 		return nil, err
 	}
-	if c.IPAddresses, err = hbinReadStringSlice(r); err != nil {
+	if c.IPAddresses, err = hbinReadStringSlice(r, retain); err != nil {
 		return nil, err
 	}
-	return c, nil
+	if !retain {
+		return nil, nil
+	}
+	result := c
+	return &result, nil
 }
 
 func hbinWriteOptPkixName(w io.Writer, n *PkixName) error {
@@ -1477,7 +1595,7 @@ func hbinWriteOptPkixName(w io.Writer, n *PkixName) error {
 	return hbinWriteString(w, n.CommonName)
 }
 
-func hbinReadOptPkixName(r io.Reader) (*PkixName, error) {
+func hbinReadOptPkixName(r io.Reader, retain bool) (*PkixName, error) {
 	var present uint8
 	if err := binary.Read(r, binary.BigEndian, &present); err != nil {
 		return nil, err
@@ -1485,22 +1603,26 @@ func hbinReadOptPkixName(r io.Reader) (*PkixName, error) {
 	if present == 0 {
 		return nil, nil
 	}
-	n := new(PkixName)
+	var n PkixName
 	var err error
 	for _, dst := range []*[]string{
 		&n.Country, &n.Organization, &n.OrganizationalUnit,
 		&n.Locality, &n.Province,
 		&n.StreetAddress, &n.PostalCode,
 	} {
-		if *dst, err = hbinReadStringSlice(r); err != nil {
+		if *dst, err = hbinReadStringSlice(r, retain); err != nil {
 			return nil, err
 		}
 	}
-	if n.SerialNumber, err = hbinReadString(r); err != nil {
+	if n.SerialNumber, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	if n.CommonName, err = hbinReadString(r); err != nil {
+	if n.CommonName, err = hbinReadStringValue(r, retain); err != nil {
 		return nil, err
 	}
-	return n, nil
+	if !retain {
+		return nil, nil
+	}
+	result := n
+	return &result, nil
 }

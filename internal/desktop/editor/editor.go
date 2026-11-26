@@ -68,15 +68,22 @@ type Editor struct {
 
 // New returns the editors of a window.
 func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifier *widgets.Notifier, confirm *widgets.ConfirmDialog) *Editor {
-	return &Editor{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm, https: map[string]*httpPane{}, sockets: map[string]*socketPane{}, widths: map[string]float32{}, dropped: map[string]int{}}
+	e := &Editor{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm, https: map[string]*httpPane{}, sockets: map[string]*socketPane{}, widths: map[string]float32{}, dropped: map[string]int{}}
+	data.Workspace.OnResponseChanged = func(key string) {
+		if pane := e.https[key]; pane != nil {
+			pane.response.syncResponse()
+		}
+	}
+	return e
 }
 
 func (e *Editor) pythonEnabled() bool { return e.Host.PythonEnabled != nil && e.Host.PythonEnabled() }
 
 func (e *Editor) prune() {
 	workspace := e.Data.Workspace
-	for key := range e.https {
+	for key, pane := range e.https {
 		if workspace.FindTab(key) == nil {
+			pane.response.body.Reset()
 			delete(e.https, key)
 		}
 	}
