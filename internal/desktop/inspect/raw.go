@@ -27,11 +27,11 @@ func (r *rawPane) set(text string) {
 
 // loadedBody returns the panel's body view when it belongs to entry.
 func (p *Panel) loadedBody(entry *logic.TrafficEntry) *proxyservice.TrafficBodyView {
-	if p.data.SelectedEntry() != entry {
+	if p.displayData().SelectedEntry() != entry {
 		return nil
 	}
 	p.requestBodyIfNeeded()
-	return p.data.BodyView()
+	return p.displayData().BodyView()
 }
 
 func requestRawText(entry *logic.TrafficEntry, body *proxyservice.TrafficBodyView) string {
@@ -88,7 +88,7 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		widgets.PaneToolbar(c, func() {
-			if p.data.BodyLoading() && p.bodyWait.visible(c) {
+			if p.displayData().BodyLoading() && p.bodyWait.visible(c) {
 				widgets.Spinner(c, theme).Size(16, 16).TextColor(theme.Muted).
 					Role(ui.RoleStatus).Label(locales.AppLoading()).Busy(true)
 			}
@@ -137,7 +137,7 @@ func (p *Panel) rawTCP(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry
 	if metadata == nil {
 		metadata = &proxyservice.Metadata{}
 	}
-	ui.Scroll(c).Fill().Children(func() {
+	ui.Scroll(c).Fill().Bind(&p.detailHandle).Children(func() {
 		ui.Column(c).FillWidth().PaddingX(12).PaddingY(14).Gap(2).Children(func() {
 			ui.Row(c).FillWidth().Gap(8).Padding(0, 8, 4, 8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, lucide.Network()).Size(16, 16).TextColor(theme.Primary)
@@ -150,26 +150,28 @@ func (p *Panel) rawTCP(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry
 				ui.Box(c).Grow(1)
 				p.closeButton(c, theme)
 			})
-			detailRow(c, theme, "target", locales.DetailRawTcpTarget(), orDash(logic.TrafficTarget(entry)))
-			detailRow(c, theme, "source", locales.DetailRawTcpSource(), tcpSourceLabel(source))
-			detailRow(c, theme, "protocol", locales.DetailProtocol(), orDash(logic.TrafficProtocol(entry)))
-			if source == proxyservice.RawTCPTunnelSourceHTTPConnect && entry.Request != nil && entry.Request.Proto != "" {
-				detailRow(c, theme, "outer", locales.DetailRawTcpOuterConnectProtocol(), entry.Request.Proto)
-			}
-			optionalRow(c, theme, "local-src", locales.DetailLocalSourceAddress(), metadata.LocalSourceAddr)
-			optionalRow(c, theme, "local-dst", locales.DetailLocalDestinationAddress(), metadata.LocalDestinationAddr)
-			optionalRow(c, theme, "remote-src", locales.DetailRemoteSourceAddress(), metadata.RemoteSourceAddr)
-			optionalRow(c, theme, "remote-dst", locales.DetailRemoteDestinationAddress(), metadata.RemoteDestinationAddr)
-			timeRow(c, theme, "observed", locales.DetailRawTcpObservedAt(), entry.StartedAt)
-			timeRow(c, theme, "local-time", locales.DetailLocalConnectionTime(), metadata.LocalConnectionEstablishedAt)
-			timeRow(c, theme, "remote-time", locales.DetailRemoteConnectionTime(), metadata.RemoteConnectionEstablishedAt)
-			timeRow(c, theme, "tls-time", locales.DetailSslHandshake(), metadata.SSLHandshakeCompletedAt)
-			p.processSection(c, theme, entry)
-			p.tlsSection(c, theme, entry)
-			p.certificateSection(c, theme, entry)
-			if source == proxyservice.RawTCPTunnelSourceHTTPConnect {
-				p.connectHeaders(c, theme, entry)
-			}
+			ui.Column(c.Key("tunnel-content")).FillWidth().Gap(2).Disabled(p.retained != nil).DimDisabled(false).Busy(p.retained != nil).Children(func() {
+				detailRow(c, theme, "target", locales.DetailRawTcpTarget(), orDash(logic.TrafficTarget(entry)))
+				detailRow(c, theme, "source", locales.DetailRawTcpSource(), tcpSourceLabel(source))
+				detailRow(c, theme, "protocol", locales.DetailProtocol(), orDash(logic.TrafficProtocol(entry)))
+				if source == proxyservice.RawTCPTunnelSourceHTTPConnect && entry.Request != nil && entry.Request.Proto != "" {
+					detailRow(c, theme, "outer", locales.DetailRawTcpOuterConnectProtocol(), entry.Request.Proto)
+				}
+				optionalRow(c, theme, "local-src", locales.DetailLocalSourceAddress(), metadata.LocalSourceAddr)
+				optionalRow(c, theme, "local-dst", locales.DetailLocalDestinationAddress(), metadata.LocalDestinationAddr)
+				optionalRow(c, theme, "remote-src", locales.DetailRemoteSourceAddress(), metadata.RemoteSourceAddr)
+				optionalRow(c, theme, "remote-dst", locales.DetailRemoteDestinationAddress(), metadata.RemoteDestinationAddr)
+				timeRow(c, theme, "observed", locales.DetailRawTcpObservedAt(), entry.StartedAt)
+				timeRow(c, theme, "local-time", locales.DetailLocalConnectionTime(), metadata.LocalConnectionEstablishedAt)
+				timeRow(c, theme, "remote-time", locales.DetailRemoteConnectionTime(), metadata.RemoteConnectionEstablishedAt)
+				timeRow(c, theme, "tls-time", locales.DetailSslHandshake(), metadata.SSLHandshakeCompletedAt)
+				p.processSection(c, theme, entry)
+				p.tlsSection(c, theme, entry)
+				p.certificateSection(c, theme, entry)
+				if source == proxyservice.RawTCPTunnelSourceHTTPConnect {
+					p.connectHeaders(c, theme, entry)
+				}
+			})
 		})
 	})
 }

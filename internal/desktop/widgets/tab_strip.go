@@ -18,6 +18,8 @@ type TabStripOptions struct {
 	// the build, so a view that derives value afresh each build records
 	// the choice here rather than by comparing value after TabStrip.
 	OnChange func(id string)
+	// Disabled freezes tab input without dimming or disabling trailing actions.
+	Disabled bool
 }
 
 // TabStrip is a row of underlined tabs whose bottom border runs across the
@@ -30,7 +32,8 @@ func TabStrip(c *ui.Context, theme nui.Theme, value *string, items []nui.TabItem
 	row.Children(func() {
 		// The tabs reach 1 px into the row's border, so the active underline
 		// covers it, as Nuxt's indicator covers its list's border.
-		strip := ui.ScrollHorizontal(c.Key("strip")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Margin(0, 0, -1, 0)
+		strip := ui.ScrollHorizontal(c.Key("strip")).Grow(1).Basis(0).MinWidth(0).Scrollbars(false).Margin(0, 0, -1, 0).
+			Disabled(o.Disabled).DimDisabled(false)
 		WheelScroll(c, strip).Children(func() {
 			nui.Tabs(c, theme, value, items, nui.TabsOptions{
 				Label: o.Label, Content: nui.Set(false), Underline: true, OnChange: o.OnChange,

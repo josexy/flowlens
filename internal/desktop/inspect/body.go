@@ -174,7 +174,7 @@ func tabLabel(tab logic.BodyTab) string {
 func (p *Panel) bodyPane(c *ui.Context, theme nui.Theme, viewer *BodyViewer, entry *logic.TrafficEntry, response bool) {
 	body := p.loadedBody(entry)
 	if body == nil {
-		if p.data.BodyLoading() {
+		if p.displayData().BodyLoading() {
 			ui.Column(c).Fill().Center().Children(func() { p.bodyWait.spinner(c, theme) })
 			return
 		}

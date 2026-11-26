@@ -5,12 +5,67 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
+	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
 
-const loadingIndicatorDelay = 180 * time.Millisecond
+const loadingIndicatorDelay = store.HistoryDetailTransitionDelay
+
+type transitionData interface {
+	deferredData
+	RetainedDetail() *store.HistoryDetailSnapshot
+	ReleaseRetainedDetail()
+}
+
+func (p *Panel) displayData() Data {
+	if p.retained != nil {
+		return p.retained
+	}
+	return p.data
+}
+
+func (p *Panel) prepareTransition(c *ui.Context) {
+	p.retained = nil
+	data, ok := p.data.(transitionData)
+	if !ok || data.RetainedDetail() == nil {
+		return
+	}
+	entry := p.data.SelectedEntry()
+	if entry != nil && p.needsBody(entry) {
+		data.RequestBody()
+	}
+	if data.PendingEntry() == nil && !p.data.BodyLoading() {
+		data.ReleaseRetainedDetail()
+		return
+	}
+	p.retained = data.RetainedDetail()
+	p.clipboard = nil
+	// Editors keep their own copy commands even under a disabled ancestor.
+	// Move focus only when it is still inside the previous detail; row
+	// selection normally already focused the table, which must keep its keys.
+	if p.OnClose != nil && p.detailHandle.FocusWithin(c) {
+		p.closeHandle.Focus(c)
+	}
+	if pending := data.PendingEntry(); pending != nil {
+		// Keep the original deadline across rapid selections of pending rows.
+		p.pendingID = pending.ID
+	}
+	p.detailWait.visible(c)
+	p.bodyWait.visible(c)
+}
+
+func (p *Panel) needsBody(entry *logic.TrafficEntry) bool {
+	if logic.IsRawTCP(entry) {
+		return false
+	}
+	// Resolve the incoming tabs without changing those of the retained view.
+	next := *p
+	next.reconcileTabs(entry, entry.ID != p.entryID)
+	return next.requestTab == tabRequestRaw || next.requestTab == tabRequestBody ||
+		next.responseTab == tabResponseRaw || next.responseTab == tabResponseBody || next.responseTab == tabWebSocket
+}
 
 type loadingDelay struct{ started time.Time }
 
@@ -114,6 +169,9 @@ func (p *Panel) pendingPane(c *ui.Context, theme nui.Theme, response bool) {
 }
 
 func (p *Panel) requestBodyIfNeeded() {
+	if p.retained != nil {
+		return
+	}
 	if deferred, ok := p.data.(deferredData); ok {
 		deferred.RequestBody()
 	}

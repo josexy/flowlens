@@ -36,19 +36,28 @@ import (
 )
 
 type fakeData struct {
-	entry   *logic.TrafficEntry
-	body    *proxyservice.TrafficBodyView
-	version uint64
-	loading bool
-	pending *logic.TrafficEntry
-	request func()
+	entry    *logic.TrafficEntry
+	body     *proxyservice.TrafficBodyView
+	version  uint64
+	loading  bool
+	pending  *logic.TrafficEntry
+	request  func()
+	retained *store.HistoryDetailSnapshot
+	release  func()
 }
 
-func (d *fakeData) SelectedEntry() *logic.TrafficEntry      { return d.entry }
-func (d *fakeData) BodyView() *proxyservice.TrafficBodyView { return d.body }
-func (d *fakeData) BodyVersion() uint64                     { return d.version }
-func (d *fakeData) BodyLoading() bool                       { return d.loading }
-func (d *fakeData) PendingEntry() *logic.TrafficEntry       { return d.pending }
+func (d *fakeData) SelectedEntry() *logic.TrafficEntry           { return d.entry }
+func (d *fakeData) BodyView() *proxyservice.TrafficBodyView      { return d.body }
+func (d *fakeData) BodyVersion() uint64                          { return d.version }
+func (d *fakeData) BodyLoading() bool                            { return d.loading }
+func (d *fakeData) PendingEntry() *logic.TrafficEntry            { return d.pending }
+func (d *fakeData) RetainedDetail() *store.HistoryDetailSnapshot { return d.retained }
+func (d *fakeData) ReleaseRetainedDetail() {
+	d.retained = nil
+	if d.release != nil {
+		d.release()
+	}
+}
 func (d *fakeData) RequestBody() {
 	if d.request != nil {
 		d.request()
