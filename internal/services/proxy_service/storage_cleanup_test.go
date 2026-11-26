@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -361,11 +362,12 @@ func TestClearLocalDataReportsWhatWasCleared(t *testing.T) {
 }
 
 func TestClearLocalDataReportsPartialFailureWithResult(t *testing.T) {
-	if os.Geteuid() == 0 {
+	if runtime.GOOS != "windows" && os.Geteuid() == 0 {
 		t.Skip("permissions do not stop root from removing files")
 	}
 	setTestConfigDir(t)
 	svc := newTestProxyService(t, nil)
+	svc.storeTrafficEntry(&TrafficEntry{ID: 1, Type: "http"})
 	baseDir, err := fs.GetBaseStorageDir()
 	if err != nil {
 		t.Fatalf("GetBaseStorageDir: %v", err)
@@ -374,13 +376,25 @@ func TestClearLocalDataReportsPartialFailureWithResult(t *testing.T) {
 	if err := os.MkdirAll(locked, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(locked, "file"), []byte("kept"), 0o600); err != nil {
+	path := filepath.Join(locked, "file")
+	if err := os.WriteFile(path, []byte("kept"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if err := os.Chmod(locked, 0o500); err != nil {
-		t.Fatalf("Chmod: %v", err)
+	if runtime.GOOS == "windows" {
+		// Directory chmod does not prevent child deletion on Windows.
+		// os.Open omits FILE_SHARE_DELETE, so this handle keeps the file
+		// undeletable until cleanup, without changing production code.
+		file, err := os.Open(path)
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		t.Cleanup(func() { _ = file.Close() })
+	} else {
+		if err := os.Chmod(locked, 0o500); err != nil {
+			t.Fatalf("Chmod: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	result, err := svc.ClearCacheFiles()
 	if err == nil || !strings.Contains(err.Error(), "remove cache directory") {
@@ -391,6 +405,12 @@ func TestClearLocalDataReportsPartialFailureWithResult(t *testing.T) {
 	}
 	if result.RequestDraftCacheRoot != filepath.Join(baseDir, "request-draft-cache") {
 		t.Fatalf("RequestDraftCacheRoot = %q", result.RequestDraftCacheRoot)
+	}
+	if svc.trafficEntries.Len() != 0 {
+		t.Fatalf("trafficEntries.Len = %d, want 0 after partial clear", svc.trafficEntries.Len())
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "kept" {
+		t.Fatalf("undeletable cache file = %q, %v; want kept contents", data, err)
 	}
 }
 
