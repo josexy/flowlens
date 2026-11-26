@@ -6,7 +6,7 @@ tool github.com/egoist/mygo/cmd/mygo
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/andybalholm/brotli v1.2.2
+	github.com/andybalholm/brotli v1.3.0
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.10.0
 	github.com/fyne-io/oksvg v0.2.0
@@ -17,7 +17,7 @@ require (
 	github.com/josexy/nuxt-ui-go v0.1.2-0.20261119040559-42aa9b196036
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
 	github.com/josexy/xhttp v0.0.0-20261112014454-6087dd9bc960
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.20.5
 	github.com/refraction-networking/utls v1.8.2
 	github.com/sergeymakinen/go-ico v1.0.0
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef

@@ -23,9 +23,9 @@ const zstdEncoderWindow = 1 << 20
 // zstdDecoderMaxWindow caps the window a frame may declare. A decoder
 // allocates the declared window when a frame starts and keeps it while
 // pooled, so with the library's 512 MiB limit a response of a few bytes held
-// 513 MiB. RFC 9659 limits zstd content coding to 8 MiB, and HBIN frames never
-// used more than the 8 MiB default of older builds. Frames over the cap fail
-// to decode.
+// over 512 MiB. RFC 9659 limits zstd content coding to 8 MiB, and HBIN
+// frames never used more than the 8 MiB default of older builds. Frames over
+// the cap fail to decode.
 const zstdDecoderMaxWindow = 8 << 20
 
 func AcquireZstdDecoder(r io.Reader) (*zstd.Decoder, error) {
