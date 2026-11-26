@@ -398,13 +398,56 @@ func TestPooledZstdReaderDoesNotWaitOnOpenSource(t *testing.T) {
 	})
 	t.Run("checksum error", func(t *testing.T) {
 		reader := open(t, corrupted)
+		var got []byte
 		var err error
-		returnsPromptly(t, "Read", func() { _, err = io.ReadAll(reader) })
+		returnsPromptly(t, "Read", func() { got, err = io.ReadAll(reader) })
+		_ = reader.Close()
 		if !errors.Is(err, zstd.ErrCRCMismatch) {
 			t.Fatalf("read error = %v, want %v", err, zstd.ErrCRCMismatch)
 		}
-		_ = reader.Close()
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("decoded %d bytes before checksum error, want %d", len(got), len(payload))
+		}
 	})
+}
+
+func TestPooledZstdReaderPreservesChecksumErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	// The final block is larger than the read buffer, so its pending bytes
+	// must survive more than one Read before the checksum error is returned.
+	payload := zstdTestBody(320 << 10)
+	encoded := mustEncodeForTest(t, encodeZstdWithPool, payload)
+	encoded[len(encoded)-1] ^= 0xff
+	for _, mode := range []string{"Read", "WriteTo"} {
+		t.Run(mode, func(t *testing.T) {
+			reader, err := NewPooledZstdReadCloser(bytes.NewReader(encoded))
+			if err != nil {
+				t.Fatalf("open pooled reader: %v", err)
+			}
+			defer reader.Close()
+			var got bytes.Buffer
+			if mode == "Read" {
+				buffer := make([]byte, 257)
+				for {
+					var n int
+					n, err = reader.Read(buffer)
+					got.Write(buffer[:n])
+					if err != nil {
+						break
+					}
+				}
+			} else {
+				_, err = io.Copy(&got, reader)
+			}
+			if !errors.Is(err, zstd.ErrCRCMismatch) {
+				t.Fatalf("decode error = %v, want %v", err, zstd.ErrCRCMismatch)
+			}
+			if !bytes.Equal(got.Bytes(), payload) {
+				t.Fatalf("decoded %d bytes before checksum error, want %d", got.Len(), len(payload))
+			}
+		})
+	}
 }
 
 // A released decoder stays pooled until the second collection after its

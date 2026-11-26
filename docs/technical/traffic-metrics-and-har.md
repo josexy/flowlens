@@ -20,6 +20,8 @@ FlowLens captures request-attempt start, request-write end, response first-byte,
   - **Unknown sentinel:** Missing metrics, truncated headers, or an unavailable start line produce `-1`. Normalized fallback headers without raw wire order can still produce a known size.
 - **Body size (`BodySize`):** Counts entity bytes after transport encoding, matching the bytes actually sent or received on the wire.
 
+Captured bodies are decoded for inspection while the original encoded bytes are forwarded unchanged. If a `gzip` or `zstd` checksum fails, capture keeps the bytes decoded before the error, including the final decoded `zstd` block, and drains the remaining encoded stream. HTTP Request Editor sends and body rewrite rules still report decoding failures.
+
 ## HAR Export
 
 HAR exports stream to a temporary file in the destination directory and atomically rename into place upon completion. Entries whose cached body is missing still export without a body and increment the skipped/unavailable body count in the result.

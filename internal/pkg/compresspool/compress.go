@@ -145,7 +145,7 @@ func NewPooledZstdReadCloser(r io.Reader) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewPooledReadCloser(dec.IOReadCloser(), func() {
+	return NewPooledReadCloser(zstdReadCloser{Decoder: dec}, func() {
 		ReleaseZstdDecoder(dec)
 	}), nil
 }

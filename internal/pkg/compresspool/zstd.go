@@ -1,6 +1,7 @@
 package compresspool
 
 import (
+	"errors"
 	"io"
 	"sync"
 
@@ -27,6 +28,29 @@ const zstdEncoderWindow = 1 << 20
 // frames never used more than the 8 MiB default of older builds. Frames over
 // the cap fail to decode.
 const zstdDecoderMaxWindow = 8 << 20
+
+// zstdReadCloser preserves the last decoded block on a checksum error.
+// The embedded decoder's WriteTo already writes that block before the error.
+type zstdReadCloser struct {
+	*zstd.Decoder
+}
+
+func (r zstdReadCloser) Read(p []byte) (int, error) {
+	n, err := r.Decoder.Read(p)
+	if n == 0 && errors.Is(err, zstd.ErrCRCMismatch) {
+		// In v1.20.5, synchronous Read reports the checksum error before
+		// returning the last block it decoded. Read again to drain that
+		// buffered output; the sticky error prevents further source reads
+		// and is returned once the buffered bytes have been consumed.
+		return r.Decoder.Read(p)
+	}
+	return n, err
+}
+
+func (r zstdReadCloser) Close() error {
+	r.Decoder.Close()
+	return nil
+}
 
 func AcquireZstdDecoder(r io.Reader) (*zstd.Decoder, error) {
 	if value := zstdDecoderPool.Get(); value != nil {
