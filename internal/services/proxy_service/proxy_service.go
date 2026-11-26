@@ -2882,12 +2882,15 @@ func (s *ProxyService) SendHTTPRequest(
 			resp.Proto,
 			time.Since(started).Round(time.Millisecond),
 		)
+		// The session owns the response once its read loop starts: finalizing
+		// releases the request, response body, and transport, and the loop
+		// closes the decoded body, so this call's deferred cleanup must not.
+		streamingResponse = true
 		go s.runHTTPRequestStreamReadLoop(session)
 		if err := detachRequestCallCancellation(callCtx, detachCallCancellation, cancelRequest); err != nil {
 			s.finalizeHTTPRequestStream(sessionID, HTTPStreamClosed, nil)
 			return SendRequestResponse{}, err
 		}
-		streamingResponse = true
 		return response, nil
 	}
 
@@ -3082,6 +3085,15 @@ func (s *ProxyService) DisconnectHTTPRequestStream(sessionID string) error {
 }
 
 func (s *ProxyService) runHTTPRequestStreamReadLoop(session *httpRequestStreamSession) {
+	// The decoded body may hold a pooled decoder, which goes to another flow
+	// once closed. Only this loop reads it, so only this loop closes it, after
+	// its last Read; finalizing a stream from elsewhere closes the response
+	// body, which ends that Read.
+	defer func() {
+		if session.body != nil && (session.response == nil || session.body != session.response.Body) {
+			_ = session.body.Close()
+		}
+	}()
 	buffer := make([]byte, CHUNK_SIZE)
 	for {
 		n, err := session.body.Read(buffer)
@@ -3121,9 +3133,6 @@ func (s *ProxyService) finalizeHTTPRequestStream(sessionID string, eventType HTT
 	}
 	session := value.(*httpRequestStreamSession)
 	session.cancel()
-	if session.body != nil && (session.response == nil || session.body != session.response.Body) {
-		_ = session.body.Close()
-	}
 	if session.response != nil && session.response.Body != nil {
 		_ = session.response.Body.Close()
 	}

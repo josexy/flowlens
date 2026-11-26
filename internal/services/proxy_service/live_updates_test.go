@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
+	http "github.com/josexy/xhttp"
 )
 
 func TestIsServerSentEventsContentType(t *testing.T) {
@@ -222,6 +224,71 @@ func TestHTTPRequestStreamReadLoopOwnsChunks(t *testing.T) {
 	if len(chunks) != 3 || chunks[0] != "AAAA" || chunks[1] != "BBBB" || chunks[2] != "CCCC" {
 		t.Fatalf("delivered chunks = %q, want [AAAA BBBB CCCC]", chunks)
 	}
+}
+
+// Disconnecting an encoded stream must not close its decoded body under the
+// read loop: a pooled decoder closed mid-Read goes to another flow while the
+// loop still reads it. Closing the response body ends that Read, and the loop
+// then closes the decoded body itself.
+func TestHTTPRequestStreamDisconnectLeavesDecodedBodyToReadLoop(t *testing.T) {
+	svc := newTestProxyService(t, nil)
+	responseBody, peer := io.Pipe()
+	defer peer.Close()
+	decoded := &readLoopOwnedBody{source: responseBody, reading: make(chan struct{})}
+	session := &httpRequestStreamSession{
+		id:       "decoded-body-owner",
+		cancel:   func() {},
+		response: &http.Response{Body: responseBody},
+		body:     decoded,
+	}
+	svc.httpRequestStreams.Store(session.id, session)
+	loopDone := make(chan struct{})
+	go func() {
+		defer close(loopDone)
+		svc.runHTTPRequestStreamReadLoop(session)
+	}()
+	<-decoded.reading
+
+	if err := svc.DisconnectHTTPRequestStream(session.id); err != nil {
+		t.Fatalf("DisconnectHTTPRequestStream: %v", err)
+	}
+	select {
+	case <-loopDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read loop did not end after the disconnect")
+	}
+	if decoded.closedDuringRead.Load() {
+		t.Fatal("disconnect closed the decoded body while the read loop was reading it")
+	}
+	if !decoded.closed.Load() {
+		t.Fatal("read loop did not close the decoded body")
+	}
+}
+
+// readLoopOwnedBody stands in for a decoded body and records a Close that
+// arrives while a Read is still in progress.
+type readLoopOwnedBody struct {
+	source           io.Reader
+	reading          chan struct{}
+	readingOnce      sync.Once
+	inRead           atomic.Bool
+	closed           atomic.Bool
+	closedDuringRead atomic.Bool
+}
+
+func (b *readLoopOwnedBody) Read(p []byte) (int, error) {
+	b.inRead.Store(true)
+	defer b.inRead.Store(false)
+	b.readingOnce.Do(func() { close(b.reading) })
+	return b.source.Read(p)
+}
+
+func (b *readLoopOwnedBody) Close() error {
+	if b.inRead.Load() {
+		b.closedDuringRead.Store(true)
+	}
+	b.closed.Store(true)
+	return nil
 }
 
 func TestCapturedWebSocketUpdatesAreIndexedAndTruncatedOnce(t *testing.T) {
