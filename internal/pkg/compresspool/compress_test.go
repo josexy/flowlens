@@ -6,13 +6,17 @@ import (
 	"compress/flate"
 	stdgzip "compress/gzip"
 	stdzlib "compress/zlib"
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+	"weak"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/snappy"
@@ -305,6 +309,166 @@ func TestPooledZstdEncoderUsesBoundedWindow(t *testing.T) {
 	if got := readDecodedPayload(t, NewPooledZstdReadCloser, legacy.Bytes()); !bytes.Equal(got, body) {
 		t.Fatalf("legacy frame decoded %d bytes, want the %d-byte body", len(got), len(body))
 	}
+}
+
+// A frame header sets the window a decoder allocates before decoding anything,
+// and a pooled decoder keeps that allocation. Windows over the cap must fail
+// without being allocated.
+func TestPooledZstdDecoderRejectsWindowsOverCap(t *testing.T) {
+	rawBlock := []byte{0x09, 0x00, 0x00, 'A'} // last block, raw, 1 byte
+	windowDescriptor := func(windowLog byte) []byte {
+		return append([]byte{0x28, 0xb5, 0x2f, 0xfd, 0x00, (windowLog - 10) << 3}, rawBlock...)
+	}
+	// A single-segment frame's window is its content size.
+	singleSegment := binary.LittleEndian.AppendUint64([]byte{0x28, 0xb5, 0x2f, 0xfd, 0xe0}, 256<<20)
+	singleSegment = append(singleSegment, rawBlock...)
+
+	for _, tc := range []struct {
+		name  string
+		frame []byte
+	}{
+		{name: "512 MiB window descriptor", frame: windowDescriptor(29)},
+		{name: "256 MiB single segment", frame: singleSegment},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			reader, err := NewPooledZstdReadCloser(bytes.NewReader(tc.frame))
+			if err != nil {
+				t.Fatalf("open pooled reader: %v", err)
+			}
+			_, err = io.ReadAll(reader)
+			_ = reader.Close()
+			runtime.ReadMemStats(&after)
+			if !errors.Is(err, zstd.ErrWindowSizeExceeded) && !errors.Is(err, zstd.ErrDecoderSizeExceeded) {
+				t.Fatalf("decode error = %v, want a window size error", err)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8<<20 {
+				t.Fatalf("a %d-byte frame allocated %.1f MiB", len(tc.frame), float64(allocated)/(1<<20))
+			}
+		})
+	}
+
+	if got := readDecodedPayload(t, NewPooledZstdReadCloser, windowDescriptor(23)); string(got) != "A" {
+		t.Fatalf("frame with an 8 MiB window decoded %q, want %q", got, "A")
+	}
+}
+
+// A stalled peer leaves the source open after the frame it sent. Once that
+// frame is decoded, Read and Close must return instead of waiting for more.
+func TestPooledZstdReaderDoesNotWaitOnOpenSource(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(strings.Repeat("zstd-open-source-", 64))
+	frame := mustEncodeForTest(t, encodeZstdWithPool, payload)
+	corrupted := append([]byte(nil), frame...)
+	corrupted[len(corrupted)-1] ^= 0xff // content checksum
+
+	open := func(t *testing.T, encoded []byte) io.ReadCloser {
+		t.Helper()
+		source, peer := io.Pipe()
+		t.Cleanup(func() { _ = peer.Close() })
+		go func() { _, _ = peer.Write(encoded) }()
+		reader, err := NewPooledZstdReadCloser(source)
+		if err != nil {
+			t.Fatalf("open pooled reader: %v", err)
+		}
+		return reader
+	}
+	returnsPromptly := func(t *testing.T, call string, fn func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			fn()
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s waited on the open source", call)
+		}
+	}
+
+	t.Run("close after a partial read", func(t *testing.T) {
+		reader := open(t, frame)
+		if _, err := io.ReadFull(reader, make([]byte, len(payload)/2)); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		returnsPromptly(t, "Close", func() { _ = reader.Close() })
+	})
+	t.Run("checksum error", func(t *testing.T) {
+		reader := open(t, corrupted)
+		var got []byte
+		var err error
+		returnsPromptly(t, "Read", func() { got, err = io.ReadAll(reader) })
+		_ = reader.Close()
+		if !errors.Is(err, zstd.ErrCRCMismatch) {
+			t.Fatalf("read error = %v, want %v", err, zstd.ErrCRCMismatch)
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("decoded %d bytes before checksum error, want %d", len(got), len(payload))
+		}
+	})
+}
+
+func TestPooledZstdReaderPreservesChecksumErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	// The final block is larger than the read buffer, so its pending bytes
+	// must survive more than one Read before the checksum error is returned.
+	payload := zstdTestBody(320 << 10)
+	encoded := mustEncodeForTest(t, encodeZstdWithPool, payload)
+	encoded[len(encoded)-1] ^= 0xff
+	for _, mode := range []string{"Read", "WriteTo"} {
+		t.Run(mode, func(t *testing.T) {
+			reader, err := NewPooledZstdReadCloser(bytes.NewReader(encoded))
+			if err != nil {
+				t.Fatalf("open pooled reader: %v", err)
+			}
+			defer reader.Close()
+			var got bytes.Buffer
+			if mode == "Read" {
+				buffer := make([]byte, 257)
+				for {
+					var n int
+					n, err = reader.Read(buffer)
+					got.Write(buffer[:n])
+					if err != nil {
+						break
+					}
+				}
+			} else {
+				_, err = io.Copy(&got, reader)
+			}
+			if !errors.Is(err, zstd.ErrCRCMismatch) {
+				t.Fatalf("decode error = %v, want %v", err, zstd.ErrCRCMismatch)
+			}
+			if !bytes.Equal(got.Bytes(), payload) {
+				t.Fatalf("decoded %d bytes before checksum error, want %d", got.Len(), len(payload))
+			}
+		})
+	}
+}
+
+// A released decoder stays pooled until the second collection after its
+// release, so it must not keep the reader it last decoded reachable.
+func TestReleasedZstdDecoderDropsItsSource(t *testing.T) {
+	encoded := mustEncodeForTest(t, encodeZstdWithPool, zstdTestBody(256<<10))
+	source := bytes.NewReader(encoded)
+	sourceRef := weak.Make(source)
+	dec, err := AcquireZstdDecoder(source)
+	if err != nil {
+		t.Fatalf("acquire zstd decoder: %v", err)
+	}
+	if _, err := io.Copy(io.Discard, dec); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ReleaseZstdDecoder(dec)
+	runtime.GC()
+	if sourceRef.Value() != nil {
+		t.Fatal("released decoder keeps its last source reachable")
+	}
+	runtime.KeepAlive(dec)
 }
 
 // An idle pooled encoder stays in memory until the second collection after

@@ -16,6 +16,7 @@ import (
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	http "github.com/josexy/xhttp"
 	"github.com/josexy/xhttp/httptest"
+	"github.com/klauspost/compress/zstd"
 )
 
 func testHeaderFields(headers map[string][]string) []HTTPHeaderField {
@@ -231,6 +232,54 @@ func TestSendHTTPRequestBodylessResponsesSkipContentDecodingAndStreaming(t *test
 				t.Fatalf("content encoding header = %q, want %q", got, tt.contentEncoding)
 			}
 		})
+	}
+}
+
+// A zstd body that fails its checksum must fail the send even while the server
+// keeps the response open, because the editor sets no timeout by default.
+func TestSendHTTPRequestFailsZstdChecksumWhileResponseStaysOpen(t *testing.T) {
+	t.Parallel()
+
+	body, err := compressWithZstd([]byte(strings.Repeat(`{"editor":"response"}`, 64)))
+	if err != nil {
+		t.Fatalf("compress body: %v", err)
+	}
+	body[len(body)-1] ^= 0xff // content checksum
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "zstd")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	svc := newTestProxyService(t, &settingservice.ProxyConfig{})
+	callCtx, cancelCall := context.WithCancel(context.Background())
+	defer cancelCall()
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := svc.SendHTTPRequest(
+			callCtx,
+			SendRequestConfig{ProxyMode: SendRequestProxyModeNone},
+			http.MethodGet,
+			server.URL,
+			nil,
+			SendRequestBody{BodyType: SendRequestBodyTypeNone},
+			nil,
+		)
+		errCh <- err
+	}()
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, zstd.ErrCRCMismatch) {
+			t.Fatalf("SendHTTPRequest error = %v, want %v", err, zstd.ErrCRCMismatch)
+		}
+	case <-time.After(5 * time.Second):
+		cancelCall()
+		<-errCh
+		t.Fatal("SendHTTPRequest waited on the open response after a zstd checksum error")
 	}
 }
 

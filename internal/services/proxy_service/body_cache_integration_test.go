@@ -480,6 +480,58 @@ func TestStreamBodyReaderDamagedCompressedPayloadDoesNotDeadlockForwarding(t *te
 	}
 }
 
+func TestStreamBodyReaderPreservesZstdPayloadAfterChecksumError(t *testing.T) {
+	for _, size := range []int{1408, 320 << 10} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			svc := newTestProxyService(t, nil)
+			const pattern = "decoded-zstd-body-"
+			payload := bytes.Repeat([]byte(pattern), size/len(pattern)+1)[:size]
+			encoded, err := compressWithZstd(payload)
+			if err != nil {
+				t.Fatalf("compressWithZstd: %v", err)
+			}
+			encoded[len(encoded)-1] ^= 0xff // content checksum
+			// Forwarding must also drain bytes after the damaged frame, while
+			// capture retains only the payload decoded before the error.
+			encoded = append(encoded, bytes.Repeat([]byte{0xa5}, 64<<10)...)
+			entry := &TrafficEntry{ID: 10_403, Type: "http", Method: http.MethodGet}
+			svc.storeTrafficEntry(entry)
+			reader := svc.newStreamBodyReader(io.NopCloser(bytes.NewReader(encoded)), entry.ID, "zstd", false)
+			defer reader.Close()
+			type readResult struct {
+				data []byte
+				err  error
+			}
+			result := make(chan readResult, 1)
+			go func() {
+				data, readErr := io.ReadAll(reader)
+				result <- readResult{data: data, err: readErr}
+			}()
+			select {
+			case got := <-result:
+				if got.err != nil {
+					t.Fatalf("ReadAll: %v", got.err)
+				}
+				if !bytes.Equal(got.data, encoded) {
+					t.Fatal("forwarded bytes changed after zstd checksum error")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("forwarding stalled after zstd checksum error")
+			}
+			if err := reader.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+			view, err := svc.GetTrafficBodyView(entry.ID)
+			if err != nil {
+				t.Fatalf("GetTrafficBodyView: %v", err)
+			}
+			if view.ResponseBody != string(payload) {
+				t.Fatalf("captured %d bytes before checksum error, want %d", len(view.ResponseBody), len(payload))
+			}
+		})
+	}
+}
+
 func TestStreamBodyReaderDrainsBytesAfterDeflateStream(t *testing.T) {
 	svc := newTestProxyService(t, nil)
 	payload := []byte(`{"decoded":"deflate"}`)

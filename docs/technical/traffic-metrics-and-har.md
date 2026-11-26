@@ -20,6 +20,8 @@ FlowLens captures request-attempt start, request-write end, response first-byte,
   - **Unknown sentinel:** Missing metrics, truncated headers, or an unavailable start line produce `-1`. Normalized fallback headers without raw wire order can still produce a known size.
 - **Body size (`BodySize`):** Counts entity bytes after transport encoding, matching the bytes actually sent or received on the wire.
 
+Captured bodies are decoded for inspection while the original encoded bytes are forwarded unchanged. If a `gzip` or `zstd` checksum fails, capture keeps the bytes decoded before the error, including the final decoded `zstd` block, and drains the remaining encoded stream. HTTP Request Editor sends and body rewrite rules still report decoding failures.
+
 ## HAR Export
 
 HAR exports stream to a temporary file in the destination directory and atomically rename into place upon completion. Entries whose cached body is missing still export without a body and increment the skipped/unavailable body count in the result.
@@ -57,7 +59,7 @@ HAR exports stream to a temporary file in the destination directory and atomical
 | **v2** | Read only | Added upstream connection timestamps; binary WebSocket payloads decoded from Base64 on read |
 | **v1** | Read only | Connection timings display as unavailable (`—`); binary WebSocket payloads decoded from Base64 on read |
 
-Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted. Body records use `zstd` frames written with a `1 MiB` window; frames compressed with any window size (including the `8 MiB` frames written by older builds) are readable.
+Earlier development-only layouts are unsupported, and files with unknown versions are skipped without being deleted. Body records use `zstd` frames written with a `1 MiB` window. Frames with windows up to `8 MiB`, including those written by older builds, are readable; a frame that declares a larger window is rejected rather than allocated.
 
 - **Periodic and terminal saves:** Live capture persists to its history pair every `60` seconds while modified, and immediately on shutdown, restart, and cache cleanup. After a periodic save completes, the next save waits `max(60s, 5 × saveDuration)` (for example, a 30-second save schedules the next save 150 seconds later). Each save writes to temporary files and swaps atomically. Spilled entries are copied as raw encoded bytes and re-indexed at their new offsets; in-memory entries are encoded during save; bodies still streaming are copied from their cache files up to bytes received so far without loading them into memory.
 - **4 GiB limit:** HBIN v3 indexes entries using 32-bit offsets, capping any single history at `4 GiB` of encoded data. A save exceeding that limit fails and is logged, while the session's cached data stays exportable until the session ends.
