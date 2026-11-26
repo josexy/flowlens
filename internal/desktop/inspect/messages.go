@@ -283,9 +283,10 @@ func (m *MessageStream) save(message *logic.WebSocketDisplayMessage) {
 // webSocketPane lists the entry's messages. Without a body view, once it is
 // not loading, the stream shows its toolbar and "No messages", as in 1.0.5.
 func (p *Panel) webSocketPane(c *ui.Context, theme nui.Theme) {
+	p.requestBodyIfNeeded()
 	body := p.data.BodyView()
 	if body == nil && p.data.BodyLoading() {
-		ui.Column(c).Fill().Center().Children(func() { widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted) })
+		ui.Column(c).Fill().Center().Children(func() { p.bodyWait.spinner(c, theme) })
 		return
 	}
 	var messages []logic.WebSocketDisplayMessage

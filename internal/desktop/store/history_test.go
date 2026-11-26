@@ -37,6 +37,14 @@ func (f *fakeHistory) GetHistoryDetail(_ context.Context, key string, id uint64)
 	}
 	return historyservice.HistoryDetail{}, errors.New("missing history entry")
 }
+func (f *fakeHistory) GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error) {
+	detail, err := f.GetHistoryDetail(ctx, key, id)
+	return detail.Entry, err
+}
+func (f *fakeHistory) GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error) {
+	detail, err := f.GetHistoryDetail(ctx, key, id)
+	return detail.Body, err
+}
 func (f *fakeHistory) DeleteHistory(key string) error {
 	f.deleted = append(f.deleted, key)
 	return nil
@@ -152,6 +160,11 @@ func TestHistoryBodyLoadsOnlyWithPanelOpen(t *testing.T) {
 	}
 	traffic.SetShowDetailPanel(true)
 	settle()
+	if traffic.DetailEntry == nil || traffic.BodyView != nil {
+		t.Fatal("opening details must load only metadata")
+	}
+	traffic.RequestBody()
+	settle()
 	if traffic.BodyView == nil || traffic.BodyView.ResponseBody != "stored" {
 		t.Fatalf("%+v", traffic.BodyView)
 	}
@@ -203,6 +216,7 @@ func TestCloseOpenedReleasesTheHistory(t *testing.T) {
 	store.Filter.SearchText = "example"
 	store.Traffic.Select(store.Traffic.Entries[0])
 	store.Traffic.SetShowDetailPanel(true)
+	store.Traffic.RequestBody()
 	store.Traffic.SetHighlight(1, "red")
 	settle()
 	if len(store.Filter.Base()) == 0 || store.Traffic.BodyView == nil {
@@ -211,6 +225,7 @@ func TestCloseOpenedReleasesTheHistory(t *testing.T) {
 
 	store.CloseOpened()
 	if store.Traffic.Key != "" || store.Traffic.Entries != nil || store.Traffic.Selected != nil ||
+		store.Traffic.DetailEntry != nil || store.Traffic.DetailLoading || store.Traffic.BodyViewLoading ||
 		store.Traffic.BodyView != nil || len(store.Traffic.Highlights) != 0 || store.SelectedKey != "" {
 		t.Fatalf("opened history kept after close: %+v", store.Traffic)
 	}

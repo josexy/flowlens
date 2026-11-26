@@ -30,6 +30,7 @@ func (p *Panel) loadedBody(entry *logic.TrafficEntry) *proxyservice.TrafficBodyV
 	if p.data.SelectedEntry() != entry {
 		return nil
 	}
+	p.requestBodyIfNeeded()
 	return p.data.BodyView()
 }
 
@@ -86,7 +87,12 @@ func (p *Panel) buildRaw(c *ui.Context, theme nui.Theme, pane *rawPane, warning 
 		return
 	}
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		widgets.PaneToolbar(c, nil, func() {
+		widgets.PaneToolbar(c, func() {
+			if p.data.BodyLoading() && p.bodyWait.visible(c) {
+				widgets.Spinner(c, theme).Size(16, 16).TextColor(theme.Muted).
+					Role(ui.RoleStatus).Label(locales.AppLoading()).Busy(true)
+			}
+		}, func() {
 			wrap := pane.view.WordWrap()
 			wrapColor := nui.Neutral
 			if wrap {

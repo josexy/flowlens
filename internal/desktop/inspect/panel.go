@@ -26,6 +26,13 @@ type Data interface {
 	BodyLoading() bool
 }
 
+// deferredData separates pending history metadata from on-demand payloads.
+// Live capture already supplies metadata and manages its body subscription.
+type deferredData interface {
+	PendingEntry() *logic.TrafficEntry
+	RequestBody()
+}
+
 // LiveData shows the selection of the live capture.
 type LiveData struct{ Traffic *store.TrafficStore }
 
@@ -99,6 +106,11 @@ type Panel struct {
 	messages       *MessageStream
 	cookiePopovers map[int]*bool
 	clipboard      *string
+	requestTabIDs  []string
+	responseTabIDs []string
+	pendingID      uint64
+	detailWait     loadingDelay
+	bodyWait       loadingDelay
 }
 
 // NewPanel returns a panel of data.
@@ -121,6 +133,8 @@ func (p *Panel) Release() {
 	next.OnClose = p.OnClose
 	next.entryID = p.entryID
 	next.requestTab, next.responseTab = p.requestTab, p.responseTab
+	// Keep only small layout identifiers; no record, labels, or payloads.
+	next.requestTabIDs, next.responseTabIDs = p.requestTabIDs, p.responseTabIDs
 	next.requestSort, next.responseSort, next.trailerSort = p.requestSort, p.responseSort, p.trailerSort
 	next.requestBody.copyPreferences(p.requestBody)
 	next.responseBody.copyPreferences(p.responseBody)
@@ -193,7 +207,17 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 		p.clipboard = nil
 	}
 	entry := p.data.SelectedEntry()
+	if !p.data.BodyLoading() {
+		p.bodyWait = loadingDelay{}
+	}
 	if entry == nil {
+		if deferred, ok := p.data.(deferredData); ok {
+			if pending := deferred.PendingEntry(); pending != nil {
+				p.pendingDetail(c, theme, pending)
+				return
+			}
+		}
+		p.pendingID = 0
 		p.entryID = 0
 		ui.Column(c).Fill().Children(func() {
 			if p.OnClose != nil {
@@ -201,14 +225,16 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 			}
 			ui.Column(c).Fill().Center().Children(func() {
 				if p.data.BodyLoading() {
-					widgets.Spinner(c, theme).Size(24, 24).TextColor(theme.Muted)
+					p.bodyWait.spinner(c, theme)
 				} else {
+					p.detailWait = loadingDelay{}
 					widgets.EmptyState(c, theme, nui.EmptyOptions{Icon: lucide.MousePointerClick(), Title: locales.DetailSelectRequest()})
 				}
 			})
 		})
 		return
 	}
+	p.pendingID, p.detailWait = 0, loadingDelay{}
 	entryChanged := entry.ID != p.entryID
 	p.entryID = entry.ID
 	p.reconcileTabs(entry, entryChanged)
@@ -216,13 +242,17 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 		p.rawTCP(c, theme, entry)
 		return
 	}
+	p.splitPanes(c, theme, func() { p.requestPane(c, theme, entry) }, func() { p.responsePane(c, theme, entry) })
+}
+
+func (p *Panel) splitPanes(c *ui.Context, theme nui.Theme, request, response func()) {
 	p.loadSplit()
 	layout := p.splitLayout
 	nui.Splitter(c.Key("detail-split"), theme, &p.split, nui.SplitterOptions{
 		Percent: true, Vertical: layout == settingservice.TrafficDetailLayoutVertical,
 		Min: nui.Set[float32](minSplit), Max: nui.Set[float32](maxSplit),
 		OnChange: func(percent float32) { p.deps.Settings.SetTrafficDetailSplit(splitName(layout), percent) },
-	}, func() { p.requestPane(c, theme, entry) }, func() { p.responsePane(c, theme, entry) }).Fill()
+	}, request, response).Fill()
 }
 
 func countLabel(label string, count int) string { return label + "(" + strconv.Itoa(count) + ")" }
@@ -251,6 +281,7 @@ func (p *Panel) requestPane(c *ui.Context, theme nui.Theme, entry *logic.Traffic
 		items = append(items, nui.TabItem{ID: tabRequestCookies, Label: countLabel(locales.DetailCookies(), len(logic.HeadersRecordToFields(logic.RequestCookiesRecord(headers))))})
 	}
 	items = append(items, nui.TabItem{ID: tabRequestBody, Label: locales.DetailRequestBody()})
+	p.requestTabIDs = rememberTabIDs(p.requestTabIDs, items)
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.tabBar(c, theme, "request-tabs", &p.requestTab, items, nil)
 		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
@@ -351,8 +382,10 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 	if entry.Response != nil {
 		headers, trailers = entry.Response.HeaderFields, entry.Response.TrailerFields
 	}
+	items := p.responseItems(entry)
+	p.responseTabIDs = rememberTabIDs(p.responseTabIDs, items)
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
-		p.tabBar(c, theme, "response-tabs", &p.responseTab, p.responseItems(entry), func() {
+		p.tabBar(c, theme, "response-tabs", &p.responseTab, items, func() {
 			p.responseChips(c, theme, entry)
 			p.closeButton(c, theme)
 		})

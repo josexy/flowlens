@@ -349,6 +349,17 @@ type HistoryDetail struct {
 }
 
 func (s *HistoryService) GetHistoryDetail(ctx context.Context, key string, id uint64) (HistoryDetail, error) {
+	return s.readHistoryDetail(ctx, key, id, true)
+}
+
+// GetHistoryEntry reads complete metadata without decoding the body record.
+// Inspection can publish headers before requesting a potentially large body.
+func (s *HistoryService) GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error) {
+	detail, err := s.readHistoryDetail(ctx, key, id, false)
+	return detail.Entry, err
+}
+
+func (s *HistoryService) readHistoryDetail(ctx context.Context, key string, id uint64, withBody bool) (HistoryDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return HistoryDetail{}, err
 	}
@@ -383,7 +394,7 @@ func (s *HistoryService) GetHistoryDetail(ctx context.Context, key string, id ui
 		return HistoryDetail{}, fmt.Errorf("history entry ID %d does not match index %d", entry.ID, id)
 	}
 	detail := HistoryDetail{Entry: entry}
-	if entry.Type == "tcp" {
+	if !withBody || entry.Type == "tcp" {
 		return detail, ctx.Err()
 	}
 	if _, err = file.Seek(int64(position.bodyIndex), io.SeekStart); err != nil {
@@ -398,9 +409,17 @@ func (s *HistoryService) GetHistoryDetail(ctx context.Context, key string, id ui
 }
 
 func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*proxyservice.TrafficBodyView, error) {
+	return s.GetHistoryBody(context.Background(), key, id)
+}
+
+// GetHistoryBody loads an inspection payload independently of its metadata.
+func (s *HistoryService) GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.storageMu.RLock()
 	defer s.storageMu.RUnlock()
-	fileIndex, err := s.historyIndex(key)
+	fileIndex, err := s.historyIndexContext(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +440,12 @@ func (s *HistoryService) GetHistoryTrafficBodyView(key string, id uint64) (*prox
 	if _, err := hbinFile.Seek(int64(idx.bodyIndex), io.SeekStart); err != nil {
 		return nil, err
 	}
-	return proxyservice.DecodeTrafficBodyWithVersion(hbinFile, fileIndex.formatVersion)
+	reader := bufio.NewReader(historyContextReader{ctx: ctx, reader: hbinFile})
+	body, err := proxyservice.DecodeTrafficBodyWithVersion(reader, fileIndex.formatVersion)
+	if err == nil {
+		err = ctx.Err()
+	}
+	return body, err
 }
 
 func (s *HistoryService) getSingleHistoryEntryAndBodyReader(key string, id uint64) (*proxyservice.TrafficEntry, []byte, error) {

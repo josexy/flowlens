@@ -17,6 +17,7 @@ const (
 	jobHistoryList   = "history:list"
 	jobHistoryLoad   = "history:load"
 	jobHistoryDetail = "history:detail"
+	jobHistoryBody   = "history:body"
 	jobHistoryAction = "history:action:"
 	jobHistoryDelete = "history:delete"
 	jobHistoryClear  = "history:clear"
@@ -27,6 +28,8 @@ const (
 type HistoryBackend interface {
 	ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error)
 	ListHistoryEntries(ctx context.Context, key string) ([]*logic.TrafficEntry, error)
+	GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error)
+	GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error)
 	GetHistoryDetail(ctx context.Context, key string, id uint64) (historyservice.HistoryDetail, error)
 	DeleteHistory(key string) error
 	ClearHistories() error
@@ -43,6 +46,7 @@ type HistoryTraffic struct {
 	EntriesVersion  uint64
 	Selected        *logic.TrafficEntry
 	DetailEntry     *logic.TrafficEntry
+	DetailLoading   bool
 	SelectedCount   int
 	BodyView        *proxyservice.TrafficBodyView
 	BodyViewVersion uint64
@@ -55,9 +59,10 @@ type HistoryTraffic struct {
 	// OnDetailReset releases caches when the detail body or selection is invalidated.
 	OnDetailReset func()
 
-	loadedBodyEntry uint64
-	bodyToken       uint64
-	bodySequence    uint64
+	bodyToken     uint64
+	bodySequence  uint64
+	bodyRequested bool
+	bodyAttempted bool
 }
 
 func (t *HistoryTraffic) setBodyView(view *proxyservice.TrafficBodyView) {
@@ -68,14 +73,16 @@ func (t *HistoryTraffic) setBodyView(view *proxyservice.TrafficBodyView) {
 func (t *HistoryTraffic) clearBody() {
 	if t.rt.Jobs != nil {
 		t.rt.Jobs.Cancel(jobHistoryDetail)
+		t.rt.Jobs.Cancel(jobHistoryBody)
 	}
 	t.DetailEntry = nil
+	t.DetailLoading = false
+	t.bodyRequested, t.bodyAttempted = false, false
 	t.bodyToken++
 	if t.BodyView != nil {
 		t.setBodyView(nil)
 	}
 	t.BodyViewLoading = false
-	t.loadedBodyEntry = 0
 	if t.OnDetailReset != nil {
 		t.OnDetailReset()
 	}
@@ -96,7 +103,7 @@ func (t *HistoryTraffic) Select(entry *logic.TrafficEntry) {
 	if previous != entry.ID {
 		t.clearBody()
 	}
-	t.loadBody()
+	t.loadDetail()
 }
 
 // SetShowDetailPanel opens or closes the detail panel.
@@ -106,38 +113,68 @@ func (t *HistoryTraffic) SetShowDetailPanel(show bool) {
 		t.clearBody()
 		return
 	}
-	t.loadBody()
+	t.loadDetail()
 }
 
-func (t *HistoryTraffic) loadBody() {
+func (t *HistoryTraffic) loadDetail() {
 	entry := t.Selected
 	if entry == nil || !t.ShowDetailPanel || t.Key == "" {
 		return
 	}
-	if (t.DetailEntry != nil && t.loadedBodyEntry == entry.ID) || t.BodyViewLoading {
+	if t.DetailEntry != nil || t.DetailLoading {
 		return
 	}
 	t.bodyToken++
 	token, key, id := t.bodyToken, t.Key, entry.ID
-	t.BodyViewLoading = true
-	runtime.Run(t.rt.Jobs, jobHistoryDetail, func(ctx context.Context) (historyservice.HistoryDetail, error) {
-		return t.backend.GetHistoryDetail(ctx, key, id)
-	}, func(detail historyservice.HistoryDetail, err error) {
+	t.DetailLoading = true
+	runtime.Run(t.rt.Jobs, jobHistoryDetail, func(ctx context.Context) (*proxyservice.TrafficEntry, error) {
+		return t.backend.GetHistoryEntry(ctx, key, id)
+	}, func(detail *proxyservice.TrafficEntry, err error) {
+		if token != t.bodyToken {
+			return
+		}
+		t.DetailLoading = false
+		if err == nil && (detail == nil || detail.ID != id) {
+			err = fmt.Errorf("history detail %d was not returned", id)
+		}
+		if err != nil {
+			logger.G().Errorf("Failed to get history traffic entry: %v", err)
+			return
+		}
+		t.DetailEntry = detail
+		if t.bodyRequested {
+			t.RequestBody()
+		}
+	})
+}
+
+// RequestBody is a guarded demand signal from a body-dependent inspection pane.
+// Redraws neither duplicate an in-flight request nor retry a failed read.
+func (t *HistoryTraffic) RequestBody() {
+	if t.Selected == nil || !t.ShowDetailPanel || t.Key == "" || t.Selected.Type == "tcp" {
+		return
+	}
+	t.bodyRequested = true
+	if t.DetailEntry == nil || t.BodyView != nil || t.bodyAttempted {
+		return
+	}
+	t.bodyAttempted, t.BodyViewLoading = true, true
+	token, key, id := t.bodyToken, t.Key, t.Selected.ID
+	runtime.Run(t.rt.Jobs, jobHistoryBody, func(ctx context.Context) (*proxyservice.TrafficBodyView, error) {
+		return t.backend.GetHistoryBody(ctx, key, id)
+	}, func(body *proxyservice.TrafficBodyView, err error) {
 		if token != t.bodyToken {
 			return
 		}
 		t.BodyViewLoading = false
-		t.DetailEntry = detail.Entry
+		if err == nil && body == nil {
+			err = fmt.Errorf("history body %d was not returned", id)
+		}
 		if err != nil {
 			logger.G().Errorf("Failed to get history traffic body view: %v", err)
-			if t.BodyView != nil {
-				t.setBodyView(nil)
-			}
-			t.loadedBodyEntry = 0
 			return
 		}
-		t.setBodyView(detail.Body)
-		t.loadedBodyEntry = id
+		t.setBodyView(body)
 	})
 }
 
@@ -422,6 +459,18 @@ type HistoryDetailData struct{ History *HistoryStore }
 
 // SelectedEntry returns the selected entry.
 func (d HistoryDetailData) SelectedEntry() *logic.TrafficEntry { return d.History.Traffic.DetailEntry }
+
+// PendingEntry identifies the selection for pending layout only, never for
+// rendering its summary headers as complete details.
+func (d HistoryDetailData) PendingEntry() *logic.TrafficEntry {
+	if d.History.Traffic.DetailLoading {
+		return d.History.Traffic.Selected
+	}
+	return nil
+}
+
+// RequestBody loads payloads only when an inspection pane needs them.
+func (d HistoryDetailData) RequestBody() { d.History.Traffic.RequestBody() }
 
 // BodyView returns the selected entry's bodies.
 func (d HistoryDetailData) BodyView() *proxyservice.TrafficBodyView {

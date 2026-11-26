@@ -1670,6 +1670,14 @@ func (b *fakeHistoryBackend) GetHistoryDetail(_ context.Context, key string, id 
 	}
 	return historyservice.HistoryDetail{}, fmt.Errorf("missing history entry %d", id)
 }
+func (b *fakeHistoryBackend) GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error) {
+	detail, err := b.GetHistoryDetail(ctx, key, id)
+	return detail.Entry, err
+}
+func (b *fakeHistoryBackend) GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error) {
+	detail, err := b.GetHistoryDetail(ctx, key, id)
+	return detail.Body, err
+}
 func (b *fakeHistoryBackend) DeleteHistory(key string) error {
 	b.deleted = append(b.deleted, key)
 	kept := b.list[:0:0]
