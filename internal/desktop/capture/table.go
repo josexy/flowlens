@@ -483,7 +483,7 @@ func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, ou
 		if first {
 			t.noteRowSpan(cell, row)
 		}
-		t.cellBackground(cell, theme, row, first, last, c.Zoom(), outlines)
+		t.cellBackground(cell, theme, row, first, last, outlines)
 		cell = ui.Element{}
 		if content != nil {
 			content(c, theme, row, chosen)
@@ -497,7 +497,7 @@ func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, ou
 // the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
 // stronger in the dark theme. first and last say whether the cell starts or
 // ends the row as shown.
-func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, zoom float32, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
+func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
 	entry := t.rows[row]
 	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
 	highlight := t.source.Highlight(entry.ID)
@@ -533,7 +533,7 @@ func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first,
 	default:
 		return
 	}
-	style := rowOutlineStyle{outline: outline, marker: bar, zoom: zoom, first: first, last: last}
+	style := rowOutlineStyle{outline: outline, marker: bar, first: first, last: last}
 	paint := outlines[style]
 	if paint == nil {
 		paint = style.paint

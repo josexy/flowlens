@@ -20,7 +20,7 @@ Nuxt applies a column's `Decoration.Style` to its content row immediately before
 
 Apply `.Background(...)` to the existing cell and use `.DrawOver(...)` for the outline and start marker. This removes decorative nodes without adding layout borders or changing row height. Keep opaque badge colors and selection/inspection/highlight precedence.
 
-A build-local cache shares drawing method values for equal `rowOutlineStyle` values. They contain only colors, zoom, and first/last flags, never records, bodies, elements, or contexts. Clip drawing per cell and derive edge flags from displayed column order, including `row-fill`.
+A build-local cache shares drawing method values for equal `rowOutlineStyle` values. They contain only colors and first/last flags, never records, bodies, elements, or contexts. Clip drawing per cell and derive edge flags from displayed column order, including `row-fill`.
 
 For `C` displayed cells, this removes `C + 1` nodes per ordinary row and `2C + 2` per outlined/marked row. With 11 business columns, savings are 12/24 without fill or 13/26 with fill.
 

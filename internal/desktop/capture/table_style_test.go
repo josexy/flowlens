@@ -289,7 +289,7 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 		line := rgba(theme.Primary.Alpha(alpha).Over(background))
 		for _, scale := range []float32{1, 1.25, 1.5, 2} {
 			f.tester.SetScale(scale)
-			for _, zoom := range []float32{1, 1.19} {
+			for _, zoom := range []float32{1, 1.19, 2} {
 				f.tester.SetZoom(zoom)
 				f.settle()
 				row, ok := f.tester.AccessByRole(ui.RoleRow, "101")
@@ -300,6 +300,8 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 				left, right := pixelEdge(row.Bounds.X), pixelEdge(row.Bounds.X+row.Bounds.W)
 				top, bottom := pixelEdge(row.Bounds.Y), pixelEdge(row.Bounds.Y+row.Bounds.H)
 				frame := f.tester.Image()
+				// At larger zooms the row scrolls past the window's edge.
+				right = min(right, frame.Bounds().Dx())
 				idColumn := headerRect(t, f, locales.TrafficId())
 				x := pixelEdge(idColumn.X + idColumn.W - 6*zoom)
 				y := top + (bottom-top)/2
@@ -313,6 +315,23 @@ func TestClickedRowOutlineSpansAllCells(t *testing.T) {
 							t.Fatalf("dark=%v scale=%v zoom=%v: broken outline at (%d,%d): %v, want %v", dark, scale, zoom, x, y, got, line)
 						}
 					}
+				}
+				// Zoom is already part of the device scale: the outline stays
+				// a 1 DIP border and the marker a 3 DIP bar, not zoomed again.
+				device := scale * zoom
+				thickness := 0
+				for y := top; y < bottom && near(frame.RGBAAt(x, y), line); y++ {
+					thickness++
+				}
+				if want := max(int(math.Round(float64(device))), 1); thickness != want {
+					t.Fatalf("dark=%v scale=%v zoom=%v: outline is %d px thick, want %d", dark, scale, zoom, thickness, want)
+				}
+				marker := 0
+				for x := left; x < right && near(frame.RGBAAt(x, y), rgba(theme.Primary)); x++ {
+					marker++
+				}
+				if lo, hi := int(math.Floor(float64(3*device))), int(math.Ceil(float64(3*device))); marker < lo || marker > hi {
+					t.Fatalf("dark=%v scale=%v zoom=%v: marker is %d px wide, want %d-%d", dark, scale, zoom, marker, lo, hi)
 				}
 			}
 		}

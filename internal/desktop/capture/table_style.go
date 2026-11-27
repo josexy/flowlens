@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"math"
 	"slices"
 
 	"github.com/egoist/mygo/ui"
@@ -81,20 +82,23 @@ func (t *Table) displayOrder(visible []columnDefinition) []string {
 // scalars, never a table, record, context, or frame element.
 type rowOutlineStyle struct {
 	outline, marker ui.Color
-	zoom            float32
 	first, last     bool
 }
 
+// paint draws in the cell's DIPs, which the painter's scale already zooms.
+// The outline is a 1 DIP border rounded to whole device pixels, as MyGo
+// rounds BorderWidth; the marker is a 3 DIP bar.
 func (s rowOutlineStyle) paint(p *ui.Painter, r ui.Rect) {
 	p.Clip(r, 0, func() {
-		w := s.zoom
+		scale := p.Scale()
+		w := float32(max(math.Round(float64(scale)), 1)) / scale
 		p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: w}, s.outline, 0)
 		p.Fill(ui.Rect{X: r.X, Y: r.Y + r.H - w, W: r.W, H: w}, s.outline, 0)
 		if s.last {
 			p.Fill(ui.Rect{X: r.X + r.W - w, Y: r.Y + w, W: w, H: max(0, r.H-2*w)}, s.outline, 0)
 		}
 		if s.first {
-			p.Fill(ui.Rect{X: r.X, Y: r.Y, W: min(3*w, r.W), H: r.H}, s.marker, 0)
+			p.Fill(ui.Rect{X: r.X, Y: r.Y, W: min(3, r.W), H: r.H}, s.marker, 0)
 		}
 	})
 }
