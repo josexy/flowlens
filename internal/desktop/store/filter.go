@@ -10,6 +10,11 @@ import (
 // TrafficSource supplies the entries a filter reads.
 type TrafficSource func() (entries []*logic.TrafficEntry, version uint64)
 
+type trafficFilterMatch struct {
+	base, category bool
+	seen           bool
+}
+
 // FilterStore narrows a traffic list by a search query, a tab, and category
 // selections. An entry's results are remembered until it or the filter
 // changes, so a live update costs only the entries it touched.
@@ -24,9 +29,10 @@ type FilterStore struct {
 	sourceVersion uint64
 	computed      bool
 	baseKey       string
-	baseMatches   map[*logic.TrafficEntry]bool
 	categoryKey   string
-	categoryMatch map[*logic.TrafficEntry]bool
+	matches       map[*logic.TrafficEntry]trafficFilterMatch
+	matchCapacity int
+	generation    bool
 	base          []*logic.TrafficEntry
 	filtered      []*logic.TrafficEntry
 	version       uint64
@@ -34,10 +40,7 @@ type FilterStore struct {
 
 // NewFilterStore returns a filter showing everything from source.
 func NewFilterStore(source TrafficSource) *FilterStore {
-	return &FilterStore{
-		source: source, ActiveTab: logic.TabAll,
-		baseMatches: map[*logic.TrafficEntry]bool{}, categoryMatch: map[*logic.TrafficEntry]bool{},
-	}
+	return &FilterStore{source: source, ActiveTab: logic.TabAll}
 }
 
 func filterKey(values ...[]string) string {
@@ -51,13 +54,6 @@ func filterKey(values ...[]string) string {
 	return key.String()
 }
 
-func reuseIfStable(current, next []*logic.TrafficEntry) ([]*logic.TrafficEntry, bool) {
-	if slices.Equal(current, next) {
-		return current, false
-	}
-	return next, true
-}
-
 // Refresh recomputes the lists if the source or the filter changed.
 func (f *FilterStore) Refresh() {
 	entries, version := f.source()
@@ -66,51 +62,79 @@ func (f *FilterStore) Refresh() {
 	if f.computed && version == f.sourceVersion && baseKey == f.baseKey && categoryKey == f.categoryKey {
 		return
 	}
-	f.computed, f.sourceVersion = true, version
-	if baseKey != f.baseKey {
-		f.baseKey = baseKey
-		f.baseMatches = map[*logic.TrafficEntry]bool{}
+	baseChanged, categoryChanged := baseKey != f.baseKey, categoryKey != f.categoryKey
+	f.computed, f.sourceVersion, f.baseKey, f.categoryKey = true, version, baseKey, categoryKey
+	f.generation = !f.generation
+	n := len(entries)
+	limit := max(64, 4*n)
+	if n == 0 {
+		if len(f.filtered) > 0 {
+			f.version++
+		}
+		clear(f.base)
+		clear(f.filtered)
+		f.base, f.filtered, f.matches, f.matchCapacity = nil, nil, nil, 0
+		return
 	}
-	if categoryKey != f.categoryKey {
-		f.categoryKey = categoryKey
-		f.categoryMatch = map[*logic.TrafficEntry]bool{}
+	unfiltered := f.SearchText == "" && f.ActiveTab == logic.TabAll && len(f.SelectedHosts) == 0 && len(f.SelectedProcessKeys) == 0
+	if unfiltered {
+		// The common All view needs no per-entry predicate cache.
+		f.matches, f.matchCapacity = nil, 0
+	} else if f.matches == nil || f.matchCapacity < n || f.matchCapacity > limit {
+		capacity := n
+		if f.matchCapacity < n {
+			capacity = max(n, 2*f.matchCapacity)
+		}
+		f.matchCapacity = capacity
+		f.matches = make(map[*logic.TrafficEntry]trafficFilterMatch, capacity)
 	}
-
-	nextMatches := make(map[*logic.TrafficEntry]bool, len(entries))
-	base := make([]*logic.TrafficEntry, 0, len(entries))
+	base, next := f.base[:0], f.filtered[:0]
+	if cap(base) > limit {
+		base = nil
+	}
+	if cap(next) > limit {
+		next = nil
+	}
+	base = slices.Grow(base, n)
+	next = slices.Grow(next, n)
+	hosts, processes := toSet(f.SelectedHosts), toSet(f.SelectedProcessKeys)
+	hasCategories := len(hosts) > 0 || len(processes) > 0
+	changed := false
 	for _, entry := range entries {
-		matched, known := f.baseMatches[entry]
-		if !known {
-			matched = logic.TrafficMatchesSearch(entry, f.SearchText) && logic.TrafficMatchesTab(entry, f.ActiveTab)
-		}
-		nextMatches[entry] = matched
-		if matched {
-			base = append(base, entry)
-		}
-	}
-	f.baseMatches = nextMatches
-	f.base, _ = reuseIfStable(f.base, base)
-
-	next := f.base
-	if len(f.SelectedHosts) > 0 || len(f.SelectedProcessKeys) > 0 {
-		hosts := toSet(f.SelectedHosts)
-		processes := toSet(f.SelectedProcessKeys)
-		nextCategory := make(map[*logic.TrafficEntry]bool, len(f.base))
-		next = make([]*logic.TrafficEntry, 0, len(f.base))
-		for _, entry := range f.base {
-			matched, known := f.categoryMatch[entry]
-			if !known {
-				matched = logic.TrafficMatchesCategoryFilters(entry, hosts, processes)
+		match := trafficFilterMatch{base: true, category: true}
+		if !unfiltered {
+			var known bool
+			match, known = f.matches[entry]
+			if !known || baseChanged {
+				match.base = logic.TrafficMatchesSearch(entry, f.SearchText) && logic.TrafficMatchesTab(entry, f.ActiveTab)
 			}
-			nextCategory[entry] = matched
-			if matched {
+			if !known || categoryChanged {
+				match.category = !hasCategories || logic.TrafficMatchesCategoryFilters(entry, hosts, processes)
+			}
+			match.seen = f.generation
+			f.matches[entry] = match
+		}
+		if match.base {
+			base = append(base, entry)
+			if match.category {
+				index := len(next)
+				if index >= len(f.filtered) || f.filtered[index] != entry {
+					changed = true
+				}
 				next = append(next, entry)
 			}
 		}
-		f.categoryMatch = nextCategory
 	}
-	var changed bool
-	if f.filtered, changed = reuseIfStable(f.filtered, next); changed {
+	for entry, match := range f.matches {
+		if match.seen != f.generation {
+			delete(f.matches, entry)
+		}
+	}
+	changed = changed || len(next) != len(f.filtered)
+	clear(f.base[min(len(base), len(f.base)):])
+	clear(f.filtered[min(len(next), len(f.filtered)):])
+	f.base, f.filtered = base, next
+	if changed {
 		f.version++
 	}
 }
@@ -123,13 +147,13 @@ func toSet(values []string) map[string]bool {
 	return set
 }
 
-// Filtered returns the entries that pass every filter.
+// Filtered returns a borrowed main-thread view, valid until the next Refresh.
 func (f *FilterStore) Filtered() []*logic.TrafficEntry {
 	f.Refresh()
 	return f.filtered
 }
 
-// Base returns the entries that pass the search and the tab.
+// Base returns the search/tab matches as a borrowed view until the next Refresh.
 func (f *FilterStore) Base() []*logic.TrafficEntry {
 	f.Refresh()
 	return f.base
@@ -168,16 +192,18 @@ func (f *FilterStore) ToggleProcess(key string) {
 // ClearSelectedProcesses removes the process selections.
 func (f *FilterStore) ClearSelectedProcesses() { f.SelectedProcessKeys = nil }
 
-// ClearFilters returns every filter to its default.
 // Release drops the computed lists and remembered results, so the filter keeps
 // no entry of a source that was closed. The next read recomputes them.
 func (f *FilterStore) Release() {
 	f.computed = false
+	clear(f.base)
+	clear(f.filtered)
 	f.base, f.filtered = nil, nil
-	f.baseMatches, f.categoryMatch = nil, nil
+	f.matches, f.matchCapacity = nil, 0
 	f.version++
 }
 
+// ClearFilters returns every filter to its default.
 func (f *FilterStore) ClearFilters() {
 	f.SearchText, f.ActiveTab = "", logic.TabAll
 	f.SelectedHosts, f.SelectedProcessKeys = nil, nil

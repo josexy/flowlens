@@ -84,6 +84,12 @@ History scans skip unused headers, trailers, certificates, and TLS fields. Selec
 
 Traffic tables paint backgrounds and outlines on existing Nuxt cells, including the trailing fill cell. Drawing callbacks retain visual scalars only. The first displayed cell supplies committed vertical bounds for right-click hit testing; the native table owns selection, keyboard input, and accessibility.
 
+Cell text is bounded before shaping to 256 UTF-8 bytes, including a trailing ellipsis when shortened; valid runes are never split. This affects labels only: filtering, sorting, inspection, copy, and export still use complete values. Single-line clipping alone does not bound text-engine allocations for long paths.
+
+Filters and sorters reuse compact matching caches, ID-keyed sort values, and pointer buffers on the main thread. The unfiltered All view needs no per-entry matching cache. Their result slices are borrowed views until the next refresh/sort; consumers needing a persistent snapshot must clone them. Obsolete entries are pruned, removed pointer slots are cleared, and empty/reset or substantially smaller sources release storage. Native row identity inputs are rebuilt only when ordered IDs change, so payload patches preserve selection without allocating a full membership map. This bounds update allocations, but the open history still retains metadata for every record.
+
+`BenchmarkTrafficTableLongPathScroll` measures newly visible rows with 64-byte through 64-KiB paths; use it alongside `BenchmarkTrafficTableLive` for selected/sorted updates. Idle frames alone do not cover text shaping when scrolling.
+
 `BenchmarkTrafficTableStress` measures warmed retained UI heap with its tester alive, separately from timed allocations. Set `FLOWLENS_TABLE_HEAP_DIR` to save heap profiles. Ordinary checks use `CGO_ENABLED=0`:
 
 ```powershell

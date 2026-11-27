@@ -67,12 +67,13 @@ func IsAtLatestEdge(sort TrafficSort, first, last, count int) bool {
 
 type sortValue struct {
 	text    string
+	folded  string
 	number  int64
 	missing bool
 	numeric bool
 }
 
-func textValue(text string) sortValue { return sortValue{text: text} }
+func textValue(text string) sortValue { return sortValue{text: text, folded: strings.ToLower(text)} }
 
 func numberValue(number int64, known bool) sortValue {
 	return sortValue{number: number, numeric: true, missing: !known}
@@ -119,7 +120,7 @@ func compareSortValues(left, right sortValue) int {
 	if left.numeric && right.numeric {
 		return cmp.Compare(left.number, right.number)
 	}
-	if compared := strings.Compare(strings.ToLower(left.text), strings.ToLower(right.text)); compared != 0 {
+	if compared := strings.Compare(left.folded, right.folded); compared != 0 {
 		return compared
 	}
 	return strings.Compare(left.text, right.text)
@@ -130,53 +131,75 @@ func compareSortValues(left, right sortValue) int {
 type TrafficTableSorter struct {
 	lastKey        TrafficColumnKey
 	lastOrder      SortOrder
-	cached         map[*TrafficEntry]sortValue
-	previousValues map[uint64]sortValue
+	cached         map[uint64]trafficSortRecord
+	capacity       int
+	generation     uint64
 	previousSorted []*TrafficEntry
 	computed       int
 }
 
-// NewTrafficTableSorter returns an empty sorter.
-func NewTrafficTableSorter() *TrafficTableSorter {
-	return &TrafficTableSorter{cached: map[*TrafficEntry]sortValue{}, previousValues: map[uint64]sortValue{}}
+type trafficSortRecord struct {
+	entry *TrafficEntry
+	value sortValue
+	seen  uint64
 }
 
-// Sort returns entries in table order. Unsorted returns entries itself.
+// NewTrafficTableSorter returns an empty sorter.
+func NewTrafficTableSorter() *TrafficTableSorter {
+	return &TrafficTableSorter{}
+}
+
+// Sort returns a borrowed main-thread view until the next Sort. Unsorted
+// returns entries itself. Callers needing a persistent snapshot must clone it.
 func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*TrafficEntry {
-	if !sort.active() {
+	if !sort.active() || len(entries) == 0 {
 		s.lastKey, s.lastOrder = "", SortNone
-		s.cached = map[*TrafficEntry]sortValue{}
-		s.previousValues = map[uint64]sortValue{}
+		s.cached, s.capacity = nil, 0
+		clear(s.previousSorted)
 		s.previousSorted = nil
 		return entries
 	}
-	if sort.Key != s.lastKey {
-		s.cached = map[*TrafficEntry]sortValue{}
+	n := len(entries)
+	limit := max(64, 4*n)
+	if s.cached == nil || s.capacity < n || s.capacity > limit {
+		capacity := n
+		if s.capacity < n {
+			capacity = max(n, 2*s.capacity)
+		}
+		s.capacity = capacity
+		s.cached = make(map[uint64]trafficSortRecord, capacity)
 	}
-	needsSort := sort.Key != s.lastKey || sort.Order != s.lastOrder || len(entries) != len(s.previousValues)
-	values := make(map[uint64]sortValue, len(entries))
-	byID := make(map[uint64]*TrafficEntry, len(entries))
-	current := make(map[*TrafficEntry]sortValue, len(entries))
+	keyChanged := sort.Key != s.lastKey
+	needsSort := keyChanged || sort.Order != s.lastOrder || n != len(s.cached)
+	s.generation++
 	for _, entry := range entries {
-		value, ok := s.cached[entry]
-		if !ok {
+		record, ok := s.cached[entry.ID]
+		value := record.value
+		if !ok || keyChanged || record.entry != entry {
 			value = trafficSortValue(entry, sort.Key)
 			s.computed++
 		}
-		current[entry] = value
-		values[entry.ID] = value
-		byID[entry.ID] = entry
-		if previous, seen := s.previousValues[entry.ID]; !seen || previous != value {
+		if !ok || record.value != value {
 			needsSort = true
 		}
+		s.cached[entry.ID] = trafficSortRecord{entry: entry, value: value, seen: s.generation}
 	}
-	s.cached = current
+	for id, record := range s.cached {
+		if record.seen != s.generation {
+			delete(s.cached, id)
+		}
+	}
 
-	var sorted []*TrafficEntry
+	sorted := s.previousSorted
+	if cap(sorted) > limit {
+		sorted = nil
+	}
+	clear(sorted[min(n, len(sorted)):])
+	sorted = slices.Grow(sorted[:0], n)[:n]
 	if needsSort {
-		sorted = slices.Clone(entries)
+		copy(sorted, entries)
 		slices.SortStableFunc(sorted, func(left, right *TrafficEntry) int {
-			a, b := values[left.ID], values[right.ID]
+			a, b := s.cached[left.ID].value, s.cached[right.ID].value
 			switch {
 			case a.missing && b.missing:
 				return cmp.Compare(left.ID, right.ID)
@@ -195,13 +218,11 @@ func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*
 			return compared
 		})
 	} else {
-		sorted = make([]*TrafficEntry, len(s.previousSorted))
-		for index, entry := range s.previousSorted {
-			sorted[index] = byID[entry.ID]
+		for index, entry := range sorted {
+			sorted[index] = s.cached[entry.ID].entry
 		}
 	}
 	s.lastKey, s.lastOrder = sort.Key, sort.Order
-	s.previousValues = values
 	s.previousSorted = sorted
 	return sorted
 }

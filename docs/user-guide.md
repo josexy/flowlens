@@ -97,6 +97,7 @@ Click the globe button beside the HTTP cache control to configure the shared DNS
 
 ### Traffic Tables
 
+- **Long values:** Capture and history cells show a shortened preview ending in `…` for very long text. Use **Copy > Path**, **Copy > URL**, or the detail panel for the full value. Search, sorting, and exports use the complete record.
 - **Columns:** Drag column dividers to resize columns; widths, column order, and hidden columns persist automatically. **Path** initially fills remaining space, while manually dragged widths stay fixed when the sidebar or window resizes. Extra space after fixed columns keeps the row background, and narrow tables scroll horizontally.
 - **Selection:** Click selects one row, `Ctrl`-click (`Cmd`-click on macOS) toggles a row, and `Shift`-click selects a range. When the table has focus, arrow keys move selection, `Shift` + arrow keys extend it, and `Primary+A` selects all rows.
 - **Details panel:** Double-click a row without modifiers to toggle the detail panel, or press `Enter` / choose **Show** from the row menu to open it. **Close details** hides the panel, keeps the current selection, and returns focus to the table. `Ctrl`/`Cmd`-click only modifies selection (deselecting the last row closes details). Changing selection updates an open panel without reopening a closed one.

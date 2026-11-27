@@ -71,6 +71,8 @@ type Table struct {
 	rowsVersion  uint64
 	rowsSort     logic.TrafficSort
 	rowsComputed bool
+	rowIDs       []uint64
+	indices      []int
 
 	fullOrder   []string
 	layoutOrder []string
@@ -135,6 +137,7 @@ func (t *Table) Reset() {
 	t.selectedRow, t.lastFirst, t.revealing = -1, -1, 0
 	t.sorter = logic.NewTrafficTableSorter()
 	t.rows, t.rowsComputed, t.rowsVersion, t.rowsSort = nil, false, 0, logic.TrafficSort{}
+	t.rowIDs, t.indices = nil, nil
 	t.historyShown = ""
 	t.menuTarget = tableMenuTarget{}
 }
@@ -228,34 +231,53 @@ func (t *Table) refreshRows() bool {
 	}
 	t.rowsComputed, t.rowsVersion, t.rowsSort = true, version, sort
 	t.rows = t.sorter.Sort(filter.Filtered(), sort)
-	t.pruneSelection()
-	indices := make([]int, len(t.rows))
-	for index := range indices {
-		indices[index] = index
+	// Filter and sorter results are borrowed slices. Compare against our own
+	// identity snapshot, not the old rows, which may already have been reused.
+	orderChanged := len(t.rows) != len(t.rowIDs)
+	if !orderChanged {
+		for index, entry := range t.rows {
+			if entry.ID != t.rowIDs[index] {
+				orderChanged = true
+				break
+			}
+		}
 	}
-	// Manual sorting keeps these indices in the business sorter's order.
-	t.state.SetRows(indices, func(index int) string { return trafficRowID(t.rows[index].ID) })
+	if !orderChanged {
+		return true
+	}
+	n := len(t.rows)
+	limit := max(64, 4*n)
+	if n == 0 || cap(t.indices) > limit {
+		t.indices = nil
+	}
+	t.indices = slices.Grow(t.indices[:0], n)[:n]
+	for index := range t.indices {
+		t.indices[index] = index
+	}
+	// SetRows validates IDs and prunes native selection. Keep existing strings
+	// for identities that stayed in place, including ordinary live appends.
+	t.state.SetRows(t.indices, func(index int) string {
+		if index < len(t.rowIDs) && t.rowIDs[index] == t.rows[index].ID {
+			return t.state.RowID(index)
+		}
+		return trafficRowID(t.rows[index].ID)
+	})
+	if n == 0 || cap(t.rowIDs) > limit {
+		t.rowIDs = nil
+	}
+	t.rowIDs = slices.Grow(t.rowIDs[:0], n)[:n]
+	for index, entry := range t.rows {
+		t.rowIDs[index] = entry.ID
+	}
+	t.pruneSelection()
 	return true
 }
 
-// pruneSelection removes rows that left the table and moves
-// the focus to the first row still selected in table order.
+// pruneSelection reconciles focus after SetRows removed absent selections.
 func (t *Table) pruneSelection() {
 	if t.state.Selection.Len() == 0 {
-		return
-	}
-	present := make(map[string]bool, len(t.rows))
-	for _, entry := range t.rows {
-		present[trafficRowID(entry.ID)] = true
-	}
-	for id := range t.state.Selection.All() {
-		if !present[id] {
-			t.state.Selection.Remove(id)
-		}
-	}
-	if t.state.Selection.Len() == 0 {
 		t.selectedRow = -1
-		t.source.SelectEntry(nil)
+		t.focusEntry(nil)
 		return
 	}
 	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(trafficRowID(focused.ID)) {
@@ -543,7 +565,7 @@ func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first,
 }
 
 func cellText(c *ui.Context, theme nui.Theme, text string) ui.Element {
-	return ui.Text(c, text).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
+	return ui.Text(c, logic.TrafficCellPreview(text)).SingleLine().Shrink(1).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Text)
 }
 
 // numericText is a cell of numbers that line up across rows.
@@ -552,7 +574,7 @@ func numericText(c *ui.Context, theme nui.Theme, text string) ui.Element {
 }
 
 func mutedText(c *ui.Context, theme nui.Theme, text string) ui.Element {
-	return ui.Text(c, text).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
+	return ui.Text(c, logic.TrafficCellPreview(text)).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 }
 
 func (t *Table) cell(c *ui.Context, theme nui.Theme, entry *logic.TrafficEntry, key logic.TrafficColumnKey) {

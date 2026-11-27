@@ -263,3 +263,35 @@ func BenchmarkTrafficSetRows(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkTrafficTableStorage measures retained filtering, sorting and native
+// identity storage separately from records and visible UI elements.
+func BenchmarkTrafficTableStorage(b *testing.B) {
+	for _, count := range []int{5000, 100000} {
+		for _, mode := range []string{"All", "Filtered", "Sorted"} {
+			b.Run(fmt.Sprintf("Rows%d/%s", count, mode), func(b *testing.B) {
+				f := newFixtureSized(b, rangeOfEntries(1), 1400, 800)
+				entries := rangeOfEntries(count)
+				before := collectedHeap()
+				filter := store.NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return entries, 1 })
+				if mode == "Filtered" {
+					filter.SearchText = "h"
+				}
+				table := NewTable(benchmarkUncappedSource{Source: f.workspace.Table.source, filter: filter}, f.workspace.Table.deps)
+				if mode == "Sorted" {
+					table.state.Sort = ui.SortOrder{Column: string(logic.ColumnStatusCode)}
+				}
+				table.refreshRows()
+				after := collectedHeap()
+				b.ResetTimer()
+				for b.Loop() {
+					table.refreshRows()
+				}
+				b.StopTimer()
+				b.ReportMetric(float64(int64(after.HeapAlloc)-int64(before.HeapAlloc)), "storage-B")
+				runtime.KeepAlive(table)
+				runtime.KeepAlive(f)
+			})
+		}
+	}
+}

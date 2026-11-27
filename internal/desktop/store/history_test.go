@@ -230,7 +230,7 @@ func TestCloseOpenedReleasesTheHistory(t *testing.T) {
 		t.Fatalf("opened history kept after close: %+v", store.Traffic)
 	}
 	if store.Filter.base != nil || store.Filter.filtered != nil ||
-		len(store.Filter.baseMatches) != 0 || len(store.Filter.categoryMatch) != 0 {
+		len(store.Filter.matches) != 0 {
 		t.Fatal("filter still references the closed history's entries")
 	}
 	if len(store.Filter.Base()) != 0 || len(store.Metadata) != 2 {

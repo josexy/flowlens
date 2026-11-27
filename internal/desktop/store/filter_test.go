@@ -87,7 +87,7 @@ func TestFilterReleaseDropsEveryEntryReference(t *testing.T) {
 
 	entries, version = nil, 2
 	filters.Release()
-	if filters.base != nil || filters.filtered != nil || len(filters.baseMatches) != 0 || len(filters.categoryMatch) != 0 {
+	if filters.base != nil || filters.filtered != nil || len(filters.matches) != 0 {
 		t.Fatal("released filter still references entries")
 	}
 	if len(filters.Base()) != 0 || len(filters.Filtered()) != 0 {
