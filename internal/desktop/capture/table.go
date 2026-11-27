@@ -386,8 +386,9 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 
 	columns := make([]nui.TableColumn[int], len(visible))
 	// Marked cells with the same visual values share one callback in this
-	// build, instead of allocating a retained drawing closure per cell.
-	outlines := make(map[rowOutlineStyle]func(*ui.Painter, ui.Rect))
+	// build, lazily allocated on the first marked cell so unmarked frames
+	// allocate no map.
+	var outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)
 	order := t.displayOrder(visible)
 	// MyGo lays out an unsized Path in the current frame. Once resized,
 	// its saved width takes precedence, just like every other column.
@@ -406,7 +407,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 				t.CellBuilds++
 				t.cell(c, theme, t.rows[row], column.key)
 			},
-		}, key == order[0], !fill && key == order[len(order)-1], outlines)
+		}, key == order[0], !fill && key == order[len(order)-1], &outlines)
 	}
 	if fill {
 		var width float32
@@ -415,7 +416,7 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 		}
 		columns = append(columns, t.decorateColumn(nui.TableColumn[int]{
 			ID: "row-fill", Width: width, Fixed: true,
-		}, len(order) == 0, true, outlines))
+		}, len(order) == 0, true, &outlines))
 	}
 	t.state.List.HeaderCell = t.headerCell(c, theme, visible)
 	t.menuSpans = t.menuSpans[:0]
@@ -471,7 +472,7 @@ func (t *Table) newRequestsButton(c *ui.Context, theme nui.Theme, count int) {
 // decorateColumn pairs Nuxt's synchronous Item style and Cell callbacks. The
 // reference exists only during this build, is replaced for every row, and is
 // cleared before building content. No element reaches state or a draw callback.
-func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) nui.TableColumn[int] {
+func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, outlines *map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) nui.TableColumn[int] {
 	var cell ui.Element
 	column.Style = func(slot nui.Slot, element ui.Element) {
 		if slot == nui.Item {
@@ -497,7 +498,7 @@ func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, ou
 // the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
 // stronger in the dark theme. first and last say whether the cell starts or
 // ends the row as shown.
-func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
+func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, outlines *map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
 	entry := t.rows[row]
 	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
 	highlight := t.source.Highlight(entry.ID)
@@ -534,10 +535,13 @@ func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first,
 		return
 	}
 	style := rowOutlineStyle{outline: outline, marker: bar, first: first, last: last}
-	paint := outlines[style]
+	paint := (*outlines)[style]
 	if paint == nil {
+		if *outlines == nil {
+			*outlines = make(map[rowOutlineStyle]func(*ui.Painter, ui.Rect))
+		}
 		paint = style.paint
-		outlines[style] = paint
+		(*outlines)[style] = paint
 	}
 	cell.DrawOver(paint)
 }

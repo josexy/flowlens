@@ -37,9 +37,13 @@ func (w *Window) Drain() {
 		}
 		fn := w.queue[0]
 		// A zero-length suffix still keeps the backing array alive. Drop the
-		// delivered callback so test windows don't retain completed job data.
+		// delivered callback and reset an empty queue so test windows don't
+		// retain completed job data or its backing array.
 		w.queue[0] = nil
 		w.queue = w.queue[1:]
+		if len(w.queue) == 0 {
+			w.queue = nil
+		}
 		w.mu.Unlock()
 		fn()
 	}
