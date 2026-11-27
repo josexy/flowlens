@@ -137,3 +137,38 @@ func TestHistoryTransitionRejectsCanceledReadsAndOldDeadline(t *testing.T) {
 	target.clearBody()
 	settle()
 }
+
+func TestHistoryTransitionRetainsPendingBodyAsLoading(t *testing.T) {
+	s, backend, _, settle := historyTransitionHarness(t)
+	started := make(chan context.Context, 1)
+	backend.body = func(ctx context.Context, _ string, id uint64) (*proxyservice.TrafficBodyView, error) {
+		if id == 2 {
+			started <- ctx
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return &proxyservice.TrafficBodyView{ResponseBody: "new"}, nil
+	}
+	target := s.Traffic
+	target.Select(target.Entries[1])
+	settle()
+	(HistoryDetailData{History: s}).ReleaseRetainedDetail()
+	target.RequestBody()
+	read := waitHistoryLoad(t, started)
+	if target.DetailEntry == nil || target.BodyView != nil || !target.BodyViewLoading {
+		t.Fatal("fixture did not leave the shown record's body loading")
+	}
+	previous := target.DetailEntry
+	target.Select(target.Entries[2])
+	settle()
+	snapshot := (HistoryDetailData{History: s}).RetainedDetail()
+	// An unread body is not an empty one: keep the loading presentation.
+	if snapshot == nil || snapshot.SelectedEntry() != previous || snapshot.BodyView() != nil || !snapshot.BodyLoading() {
+		t.Fatalf("retained a pending body as complete: %+v", snapshot)
+	}
+	if read.Err() != context.Canceled || target.BodyViewLoading {
+		t.Fatal("the retained view kept its body read running")
+	}
+	target.clearBody()
+	settle()
+}

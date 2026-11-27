@@ -17,10 +17,12 @@ import (
 	"github.com/josexy/flowlens/locales"
 )
 
+// beginRetainedSwitch mirrors HistoryTraffic.Select: it retains the shown
+// view, including whether its body was loading, and cancels that read.
 func beginRetainedSwitch(f *fixture, next *logic.TrafficEntry) {
-	f.data.retained = &store.HistoryDetailSnapshot{Entry: f.data.entry, Body: f.data.body, Version: f.data.version}
+	f.data.retained = &store.HistoryDetailSnapshot{Entry: f.data.entry, Body: f.data.body, Version: f.data.version, Loading: f.data.loading}
 	f.data.release = f.panel.Release
-	f.data.entry, f.data.body, f.data.pending = nil, nil, next
+	f.data.entry, f.data.body, f.data.pending, f.data.loading = nil, nil, next, false
 	f.data.version++
 	f.tester.Frame()
 }
@@ -229,5 +231,48 @@ func TestRetainedBodyBlocksKeyboardCopy(t *testing.T) {
 	f.tester.Key(ui.Cmd, ui.KeyC)
 	if f.tester.Clipboard() != "unchanged" {
 		t.Fatal("keyboard copied the previous row's body during replacement")
+	}
+}
+
+func TestRetainedViewKeepsPendingBodyLoading(t *testing.T) {
+	for _, tab := range []string{tabRequestRaw, tabResponseBody, tabResponseRaw, tabWebSocket} {
+		for _, shown := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/spinner=%t", tab, shown), func(t *testing.T) {
+				old, next := httpEntry(), httpEntry()
+				next.ID = 200
+				if tab == tabWebSocket {
+					old.Type, next.Type = "wss", "wss"
+				}
+				f := newFixture(t, old, nil)
+				if tab == tabRequestRaw {
+					f.panel.requestTab = tab
+				} else {
+					f.panel.responseTab = tab
+				}
+				f.data.loading = true
+				f.settle()
+				if shown {
+					f.tester.Advance(loadingIndicatorDelay)
+					f.tester.Frame()
+				}
+				assertLoadingIndicator(t, f, shown)
+				before, texts := f.tester.Image(), f.tester.Texts()
+				beginRetainedSwitch(f, next)
+				// An unread body is not an empty one, and its wait keeps its deadline.
+				if !slices.Equal(texts, f.tester.Texts()) || !bytes.Equal(before.Pix, f.tester.Image().Pix) {
+					t.Fatalf("retained pending body changed the previous view: %v", f.tester.Texts())
+				}
+				if slices.Contains(f.tester.Texts(), locales.DetailBodyEmpty()) {
+					t.Fatal("retained view called a loading body empty")
+				}
+				assertLoadingIndicator(t, f, shown)
+				f.data.pending, f.data.entry = nil, next
+				f.data.body = &proxyservice.TrafficBodyView{RequestBody: "new request", ResponseBody: "new response"}
+				f.tester.Frame()
+				if f.data.retained != nil || f.panel.entryID != next.ID {
+					t.Fatal("ready detail did not replace the retained view")
+				}
+			})
+		}
 	}
 }

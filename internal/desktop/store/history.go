@@ -122,7 +122,7 @@ func (t *HistoryTraffic) retainDetail() {
 	if t.retained != nil || t.DetailEntry == nil || !t.ShowDetailPanel {
 		return
 	}
-	t.retained = &HistoryDetailSnapshot{Entry: t.DetailEntry, Body: t.BodyView, Version: t.BodyViewVersion}
+	t.retained = &HistoryDetailSnapshot{Entry: t.DetailEntry, Body: t.BodyView, Version: t.BodyViewVersion, Loading: t.BodyViewLoading}
 	if t.clock == nil {
 		t.clock = dispatcherClock{dispatcher: t.rt.Dispatcher}
 	}
@@ -512,6 +512,9 @@ type HistoryDetailSnapshot struct {
 	Entry   *logic.TrafficEntry
 	Body    *proxyservice.TrafficBodyView
 	Version uint64
+	// Loading records that Body was still being read when the view was
+	// retained, so the view keeps showing loading rather than an empty body.
+	Loading bool
 }
 
 // SelectedEntry returns the retained record.
@@ -523,8 +526,9 @@ func (d *HistoryDetailSnapshot) BodyView() *proxyservice.TrafficBodyView { retur
 // BodyVersion identifies the retained body snapshot.
 func (d *HistoryDetailSnapshot) BodyVersion() uint64 { return d.Version }
 
-// BodyLoading is false because a retained view never starts or accepts reads.
-func (d *HistoryDetailSnapshot) BodyLoading() bool { return false }
+// BodyLoading reports whether the retained body was still loading. The read
+// itself was canceled: a retained view never starts or accepts reads.
+func (d *HistoryDetailSnapshot) BodyLoading() bool { return d.Loading }
 
 // RetainedDetail supplies the disabled previous view during a brief row change.
 func (d HistoryDetailData) RetainedDetail() *HistoryDetailSnapshot { return d.History.Traffic.retained }
