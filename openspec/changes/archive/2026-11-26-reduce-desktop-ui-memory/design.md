@@ -62,4 +62,4 @@ The 20% table reduction is a target, not an assumed result. Record shortfalls; k
 
 ## Migration Plan
 
-No data migration is required. The icon and table changes can be reverted independently without changing stored histories or settings. The remaining native icon acceptance is recorded in [tasks.md](tasks.md).
+No data migration is required. The icon and table changes can be reverted independently without changing stored histories or settings. Acceptance results are recorded in [tasks.md](tasks.md).

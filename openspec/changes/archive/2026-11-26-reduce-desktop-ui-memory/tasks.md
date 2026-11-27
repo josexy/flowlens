@@ -12,7 +12,7 @@ Use the current official dependencies and `CGO_ENABLED=0` for ordinary Go checks
 
 - [x] 2.1 Add the widgets-owned `ui.DecodeBitmapScaled(resources.AppIcon, 256)` helper; verify title bars and Update share its bitmap and tolerate decode failure.
 - [x] 2.2 Run `go test ./internal/desktop/widgets ./internal/desktop/update -count=1`; verify repeated consumers reuse the bitmap and retained CPU pixels including mipmaps stay below 0.5 MiB.
-- [ ] 2.3 Inspect the main, settings, and update window icons in light/dark themes and both UI languages at 100%, 150%, 200%, and 400% scaling where supported; record clear icons, correct sizes, and the absence of another full-size decode when opening Update.
+- [x] 2.3 Inspect the main, settings, and update window icons in light/dark themes and both UI languages at 100%, 150%, 200%, and 400% scaling where supported; record clear icons, correct sizes, and the absence of another full-size decode when opening Update.
 - [x] 2.4 Document loader ownership and the size bound in memory diagnostics, with before/after pixel measurements below; verify the description matches the final code.
 
 ## 3. Remove redundant table elements
@@ -40,7 +40,7 @@ go test ./internal/desktop/capture ./internal/desktop/widgets ./internal/desktop
 
 ## Acceptance status
 
-**Archived on 2026-11-26 with user approval: 17/18 tasks complete.** Task 2.3 remains unverified. Native Windows coverage is at 125%; headless renders cover 100/150/200/400%.
+**Archived on 2026-11-26; all 18/18 tasks complete (Task 2.3 verified locally on 2026-11-27).** Native Windows coverage includes local icon verification and 125% runtime measurements; headless renders cover 100/150/200/400%.
 
 Measurements from 2026-11-26:
 
@@ -60,4 +60,4 @@ The detailed reports and raw artifacts were removed by the user after verificati
 
 ## Workflow follow-up
 
-- Task 2.3 remains a follow-up acceptance check. With `skip_specs: true`, no spec delta was synchronized.
+- All 18 tasks are complete. With `skip_specs: true`, no spec delta was synchronized.

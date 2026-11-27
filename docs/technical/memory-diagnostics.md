@@ -71,7 +71,7 @@ Heap profiles can lag by two GC cycles. Use runtime counters for the recovery cu
 | --- | --- |
 | Live capture | Newest 5,000 settled entries plus in-progress exchanges. Bodies above the configured threshold (10 KiB by default) spill to disk. Clear or restart releases the live window. |
 | Open history | Table/filter metadata for all rows; released when history closes or is replaced. Switching workbench tabs keeps it open. |
-| Selected body and editor response | Loaded views of the current response; released on replacement or closure. Formatted text is unavailable at or above 512 KiB. |
+| Selected body and editor response | Loaded views of the current response; released on replacement or closure (history row changes may retain one disabled previous detail for up to 180 ms until the replacement settles, times out, fails, or closes). Formatted text is unavailable at or above 512 KiB. |
 | History indexes | Up to four recent histories, evicted least-recently-used first. |
 | Codec pools | Reusable zstd/Brotli buffers; memory depends on concurrency and input windows. zstd uses a 1 MiB encoder window and rejects decoder windows above 8 MiB. |
 | MyGo resources | Text layouts, element states, frame arenas, atlases, and drawing buffers. Some trimming requires subsequent frames. |
