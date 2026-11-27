@@ -1,9 +1,19 @@
 package capture
 
 import (
+	"fmt"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
+	"weak"
 
+	"github.com/josexy/flowlens/internal/desktop/inspect"
 	"github.com/josexy/flowlens/internal/desktop/logic"
+	"github.com/josexy/flowlens/internal/desktop/store"
+	historyservice "github.com/josexy/flowlens/internal/services/history_service"
+	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
+	"github.com/josexy/flowlens/locales"
 )
 
 func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
@@ -80,4 +90,47 @@ func TestHistoryResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	}
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)
 	f.settle()
+}
+
+func TestRepeatedHistoryCloseReleasesRowsAndDrawing(t *testing.T) {
+	f := newHistoryFixture(t, entry(1, "live.test"))
+	panel := inspect.NewPanel(store.HistoryDetailData{History: f.data.History}, inspect.Dependencies{
+		Runtime: f.data.Runtime, Settings: f.data.Settings, Notifier: f.notifier,
+	})
+	f.workspace.HistoryDetail, f.workspace.ReleaseHistoryDetail = panel.Build, panel.Release
+	for cycle := range 10 {
+		oldRow, oldBody := func() (weak.Pointer[logic.TrafficEntry], weak.Pointer[proxyservice.TrafficBodyView]) {
+			record := entry(11, fmt.Sprintf("cycle%d.test", cycle))
+			record.Response = &proxyservice.HTTPMessage{HeaderFields: []proxyservice.HTTPHeaderField{{Name: "Content-Type", Value: "text/plain"}}}
+			body := &proxyservice.TrafficBodyView{ResponseBody: strings.Repeat("saved body line\n", 65536)}
+			f.history.entries["k1"] = []*logic.TrafficEntry{record}
+			f.history.details = map[uint64]historyservice.HistoryDetail{11: {Entry: record, Body: body}}
+			f.click("session one")
+			f.workspace.HistoryTable.source.SetHighlight(11, "#ef4444")
+			f.openDetails(record.Host)
+			f.click(locales.DetailResponseBody())
+			if f.data.History.Traffic.BodyView == nil || f.data.History.Traffic.BodyView.ResponseBody != body.ResponseBody {
+				t.Fatal("history body was not viewed")
+			}
+			rowRef, bodyRef := weak.Make(record), weak.Make(body)
+			f.data.Workspace.CloseTab(logic.HistoryTabKey)
+			f.settle()
+			// The fake disk source must not itself own the discarded objects.
+			f.history.entries["k1"], f.history.details = nil, nil
+			return rowRef, bodyRef
+		}()
+		f.tester.Advance(time.Second) // Let removed detail/Router transitions finish.
+		for range 3 {
+			f.settle()
+		}
+		runtime.GC()
+		runtime.GC()
+		if oldRow.Value() != nil || oldBody.Value() != nil {
+			t.Fatalf("cycle %d: closed history retained row=%t body=%t through UI callbacks", cycle+1, oldRow.Value() != nil, oldBody.Value() != nil)
+		}
+		if len(f.workspace.HistoryTable.rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
+			t.Fatalf("cycle %d: closed table still owns rows", cycle+1)
+		}
+	}
+	runtime.KeepAlive(f)
 }

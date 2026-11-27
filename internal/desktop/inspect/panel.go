@@ -111,6 +111,9 @@ type Panel struct {
 	pendingID      uint64
 	detailWait     loadingDelay
 	bodyWait       loadingDelay
+	retained       *store.HistoryDetailSnapshot
+	detailHandle   ui.Handle
+	closeHandle    ui.Handle
 }
 
 // NewPanel returns a panel of data.
@@ -131,10 +134,20 @@ func (p *Panel) Release() {
 	p.responseBody.release()
 	next := NewPanel(p.data, p.deps)
 	next.OnClose = p.OnClose
+	next.detailHandle, next.closeHandle = p.detailHandle, p.closeHandle
 	next.entryID = p.entryID
 	next.requestTab, next.responseTab = p.requestTab, p.responseTab
 	// Keep only small layout identifiers; no record, labels, or payloads.
 	next.requestTabIDs, next.responseTabIDs = p.requestTabIDs, p.responseTabIDs
+	// Expiring a retained view must not start a second loading delay.
+	if p.retained != nil {
+		if deferred, ok := p.data.(deferredData); ok && deferred.PendingEntry() != nil {
+			next.pendingID, next.detailWait = p.pendingID, p.detailWait
+		}
+		if p.data.BodyLoading() {
+			next.bodyWait = p.bodyWait
+		}
+	}
 	next.requestSort, next.responseSort, next.trailerSort = p.requestSort, p.responseSort, p.trailerSort
 	next.requestBody.copyPreferences(p.requestBody)
 	next.responseBody.copyPreferences(p.responseBody)
@@ -202,12 +215,13 @@ func (p *Panel) loadSplit() {
 
 // Build builds the panel for the current entry.
 func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
+	p.prepareTransition(c)
 	if p.clipboard != nil {
 		c.WriteClipboard(*p.clipboard)
 		p.clipboard = nil
 	}
-	entry := p.data.SelectedEntry()
-	if !p.data.BodyLoading() {
+	entry := p.displayData().SelectedEntry()
+	if !p.displayData().BodyLoading() && p.retained == nil {
 		p.bodyWait = loadingDelay{}
 	}
 	if entry == nil {
@@ -234,7 +248,9 @@ func (p *Panel) Build(c *ui.Context, theme nui.Theme) {
 		})
 		return
 	}
-	p.pendingID, p.detailWait = 0, loadingDelay{}
+	if p.retained == nil {
+		p.pendingID, p.detailWait = 0, loadingDelay{}
+	}
 	entryChanged := entry.ID != p.entryID
 	p.entryID = entry.ID
 	p.reconcileTabs(entry, entryChanged)
@@ -252,14 +268,14 @@ func (p *Panel) splitPanes(c *ui.Context, theme nui.Theme, request, response fun
 		Percent: true, Vertical: layout == settingservice.TrafficDetailLayoutVertical,
 		Min: nui.Set[float32](minSplit), Max: nui.Set[float32](maxSplit),
 		OnChange: func(percent float32) { p.deps.Settings.SetTrafficDetailSplit(splitName(layout), percent) },
-	}, request, response).Fill()
+	}, request, response).Fill().Bind(&p.detailHandle)
 }
 
 func countLabel(label string, count int) string { return label + "(" + strconv.Itoa(count) + ")" }
 
 func (p *Panel) tabBar(c *ui.Context, theme nui.Theme, key string, value *string, items []nui.TabItem, trailing func()) {
 	ui.Box(c.Key(key)).FillWidth().Shrink(0).Children(func() {
-		widgets.TabStrip(c, theme, value, items, widgets.TabStripOptions{Label: key, PaddingX: 10, Trailing: trailing})
+		widgets.TabStrip(c, theme, value, items, widgets.TabStripOptions{Label: key, PaddingX: 10, Trailing: trailing, Disabled: p.retained != nil})
 	})
 }
 
@@ -284,7 +300,7 @@ func (p *Panel) requestPane(c *ui.Context, theme nui.Theme, entry *logic.Traffic
 	p.requestTabIDs = rememberTabIDs(p.requestTabIDs, items)
 	ui.Column(c).Fill().MinHeight(0).Background(theme.Background).Children(func() {
 		p.tabBar(c, theme, "request-tabs", &p.requestTab, items, nil)
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Disabled(p.retained != nil).DimDisabled(false).Busy(p.retained != nil).Children(func() {
 			switch p.requestTab {
 			case tabRequestRaw:
 				p.requestRawPane(c, theme, entry)
@@ -389,7 +405,7 @@ func (p *Panel) responsePane(c *ui.Context, theme nui.Theme, entry *logic.Traffi
 			p.responseChips(c, theme, entry)
 			p.closeButton(c, theme)
 		})
-		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Children(func() {
+		ui.Column(c).FillWidth().Grow(1).Basis(0).MinHeight(0).Disabled(p.retained != nil).DimDisabled(false).Busy(p.retained != nil).Children(func() {
 			switch p.responseTab {
 			case tabResponseError:
 				p.errorPane(c, theme, entry)
@@ -428,7 +444,7 @@ func (p *Panel) closeButton(c *ui.Context, theme nui.Theme) {
 	button := nui.Button(c.Key("close-details"), theme, "", nui.ButtonOptions{
 		Variant: nui.Ghost, Color: nui.Neutral, Size: nui.XS, Square: true,
 		Leading: lucide.X(), AccessibleLabel: label,
-	}).OnClick(p.OnClose)
+	}).Bind(&p.closeHandle).OnClick(p.OnClose)
 	nui.Tooltip(c, theme, button, label, nui.TooltipOptions{})
 }
 

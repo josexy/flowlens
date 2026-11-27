@@ -5,11 +5,84 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/inspect"
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/logic"
+	"github.com/josexy/flowlens/internal/desktop/store"
+	historyservice "github.com/josexy/flowlens/internal/services/history_service"
+	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
+
+func TestHistoryRowSwitchRetainsDetailsUntilLoaded(t *testing.T) {
+	f := newHistoryFixture(t)
+	data := store.HistoryDetailData{History: f.data.History}
+	panel := inspect.NewPanel(data, inspect.Dependencies{
+		Runtime: f.data.Runtime, Settings: f.data.Settings, Notifier: f.notifier,
+	})
+	panel.OnClose = f.workspace.HistoryTable.CloseDetails
+	f.workspace.HistoryDetail, f.workspace.ReleaseHistoryDetail = panel.Build, panel.Release
+	f.history.details = make(map[uint64]historyservice.HistoryDetail)
+	for _, summary := range f.history.entries["k1"] {
+		full := *summary
+		full.Response = &proxyservice.HTTPMessage{Proto: "HTTP/1.1", HeaderFields: []proxyservice.HTTPHeaderField{{Name: "X-Record", Value: "detail-" + summary.Host}}}
+		f.history.details[summary.ID] = historyservice.HistoryDetail{Entry: &full, Body: &proxyservice.TrafficBodyView{ResponseBody: "body-" + summary.Host}}
+	}
+	first, second := f.history.entries["k1"][0], f.history.entries["k1"][1]
+	f.click("session one")
+	f.openDetails(first.Host)
+	f.requireText("detail-" + first.Host)
+	if err := f.tester.Click(second.Host); err != nil {
+		t.Fatal(err)
+	}
+	f.data.Runtime.Jobs.Wait() // Keep the completed read queued, before publication.
+	f.tester.Frame()
+	if data.SelectedEntry() != nil || data.RetainedDetail() == nil || f.data.History.Traffic.Selected.ID != second.ID {
+		t.Fatal("switch mixed the new selection with the previous detail")
+	}
+	f.requireText("detail-" + first.Host)
+	f.requireNoText("detail-" + second.Host)
+	if copy, ok := f.tester.Access(locales.DetailCopyResponseHeadersText()); !ok || !copy.Disabled {
+		t.Fatal("previous history headers remain actionable")
+	}
+	f.settle()
+	f.requireText("detail-" + second.Host)
+	f.requireNoText("detail-" + first.Host)
+	if data.RetainedDetail() != nil || data.SelectedEntry().ID != second.ID {
+		t.Fatal("completed detail did not release the old view")
+	}
+	// Both panes call their body tab "Body"; choose the response tab last.
+	var bodyTab ui.AccessInfo
+	for _, info := range f.tester.AccessAll() {
+		if info.Role == ui.RoleTab && info.Name == locales.DetailResponseBody() {
+			bodyTab = info
+		}
+	}
+	f.tester.ClickAt(bodyTab.Bounds.X+bodyTab.Bounds.W/2, bodyTab.Bounds.Y+bodyTab.Bounds.H/2)
+	f.settle()
+	editor, ok := f.tester.AccessByRole(ui.RoleTextField, "Code editor")
+	if !ok {
+		t.Fatal("history body editor missing")
+	}
+	f.tester.ClickAt(editor.Bounds.X+30, editor.Bounds.Y+10)
+	if err := f.tester.Click(first.Host); err != nil {
+		t.Fatal(err)
+	}
+	if !f.tester.Focused(locales.TrafficColumns()) {
+		t.Fatal("retained editor redirected focus away from the history table")
+	}
+	if err := f.tester.Click(locales.DetailClosePanel()); err != nil {
+		t.Fatal(err)
+	}
+	if data.RetainedDetail() != nil || data.SelectedEntry() != nil || f.data.History.Traffic.ShowDetailPanel {
+		t.Fatal("closing a transition did not immediately release both details")
+	}
+	f.settle()
+	if data.SelectedEntry() != nil {
+		t.Fatal("a late read restored closed details")
+	}
+}
 
 // Hold the completed load in the dispatcher so frames and input exercise the
 // real loading state before settle publishes the result on the main thread.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime"
@@ -12,6 +13,9 @@ import (
 	historyservice "github.com/josexy/flowlens/internal/services/history_service"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 )
+
+// HistoryDetailTransitionDelay bounds retention of the previous inspection view.
+const HistoryDetailTransitionDelay = 180 * time.Millisecond
 
 const (
 	jobHistoryList   = "history:list"
@@ -63,6 +67,9 @@ type HistoryTraffic struct {
 	bodySequence  uint64
 	bodyRequested bool
 	bodyAttempted bool
+	clock         Clock
+	retained      *HistoryDetailSnapshot
+	stopRetention func()
 }
 
 func (t *HistoryTraffic) setBodyView(view *proxyservice.TrafficBodyView) {
@@ -71,6 +78,11 @@ func (t *HistoryTraffic) setBodyView(view *proxyservice.TrafficBodyView) {
 }
 
 func (t *HistoryTraffic) clearBody() {
+	t.stopRetaining()
+	t.resetBody()
+}
+
+func (t *HistoryTraffic) resetBody() {
 	if t.rt.Jobs != nil {
 		t.rt.Jobs.Cancel(jobHistoryDetail)
 		t.rt.Jobs.Cancel(jobHistoryBody)
@@ -83,9 +95,43 @@ func (t *HistoryTraffic) clearBody() {
 		t.setBodyView(nil)
 	}
 	t.BodyViewLoading = false
+	if t.retained == nil && t.OnDetailReset != nil {
+		t.OnDetailReset()
+	}
+}
+
+func (t *HistoryTraffic) stopRetaining() {
+	if t.stopRetention != nil {
+		t.stopRetention()
+		t.stopRetention = nil
+	}
+	t.retained = nil
+}
+
+func (t *HistoryTraffic) releaseRetained() {
+	if t.retained == nil {
+		return
+	}
+	t.stopRetaining()
 	if t.OnDetailReset != nil {
 		t.OnDetailReset()
 	}
+}
+
+func (t *HistoryTraffic) retainDetail() {
+	if t.retained != nil || t.DetailEntry == nil || !t.ShowDetailPanel {
+		return
+	}
+	t.retained = &HistoryDetailSnapshot{Entry: t.DetailEntry, Body: t.BodyView, Version: t.BodyViewVersion, Loading: t.BodyViewLoading}
+	if t.clock == nil {
+		t.clock = dispatcherClock{dispatcher: t.rt.Dispatcher}
+	}
+	retained := t.retained
+	t.stopRetention = t.clock.After(HistoryDetailTransitionDelay, func() {
+		if t.retained == retained {
+			t.releaseRetained()
+		}
+	})
 }
 
 // Select makes entry the selected one; nil closes the detail panel.
@@ -101,7 +147,8 @@ func (t *HistoryTraffic) Select(entry *logic.TrafficEntry) {
 		return
 	}
 	if previous != entry.ID {
-		t.clearBody()
+		t.retainDetail()
+		t.resetBody()
 	}
 	t.loadDetail()
 }
@@ -139,6 +186,7 @@ func (t *HistoryTraffic) loadDetail() {
 		}
 		if err != nil {
 			logger.G().Errorf("Failed to get history traffic entry: %v", err)
+			t.releaseRetained()
 			return
 		}
 		t.DetailEntry = detail
@@ -172,6 +220,7 @@ func (t *HistoryTraffic) RequestBody() {
 		}
 		if err != nil {
 			logger.G().Errorf("Failed to get history traffic body view: %v", err)
+			t.releaseRetained()
 			return
 		}
 		t.setBodyView(body)
@@ -456,6 +505,36 @@ func (s *HistoryStore) ImportHAR(paths []string, windows bool, done func(HARImpo
 
 // HistoryDetailData shows the selection of the opened history in a detail panel.
 type HistoryDetailData struct{ History *HistoryStore }
+
+// HistoryDetailSnapshot is the previous complete view, never a current selection
+// or an action input. Its lifetime is bounded by the owning HistoryTraffic.
+type HistoryDetailSnapshot struct {
+	Entry   *logic.TrafficEntry
+	Body    *proxyservice.TrafficBodyView
+	Version uint64
+	// Loading records that Body was still being read when the view was
+	// retained, so the view keeps showing loading rather than an empty body.
+	Loading bool
+}
+
+// SelectedEntry returns the retained record.
+func (d *HistoryDetailSnapshot) SelectedEntry() *logic.TrafficEntry { return d.Entry }
+
+// BodyView returns the retained record's body, if it had been loaded.
+func (d *HistoryDetailSnapshot) BodyView() *proxyservice.TrafficBodyView { return d.Body }
+
+// BodyVersion identifies the retained body snapshot.
+func (d *HistoryDetailSnapshot) BodyVersion() uint64 { return d.Version }
+
+// BodyLoading reports whether the retained body was still loading. The read
+// itself was canceled: a retained view never starts or accepts reads.
+func (d *HistoryDetailSnapshot) BodyLoading() bool { return d.Loading }
+
+// RetainedDetail supplies the disabled previous view during a brief row change.
+func (d HistoryDetailData) RetainedDetail() *HistoryDetailSnapshot { return d.History.Traffic.retained }
+
+// ReleaseRetainedDetail commits a ready replacement and drops the previous view.
+func (d HistoryDetailData) ReleaseRetainedDetail() { d.History.Traffic.releaseRetained() }
 
 // SelectedEntry returns the selected entry.
 func (d HistoryDetailData) SelectedEntry() *logic.TrafficEntry { return d.History.Traffic.DetailEntry }

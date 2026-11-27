@@ -284,8 +284,8 @@ func (m *MessageStream) save(message *logic.WebSocketDisplayMessage) {
 // not loading, the stream shows its toolbar and "No messages", as in 1.0.5.
 func (p *Panel) webSocketPane(c *ui.Context, theme nui.Theme) {
 	p.requestBodyIfNeeded()
-	body := p.data.BodyView()
-	if body == nil && p.data.BodyLoading() {
+	body := p.displayData().BodyView()
+	if body == nil && p.displayData().BodyLoading() {
 		ui.Column(c).Fill().Center().Children(func() { p.bodyWait.spinner(c, theme) })
 		return
 	}

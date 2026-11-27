@@ -4,7 +4,6 @@ package update
 import (
 	"math"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -15,7 +14,6 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/widgets"
 	appservice "github.com/josexy/flowlens/internal/services/app_service"
 	"github.com/josexy/flowlens/locales"
-	"github.com/josexy/flowlens/resources"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -178,7 +176,7 @@ func (v *View) statusHeader(c *ui.Context, theme nui.Theme) {
 	status := v.status(theme)
 	ui.Row(c.Key("status")).FillWidth().Gap(16).AlignItems(ui.Start).Children(func() {
 		ui.Box(c.Key("icon")).Size(48, 48).Shrink(0).Children(func() {
-			if icon := appIcon(); icon != nil {
+			if icon := widgets.AppIcon(); icon != nil {
 				ui.Image(c.Key("image"), icon).Size(48, 48).Fit(ui.Contain)
 			}
 		})
@@ -288,14 +286,6 @@ func (v *View) footerActions(c *ui.Context, theme nui.Theme) {
 		nui.Button(c.Key("primary"), theme, label, nui.ButtonOptions{Leading: icon, Loading: u.ActionPending, Disabled: u.ActionPending}).OnClick(v.runPrimary)
 	}
 }
-
-var appIcon = sync.OnceValue(func() ui.ImageSource {
-	icon, err := ui.DecodeImage(resources.AppIcon)
-	if err != nil {
-		return nil
-	}
-	return icon
-})
 
 // Build shows the window. Operations belong to the service, not this view.
 func (v *View) Build(c *ui.Context) {

@@ -2,8 +2,13 @@ package capture
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"runtime/pprof"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -96,27 +101,94 @@ func BenchmarkTrafficTableLive(b *testing.B) {
 type benchmarkUncappedSource struct {
 	Source
 	filter *store.FilterStore
+	marked bool
 }
 
 func (s benchmarkUncappedSource) Filter() *store.FilterStore { return s.filter }
 func (s benchmarkUncappedSource) Live() LiveControl          { return nil }
 
+func (s benchmarkUncappedSource) Highlight(id uint64) string {
+	if s.marked {
+		return "#ef4444"
+	}
+	return s.Source.Highlight(id)
+}
+
+// collectedHeap measures live objects, not HeapInuse (which includes unused
+// space in spans). Two collections drop otherwise idle sync.Pool generations.
+func collectedHeap() runtime.MemStats {
+	runtime.GC()
+	runtime.GC()
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	return stats
+}
+
+// writeTableHeapProfile optionally saves the warmed live fixture, before its
+// timed loop or cleanup. Ordinary benchmarks and tests create no files.
+func writeTableHeapProfile(b *testing.B) {
+	b.Helper()
+	dir := os.Getenv("FLOWLENS_TABLE_HEAP_DIR")
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	name := strings.ReplaceAll(b.Name(), "/", "-") + ".pprof"
+	file, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		b.Fatal(err)
+	}
+	err = pprof.WriteHeapProfile(file)
+	closeErr := file.Close()
+	if err != nil {
+		b.Fatal(err)
+	}
+	if closeErr != nil {
+		b.Fatal(closeErr)
+	}
+}
+
 func BenchmarkTrafficTableStress(b *testing.B) {
 	for _, count := range []int{5000, 50000, 100000} {
-		for _, changed := range []bool{false, true} {
-			mode := "Idle"
-			if changed {
-				mode = "Patch1"
+		for _, mode := range []string{"Idle", "Patch1", "Marked", "FixedPath", "MarkedFixedPath", "ReorderedHidden", "MarkedReorderedHidden"} {
+			if count == 100000 && mode != "Idle" && mode != "Patch1" {
+				continue
 			}
 			b.Run(fmt.Sprintf("Rows%d/%s", count, mode), func(b *testing.B) {
 				f := newFixtureSized(b, rangeOfEntries(1), 1400, 800)
+				f.setDark(false)
+				changed := mode == "Patch1"
 				entries, version := rangeOfEntries(count), uint64(1)
 				filter := store.NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return entries, version })
-				table := NewTable(benchmarkUncappedSource{Source: f.workspace.Table.source, filter: filter}, f.workspace.Table.deps)
+				table := NewTable(benchmarkUncappedSource{
+					Source: f.workspace.Table.source, filter: filter, marked: strings.HasPrefix(mode, "Marked"),
+				}, f.workspace.Table.deps)
+				if strings.HasSuffix(mode, "ReorderedHidden") {
+					f.data.Settings.SetTrafficColumnVisible(logic.ColumnProcess, false, nil)
+					f.settle()
+				}
+				table.loadLayout()
+				if strings.HasSuffix(mode, "FixedPath") {
+					table.state.List.Columns.Widths = map[string]float32{"path": 160}
+				}
+				if strings.HasSuffix(mode, "ReorderedHidden") {
+					order := slices.DeleteFunc(slices.Clone(table.fullOrder), func(key string) bool { return key == "path" })
+					table.state.List.Columns.Order = append(order, "path")
+				}
+				// Persist/warm layout and data before measuring UI retention. The
+				// baseline already owns every record, sorted index and Nuxt row ID.
+				table.syncLayout(table.visibleColumns())
+				f.settle()
+				table.refreshRows()
+				before := collectedHeap()
 				tester := ui.NewTester(func(c *ui.Context) {
 					theme := nui.App(c, f.data.Settings.Theme().Config)
 					table.Build(c, theme)
 				}, 1160, 714)
+				tester.SetLocale("en")
+				tester.SetDark(false)
 				step := func() {
 					if changed {
 						version++
@@ -126,9 +198,16 @@ func BenchmarkTrafficTableStress(b *testing.B) {
 					}
 					tester.Frame()
 				}
-				for range 3 {
+				for range 8 {
 					step()
 				}
+				if len(table.rows) != count {
+					b.Fatalf("requested %d rows, actually showing %d", count, len(table.rows))
+				}
+				after := collectedHeap()
+				retainedBytes := int64(after.HeapAlloc) - int64(before.HeapAlloc)
+				retainedObjects := int64(after.HeapObjects) - int64(before.HeapObjects)
+				writeTableHeapProfile(b)
 				table.CellBuilds = 0
 				b.ReportAllocs()
 				b.ResetTimer()
@@ -137,9 +216,15 @@ func BenchmarkTrafficTableStress(b *testing.B) {
 				}
 				b.StopTimer()
 				b.ReportMetric(float64(table.CellBuilds)/float64(b.N), "cells/op")
+				b.ReportMetric(float64(retainedBytes), "ui-retained-B")
+				b.ReportMetric(float64(retainedObjects), "ui-retained-objects")
 				if len(table.rows) != count || table.rows[count-1].Revision != version {
 					b.Fatal("stress table did not retain or update every row")
 				}
+				// Keep both sides of the measurement reachable through the sample
+				// and timed frames; setup and forced GC are never timed.
+				runtime.KeepAlive(tester)
+				runtime.KeepAlive(f)
 			})
 		}
 	}

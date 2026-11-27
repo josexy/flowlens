@@ -213,9 +213,22 @@ func TestHistoryDetailReleaseDropsRenderedCachesAndReopens(t *testing.T) {
 	if f.panel.requestRaw.text != "" || f.panel.responseRaw.text != "" || len(f.panel.messages.source) != 0 || len(f.panel.messages.filtered) != 0 {
 		t.Fatal("closed history retained Raw or WebSocket data")
 	}
-	open()
-	if f.panel.responseBody.raw.Text() != body.ResponseBody {
-		t.Fatal("reopened body differs")
+	for cycle := range 10 {
+		open()
+		viewer := f.panel.responseBody
+		viewer.raw.SetWordWrap(true)
+		if viewer.raw.Text() != body.ResponseBody {
+			t.Fatalf("cycle %d: reopened body differs", cycle+1)
+		}
+		history.CloseOpened()
+		f.panel.Release()
+		for range 4 {
+			f.settle()
+		}
+		assertPanelPayloadsReleased(t, f.panel)
+		if f.panel.responseTab != tabResponseBody || !f.panel.responseBody.raw.WordWrap() {
+			t.Fatalf("cycle %d: close lost viewer preferences", cycle+1)
+		}
 	}
 }
 

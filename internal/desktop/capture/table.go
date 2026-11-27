@@ -385,6 +385,9 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.followNewest(rowsChanged)
 
 	columns := make([]nui.TableColumn[int], len(visible))
+	// Marked cells with the same visual values share one callback in this
+	// build, instead of allocating a retained drawing closure per cell.
+	outlines := make(map[rowOutlineStyle]func(*ui.Painter, ui.Rect))
 	order := t.displayOrder(visible)
 	// MyGo lays out an unsized Path in the current frame. Once resized,
 	// its saved width takes precedence, just like every other column.
@@ -396,33 +399,23 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	// Path too: MyGo omits the resize grip on the last flex column.
 	fill := !flexPath || len(order) > 0 && order[len(order)-1] == string(logic.ColumnPath)
 	for index, column := range visible {
-		columns[index] = nui.TableColumn[int]{
+		key := string(column.key)
+		columns[index] = t.decorateColumn(nui.TableColumn[int]{
 			Title: column.title(), ID: string(column.key), Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
 			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
 				t.CellBuilds++
-				key := string(column.key)
-				if key == order[0] {
-					t.noteRowSpan(cellFill(c, "row-span"), row)
-				}
-				t.cellBackground(c, theme, row, key == order[0], !fill && key == order[len(order)-1])
 				t.cell(c, theme, t.rows[row], column.key)
 			},
-		}
+		}, key == order[0], !fill && key == order[len(order)-1], outlines)
 	}
 	if fill {
 		var width float32
 		if flexPath {
 			width = 16
 		}
-		columns = append(columns, nui.TableColumn[int]{
+		columns = append(columns, t.decorateColumn(nui.TableColumn[int]{
 			ID: "row-fill", Width: width, Fixed: true,
-			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
-				if len(order) == 0 {
-					t.noteRowSpan(cellFill(c, "row-span"), row)
-				}
-				t.cellBackground(c, theme, row, len(order) == 0, true)
-			},
-		})
+		}, len(order) == 0, true, outlines))
 	}
 	t.state.List.HeaderCell = t.headerCell(c, theme, visible)
 	t.menuSpans = t.menuSpans[:0]
@@ -475,9 +468,28 @@ func (t *Table) newRequestsButton(c *ui.Context, theme nui.Theme, count int) {
 	})
 }
 
-// cellFill fills a cell's box behind its content.
-func cellFill(c *ui.Context, key string) ui.Element {
-	return ui.Box(c.Key(key)).Absolute().Top(0).Bottom(0).Left(0).Right(0).ZIndex(-1).IgnoreInput(true)
+// decorateColumn pairs Nuxt's synchronous Item style and Cell callbacks. The
+// reference exists only during this build, is replaced for every row, and is
+// cleared before building content. No element reaches state or a draw callback.
+func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) nui.TableColumn[int] {
+	var cell ui.Element
+	column.Style = func(slot nui.Slot, element ui.Element) {
+		if slot == nui.Item {
+			cell = element
+		}
+	}
+	content := column.Cell
+	column.Cell = func(c *ui.Context, theme nui.Theme, row int, chosen bool) {
+		if first {
+			t.noteRowSpan(cell, row)
+		}
+		t.cellBackground(cell, theme, row, first, last, outlines)
+		cell = ui.Element{}
+		if content != nil {
+			content(c, theme, row, chosen)
+		}
+	}
+	return column
 }
 
 // cellBackground colors selected and highlighted rows, stripes other rows, and marks
@@ -485,7 +497,7 @@ func cellFill(c *ui.Context, key string) ui.Element {
 // the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
 // stronger in the dark theme. first and last say whether the cell starts or
 // ends the row as shown.
-func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, last bool) {
+func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
 	entry := t.rows[row]
 	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
 	highlight := t.source.Highlight(entry.ID)
@@ -503,7 +515,7 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 	case row%2 == 0:
 		background = trafficStripeColor(theme).Over(background)
 	}
-	cellFill(c, "background").Background(background)
+	cell.Background(background)
 	var bar, outline ui.Color
 	switch {
 	case t.source.SelectedEntry() != nil && t.source.SelectedEntry().ID == entry.ID:
@@ -521,10 +533,13 @@ func (t *Table) cellBackground(c *ui.Context, theme nui.Theme, row int, first, l
 	default:
 		return
 	}
-	rowOutline(c, outline, first, last)
-	if first {
-		ui.Box(c.Key("marker")).Absolute().Top(0).Bottom(0).Left(0).Width(3).Background(bar).IgnoreInput(true).Label("row-marker")
+	style := rowOutlineStyle{outline: outline, marker: bar, first: first, last: last}
+	paint := outlines[style]
+	if paint == nil {
+		paint = style.paint
+		outlines[style] = paint
 	}
+	cell.DrawOver(paint)
 }
 
 func cellText(c *ui.Context, theme nui.Theme, text string) ui.Element {

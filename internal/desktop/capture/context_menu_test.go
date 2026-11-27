@@ -10,6 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
+	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/locales"
 	nui "github.com/josexy/nuxt-ui-go/ui"
 )
@@ -211,5 +212,43 @@ func TestHeaderMenuAfterScrollingKeepsSelection(t *testing.T) {
 				menutest.Close(f.tester, f.settle)
 			}
 		})
+	}
+}
+
+func TestRowMenuAfterColumnChangesAndScrolling(t *testing.T) {
+	f := newFixtureSized(t, manyEntries(200), 2400, 800)
+	table := f.workspace.Table
+	for _, layout := range []string{"default", "reordered-hidden", "fixed-path"} {
+		if layout == "reordered-hidden" {
+			f.data.Settings.SetTrafficColumnVisible(logic.ColumnID, false, nil)
+			table.state.List.Columns.Order = append([]string{"host"}, slices.DeleteFunc(slices.Clone(table.fullOrder), func(key string) bool { return key == "host" })...)
+		}
+		if layout == "fixed-path" {
+			table.state.List.Columns.Widths = map[string]float32{"path": 150}
+		}
+		table.state.List.ScrollTo(40, ui.Start)
+		f.settle()
+		f.clickRow(0, "host41.test")
+		f.clickRow(ui.Shift, "host42.test")
+		viewport, _ := f.tester.AccessByRole(ui.RoleTable, locales.TrafficColumns())
+		row, ok := f.tester.AccessByRole(ui.RoleRow, "42")
+		if !ok {
+			t.Fatal("scrolled row missing")
+		}
+		// Include the trailing fill cell when Path has a saved width.
+		f.tester.RightClickAt(viewport.Bounds.X+viewport.Bounds.W-8, row.Bounds.Y+row.Bounds.H/2)
+		f.settle()
+		if !menutest.Shown(f.tester) || !slices.Equal(table.menuTarget.ids, []uint64{41, 42}) {
+			t.Fatalf("%s: menu lost the selected group: %+v", layout, table.menuTarget)
+		}
+		menutest.Close(f.tester, f.settle)
+	}
+	f.data.Traffic.ResetState()
+	f.settle()
+	viewport, _ := f.tester.AccessByRole(ui.RoleTable, locales.TrafficColumns())
+	f.tester.RightClickAt(viewport.Bounds.X+viewport.Bounds.W-8, viewport.Bounds.Y+100)
+	f.settle()
+	if menutest.Shown(f.tester) {
+		t.Fatal("empty table reused an old row's committed bounds")
 	}
 }
