@@ -53,6 +53,25 @@ func TestCategoryCachesFollowBaseRevisionSearchAndLocale(t *testing.T) {
 	}
 }
 
+func TestCategoryIntentSurvivesTemporaryTableFilter(t *testing.T) {
+	f := newFixture(t, entry(1, "a.test"), entry(2, "b.test"))
+	f.showCategories = true
+	f.settle()
+	v := &f.workspace.category
+	const key = "host:b.test"
+	if !slices.ContainsFunc(v.roots, func(root *logic.StructureNode) bool { return root.Key == key }) {
+		t.Fatalf("missing %s root", key)
+	}
+	v.expanded[key] = true
+	f.data.Filter.SearchText = "no-match"
+	f.settle()
+	f.data.Filter.SearchText = ""
+	f.settle()
+	if !v.expanded[key] {
+		t.Fatal("a temporary table search discarded category expansion")
+	}
+}
+
 func TestCategoryHideReleasesLargeTreeAndPreservesIntent(t *testing.T) {
 	f := newFixtureSized(t, nil, 1400, 800, &fakeHistoryBackend{})
 	entries := rangeOfEntries(100000)
@@ -74,7 +93,7 @@ func TestCategoryHideReleasesLargeTreeAndPreservesIntent(t *testing.T) {
 	menu.Open = true
 	f.showCategories = false
 	f.workspace.CategorySidebarHidden()
-	if v.entries != nil || v.roots != nil || v.treeItems != nil || v.hostSelection.Len() != 0 || v.processSelection.Len() != 0 || menu.Open {
+	if v.entryCount != 0 || v.roots != nil || v.treeItems != nil || v.hostSelection.Len() != 0 || v.processSelection.Len() != 0 || menu.Open {
 		t.Fatal("hidden category retains derived data/menu")
 	}
 	if v.context != "history:large" || v.search != "h" || !v.expanded[rootKey] || v.scroll.Y != 50 || len(f.data.History.Filter.SelectedHosts) != 1 {
@@ -103,7 +122,7 @@ func TestCategoryHideReleasesLargeTreeAndPreservesIntent(t *testing.T) {
 		t.Fatal("hidden source replacement kept source intent")
 	}
 	f.data.History.CloseOpened()
-	if v.entries != nil || v.roots != nil {
+	if v.entryCount != 0 || v.roots != nil {
 		t.Fatal("hidden close restored derived data")
 	}
 	runtime.KeepAlive(f)
@@ -133,7 +152,7 @@ func TestHistoryMemoryCyclesSettleAfterCollection(t *testing.T) {
 		f.data.History.CloseOpened()
 		f.data.Workbench.SelectCaptureItem(store.CaptureItemLive)
 		f.settle()
-		if table.rows != nil || table.state.Len() != 0 || f.workspace.category.entries != nil || f.workspace.category.treeItems != nil {
+		if table.rows != nil || table.state.Len() != 0 || f.workspace.category.entryCount != 0 || f.workspace.category.treeItems != nil {
 			t.Fatal("cycle left history working state reachable")
 		}
 	}

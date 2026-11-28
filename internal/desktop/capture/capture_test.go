@@ -2028,8 +2028,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f.showCategories = true
 	f.settle()
 	view := &f.workspace.category
-	if len(f.workspace.HistoryTable.rows) != 2 || view.context != "history:k1" || len(view.entries) != 2 || len(view.roots) == 0 {
-		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.rows), view.context, len(view.entries))
+	if len(f.workspace.HistoryTable.rows) != 2 || view.context != "history:k1" || view.entryCount != 2 || len(view.roots) == 0 {
+		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.rows), view.context, view.entryCount)
 	}
 
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)
@@ -2044,8 +2044,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	if rows := f.workspace.HistoryTable.rows; len(rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
 		t.Fatalf("history table kept %d rows", len(rows))
 	}
-	for _, row := range view.entries {
-		if row.Host == "saved.test" || row.Host == "other.test" {
+	for _, root := range view.roots {
+		if root.Label == "saved.test" || root.Label == "other.test" {
 			t.Fatal("category view kept the closed history's entries")
 		}
 	}

@@ -74,13 +74,14 @@ func (f *FilterStore) Refresh() {
 		return
 	}
 	baseChanged, categoryChanged := baseKey != f.baseKey, categoryKey != f.categoryKey
-	if !f.computed || version != f.sourceVersion || baseChanged {
+	rebuildBase := !f.computed || version != f.sourceVersion || baseChanged
+	if rebuildBase {
 		// Facets consume Base, which can change outside the selected subset.
 		f.baseVersion++
 	}
 	f.computed, f.sourceVersion, f.baseKey, f.categoryKey = true, version, baseKey, categoryKey
 	if f.policy == logic.TrafficSnapshot {
-		f.refreshSnapshot(entries)
+		f.refreshSnapshot(entries, rebuildBase)
 		return
 	}
 	f.generation = !f.generation
@@ -179,12 +180,16 @@ func snapshotMatches(buffer, entries []*logic.TrafficEntry, matches func(*logic.
 	return result
 }
 
-func (f *FilterStore) refreshSnapshot(entries []*logic.TrafficEntry) {
-	if f.SearchText == "" && f.ActiveTab == logic.TabAll {
+// refreshSnapshot rescans the source only when it or the search/tab changed;
+// a category change filters the existing base view.
+func (f *FilterStore) refreshSnapshot(entries []*logic.TrafficEntry, rebuildBase bool) {
+	switch {
+	case !rebuildBase:
+	case f.SearchText == "" && f.ActiveTab == logic.TabAll:
 		clear(f.baseOwned)
 		f.baseOwned = nil
 		f.base = entries
-	} else {
+	default:
 		f.baseOwned = snapshotMatches(f.baseOwned, entries, func(entry *logic.TrafficEntry) bool {
 			return logic.TrafficMatchesSearch(entry, f.SearchText) && logic.TrafficMatchesTab(entry, f.ActiveTab)
 		})

@@ -61,6 +61,10 @@ The Categories section SHALL group the current capture or selected history by ho
 - **WHEN** a large history's category sidebar redraws without relevant source, filter, search, or language changes
 - **THEN** it reuses the current category summaries and prepared tree/list data while constructing only the controls needed for the viewport
 
+#### Scenario: A table filter temporarily hides structure nodes
+- **WHEN** a table search or tab hides expanded structure nodes while Categories is visible, and the filter is then cleared
+- **THEN** the nodes return with their previous expansion
+
 #### Scenario: Search or language changes
 - **WHEN** the user changes category search or the interface language with active host or process filters
 - **THEN** visible labels and matching choices update without discarding selected filters hidden by search

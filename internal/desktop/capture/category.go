@@ -42,7 +42,7 @@ type categoryView struct {
 	computed                       time.Time
 	selectedHosts                  []string
 	selectedProcessKeys            []string
-	entries                        []*logic.TrafficEntry
+	entryCount                     int
 	roots                          []*logic.StructureNode
 	baseVersion                    uint64
 	ready                          bool
@@ -123,14 +123,17 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 	if changedContext {
 		v.reset()
 	}
-	facetsChanged := !v.ready || changedContext || changedSelection || changedLocale || baseVersion != v.baseVersion
-	rootsChanged := !v.ready || changedContext || version != v.version
+	reopened := !v.ready
+	facetsChanged := reopened || changedContext || changedSelection || changedLocale || baseVersion != v.baseVersion
+	rootsChanged := reopened || changedContext || version != v.version
 	if v.tree != nil && v.treeItems != nil {
 		v.activeNode = v.tree.Active
 	}
-	v.entries = filter.Base()
+	// Base is borrowed until the filter's next refresh; keep only its size.
+	base := filter.Base()
+	v.entryCount = len(base)
 	if facetsChanged {
-		v.hosts, v.processes = logic.BuildCategoryFacets(v.entries, toSet(filter.SelectedHosts), toSet(filter.SelectedProcessKeys), fallback)
+		v.hosts, v.processes = logic.BuildCategoryFacets(base, toSet(filter.SelectedHosts), toSet(filter.SelectedProcessKeys), fallback)
 		v.facetBuilds++
 		v.selectedHosts, v.selectedProcessKeys = slices.Clone(filter.SelectedHosts), slices.Clone(filter.SelectedProcessKeys)
 		v.hostSelection.Set(filter.SelectedHosts)
@@ -139,7 +142,11 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 	if rootsChanged {
 		v.roots = logic.BuildStructureTree(filter.Filtered())
 		v.rootBuilds++
-		v.pruneIntent()
+		if reopened {
+			// Data may have changed while hidden. While visible, a table filter
+			// can hide nodes only temporarily, so their intent must survive.
+			v.pruneIntent()
+		}
 	}
 	if facetsChanged || changedQuery {
 		v.filteredHosts = logic.FilterHostSummary(v.hosts, query)
@@ -175,7 +182,7 @@ func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 // records, tree nodes, prepared item data, list callbacks or anchor handles.
 func (v *categoryView) releaseDerived() {
 	v.ready = false
-	v.entries, v.roots, v.filteredRoots = nil, nil, nil
+	v.entryCount, v.roots, v.filteredRoots = 0, nil, nil
 	v.hosts, v.filteredHosts, v.processes, v.filteredProcesses = nil, nil, nil, nil
 	v.processByID = nil
 	v.selectedHosts, v.selectedProcessKeys = nil, nil
@@ -309,7 +316,7 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 		return
 	}
 	view.refresh(c, source)
-	if len(view.entries) == 0 {
+	if view.entryCount == 0 {
 		status(locales.CategoryEmpty())
 		return
 	}

@@ -199,6 +199,27 @@ func TestSnapshotFilterBorrowsOnlyUnchangedViews(t *testing.T) {
 	}
 }
 
+func TestSnapshotCategoryChangeKeepsSearchResult(t *testing.T) {
+	entries := entryRange(1, 3)
+	for _, entry := range entries {
+		entry.Host, entry.URL = "a.test", "https://a.test/"
+	}
+	entries[2].Host, entries[2].URL = "b.test", "https://b.test/"
+	f := NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return entries, 1 }, logic.TrafficSnapshot)
+	f.SearchText = "a.test"
+	requireIDs(t, f.Filtered(), []uint64{1, 2})
+	baseVersion := f.BaseVersion()
+	// Published records are immutable; a rescan would observe this edit.
+	entries[0].Host, entries[0].URL = "c.test", "https://c.test/"
+	f.SelectedHosts = []string{"c.test"}
+	requireIDs(t, f.Filtered(), []uint64{1})
+	if f.BaseVersion() != baseVersion || len(f.Base()) != 2 {
+		t.Fatal("a category change rescanned the unchanged search result")
+	}
+	f.SearchText = "c.test"
+	requireIDs(t, f.Base(), []uint64{1})
+}
+
 func TestSnapshotFilterShrinksToResultSize(t *testing.T) {
 	entries := entryRange(1, 100000)
 	for _, entry := range entries {
