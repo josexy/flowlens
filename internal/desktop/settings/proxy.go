@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/desktop/widgets"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -14,19 +15,20 @@ import (
 )
 
 type proxyState struct {
-	info         *settingservice.CACertificateInfo
-	trust        *settingservice.CACertificateTrustStatus
-	trustFailed  bool
-	loading      bool
-	changing     bool
-	generating   bool
-	generatedAt  bool
-	sequence     int
-	details      bool
-	rootsOpen    bool
-	certsOpen    bool
-	rootMenu     nui.MenuState
-	regenerating bool
+	info           *settingservice.CACertificateInfo
+	trust          *settingservice.CACertificateTrustStatus
+	trustFailed    bool
+	loading        bool
+	changing       bool
+	generating     bool
+	generatedAt    bool
+	sequence       int
+	details        bool
+	rootsOpen      bool
+	certsOpen      bool
+	rootMenu       nui.MenuState
+	upstreamChoice widgets.SelectState[string]
+	regenerating   bool
 }
 
 func (v *View) loadCA() {
@@ -295,11 +297,13 @@ func (v *View) upstream(c *ui.Context, palette nui.Theme, proxy *settingservice.
 	row(c, palette, "upstream", locales.ToolbarUpstreamProxy(), "", func() {
 		value := string(proxy.UpstreamMode)
 		ui.Box(c.Key("mode")).Width(320).Children(func() {
-			nui.Select(c.Key("select"), palette, &value, []nui.Option[string]{
-				option(string(settingservice.UpstreamProxyModeNone), locales.SettingsUpstreamProxyModeNone()),
-				option(string(settingservice.UpstreamProxyModeSystem), locales.SettingsUpstreamProxyModeSystem()),
-				option(string(settingservice.UpstreamProxyModeCustom), locales.SettingsUpstreamProxyModeCustom()),
-			}, nui.SelectOptions{Label: locales.ToolbarUpstreamProxy()})
+			nui.Select(c.Key("select"), palette, &value, v.proxy.upstreamChoice.Prepare(c.Locale(), func() []nui.Option[string] {
+				return []nui.Option[string]{
+					option(string(settingservice.UpstreamProxyModeNone), locales.SettingsUpstreamProxyModeNone()),
+					option(string(settingservice.UpstreamProxyModeSystem), locales.SettingsUpstreamProxyModeSystem()),
+					option(string(settingservice.UpstreamProxyModeCustom), locales.SettingsUpstreamProxyModeCustom()),
+				}
+			}), nui.SelectOptions{Label: locales.ToolbarUpstreamProxy()})
 		})
 		if next := settingservice.UpstreamProxyMode(value); next != proxy.UpstreamMode {
 			proxy.UpstreamMode = next
@@ -481,13 +485,15 @@ func (v *View) rootCAs(c *ui.Context, palette nui.Theme, proxy *settingservice.P
 	}
 	collapsibleHead(c, palette, "roots-head", locales.SettingsSectionRootCas(), summary, palette.Muted, &state.rootsOpen, func() {
 		anchor := nui.Button(c.Key("add"), palette, locales.SettingsAddRootCa(), nui.ButtonOptions{Variant: nui.Outline, Color: nui.Neutral, Leading: lucide.Plus(), Trailing: lucide.ChevronDown(), AccessibleLabel: locales.SettingsAddRootCaAction()})
-		nui.DropdownMenu(c.Key("add-menu"), palette, anchor, &state.rootMenu, []nui.MenuItem{
-			{ID: "files", Label: locales.SettingsSelectFiles(), Icon: lucide.FolderOpen(), OnSelect: func() { v.pickRoots(proxy) }},
-			{ID: "manual", Label: locales.SettingsAddPathManually(), Icon: lucide.Pencil(), OnSelect: func() {
-				proxy.RootCAPaths = append(proxy.RootCAPaths, "")
-				state.rootsOpen = true
-			}},
-		}, nui.MenuOptions{Label: locales.SettingsAddRootCaAction(), Placement: nui.Set(nui.BottomEnd)})
+		widgets.DropdownMenu(c.Key("add-menu"), palette, anchor, &state.rootMenu, func() []nui.MenuItem {
+			return []nui.MenuItem{
+				{ID: "files", Label: locales.SettingsSelectFiles(), Icon: lucide.FolderOpen(), OnSelect: func() { v.pickRoots(proxy) }},
+				{ID: "manual", Label: locales.SettingsAddPathManually(), Icon: lucide.Pencil(), OnSelect: func() {
+					proxy.RootCAPaths = append(proxy.RootCAPaths, "")
+					state.rootsOpen = true
+				}},
+			}
+		}, nui.MenuOptions{Label: locales.SettingsAddRootCaAction(), Placement: nui.Set(nui.BottomEnd)}, proxy)
 	})
 	if !state.rootsOpen {
 		return

@@ -61,8 +61,7 @@ type Table struct {
 	source Source
 	deps   TableDependencies
 
-	// state stores indices into rows, whose order is owned by the traffic sorter.
-	state       nui.TableState[int]
+	state       nui.KeyedTableState[*logic.TrafficEntry, uint64]
 	selectedRow int
 	lastSort    ui.SortOrder
 
@@ -71,8 +70,6 @@ type Table struct {
 	rowsVersion  uint64
 	rowsSort     logic.TrafficSort
 	rowsComputed bool
-	rowIDs       []uint64
-	indices      []int
 
 	fullOrder   []string
 	layoutOrder []string
@@ -95,9 +92,10 @@ type Table struct {
 
 	// menu is the context menu of the rows and the header, and menuTarget
 	// what it acts on.
-	menu       nui.MenuState
-	menuTarget tableMenuTarget
-	menuShown  bool
+	menu         nui.MenuState
+	menuTarget   tableMenuTarget
+	menuShown    bool
+	menuRevision uint64
 	// menuPress is where a right-click went down, relative to the table,
 	// until the build after it finds what it pressed.
 	menuPress *float32
@@ -118,7 +116,7 @@ type Table struct {
 
 // NewTable returns a table of source.
 func NewTable(source Source, deps TableDependencies) *Table {
-	t := &Table{source: source, deps: deps, selectedRow: -1, sorter: logic.NewTrafficTableSorter(), lastFirst: -1}
+	t := &Table{source: source, deps: deps, selectedRow: -1, sorter: logic.NewTrafficTableSorter(source.Filter().ProcessingPolicy()), lastFirst: -1}
 	t.state.List.Selected = &t.selectedRow
 	t.state.List.DragSelect = true
 	t.observer = t.observePointer
@@ -130,19 +128,18 @@ func NewTable(source Source, deps TableDependencies) *Table {
 // column layout and sort order stay.
 func (t *Table) Reset() {
 	columns, sort := t.state.List.Columns, t.state.Sort
-	t.state = nui.TableState[int]{}
+	t.state = nui.KeyedTableState[*logic.TrafficEntry, uint64]{}
 	t.state.List.Selected = &t.selectedRow
 	t.state.List.DragSelect = true
 	t.state.List.Columns, t.state.Sort = columns, sort
 	t.selectedRow, t.lastFirst, t.revealing = -1, -1, 0
-	t.sorter = logic.NewTrafficTableSorter()
+	t.sorter = logic.NewTrafficTableSorter(t.source.Filter().ProcessingPolicy())
 	t.rows, t.rowsComputed, t.rowsVersion, t.rowsSort = nil, false, 0, logic.TrafficSort{}
-	t.rowIDs, t.indices = nil, nil
 	t.historyShown = ""
 	t.menuTarget = tableMenuTarget{}
 }
 
-func trafficRowID(id uint64) string { return strconv.FormatUint(id, 10) }
+func trafficEntryID(entry *logic.TrafficEntry) uint64 { return entry.ID }
 
 func (t *Table) trafficSort() logic.TrafficSort {
 	if t.state.Sort.Column == "" {
@@ -230,61 +227,25 @@ func (t *Table) refreshRows() bool {
 		return false
 	}
 	t.rowsComputed, t.rowsVersion, t.rowsSort = true, version, sort
-	t.rows = t.sorter.Sort(filter.Filtered(), sort)
-	// Filter and sorter results are borrowed slices. Compare against our own
-	// identity snapshot, not the old rows, which may already have been reused.
-	orderChanged := len(t.rows) != len(t.rowIDs)
-	if !orderChanged {
-		for index, entry := range t.rows {
-			if entry.ID != t.rowIDs[index] {
-				orderChanged = true
-				break
-			}
-		}
+	t.rows = t.sorter.Sort(filter.Filtered(), sort, version)
+	if t.state.SetBorrowedRows(t.rows, trafficEntryID) {
+		t.pruneSelection()
 	}
-	if !orderChanged {
-		return true
-	}
-	n := len(t.rows)
-	limit := max(64, 4*n)
-	if n == 0 || cap(t.indices) > limit {
-		t.indices = nil
-	}
-	t.indices = slices.Grow(t.indices[:0], n)[:n]
-	for index := range t.indices {
-		t.indices[index] = index
-	}
-	// SetRows validates IDs and prunes native selection. Keep existing strings
-	// for identities that stayed in place, including ordinary live appends.
-	t.state.SetRows(t.indices, func(index int) string {
-		if index < len(t.rowIDs) && t.rowIDs[index] == t.rows[index].ID {
-			return t.state.RowID(index)
-		}
-		return trafficRowID(t.rows[index].ID)
-	})
-	if n == 0 || cap(t.rowIDs) > limit {
-		t.rowIDs = nil
-	}
-	t.rowIDs = slices.Grow(t.rowIDs[:0], n)[:n]
-	for index, entry := range t.rows {
-		t.rowIDs[index] = entry.ID
-	}
-	t.pruneSelection()
 	return true
 }
 
-// pruneSelection reconciles focus after SetRows removed absent selections.
+// pruneSelection reconciles traffic details after Nuxt removes absent IDs.
 func (t *Table) pruneSelection() {
 	if t.state.Selection.Len() == 0 {
 		t.selectedRow = -1
 		t.focusEntry(nil)
 		return
 	}
-	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(trafficRowID(focused.ID)) {
+	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(focused.ID) {
 		return
 	}
 	for _, entry := range t.rows {
-		if t.state.Selection.Has(trafficRowID(entry.ID)) {
+		if t.state.Selection.Has(entry.ID) {
 			t.selectedRow = t.rowIndex(entry.ID)
 			t.source.SelectEntry(entry)
 			return
@@ -315,7 +276,7 @@ func (t *Table) followHistory() {
 func (t *Table) replaceSelection(index int) {
 	t.state.Selection.Clear()
 	entry := t.rows[index]
-	t.state.Selection.Add(trafficRowID(entry.ID))
+	t.state.Selection.Add(entry.ID)
 	t.selectedRow = index
 }
 
@@ -406,53 +367,58 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	t.applyPendingFocus()
 	t.followNewest(rowsChanged)
 
-	columns := make([]nui.TableColumn[int], len(visible))
-	// Marked cells with the same visual values share one callback in this
-	// build, instead of allocating a retained drawing closure per cell.
+	columns := make([]nui.TableColumn[*logic.TrafficEntry], len(visible))
+	// Marked cells share paint callbacks without retaining row data.
 	outlines := make(map[rowOutlineStyle]func(*ui.Painter, ui.Rect))
 	order := t.displayOrder(visible)
-	// MyGo lays out an unsized Path in the current frame. Once resized,
-	// its saved width takes precedence, just like every other column.
+	// A resized Path uses its saved width; an unsized Path stays flexible.
 	flexPath := slices.ContainsFunc(visible, func(column columnDefinition) bool {
 		return column.key == logic.ColumnPath && t.state.List.Columns.Widths[string(column.key)] <= 0
 	})
-	// Fixed columns keep their exact widths. A native flex tail fills the
-	// remaining row background. Keep a small tail after a reordered flex
-	// Path too: MyGo omits the resize grip on the last flex column.
+	// Keep a flex tail after fixed columns and a small resize-grip tail after Path.
 	fill := !flexPath || len(order) > 0 && order[len(order)-1] == string(logic.ColumnPath)
+	var doubleClicked bool
+	buildCell := func(key logic.TrafficColumnKey, first, last bool) func(*ui.Context, nui.Theme, ui.Element, nui.TableCell[*logic.TrafficEntry]) {
+		return func(c *ui.Context, theme nui.Theme, element ui.Element, cell nui.TableCell[*logic.TrafficEntry]) {
+			if first {
+				t.noteRowSpan(element, cell.Index)
+			}
+			if element.RowDoubleClicked() {
+				doubleClicked = true
+			}
+			t.cellBackground(element, theme, cell.Index, first, last, outlines)
+			if key != "" {
+				t.CellBuilds++
+				t.cell(c, theme, cell.Value, key)
+			}
+		}
+	}
 	for index, column := range visible {
 		key := string(column.key)
-		columns[index] = t.decorateColumn(nui.TableColumn[int]{
-			Title: column.title(), ID: string(column.key), Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
-			Cell: func(c *ui.Context, theme nui.Theme, row int, _ bool) {
-				t.CellBuilds++
-				t.cell(c, theme, t.rows[row], column.key)
-			},
-		}, key == order[0], !fill && key == order[len(order)-1], outlines)
+		columns[index] = nui.TableColumn[*logic.TrafficEntry]{
+			Title: column.title(), ID: key, Width: column.width, MinWidth: column.minWidth, Align: column.align, Sortable: nui.Set(true),
+			BuildCell: buildCell(column.key, key == order[0], !fill && key == order[len(order)-1]),
+		}
 	}
 	if fill {
 		var width float32
 		if flexPath {
 			width = 16
 		}
-		columns = append(columns, t.decorateColumn(nui.TableColumn[int]{
+		columns = append(columns, nui.TableColumn[*logic.TrafficEntry]{
 			ID: "row-fill", Width: width, Fixed: true,
-		}, len(order) == 0, true, outlines))
+			BuildCell: buildCell("", len(order) == 0, true),
+		})
 	}
 	t.state.List.HeaderCell = t.headerCell(c, theme, visible)
 	t.menuSpans = t.menuSpans[:0]
-	var doubleClicked bool
 	var element ui.Element
 	ui.Box(c.Key("traffic-table-pane")).Fill().MinHeight(0).Background(theme.Background).Children(func() {
-		element = widgets.Table(c.Key("traffic-table"), theme, &t.state, columns, nui.TableOptions{
+		element = widgets.Table(c.Key("traffic-table"), theme, &t.state, columns, nui.KeyedTableOptions[uint64]{
 			Label: locales.TrafficColumns(), ManualSorting: true,
 			BuildEmpty: func(*ui.Context, nui.Theme) {},
-			Style: func(slot nui.Slot, cell ui.Element) {
-				if slot == nui.Item && cell.RowDoubleClicked() {
-					doubleClicked = true
-				}
-			},
-		}).ObserveInput(t.observer).OnSubmit(func() {
+		})
+		element.ObserveInput(t.observer).OnSubmit(func() {
 			// Modifier double-clicks only change selection.
 			if c.Modifiers() == 0 {
 				if doubleClicked && t.source.ShowDetail() {
@@ -473,7 +439,11 @@ func (t *Table) Build(c *ui.Context, theme nui.Theme) {
 	}
 	t.syncLayout(visible)
 	t.holdWhileReading(element)
-	widgets.ContextMenu(c.Key("traffic-menu"), theme, element, &t.menu, t.menuItems, nui.MenuOptions{Label: t.menuLabel()})
+	var columnConfig any
+	if current := t.deps.Settings.Current; current != nil {
+		columnConfig = current.TrafficTableConfig
+	}
+	widgets.ContextMenu(c.Key("traffic-menu"), theme, element, &t.menu, t.menuItems, nui.MenuOptions{Label: t.menuLabel()}, t.menuRevision, t.rowsVersion, columnConfig, t.deps.Settings.SavingTrafficTableConfig, t.deps.Exporter != nil && t.deps.Exporter.Exporting)
 	t.resend.build(c, theme, t)
 }
 
@@ -490,30 +460,6 @@ func (t *Table) newRequestsButton(c *ui.Context, theme nui.Theme, count int) {
 	})
 }
 
-// decorateColumn pairs Nuxt's synchronous Item style and Cell callbacks. The
-// reference exists only during this build, is replaced for every row, and is
-// cleared before building content. No element reaches state or a draw callback.
-func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) nui.TableColumn[int] {
-	var cell ui.Element
-	column.Style = func(slot nui.Slot, element ui.Element) {
-		if slot == nui.Item {
-			cell = element
-		}
-	}
-	content := column.Cell
-	column.Cell = func(c *ui.Context, theme nui.Theme, row int, chosen bool) {
-		if first {
-			t.noteRowSpan(cell, row)
-		}
-		t.cellBackground(cell, theme, row, first, last, outlines)
-		cell = ui.Element{}
-		if content != nil {
-			content(c, theme, row, chosen)
-		}
-	}
-	return column
-}
-
 // cellBackground colors selected and highlighted rows, stripes other rows, and marks
 // the entry the detail panel shows, and highlighted rows, with a bar along
 // the row's start and a 1 px outline, as 1.0.5 did. Tints and outlines are
@@ -521,7 +467,7 @@ func (t *Table) decorateColumn(column nui.TableColumn[int], first, last bool, ou
 // ends the row as shown.
 func (t *Table) cellBackground(cell ui.Element, theme nui.Theme, row int, first, last bool, outlines map[rowOutlineStyle]func(*ui.Painter, ui.Rect)) {
 	entry := t.rows[row]
-	chosen := t.state.Selection.Has(trafficRowID(entry.ID))
+	chosen := t.state.Selection.Has(entry.ID)
 	highlight := t.source.Highlight(entry.ID)
 	// Opaque cell backgrounds cover the native table's hover tint.
 	background := theme.Background

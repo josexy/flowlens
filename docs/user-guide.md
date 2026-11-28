@@ -112,6 +112,11 @@ The **Categories** sidebar filters traffic by domain, process, and URL structure
 - In the URL structure tree, `Left`/`Right` collapses or expands branches, and `Enter` or `Space` toggles a branch or selects a request.
 - Right-click a request (or press the `Menu` key / `Shift+F10`) to open its context menu.
 
+Leaving **Categories** or collapsing its sidebar releases the derived lists and
+structure tree. Your search, applied filters, and valid expansion and scroll
+choices survive for the same source; returning rebuilds the sidebar from current
+traffic. Closing or replacing a history clears its source-specific navigation.
+
 ### Bodies
 
 - **Text and Raw:** Render the full body without pagination so search, selection, copy, and save cover the entire content. Line wrapping can be toggled at any size. Bodies of `524,288` characters (`512 Ki`) or more—or containing any line of `131,072` characters (`128 Ki`) or more—render as plain text without syntax highlighting or bracket matching.
@@ -153,6 +158,17 @@ Process attribution is enabled by default under **Settings > Proxy** and applies
 ## History and HAR
 
 Saved capture sessions appear under **History** and persist across restarts. Only the currently open history's decoded entries and loaded bodies stay in memory: opening another history replaces them, and closing the history tab releases them (including detail-view caches) and returns to live capture. FlowLens retains compact indexes for up to four recently accessed histories so reopening them stays fast.
+
+The session list builds visible rows as you scroll, so large lists do not render
+every session at once. Use `Tab` to reach the list, arrow keys or `Home`/`End` to
+navigate, and `Enter` to open a session. Right-click or `Menu`/`Shift+F10` opens
+the target session's actions; a menu closes when its row leaves view.
+
+All rows in an open history remain searchable and sortable using their complete
+values. Clearing filters or sorting releases unused working buffers, and clearing
+a large selection releases its extra identity storage. If a replacement history
+cannot load, the previous history remains available. These releases make memory
+reclaimable; they do not force an immediate return of process memory to the OS.
 
 History details show complete headers and metadata before loading bodies. Open **Raw**, **Body**, or **WebSocket** when you need payload content; other detail tabs do not wait for it. When switching rows, the previous view stays briefly (up to 180 ms) until the new details are ready, so quick reads do not flash blank content or a spinner. Its content actions are disabled during the switch, while close stays available. Slower reads show loading feedback in the same layout. Raw copying becomes available after the payload loads.
 

@@ -27,7 +27,7 @@ func (f *fakeHistory) ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error)
 	return slices.Clone(f.list), nil
 }
 func (f *fakeHistory) ListHistoryEntries(_ context.Context, key string) ([]*logic.TrafficEntry, error) {
-	return f.entries[key], f.getErr
+	return slices.Clone(f.entries[key]), f.getErr
 }
 func (f *fakeHistory) GetHistoryDetail(_ context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
 	for _, entry := range f.entries[key] {

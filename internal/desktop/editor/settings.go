@@ -18,14 +18,16 @@ func settingsContent(c *ui.Context, theme nui.Theme, title string, controls func
 	})
 }
 
-func proxySettings(c *ui.Context, theme nui.Theme, mode, customProxy *string) {
-	options := []nui.Option[string]{
-		{Value: logic.ProxyModeNone, Label: locales.WorkspaceHttpRequestProxyModeNone()},
-		{Value: logic.ProxyModeSystem, Label: locales.WorkspaceHttpRequestProxyModeSystem()},
-		{Value: logic.ProxyModeMITM, Label: locales.WorkspaceHttpRequestProxyModeMitm()},
-		{Value: logic.ProxyModeCustom, Label: locales.WorkspaceHttpRequestProxyModeCustom()},
+func proxySettings(c *ui.Context, theme nui.Theme, mode, customProxy *string, state *widgets.SelectState[string]) {
+	options := func() []nui.Option[string] {
+		return []nui.Option[string]{
+			{Value: logic.ProxyModeNone, Label: locales.WorkspaceHttpRequestProxyModeNone()},
+			{Value: logic.ProxyModeSystem, Label: locales.WorkspaceHttpRequestProxyModeSystem()},
+			{Value: logic.ProxyModeMITM, Label: locales.WorkspaceHttpRequestProxyModeMitm()},
+			{Value: logic.ProxyModeCustom, Label: locales.WorkspaceHttpRequestProxyModeCustom()},
+		}
 	}
-	selectRow(c, theme, "proxy", locales.WorkspaceHttpRequestProxyMode(), mode, options, nil)
+	selectRow(c, theme, "proxy", locales.WorkspaceHttpRequestProxyMode(), mode, state, options, nil)
 	if *mode == logic.ProxyModeCustom {
 		label := locales.WorkspaceHttpRequestCustomProxy()
 		settingRow(c, theme, "custom", label, func() {
@@ -59,9 +61,9 @@ func settingRow(c *ui.Context, theme nui.Theme, key, label string, control func(
 	})
 }
 
-func selectRow(c *ui.Context, theme nui.Theme, key, label string, value *string, options []nui.Option[string], onChange func()) {
+func selectRow(c *ui.Context, theme nui.Theme, key, label string, value *string, state *widgets.SelectState[string], options func() []nui.Option[string], onChange func()) {
 	settingRow(c, theme, key, label, func() {
-		nui.Select(c.Key("select"), theme, value, options, nui.SelectOptions{Label: label, OnChange: onChange})
+		nui.Select(c.Key("select"), theme, value, state.Prepare(c.Locale(), options), nui.SelectOptions{Label: label, OnChange: onChange})
 	})
 }
 

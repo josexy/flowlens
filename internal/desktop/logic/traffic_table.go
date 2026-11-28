@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// TrafficProcessingPolicy distinguishes mutable capture updates from published
+// immutable history snapshots. Source kind, not the presence of live controls,
+// chooses the policy.
+type TrafficProcessingPolicy uint8
+
+const (
+	TrafficLive TrafficProcessingPolicy = iota
+	TrafficSnapshot
+)
+
 // SortOrder is a column's sort direction.
 type SortOrder string
 
@@ -129,13 +139,16 @@ func compareSortValues(left, right sortValue) int {
 // TrafficTableSorter sorts entries, computing each value once per entry
 // version and sorting again only when membership or a value changes.
 type TrafficTableSorter struct {
-	lastKey        TrafficColumnKey
-	lastOrder      SortOrder
-	cached         map[uint64]trafficSortRecord
-	capacity       int
-	generation     uint64
-	previousSorted []*TrafficEntry
-	computed       int
+	policy          TrafficProcessingPolicy
+	lastKey         TrafficColumnKey
+	lastOrder       SortOrder
+	cached          map[uint64]trafficSortRecord
+	capacity        int
+	generation      uint64
+	previousSorted  []*TrafficEntry
+	computed        int
+	snapshotVersion uint64
+	snapshotReady   bool
 }
 
 type trafficSortRecord struct {
@@ -145,19 +158,27 @@ type trafficSortRecord struct {
 }
 
 // NewTrafficTableSorter returns an empty sorter.
-func NewTrafficTableSorter() *TrafficTableSorter {
-	return &TrafficTableSorter{}
+func NewTrafficTableSorter(policy ...TrafficProcessingPolicy) *TrafficTableSorter {
+	s := &TrafficTableSorter{}
+	if len(policy) != 0 {
+		s.policy = policy[0]
+	}
+	return s
 }
 
 // Sort returns a borrowed main-thread view until the next Sort. Unsorted
 // returns entries itself. Callers needing a persistent snapshot must clone it.
-func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*TrafficEntry {
+func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort, revision ...uint64) []*TrafficEntry {
 	if !sort.active() || len(entries) == 0 {
+		s.snapshotReady = false
 		s.lastKey, s.lastOrder = "", SortNone
 		s.cached, s.capacity = nil, 0
 		clear(s.previousSorted)
 		s.previousSorted = nil
 		return entries
+	}
+	if s.policy == TrafficSnapshot {
+		return s.sortSnapshot(entries, sort, revision)
 	}
 	n := len(entries)
 	limit := max(64, 4*n)
@@ -225,4 +246,58 @@ func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*
 	s.lastKey, s.lastOrder = sort.Key, sort.Order
 	s.previousSorted = sorted
 	return sorted
+}
+
+type snapshotSortRecord struct {
+	entry *TrafficEntry
+	value sortValue
+}
+
+func (s *TrafficTableSorter) sortSnapshot(entries []*TrafficEntry, sort TrafficSort, revision []uint64) []*TrafficEntry {
+	if len(revision) > 0 && s.snapshotReady && s.snapshotVersion == revision[0] &&
+		s.lastKey == sort.Key && s.lastOrder == sort.Order {
+		return s.previousSorted
+	}
+	// Scratch and full folded strings die with this call. Only the ordered
+	// pointers survive; never pool or cache the comparison records.
+	scratch := make([]snapshotSortRecord, len(entries))
+	for i, entry := range entries {
+		scratch[i] = snapshotSortRecord{entry, trafficSortValue(entry, sort.Key)}
+		s.computed++
+	}
+	slices.SortFunc(scratch, func(left, right snapshotSortRecord) int {
+		a, b := left.value, right.value
+		switch {
+		case a.missing && b.missing:
+			return cmp.Compare(left.entry.ID, right.entry.ID)
+		case a.missing:
+			return 1
+		case b.missing:
+			return -1
+		}
+		compared := compareSortValues(a, b)
+		if compared == 0 {
+			return cmp.Compare(left.entry.ID, right.entry.ID)
+		}
+		if sort.Order == SortDesc {
+			return -compared
+		}
+		return compared
+	})
+	n := len(entries)
+	result := s.previousSorted
+	clear(result[min(n, len(result)):])
+	if cap(result) > max(64, 4*n) {
+		result = nil
+	}
+	result = slices.Grow(result[:0], n)[:n]
+	for i := range scratch {
+		result[i] = scratch[i].entry
+	}
+	s.previousSorted, s.lastKey, s.lastOrder = result, sort.Key, sort.Order
+	s.snapshotReady = len(revision) > 0
+	if s.snapshotReady {
+		s.snapshotVersion = revision[0]
+	}
+	return result
 }

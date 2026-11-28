@@ -260,6 +260,7 @@ type logState struct {
 	loaded, updatingEnabled, updating bool
 	enabledTarget                     bool
 	level                             string
+	levelChoice                       widgets.SelectState[string]
 	opening, clearing                 bool
 }
 
@@ -316,7 +317,7 @@ func (v *View) logsPage(c *ui.Context, palette nui.Theme) {
 		})
 		row(c, palette, "level", locales.SettingsLogLevelLabel(), "", func() {
 			ui.Box(c.Key("menu")).Width(240).Children(func() {
-				nui.Select(c.Key("select"), palette, &state.level, logLevelOptions(), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Disabled: state.updating}).DimDisabled(false)
+				nui.Select(c.Key("select"), palette, &state.level, state.levelChoice.Prepare(c.Locale(), logLevelOptions), nui.SelectOptions{Label: locales.SettingsLogLevelLabel(), Disabled: state.updating}).DimDisabled(false)
 			})
 			if state.level != string(state.status.Level) && !state.updating {
 				level := logger.LogLevel(state.level)
@@ -369,6 +370,7 @@ type storageState struct {
 	cacheDone, allDone     bool
 	threshold, maxMessages integerField
 	retention              integerField
+	unitChoice             widgets.SelectState[string]
 }
 
 func (v *View) loadDataSize() {
@@ -458,11 +460,13 @@ func (v *View) storagePage(c *ui.Context, palette nui.Theme, draft *settingservi
 				state.retention.build(c, palette, "number", locales.SettingsHistoryRetentionPeriodLabel(), &retention.Value, 1, 9999, 1, !retention.Enabled)
 				unit := string(retention.Unit)
 				ui.Box(c.Key("unit")).Width(140).Children(func() {
-					nui.Select(c.Key("select"), palette, &unit, []nui.Option[string]{
-						option(string(settingservice.HistoryRetentionUnitHour), locales.SettingsHistoryRetentionUnitHour()), option(string(settingservice.HistoryRetentionUnitDay), locales.SettingsHistoryRetentionUnitDay()),
-						option(string(settingservice.HistoryRetentionUnitWeek), locales.SettingsHistoryRetentionUnitWeek()), option(string(settingservice.HistoryRetentionUnitMonth), locales.SettingsHistoryRetentionUnitMonth()),
-						option(string(settingservice.HistoryRetentionUnitYear), locales.SettingsHistoryRetentionUnitYear()),
-					}, nui.SelectOptions{Label: locales.SettingsHistoryRetentionUnitLabel(), Disabled: !retention.Enabled})
+					nui.Select(c.Key("select"), palette, &unit, state.unitChoice.Prepare(c.Locale(), func() []nui.Option[string] {
+						return []nui.Option[string]{
+							option(string(settingservice.HistoryRetentionUnitHour), locales.SettingsHistoryRetentionUnitHour()), option(string(settingservice.HistoryRetentionUnitDay), locales.SettingsHistoryRetentionUnitDay()),
+							option(string(settingservice.HistoryRetentionUnitWeek), locales.SettingsHistoryRetentionUnitWeek()), option(string(settingservice.HistoryRetentionUnitMonth), locales.SettingsHistoryRetentionUnitMonth()),
+							option(string(settingservice.HistoryRetentionUnitYear), locales.SettingsHistoryRetentionUnitYear()),
+						}
+					}), nui.SelectOptions{Label: locales.SettingsHistoryRetentionUnitLabel(), Disabled: !retention.Enabled})
 				})
 				retention.Unit = settingservice.HistoryRetentionUnit(unit)
 			})

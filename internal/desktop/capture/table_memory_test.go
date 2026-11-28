@@ -43,21 +43,69 @@ func TestTableStablePatchesHaveBoundedAllocations(t *testing.T) {
 			if allocs > 25 {
 				t.Fatalf("stable patch rebuilt full-list storage: %.0f allocations", allocs)
 			}
-			if table.state.Selection.Len() != 1 || !table.state.Selection.Has("5000") {
+			if table.state.Selection.Len() != 1 || !table.state.Selection.Has(5000) {
 				t.Fatal("stable patch changed selection")
 			}
 			entries, version = entries[:2], version+1
 			table.refreshRows()
-			if table.state.Selection.Len() != 0 || table.selectedRow != -1 || table.state.Len() != 2 ||
-				cap(table.rowIDs) > 64 || cap(table.indices) > 64 {
+			if table.state.Selection.Len() != 0 || table.selectedRow != -1 || len(table.rows) != 2 ||
+				table.state.Len() != 2 {
 				t.Fatal("shrinking failed to prune selection or release identity storage")
 			}
 			entries, version = nil, version+1
 			table.refreshRows()
-			if table.rowIDs != nil || table.indices != nil || table.state.Len() != 0 {
+			if table.state.Len() != 0 || len(table.rows) != 0 {
 				t.Fatal("empty table retained identity storage")
 			}
 		})
+	}
+}
+
+func TestTableAllSelectedPatchesHaveBoundedAllocations(t *testing.T) {
+	f := newFixtureSized(t, rangeOfEntries(1), 1400, 800)
+	entries, version := rangeOfEntries(10000), uint64(1)
+	filter := store.NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return entries, version })
+	table := NewTable(benchmarkUncappedSource{Source: f.workspace.Table.source, filter: filter}, f.workspace.Table.deps)
+	table.refreshRows()
+	table.replaceSelection(len(entries) - 1)
+	for _, entry := range entries {
+		table.state.Selection.Add(entry.ID)
+	}
+	original := entries[len(entries)-1]
+	replacement := *original
+	replacement.Path = "/updated-payload"
+	patch := func() {
+		version++
+		if version%2 == 0 {
+			entries[len(entries)-1] = &replacement
+		} else {
+			entries[len(entries)-1] = original
+		}
+		changed := table.refreshRows()
+		table.syncChoice(changed)
+		if !changed || table.state.Selection.Len() != len(entries) || table.selectedRow != len(entries)-1 ||
+			table.source.SelectedEntry() != entries[len(entries)-1] {
+			t.Fatal("patch lost selected identities, cursor or current detail")
+		}
+	}
+	patch() // Warm filter/sort storage before measuring the complete refresh.
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	const patches = 20
+	for range patches {
+		patch()
+	}
+	runtime.ReadMemStats(&after)
+	// Rebinding the same IDs must not copy the entire selection into a scratch
+	// map. Count bytes, since even a large map can use only a few allocations.
+	if perPatch := (after.TotalAlloc - before.TotalAlloc) / patches; perPatch > 16*1024 {
+		t.Fatalf("all-selected patch allocated %d bytes; want at most 16 KiB", perPatch)
+	}
+	entries, version = entries[:2], version+1
+	table.syncChoice(table.refreshRows())
+	if table.state.Selection.Len() != 2 || !table.state.Selection.Has(entries[0].ID) ||
+		!table.state.Selection.Has(entries[1].ID) || table.source.SelectedEntry() != entries[0] {
+		t.Fatal("shrinking did not prune missing IDs and restore a surviving detail")
 	}
 }
 

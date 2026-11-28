@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ type controlledHistory struct {
 
 func (b *controlledHistory) ListHistoryEntries(ctx context.Context, key string) ([]*logic.TrafficEntry, error) {
 	if b.list != nil {
-		return b.list(ctx, key)
+		entries, err := b.list(ctx, key)
+		return slices.Clone(entries), err
 	}
 	return b.fakeHistory.ListHistoryEntries(ctx, key)
 }

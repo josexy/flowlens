@@ -135,7 +135,7 @@ func TestDetailCloseRetainsSelectionAndReturnsFocus(t *testing.T) {
 			keytest.TabTo(t, f.tester, locales.DetailClosePanel())
 			f.tester.Key(0, ui.KeySpace)
 			f.settle()
-			if table.source.ShowDetail() || !table.state.Selection.Has(trafficRowID(row.ID)) || table.state.Selection.Len() != 1 || !f.tester.Focused(locales.TrafficColumns()) {
+			if table.source.ShowDetail() || !table.state.Selection.Has(row.ID) || table.state.Selection.Len() != 1 || !f.tester.Focused(locales.TrafficColumns()) {
 				t.Fatalf("close: visible %v selected %v focus %v", table.source.ShowDetail(), table.selectedIDs(), f.tester.Focused(locales.TrafficColumns()))
 			}
 			f.tester.Key(0, ui.KeyDown)

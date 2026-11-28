@@ -41,7 +41,7 @@ var errRequestBodyUnavailable = errors.New("request body unavailable")
 func (t *Table) selectedEntries() []*logic.TrafficEntry {
 	entries := make([]*logic.TrafficEntry, 0, t.state.Selection.Len())
 	for _, entry := range t.rows {
-		if t.state.Selection.Has(trafficRowID(entry.ID)) {
+		if t.state.Selection.Has(entry.ID) {
 			entries = append(entries, entry)
 		}
 	}
@@ -72,6 +72,7 @@ func (t *Table) resolveMenu(table ui.Element) {
 	opened := t.menu.Open && !t.menuShown
 	t.menuShown = t.menu.Open
 	if press := t.menuPress; press != nil {
+		t.menuRevision++
 		t.menuPress = nil
 		top := table.Bounds().Y
 		switch id := t.rowAt(top, *press); {
@@ -80,7 +81,7 @@ func (t *Table) resolveMenu(table ui.Element) {
 			// The header takes precedence over those offscreen row bounds.
 			t.menuTarget = tableMenuTarget{header: true}
 		case id != 0:
-			if index := t.rowIndex(id); index >= 0 && !t.state.Selection.Has(trafficRowID(id)) {
+			if index := t.rowIndex(id); index >= 0 && !t.state.Selection.Has(id) {
 				t.replaceSelection(index)
 				t.focusEntry(t.rows[index])
 			}
@@ -91,6 +92,7 @@ func (t *Table) resolveMenu(table ui.Element) {
 		return
 	}
 	if opened {
+		t.menuRevision++
 		t.menuTarget = tableMenuTarget{ids: t.selectedIDs()}
 	}
 }

@@ -30,11 +30,12 @@ type View struct {
 	// Select shows the section.
 	Select func()
 
-	interval    int64
-	chart       nui.ChartState
-	charted     uint64
-	chartLocale string
-	drawn       bool
+	intervalChoice widgets.SelectState[int64]
+	interval       int64
+	chart          nui.ChartState
+	charted        uint64
+	chartLocale    string
+	drawn          bool
 	// viewed is set by the first Content call, which takes one sample if none
 	// exists. Showing the section again never samples.
 	viewed      bool
@@ -108,7 +109,7 @@ func (v *View) toolbar(c *ui.Context, theme nui.Theme) {
 			})
 			v.interval = data.IntervalMs
 			ui.Box(c.Key("interval")).Width(110).Children(func() {
-				nui.Select(c.Key("select"), theme, &v.interval, intervals, nui.SelectOptions{Label: locales.MemstatsInterval(), Size: nui.MD})
+				nui.Select(c.Key("select"), theme, &v.interval, v.intervalChoice.Prepare("", func() []nui.Option[int64] { return intervals }), nui.SelectOptions{Label: locales.MemstatsInterval(), Size: nui.MD})
 			})
 			data.SetInterval(v.interval)
 			nui.Button(c.Key("refresh"), theme, locales.MemstatsRefresh(), nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.MD, Leading: lucide.RefreshCw()}).OnClick(data.FetchOnce)

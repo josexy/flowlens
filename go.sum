@@ -32,8 +32,8 @@ github.com/josexy/logx v0.0.0-20260618062928-f91144c33007 h1:53fOxCpLT4ZcWODKnTc
 github.com/josexy/logx v0.0.0-20260618062928-f91144c33007/go.mod h1:dZakDU2uhWtbYSWuMkekb3ZfJMTEVvYWc1SsP0SYaIM=
 github.com/josexy/mitmproxy-go/v2 v2.0.4 h1:lvYP70ZksfY9Lhgn1DHtOVKZw1e0+6cBVhw47XwsKpE=
 github.com/josexy/mitmproxy-go/v2 v2.0.4/go.mod h1:N1OS9Hd6hhZ8ozz3ft4IM/LPLVwWzHGYvP+ilRC45Cs=
-github.com/josexy/nuxt-ui-go v0.1.2-0.20261119040559-42aa9b196036 h1:jMJMUWIUvW4PWfCBTrUV74qRlno1prhrrs3LUAK6s4M=
-github.com/josexy/nuxt-ui-go v0.1.2-0.20261119040559-42aa9b196036/go.mod h1:IsbNNaYXBKihTzu+4NfvKX4CQTuh99b5mHeb64h/66g=
+github.com/josexy/nuxt-ui-go v0.2.0 h1:7CeLRRSN9nJJNrQp4nl28qEgFc9kYd/EgXvd2rVHrC0=
+github.com/josexy/nuxt-ui-go v0.2.0/go.mod h1:IsbNNaYXBKihTzu+4NfvKX4CQTuh99b5mHeb64h/66g=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891 h1:nPBBheHXDAwthl/Eatf8WXNzrqMnqIqFm5tU8uMT47o=
 github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891/go.mod h1:e/m0+ie/tpugMyeeitiYrJTsa8gal1Xu7WNq6VMqqUQ=
 github.com/josexy/xhttp v0.0.0-20261112014454-6087dd9bc960 h1:UBatDSMc6qkx2Fyh9+XENnMp3tN7JUfj2iZw6ZdWtJg=

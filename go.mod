@@ -14,7 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/josexy/logx v0.0.0-20260618062928-f91144c33007
 	github.com/josexy/mitmproxy-go/v2 v2.0.4
-	github.com/josexy/nuxt-ui-go v0.1.2-0.20261119040559-42aa9b196036
+	github.com/josexy/nuxt-ui-go v0.2.0
 	github.com/josexy/websocket v0.0.0-20260820071228-412d0f6b5891
 	github.com/josexy/xhttp v0.0.0-20261112014454-6087dd9bc960
 	github.com/klauspost/compress v1.20.5

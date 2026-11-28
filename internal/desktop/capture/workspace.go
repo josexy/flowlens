@@ -78,18 +78,28 @@ type Workspace struct {
 	lastSelection      string
 	lastActive         string
 	historyListSeen    uint64
+	historyRowBuilds   int
+	historyList        ui.ListState
+	historyCursor      int
+	historyCursorKey   string
+	historyListVersion uint64
+	historyListCount   int
+	historyMenu        nui.MenuState
+	historyMenuTarget  *proxyservice.HistoryMetadata
+	historyMenuPress   *float32
+	historyMenuShown   bool
+	historyRowSpans    []historyRowSpan
 	toolbar            toolbarState
 	alias              aliasDialog
-	// captureMenu, historyMenus and categoryMenus are the states of the
+	// captureMenu and categoryMenus are the states of the
 	// sidebars' context menus.
 	captureMenu   nui.MenuState
-	historyMenus  widgets.MenuStates
 	categoryMenus widgets.MenuStates
 }
 
 // New returns the capture workspace.
 func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifier *widgets.Notifier, confirm *widgets.ConfirmDialog, icons *widgets.ProcessIcons) *Workspace {
-	w := &Workspace{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm}
+	w := &Workspace{Data: data, Host: host, Dispatcher: dispatcher, Notifier: notifier, Confirm: confirm, historyCursor: -1}
 	if host.Export != nil {
 		w.exporter = &Exporter{Host: *host.Export, Runtime: data.Runtime, Notifier: notifier}
 	}
@@ -109,6 +119,7 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 		w.Table.Reset()
 		if w.category.context == "capture" {
 			w.category.reset()
+			w.categoryMenus.Reset()
 		}
 	}
 	if data.History != nil {
@@ -123,6 +134,7 @@ func New(data *store.Store, host Host, dispatcher *shortcuts.Dispatcher, notifie
 			w.HistoryTable.Reset()
 			if strings.HasPrefix(w.category.context, "history:") {
 				w.category.reset()
+				w.categoryMenus.Reset()
 			}
 		}
 		w.HistoryTable.HistoryKey = func() string { return data.History.Traffic.Key }
@@ -183,7 +195,7 @@ func (w *Workspace) captureItem(c *ui.Context, theme nui.Theme) {
 		nui.Tooltip(c, theme, restart, locales.CaptureRestart(), nui.TooltipOptions{})
 		CountPill(c, theme, strconv.FormatInt(w.Data.Traffic.Statistics.Total, 10), false)
 	})
-	widgets.ContextMenu(c.Key("capture-menu"), theme, row, &w.captureMenu, w.captureMenuItems, nui.MenuOptions{Label: label})
+	widgets.ContextMenu(c.Key("capture-menu"), theme, row, &w.captureMenu, w.captureMenuItems, nui.MenuOptions{Label: label}, w.Data.Proxy.Status.CaptureAlias, w.exporter != nil && w.exporter.Exporting)
 }
 
 // captureMenuItems are the actions on the live capture.

@@ -31,9 +31,11 @@ func TestShootThemesWritesTwoImages(t *testing.T) {
 	t.Setenv(EnvDir, dir)
 	config := nui.DefaultApp()
 	interval := "2s"
+	var state nui.SelectState[string]
+	state.SetOptions([]nui.Option[string]{{Value: "2s", Label: "2s"}})
 	tester := ui.NewTester(func(c *ui.Context) {
 		palette := nui.App(c, config)
-		nui.Select(c, palette, &interval, []nui.Option[string]{{Value: "2s", Label: "2s"}}, nui.SelectOptions{Label: "Interval"}).Width(140)
+		nui.Select(c, palette, &interval, &state, nui.SelectOptions{Label: "Interval"}).Width(140)
 	}, 200, 100)
 	var modes []bool
 	paths := ShootThemes(t, tester, "probe/view", func(dark bool) {

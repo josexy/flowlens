@@ -259,7 +259,7 @@ func (v *View) decorateTreeItem(c *ui.Context, theme nui.Theme, item *collection
 						v.treeState.Outline.List.Focus(c)
 					}
 				},
-			})
+			}, v.Data.Collection.Version, v.copying, row.ID, row.Name)
 		})
 	}
 }

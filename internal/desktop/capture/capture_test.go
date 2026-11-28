@@ -1215,8 +1215,8 @@ func TestDeleteSingleAndMultiple(t *testing.T) {
 		t.Fatal(f.backend.deleted)
 	}
 	table := f.workspace.Table
-	table.state.Selection.Add(trafficRowID(2))
-	table.state.Selection.Add(trafficRowID(3))
+	table.state.Selection.Add(2)
+	table.state.Selection.Add(3)
 	f.settle()
 	openRowMenu(t, f, "b.test")
 	f.choose("Delete")
@@ -1340,7 +1340,7 @@ func TestEditLimit(t *testing.T) {
 	f := newFixtureSized(t, entries, 1400, 800)
 	table := f.workspace.Table
 	for _, item := range entries {
-		table.state.Selection.Add(trafficRowID(item.ID))
+		table.state.Selection.Add(item.ID)
 	}
 	f.settle()
 	openRowMenu(t, f, "/p51")
@@ -1349,7 +1349,7 @@ func TestEditLimit(t *testing.T) {
 		t.Fatalf("%v", f.opened)
 	}
 	f.requireText("50")
-	table.state.Selection.Remove(trafficRowID(1))
+	table.state.Selection.Remove(1)
 	f.settle()
 	openRowMenu(t, f, "/p51")
 	f.choose("Edit")
@@ -1657,7 +1657,7 @@ func (b *fakeHistoryBackend) ListHistoryKeys() ([]*proxyservice.HistoryMetadata,
 	return b.list, nil
 }
 func (b *fakeHistoryBackend) ListHistoryEntries(_ context.Context, key string) ([]*logic.TrafficEntry, error) {
-	return b.entries[key], nil
+	return slices.Clone(b.entries[key]), nil
 }
 func (b *fakeHistoryBackend) GetHistoryDetail(_ context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
 	if detail, ok := b.details[id]; ok {

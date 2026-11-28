@@ -12,8 +12,9 @@ import (
 
 func TestCaptureAndHistoryKeyboardNavigation(t *testing.T) {
 	f := newHistoryFixture(t)
-	keytest.TabTo(t, f.tester, "session one")
-	f.tester.Key(0, ui.KeySpace)
+	f.tabToCategory(ui.RoleList, locales.HistoryTitle())
+	f.tester.Key(0, ui.KeyHome)
+	f.tester.Key(0, ui.KeyEnter)
 	f.settle()
 	if f.data.History.Traffic.Key != "k1" {
 		t.Fatal("keyboard did not open history")

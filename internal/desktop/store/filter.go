@@ -20,6 +20,7 @@ type trafficFilterMatch struct {
 // changes, so a live update costs only the entries it touched.
 type FilterStore struct {
 	source TrafficSource
+	policy logic.TrafficProcessingPolicy
 
 	SearchText          string
 	ActiveTab           string
@@ -35,13 +36,23 @@ type FilterStore struct {
 	generation    bool
 	base          []*logic.TrafficEntry
 	filtered      []*logic.TrafficEntry
+	baseOwned     []*logic.TrafficEntry
+	filteredOwned []*logic.TrafficEntry
+	baseVersion   uint64
 	version       uint64
 }
 
 // NewFilterStore returns a filter showing everything from source.
-func NewFilterStore(source TrafficSource) *FilterStore {
-	return &FilterStore{source: source, ActiveTab: logic.TabAll}
+func NewFilterStore(source TrafficSource, policy ...logic.TrafficProcessingPolicy) *FilterStore {
+	f := &FilterStore{source: source, ActiveTab: logic.TabAll}
+	if len(policy) != 0 {
+		f.policy = policy[0]
+	}
+	return f
 }
+
+// ProcessingPolicy is selected explicitly by the source's owner.
+func (f *FilterStore) ProcessingPolicy() logic.TrafficProcessingPolicy { return f.policy }
 
 func filterKey(values ...[]string) string {
 	var key strings.Builder
@@ -63,7 +74,15 @@ func (f *FilterStore) Refresh() {
 		return
 	}
 	baseChanged, categoryChanged := baseKey != f.baseKey, categoryKey != f.categoryKey
+	if !f.computed || version != f.sourceVersion || baseChanged {
+		// Facets consume Base, which can change outside the selected subset.
+		f.baseVersion++
+	}
 	f.computed, f.sourceVersion, f.baseKey, f.categoryKey = true, version, baseKey, categoryKey
+	if f.policy == logic.TrafficSnapshot {
+		f.refreshSnapshot(entries)
+		return
+	}
 	f.generation = !f.generation
 	n := len(entries)
 	limit := max(64, 4*n)
@@ -139,6 +158,54 @@ func (f *FilterStore) Refresh() {
 	}
 }
 
+// snapshotMatches owns only its output. Growth follows actual matches, not
+// source length; discarded tails cannot retain records from an earlier query.
+func snapshotMatches(buffer, entries []*logic.TrafficEntry, matches func(*logic.TrafficEntry) bool) []*logic.TrafficEntry {
+	result := buffer[:0]
+	for _, entry := range entries {
+		if matches(entry) {
+			result = append(result, entry)
+		}
+	}
+	clear(buffer[min(len(result), len(buffer)):])
+	if len(result) == 0 {
+		return nil
+	}
+	if cap(result) > max(64, 4*len(result)) {
+		compact := slices.Clone(result)
+		clear(result)
+		return compact
+	}
+	return result
+}
+
+func (f *FilterStore) refreshSnapshot(entries []*logic.TrafficEntry) {
+	if f.SearchText == "" && f.ActiveTab == logic.TabAll {
+		clear(f.baseOwned)
+		f.baseOwned = nil
+		f.base = entries
+	} else {
+		f.baseOwned = snapshotMatches(f.baseOwned, entries, func(entry *logic.TrafficEntry) bool {
+			return logic.TrafficMatchesSearch(entry, f.SearchText) && logic.TrafficMatchesTab(entry, f.ActiveTab)
+		})
+		f.base = f.baseOwned
+	}
+	if len(f.SelectedHosts) == 0 && len(f.SelectedProcessKeys) == 0 {
+		clear(f.filteredOwned)
+		f.filteredOwned = nil
+		f.filtered = f.base
+	} else {
+		hosts, processes := toSet(f.SelectedHosts), toSet(f.SelectedProcessKeys)
+		f.filteredOwned = snapshotMatches(f.filteredOwned, f.base, func(entry *logic.TrafficEntry) bool {
+			return logic.TrafficMatchesCategoryFilters(entry, hosts, processes)
+		})
+		f.filtered = f.filteredOwned
+	}
+	// Aliased views may already contain new pointers/IDs. Source and predicate
+	// revisions, rather than comparison with reused storage, invalidate readers.
+	f.version++
+}
+
 func toSet(values []string) map[string]bool {
 	set := make(map[string]bool, len(values))
 	for _, value := range values {
@@ -163,6 +230,13 @@ func (f *FilterStore) Base() []*logic.TrafficEntry {
 func (f *FilterStore) Version() uint64 {
 	f.Refresh()
 	return f.version
+}
+
+// BaseVersion changes with source or search/tab inputs, independently of the
+// final category result. Both versions are conservative publication revisions.
+func (f *FilterStore) BaseVersion() uint64 {
+	f.Refresh()
+	return f.baseVersion
 }
 
 // SetActiveTab selects a tab.
@@ -196,11 +270,18 @@ func (f *FilterStore) ClearSelectedProcesses() { f.SelectedProcessKeys = nil }
 // no entry of a source that was closed. The next read recomputes them.
 func (f *FilterStore) Release() {
 	f.computed = false
-	clear(f.base)
-	clear(f.filtered)
+	if f.policy == logic.TrafficSnapshot {
+		clear(f.baseOwned)
+		clear(f.filteredOwned)
+		f.baseOwned, f.filteredOwned = nil, nil
+	} else {
+		clear(f.base)
+		clear(f.filtered)
+	}
 	f.base, f.filtered = nil, nil
 	f.matches, f.matchCapacity = nil, 0
 	f.version++
+	f.baseVersion++
 }
 
 // ClearFilters returns every filter to its default.

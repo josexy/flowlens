@@ -2,6 +2,14 @@
 
 Building FlowLens requires Go 1.27.3 or newer, the MyGo CLI pinned in `go.mod` (`go tool mygo`), and preferably [Task](https://taskfile.dev). Ordinary builds and Go tests require no C/Objective-C compiler, Node.js, or npm. Python request hooks use an external Python 3 interpreter at runtime.
 
+## Native UI Dependency
+
+Nuxt UI Go is pinned to [v0.2.0](https://github.com/josexy/nuxt-ui-go/releases/tag/v0.2.0), which includes the borrowed-row and collection optimizations from PRs #18 and #20. No local checkout or `replace` directive is required. MyGo remains at v0.10.0.
+
+The dependency's choice controls own submitted data. Keep each control's state per window and submit options only on initialization or a data/locale change. `widgets.SelectState` prepares fixed or localized choices; category lists and font menus submit their snapshots explicitly. Multi-selection uses `nui.SelectionState`, with snapshots copied to application state in change callbacks.
+
+Shared menu controls cache submitted items. Their revision arguments must cover changes to both descriptors and captured callback targets, including asynchronous data and settings updates. Context menus prepare lazily on opening; dropdowns prepare while closed too, preserving first-open keyboard navigation. Tables use the combined `OnChange` notification for native selection, cursor, sort and column-layout changes.
+
 ## Cgo and Platform Tools
 
 Task, CI, release verification, and packaging all run with `CGO_ENABLED=0` on Windows, Linux, and macOS. On macOS, process attribution and icons, system proxy discovery and control, and physical-footprint memory sampling call system frameworks through the pinned `purego` dependency—no helper dylib or generated cgo wrapper is built.

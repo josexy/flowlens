@@ -32,12 +32,13 @@ type httpPane struct {
 	body, script         *widgets.CodeView
 	bodyText, scriptText string
 
-	split        float32
-	restoreProxy string
-	seenMethod   string
-	seenURL      string
-	timeout      numberField
-	redirects    numberField
+	split                                                            float32
+	restoreProxy                                                     string
+	seenMethod                                                       string
+	seenURL                                                          string
+	methodChoice, bodyChoice, protocolChoice, proxyChoice, tlsChoice widgets.SelectState[string]
+	timeout                                                          numberField
+	redirects                                                        numberField
 
 	response *responseView
 }
@@ -132,7 +133,7 @@ func (p *httpPane) requestLine(c *ui.Context, theme nui.Theme) {
 	requestLine(c, theme, "request-line", func() {
 		urlField{
 			url: &state.URL, label: locales.WorkspaceHttpRequestUrlPlaceholder(), placeholder: locales.WorkspaceHttpRequestUrlPlaceholder(),
-			method: func() { methodSelect(c, theme, &state.Method) },
+			method: func() { methodSelect(c, theme, &state.Method, &p.methodChoice) },
 			mitm:   state.Settings.ProxyMode == logic.ProxyModeMITM,
 			toggleMITM: func() {
 				state.Settings.ProxyMode = logic.ToggleMITMProxyMode(state.Settings.ProxyMode, &p.restoreProxy)
@@ -237,18 +238,20 @@ func wordWrapButton(c *ui.Context, theme nui.Theme, view *widgets.CodeView) {
 
 func (p *httpPane) bodyPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
-	options := []nui.Option[string]{
-		{Value: logic.BodyTypeNone, Label: locales.WorkspaceHttpRequestBodyTypeNone()},
-		{Value: logic.BodyTypeJSON, Label: locales.WorkspaceHttpRequestBodyTypeJson()},
-		{Value: logic.BodyTypeText, Label: locales.WorkspaceHttpRequestBodyTypeText()},
-		{Value: logic.BodyTypeXML, Label: locales.WorkspaceHttpRequestBodyTypeXml()},
-		{Value: logic.BodyTypeFile, Label: locales.WorkspaceHttpRequestBodyTypeFile()},
-		{Value: logic.BodyTypeFormData, Label: locales.WorkspaceHttpRequestBodyTypeFormData()},
-		{Value: logic.BodyTypeURLEncoded, Label: locales.WorkspaceHttpRequestBodyTypeUrlencoded()},
+	options := func() []nui.Option[string] {
+		return []nui.Option[string]{
+			{Value: logic.BodyTypeNone, Label: locales.WorkspaceHttpRequestBodyTypeNone()},
+			{Value: logic.BodyTypeJSON, Label: locales.WorkspaceHttpRequestBodyTypeJson()},
+			{Value: logic.BodyTypeText, Label: locales.WorkspaceHttpRequestBodyTypeText()},
+			{Value: logic.BodyTypeXML, Label: locales.WorkspaceHttpRequestBodyTypeXml()},
+			{Value: logic.BodyTypeFile, Label: locales.WorkspaceHttpRequestBodyTypeFile()},
+			{Value: logic.BodyTypeFormData, Label: locales.WorkspaceHttpRequestBodyTypeFormData()},
+			{Value: logic.BodyTypeURLEncoded, Label: locales.WorkspaceHttpRequestBodyTypeUrlencoded()},
+		}
 	}
 	text := state.RequestBodyType == logic.BodyTypeJSON || state.RequestBodyType == logic.BodyTypeText || state.RequestBodyType == logic.BodyTypeXML
 	widgets.PaneToolbar(c.Key("body-type"), func() {
-		paneSelect(c, theme, locales.WorkspaceHttpRequestBodyType(), &state.RequestBodyType, options)
+		paneSelect(c, theme, locales.WorkspaceHttpRequestBodyType(), &state.RequestBodyType, &p.bodyChoice, options)
 	}, func() {
 		switch {
 		case text:
@@ -311,20 +314,22 @@ func (p *httpPane) scriptPane(c *ui.Context, theme nui.Theme) {
 func (p *httpPane) settingsPane(c *ui.Context, theme nui.Theme) {
 	state := p.state
 	settings := &state.Settings
-	protocols := []nui.Option[string]{
-		{Value: string(logic.ProtocolAuto), Label: locales.WorkspaceHttpRequestProtocolAuto()},
-		{Value: string(logic.ProtocolHTTP1), Label: "HTTP/1.1"},
-		{Value: string(logic.ProtocolHTTP2), Label: "HTTP/2"},
+	protocols := func() []nui.Option[string] {
+		return []nui.Option[string]{
+			{Value: string(logic.ProtocolAuto), Label: locales.WorkspaceHttpRequestProtocolAuto()},
+			{Value: string(logic.ProtocolHTTP1), Label: "HTTP/1.1"},
+			{Value: string(logic.ProtocolHTTP2), Label: "HTTP/2"},
+		}
 	}
 	settingsContent(c, theme, locales.WorkspaceHttpRequestSettings(), func() {
-		selectRow(c, theme, "protocol", locales.WorkspaceHttpRequestProtocol(), &settings.Protocol, protocols, func() {
+		selectRow(c, theme, "protocol", locales.WorkspaceHttpRequestProtocol(), &settings.Protocol, &p.protocolChoice, protocols, func() {
 			state.Headers = logic.ConvertRequestRouteHeaders(state.Headers, logic.RequestProtocol(settings.Protocol), state.URL)
 		})
-		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
+		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy, &p.proxyChoice)
 		settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
 			nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
 		})
-		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
+		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, &p.tlsChoice, tlsProfileOptions, nil)
 		settingRow(c, theme, "h2", locales.WorkspaceHttpRequestHttp2Fingerprint(), func() {
 			nui.Input(c.Key("input"), theme, &settings.HTTP2Fingerprint, nui.InputOptions{Label: locales.WorkspaceHttpRequestHttp2Fingerprint(), Size: nui.SM, Disabled: settings.Protocol == string(logic.ProtocolHTTP1)}).FillWidth()
 		})
@@ -432,27 +437,29 @@ func (v *formDataView) rowMenu(c *ui.Context, theme nui.Theme, e *Editor, key st
 	number := strconv.Itoa(index + 1)
 	state := v.menu(id)
 	anchor := nui.Button(c.Key("row-menu"), theme, "", nui.ButtonOptions{Variant: nui.Ghost, Color: nui.Neutral, Size: nui.SM, Square: true, Leading: lucide.Ellipsis(), AccessibleLabel: locales.WorkspaceHttpRequestFormDataRowMenuActions() + " " + number})
-	nui.DropdownMenu(c.Key("row-menu-items"), theme, anchor, state, []nui.MenuItem{
-		{ID: "text", Label: locales.WorkspaceHttpRequestFormDataRowMenuText(), OnSelect: func() {
-			v.begin(id)
-			v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.File = logic.FormDataItemText, nil })
-		}},
-		{ID: "file", Label: locales.WorkspaceHttpRequestFormDataRowMenuFile(), OnSelect: func() {
-			v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.Value = logic.FormDataItemFile, "" })
-		}},
-		{ID: "upload", Label: locales.WorkspaceHttpRequestFormDataRowMenuUpload(), OnSelect: func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) }},
-		{ID: "delete", Label: locales.WorkspaceHttpRequestFormDataRowMenuDelete(), OnSelect: func() {
-			v.begin(id)
-			if position := indexOfFormRow(*items, id); position >= 0 {
-				if len(*items) <= 1 {
-					*items = []logic.FormDataItem{logic.NewFormDataRow()}
-					return
+	widgets.DropdownMenu(c.Key("row-menu-items"), theme, anchor, state, func() []nui.MenuItem {
+		return []nui.MenuItem{
+			{ID: "text", Label: locales.WorkspaceHttpRequestFormDataRowMenuText(), OnSelect: func() {
+				v.begin(id)
+				v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.File = logic.FormDataItemText, nil })
+			}},
+			{ID: "file", Label: locales.WorkspaceHttpRequestFormDataRowMenuFile(), OnSelect: func() {
+				v.mutate(items, id, func(row *logic.FormDataItem) { row.ItemType, row.Value = logic.FormDataItemFile, "" })
+			}},
+			{ID: "upload", Label: locales.WorkspaceHttpRequestFormDataRowMenuUpload(), OnSelect: func() { e.pickFile(key+":"+id, v.begin(id), v.setFile(items, id)) }},
+			{ID: "delete", Label: locales.WorkspaceHttpRequestFormDataRowMenuDelete(), OnSelect: func() {
+				v.begin(id)
+				if position := indexOfFormRow(*items, id); position >= 0 {
+					if len(*items) <= 1 {
+						*items = []logic.FormDataItem{logic.NewFormDataRow()}
+						return
+					}
+					next := make([]logic.FormDataItem, 0, len(*items)-1)
+					next = append(next, (*items)[:position]...)
+					*items = append(next, (*items)[position+1:]...)
 				}
-				next := make([]logic.FormDataItem, 0, len(*items)-1)
-				next = append(next, (*items)[:position]...)
-				*items = append(next, (*items)[position+1:]...)
-			}
-		}},
+			}},
+		}
 	}, nui.MenuOptions{Label: locales.WorkspaceHttpRequestFormDataRowMenuActions()})
 }
 

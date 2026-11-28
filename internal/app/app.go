@@ -466,9 +466,9 @@ func openMainWindow(started *launched, shown func()) {
 	app.Host.OpenSettings = settingsWindow.open
 	app.Host.OpenUpdate = updateWindow.open
 	app.Surfaces[store.WorkspaceAPICollection] = shell.Surface{Sidebar: collections.Sidebar, Content: captureWorkspace.Content}
-	app.Surfaces[store.WorkspaceCategory] = shell.Surface{Sidebar: captureWorkspace.CategorySidebar, Content: captureWorkspace.Content}
+	app.Surfaces[store.WorkspaceCategory] = shell.Surface{Sidebar: captureWorkspace.CategorySidebar, Content: captureWorkspace.Content, SidebarHidden: captureWorkspace.CategorySidebarHidden}
 	data.History.LoadList()
-	app.Surfaces[store.WorkspaceCapture] = shell.Surface{Sidebar: captureWorkspace.Sidebar, Content: captureWorkspace.Content}
+	app.Surfaces[store.WorkspaceCapture] = shell.Surface{Sidebar: captureWorkspace.Sidebar, Content: captureWorkspace.Content, SidebarHidden: captureWorkspace.HistorySidebarHidden}
 	app.Counts = func() (int, int) { return activeTrafficCounts(data) }
 
 	options := mygo.WindowOptions{

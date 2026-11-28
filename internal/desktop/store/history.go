@@ -31,6 +31,9 @@ const (
 // HistoryBackend is the history service as the stores use it.
 type HistoryBackend interface {
 	ListHistoryKeys() ([]*proxyservice.HistoryMetadata, error)
+	// ListHistoryEntries transfers exclusive ownership of its result backing
+	// array on success. The backend retains no mutable access to the array;
+	// published summary records are immutable.
 	ListHistoryEntries(ctx context.Context, key string) ([]*logic.TrafficEntry, error)
 	GetHistoryEntry(ctx context.Context, key string, id uint64) (*proxyservice.TrafficEntry, error)
 	GetHistoryBody(ctx context.Context, key string, id uint64) (*proxyservice.TrafficBodyView, error)
@@ -330,7 +333,7 @@ func NewHistoryStore(rt Runtime, backend HistoryBackend) *HistoryStore {
 	traffic := &HistoryTraffic{rt: rt, backend: backend, Highlights: map[uint64]string{}}
 	return &HistoryStore{
 		rt: rt, backend: backend, Traffic: traffic,
-		Filter: NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return traffic.Entries, traffic.EntriesVersion }),
+		Filter: NewFilterStore(func() ([]*logic.TrafficEntry, uint64) { return traffic.Entries, traffic.EntriesVersion }, logic.TrafficSnapshot),
 	}
 }
 
@@ -394,7 +397,23 @@ func (s *HistoryStore) Select(key string) {
 	}
 	s.SelectedKey, s.LoadingHistory, s.LoadingHistoryKey = key, true, key
 	runtime.Run(s.rt.Jobs, jobHistoryLoad, func(ctx context.Context) ([]*logic.TrafficEntry, error) {
-		return s.backend.ListHistoryEntries(ctx, key)
+		entries, err := s.backend.ListHistoryEntries(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		// Decoded identities can differ from the file's index keys. Validate
+		// once, before publication; never retain a second identity index.
+		seen := make(map[uint64]struct{}, len(entries))
+		for _, entry := range entries {
+			if entry == nil {
+				continue
+			}
+			if _, duplicate := seen[entry.ID]; duplicate {
+				return nil, fmt.Errorf("history contains duplicate row ID %d", entry.ID)
+			}
+			seen[entry.ID] = struct{}{}
+		}
+		return entries, ctx.Err()
 	}, func(entries []*logic.TrafficEntry, err error) {
 		s.LoadingHistory, s.LoadingHistoryKey = false, ""
 		if err != nil {
@@ -410,7 +429,9 @@ func (s *HistoryStore) Select(key string) {
 		// Drop the previous history's filter results before the new entries
 		// replace it.
 		s.Filter.Release()
-		s.Traffic.Load(key, slices.DeleteFunc(slices.Clone(entries), func(entry *logic.TrafficEntry) bool { return entry == nil }))
+		// Successful reads transfer their array. DeleteFunc compacts in place
+		// and clears the removed tail without cloning the full pointer list.
+		s.Traffic.Load(key, slices.DeleteFunc(entries, func(entry *logic.TrafficEntry) bool { return entry == nil }))
 	})
 }
 

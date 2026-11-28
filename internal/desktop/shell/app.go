@@ -32,6 +32,9 @@ type Host struct {
 type Surface struct {
 	Sidebar func(c *ui.Context, theme nui.Theme)
 	Content func(c *ui.Context, theme nui.Theme)
+	// SidebarHidden runs on the main thread once when this visible sidebar
+	// is replaced or collapsed, before building its successor.
+	SidebarHidden func()
 }
 
 // SidePanel is a panel that slides over the window from its edge, as a
@@ -62,8 +65,11 @@ type App struct {
 	// MacOS selects the platform's title bar layout.
 	MacOS bool
 
-	environment environmentDialog
-	shutdownUI  bool
+	environment   environmentDialog
+	shutdownUI    bool
+	sidebarShown  bool
+	sidebarOwner  store.WorkspaceSection
+	sidebarHidden func()
 }
 
 // New returns the main window's interface.
@@ -125,6 +131,13 @@ func (a *App) workspace(c *ui.Context, theme nui.Theme) {
 func (a *App) workspaceMain(c *ui.Context, theme nui.Theme) {
 	workbench := a.Store.Workbench
 	surface := a.Surfaces[workbench.ActiveSection]
+	visible := workbench.SecondarySidebarVisible && surface.Sidebar != nil
+	if a.sidebarShown && (!visible || a.sidebarOwner != workbench.ActiveSection) {
+		if a.sidebarHidden != nil {
+			a.sidebarHidden()
+		}
+	}
+	a.sidebarShown, a.sidebarOwner, a.sidebarHidden = visible, workbench.ActiveSection, surface.SidebarHidden
 	content := func() {
 		ui.Column(c).Fill().MinHeight(0).Background(theme.MutedBackground).Children(func() {
 			if surface.Content != nil {

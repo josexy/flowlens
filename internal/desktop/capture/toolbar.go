@@ -11,6 +11,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/runtime"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/desktop/widgets"
 	proxyservice "github.com/josexy/flowlens/internal/services/proxy_service"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
@@ -34,6 +35,7 @@ type toolbarState struct {
 	proxyAction        ui.Handle
 	focusProxyAction   bool
 	hostOptions        []settingservice.LocalIPAddress
+	hostRevision       uint64
 
 	portOpen    bool
 	portWasOpen bool
@@ -356,18 +358,20 @@ func (w *Workspace) startStopButtons(c *ui.Context, theme nui.Theme) {
 		nui.FieldGroup(c.Key("proxy-control"), theme, nui.FieldGroupOptions{Disabled: busy}, items).
 			DimDisabled(false).Width(controlWidth).Shrink(0)
 		if proxy.Status.Running {
-			nui.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, []nui.MenuItem{{
-				ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
-				Disabled: busy,
-				// The trigger disappears after stopping; restore focus to the
-				// primary action without queueing focus on the hidden arrow.
-				Close: nui.Set(false),
-				OnSelect: func() {
-					w.toolbar.proxyMenu.Open = false
-					w.toolbar.focusProxyAction = true
-					w.toggleProxy()
-				},
-			}}, nui.MenuOptions{Label: locales.ToolbarProxyActions(), Disabled: busy}).MinWidth(controlWidth)
+			widgets.DropdownMenu(c.Key("proxy-menu"), theme, menuAnchor, &w.toolbar.proxyMenu, func() []nui.MenuItem {
+				return []nui.MenuItem{{
+					ID: "stop-proxy", Label: locales.ToolbarStop(), Icon: lucide.Power(), Color: nui.Error,
+					Disabled: busy,
+					// The trigger disappears after stopping; restore focus to the
+					// primary action without queueing focus on the hidden arrow.
+					Close: nui.Set(false),
+					OnSelect: func() {
+						w.toolbar.proxyMenu.Open = false
+						w.toolbar.focusProxyAction = true
+						w.toggleProxy()
+					},
+				}}
+			}, nui.MenuOptions{Label: locales.ToolbarProxyActions(), Disabled: busy}, busy).MinWidth(controlWidth)
 		}
 		toolbarButton(c, theme, toolButton{
 			key: "clear", icon: lucide.Trash(), tooltip: locales.ToolbarClear(), color: nui.Error,
@@ -432,9 +436,11 @@ func (w *Workspace) modeMenu(c *ui.Context, theme nui.Theme, config *settingserv
 			}
 		}}
 	}
-	nui.DropdownMenu(c.Key("mode-menu"), theme, anchor, &w.toolbar.modeMenu, []nui.MenuItem{
-		item("HTTP", settingservice.ProxyModeHTTP), item("SOCKS5", settingservice.ProxyModeSOCKS5),
-	}, nui.MenuOptions{Label: tooltip})
+	widgets.DropdownMenu(c.Key("mode-menu"), theme, anchor, &w.toolbar.modeMenu, func() []nui.MenuItem {
+		return []nui.MenuItem{
+			item("HTTP", settingservice.ProxyModeHTTP), item("SOCKS5", settingservice.ProxyModeSOCKS5),
+		}
+	}, nui.MenuOptions{Label: tooltip}, config.Mode, config)
 }
 
 func (w *Workspace) refreshLocalIPs() {
@@ -448,6 +454,7 @@ func (w *Workspace) refreshLocalIPs() {
 	}, func(options []settingservice.LocalIPAddress, err error) {
 		if err == nil {
 			w.toolbar.hostOptions = options
+			w.toolbar.hostRevision++
 		}
 	})
 }
@@ -462,8 +469,8 @@ func (w *Workspace) localIPs() []settingservice.LocalIPAddress {
 func (w *Workspace) hostMenu(c *ui.Context, theme nui.Theme, config *settingservice.ProxyConfig) {
 	tooltip := locales.ToolbarQuickHost(config.Host)
 	anchor := toolbarButton(c, theme, toolButton{key: "host", icon: lucide.Router(), tooltip: tooltip, quick: true})
-	var items []nui.MenuItem
-	if w.toolbar.hostMenu.Open {
+	items := func() []nui.MenuItem {
+		var items []nui.MenuItem
 		for _, option := range w.localIPs() {
 			value := option.Value
 			items = append(items, nui.MenuItem{ID: value, Label: option.Label, Radio: true, Checked: nui.Set(config.Host == value), OnSelect: func() {
@@ -472,15 +479,16 @@ func (w *Workspace) hostMenu(c *ui.Context, theme nui.Theme, config *settingserv
 				}
 			}})
 		}
+		return items
 	}
-	nui.DropdownMenu(c.Key("host-menu"), theme, anchor, &w.toolbar.hostMenu, items, nui.MenuOptions{
+	widgets.DropdownMenu(c.Key("host-menu"), theme, anchor, &w.toolbar.hostMenu, items, nui.MenuOptions{
 		Label: tooltip,
 		OnOpenChange: func(open bool) {
 			if open {
 				w.refreshLocalIPs()
 			}
 		},
-	})
+	}, w.toolbar.hostRevision, config.Host, config)
 }
 
 func (w *Workspace) portPopover(c *ui.Context, theme nui.Theme, config *settingservice.ProxyConfig) {
