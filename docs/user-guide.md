@@ -105,7 +105,7 @@ Filter traffic by domain, process, or URL structure. Multiple filters can remain
 
 Use `Tab` to enter lists, `Up`/`Down` to move, and `Enter`/`Space` to toggle filters. In the URL tree, `Left`/`Right` collapses or expands branches. Right-click or use `Menu` / `Shift+F10` for request actions.
 
-Leaving or collapsing Categories releases its derived lists and tree. Search, filters, and valid expansion/scroll choices survive for the same source. Closing or replacing a history clears its source-specific navigation.
+Search text, filters, and expanded nodes are kept when you switch pages or collapse the sidebar. Opening another history starts with fresh navigation.
 
 ### Bodies
 
@@ -147,20 +147,11 @@ Process attribution is enabled by default under **Settings > Proxy** and applies
 
 ## History and HAR
 
-Saved capture sessions appear under **History** and persist across restarts. Only the currently open history's decoded entries and loaded bodies stay in memory: opening another history replaces them, and closing the history tab releases them (including detail-view caches) and returns to live capture. FlowLens retains compact indexes for up to four recently accessed histories so reopening them stays fast.
+Saved capture sessions appear under **History** and persist across restarts. Use `Tab` to reach the list, arrow keys or `Home`/`End` to move, and `Enter` to open a session. Right-click or `Menu`/`Shift+F10` opens its actions.
 
-The session list builds visible rows as you scroll, so large lists do not render
-every session at once. Use `Tab` to reach the list, arrow keys or `Home`/`End` to
-navigate, and `Enter` to open a session. Right-click or `Menu`/`Shift+F10` opens
-the target session's actions; a menu closes when its row leaves view.
+Only the open history stays in memory. Opening another history replaces it, and closing the history tab releases it and returns to live capture. If a history fails to load, the previous one stays open. Compact indexes of the four most recently opened histories are kept so reopening them is fast.
 
-All rows in an open history remain searchable and sortable using their complete
-values. Clearing filters or sorting releases unused working buffers, and clearing
-a large selection releases its extra identity storage. If a replacement history
-cannot load, the previous history remains available. These releases make memory
-reclaimable; they do not force an immediate return of process memory to the OS.
-
-History details show complete headers and metadata before loading bodies. Open **Raw**, **Body**, or **WebSocket** when you need payload content; other detail tabs do not wait for it. When switching rows, the previous view stays briefly (up to 180 ms) until the new details are ready, so quick reads do not flash blank content or a spinner. Its content actions are disabled during the switch, while close stays available. Slower reads show loading feedback in the same layout. Raw copying becomes available after the payload loads.
+Details show headers and metadata first; bodies load only when you open **Raw**, **Body**, or **WebSocket**. When you switch rows, the previous view stays for up to 180 ms, with its content actions disabled, so fast reads do not flash a spinner. Slower reads show a loading indicator.
 
 ### Importing HAR Files
 
@@ -266,7 +257,7 @@ Open **Settings > Shortcuts** to search commands, record or clear bindings, and 
 
 ## Windows and Tray
 
-- Closing the main window hides FlowLens to the system tray; use the tray menu to restore or quit.
+- Closing the main window hides FlowLens to the system tray by default; use the tray menu to restore or quit. To quit on close instead, change **When closing main window** in **Settings > General**.
 - Only one instance runs per build mode; launching FlowLens again focuses the existing window.
 - Window size, position, and maximized state persist across launches when possible.
 - Settings open in a dedicated window and prompt before discarding unsaved edits.
@@ -276,7 +267,7 @@ Open **Settings > Shortcuts** to search commands, record or clear bindings, and 
 
 | Section | Contents |
 | --- | --- |
-| **General** | Theme colors, UI and code fonts, animations, and title-bar mode |
+| **General** | Theme colors, UI and code fonts, animations, title bar, and close behavior |
 | **Proxy** | Process attribution, upstream proxy, built-in or custom CA, extra trusted roots, and per-host client certificates |
 | **Python** | Interpreter selection, hook timeout, and global plugin master switch |
 | **Shortcuts** | In-app bindings and optional system-wide shortcuts |
@@ -307,7 +298,7 @@ On Unix-like systems, FlowLens creates directories with mode `0700` and database
 
 - Capture session body caches are deleted automatically once no longer needed: after **Save and Restart** or **Discard and Restart**, after the final shutdown save succeeds, and on the next launch if a previous exit was unclean or the final save failed. Saved histories and cached process icons remain intact.
 - **Storage cleanup** (**Settings > Storage**) removes either caches only, or caches together with the current capture and readable saved histories. Cache-only cleanup archives a non-empty current capture to history first. History files in unsupported/unknown formats are preserved, and cleanup never deletes `flowlens.db`, API Collections, preferences, certificates, or logs.
-- Open windows react to cleanup immediately without restarting, even if Settings is closed first: the history list reflects archived or cleared histories, a removed open history closes back to live capture, Request Editor tabs clear references to deleted draft-cache files while keeping the rest of each draft, and process icons reload. If cleanup partially fails, the error appears after windows refresh what succeeded.
+- Open windows update immediately: the history list refreshes, a removed open history returns to live capture, Request Editor tabs drop references to deleted draft-cache files but keep the rest of each draft, and process icons reload. If cleanup partly fails, the error appears after the successful parts are applied.
 
 ### Check FlowLens Memory Use
 

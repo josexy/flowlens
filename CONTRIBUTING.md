@@ -43,7 +43,7 @@ The Taskfile sets `CGO_ENABLED=0` for ordinary builds and tests. Direct MyGo com
 
 ## Validation
 
-Group tests by behavior within the owning package. Extend an existing test file or table-driven case when it covers the same area; use a separate file for a distinct feature, fixture, integration boundary, or platform build constraint. Remove a test only when another test covers the same setup, assertions, and failure path. File count alone is not evidence of redundant coverage.
+Add tests to the existing file for the same feature, preferably as a table case. Create a test file only for a distinct feature, a shared fixture or benchmark set, an integration boundary, or a platform build constraint. Delete a test only when another one covers the same setup, assertions, and failure path.
 
 Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#verification) maps each area to its test packages. Before requesting review, run the full check:
 

@@ -73,60 +73,53 @@ Little allocation can delay GC, pools and cleanups can survive additional cycles
 
 History scans skip unused headers, trailers, certificates, and TLS fields. Details load metadata first and bodies only when needed. Closing or replacing a selection cancels reads and rejects late results. Export, resend, Copy as cURL, and Edit Request load full records when needed.
 
-## Application-owned UI resources
+## Application-Owned UI Resources
 
-- **App icon:** `widgets.AppIcon` shares one bitmap decoded at 256 pixels. Title bars and Software Update display it at 18 and 48 DIPs; GPU textures are per window.
-- **Traffic table:** `widgets.Table` uses `nui.KeyedTableState[*logic.TrafficEntry, uint64]` and `SetBorrowedRows`. Nuxt borrows filtered/sorted rows, retains one ordered-ID snapshot and selection, and compacts selection after clear/shrink. FlowLens validates identities and rebinds published rows on the main thread. Other tables use Nuxt's copied string-keyed API.
-- **Cells:** Each built traffic cell retains a decoration container for backgrounds, markers, and hit testing. `BuildCell` supplies it only during its synchronous callback. Drawing callbacks retain visual values, never elements. Native controls own selection, keyboard input, and accessibility.
-- **Labels:** Table previews are bounded to 256 UTF-8 bytes, including the ellipsis, without splitting runes. Search, sorting, copy, inspection, and export use full values. Visual clipping alone does not bound text shaping.
-- **Choices and menus:** State is per window and owns submitted items. `widgets.SelectState` resubmits on data/locale changes. Menu revisions must cover descriptors and captured callback targets; context menus prepare on opening, while dropdowns also prepare when closed. Selection callbacks copy value snapshots into application state. Tables use `OnChange` for selection, cursor, sort, and layout notices.
+- **App icon:** `widgets.AppIcon` shares one bitmap decoded at 256 pixels; title bars and Software Update draw it at 18 and 48 DIPs. GPU textures are per window.
+- **Traffic table:** `widgets.Table` binds `nui.KeyedTableState[*logic.TrafficEntry, uint64]` with `SetBorrowedRows`. Nuxt keeps the borrowed rows, one ordered-ID snapshot, and the selection, and compacts selection storage after a clear or shrink. Other tables use Nuxt's copied, string-keyed API.
+- **Cells:** Each built traffic cell keeps one decoration container for backgrounds, markers, and hit testing. `BuildCell` passes it only during the callback, and drawing callbacks keep visual values, never elements.
+- **Labels:** Cell text is cut to 256 UTF-8 bytes, including the ellipsis, without splitting runes. Search, sorting, copy, inspection, and export use full values. Visual clipping alone does not bound text shaping.
+- **Choices and menus:** `widgets.SelectState` resubmits options only when its key, usually the locale, changes. Menu revisions must cover the items and the targets their callbacks capture. Context menus build items when opened; dropdowns also build them while closed.
 
 ### Live and Snapshot Policies
 
-Live capture uses `logic.TrafficLive`: filters reuse matching caches and pointer buffers, while sorters cache ID-keyed comparison values. History uses `logic.TrafficSnapshot`, selected explicitly and retained across resets.
+Live capture uses `logic.TrafficLive`: the filter caches per-entry matches and reuses its buffers, and the sorter caches comparison values by ID. History uses `logic.TrafficSnapshot`:
 
-A successful `ListHistoryEntries` transfers exclusive ownership of its result array to the store. Nil compaction clears its tail in place; duplicate IDs fail before publication, preserving the files and previous history. Published records are immutable, and test backends clone reusable fixture arrays.
+- A successful `ListHistoryEntries` hands its result array to the store, which compacts nil entries in place. Duplicate IDs fail the load and keep the previous history. Published records are immutable, so test backends return clones of their fixtures.
+- Filtering borrows the source when no search, tab, or category filter applies and owns a result buffer only for the filters in use. A category change reuses the current search result. Buffers are compacted when their capacity exceeds `max(64, 4 * length)` and released when empty or on release.
+- `Version` changes with every snapshot result, even when IDs and lengths match. `BaseVersion` changes only with the source or search/tab, so category facets can follow data outside the selected subset.
+- Sorting keeps only the ordered pointers. Sort keys, including lowercase copies of long text, are temporary, so text sorts still have a transient peak.
 
-Snapshot filtering borrows the source in All mode, owns search/tab results when needed, and adds a final result only for category filters. Source revisions invalidate aliases even when IDs and lengths match. `BaseVersion` invalidates facets independently of the final subset. Release clears owned buffers; empty results release them, and capacity above `max(64, 4 * result length)` is compacted.
-
-Snapshot sorting retains ordered pointers only. Comparison records and folded text become reclaimable after sorting; source/result revisions and sort state control recomputation. Unsorted, empty, and reset states release output. Long mixed-case paths still need temporary folded strings, so numeric-sort retention does not bound text-sort peaks.
-
-All filter/sort results are borrowed until the next refresh or release. Long-running actions and deletion must clone any snapshot they retain.
+Every filter and sort result is borrowed until the next refresh or release. Background actions and deletion must copy what they keep.
 
 ## Sidebar Cache Lifetimes
 
-Categories cache facets by source, base revision, selected hosts/processes, and locale; structure roots follow the final-result revision. Search prepares filtered items only when inputs change. Live rebuilds retain the 250-ms throttle; source switches and user changes refresh promptly.
+- **Categories:** Facets are rebuilt when the source, `BaseVersion`, selected hosts/processes, or locale changes; the structure tree follows `Version`; sidebar search only re-filters prepared items. Live capture rebuilds at most every 250 ms, while user actions refresh at once.
+- **Hiding Categories:** Leaving the page or collapsing the sidebar releases entries, summaries, tree and listbox state, handles, and menus. Search, filters, expansion, and scroll survive for the same source. Reopening rebuilds once and drops expansion for nodes that no longer exist; a table filter that hides nodes while the sidebar is visible keeps their expansion. Closing or replacing the source clears its navigation, even while hidden.
+- **History list:** A native keyed list builds only visible session rows, so UI cost does not grow with the number of saved sessions (metadata still does). Activation uses native notices, so reordering cannot open a session. The row menu follows its session key and closes when the row scrolls out, is removed, or the sidebar hides.
 
-Hiding Categories releases derived entries, summaries, tree/listbox state, handles, and menus. Search, filters, and valid expansion/scroll intent survive for the same source. State is replaced by pointer because hiding can occur between build and layout. Reopening rebuilds once; source replacement or closure clears source-specific intent, including while hidden. Empty results also release obsolete nodes.
+## Table and Sidebar Benchmarks
 
-History uses a native keyed list over session metadata. Only visible rows build controls. Pointer activation and keyboard Enter use native notices; reordering alone cannot open a session. One context menu follows its session key and closes on scroll, removal, or hide. Metadata still scales with the number of saved sessions.
+Run allocation benchmarks separately from profiling. In PowerShell, set `$env:CGO_ENABLED = "0"` and `$env:FLOWLENS_TABLE_HEAP_DIR` instead of the inline variables.
 
-## Matched History-Table Acceptance Fixtures
-
-Run allocation measurements separately from profiling:
-
-```powershell
-$env:CGO_ENABLED = "0"
+```sh
+export CGO_ENABLED=0
 go test ./internal/desktop/capture -run '^$' -bench '^BenchmarkTraffic(TableStorage|TableStress|TableLive|TableLongPathScroll|TableViewport)$' -benchmem -benchtime=20x -count=3
 go test ./internal/desktop/capture -run '^$' -bench '^Benchmark(HistorySidebar|CategorySidebar)$' -benchmem -benchtime=20x -count=3
 
-$env:FLOWLENS_TABLE_HEAP_DIR = Join-Path $env:TEMP "flowlens-table-profiles"
-go test ./internal/desktop/capture -run '^$' -bench '^BenchmarkTrafficTableStress$/^Rows50000$/^Idle$' -benchtime=1x -memprofilerate=1 -count=1
-go tool pprof -sample_index=inuse_space -top (Join-Path $env:FLOWLENS_TABLE_HEAP_DIR "BenchmarkTrafficTableStress-Rows50000-Idle.pprof")
-go tool pprof -sample_index=inuse_objects -top (Join-Path $env:FLOWLENS_TABLE_HEAP_DIR "BenchmarkTrafficTableStress-Rows50000-Idle.pprof")
-Remove-Item Env:FLOWLENS_TABLE_HEAP_DIR
+# Heap profile of one warmed workload, written to FLOWLENS_TABLE_HEAP_DIR.
+FLOWLENS_TABLE_HEAP_DIR=/tmp/flowlens-profiles go test ./internal/desktop/capture -run '^$' -bench '^BenchmarkTrafficTableStress$/^Rows50000$/^Idle$' -benchtime=1x -memprofilerate=1 -count=1
+go tool pprof -sample_index=inuse_space -top /tmp/flowlens-profiles/BenchmarkTrafficTableStress-Rows50000-Idle.pprof
 ```
 
-| Fixture | Measures |
+| Benchmark | Measures |
 | --- | --- |
-| Storage | Bookkeeping after two GCs, with source records kept alive and no UI. All, filtered, sorted, and filtered+sorted are separate workloads. Selection is measured separately; shrink keeps two rows. |
-| Stress | Warmed UI heap after bookkeeping exists; mutable `Patch1` exercises live policy. |
-| Live | Actual live updates, including selection, sorting, and churn. |
-| LongPathScroll | Newly visible rows with 64-byte through 64-KiB paths. |
-| Viewport | Rows/cells, node/state counts, and UI heap at 1160-DIP width, three heights, and 5k/50k/100k rows. |
-| HistorySidebar | UI for 100/1000 sessions at 240 × 714 DIP, excluding metadata. |
-| CategorySidebar | Derived data and UI for 100k rows, with unchanged or changing search, excluding original records. |
+| `TableStorage` | Table bookkeeping after two GCs, with no UI and the source records kept alive. All, filtered, sorted, and filtered+sorted run separately; selection and shrink-to-two-rows are separate cases. |
+| `TableStress` | Warmed UI heap; the mutable `Patch1` case uses the live policy. |
+| `TableLive` | Live updates with selection, sorting, and churn. |
+| `TableLongPathScroll` | Newly visible rows with 64-byte to 64-KiB paths. |
+| `TableViewport` | Built rows/cells, node and state counts, and UI heap at 1160 DIP wide, three heights, and 5k/50k/100k rows. |
+| `HistorySidebar` | UI for 100 and 1000 sessions at 240 × 714 DIP, excluding metadata. |
+| `CategorySidebar` | Derived data and UI for 100k rows, with and without search changes, excluding records. |
 
-Compare medians from matched runs. `B/op` is cumulative allocation, not retained heap or peak memory. UI, bookkeeping, selection, and original records are separate measurements; whole-process profiles overlap them and must not be added to them.
-
-Use real HBIN files and native idle/recovery runs for process-memory claims. Outstanding native acceptance is tracked in the [change tasks](../../openspec/changes/reduce-history-table-retained-memory/tasks.md).
+Compare medians of matched runs. `B/op` is cumulative allocation, not retained or peak memory. Table bookkeeping, selection, UI heap, and source records are separate measurements; do not add whole-process profiles to them. Process-memory claims need real HBIN files and native idle/recovery runs; native acceptance for this work is tracked in the `reduce-history-table-retained-memory` OpenSpec change.

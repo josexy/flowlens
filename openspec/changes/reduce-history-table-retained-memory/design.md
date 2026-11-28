@@ -23,7 +23,7 @@ Existing specifications preserve complete search/sort/action values, all history
 **Non-Goals:**
 
 - No service-model, codec, persistent settings, header-order, metric-unit, body-availability, or file-format changes.
-- No generic table framework, second production renderer, copied MyGo internals, `unsafe` renderer access, or dependency fork/update.
+- No generic table framework, second production renderer, copied MyGo internals, `unsafe` renderer access, MyGo change, or dependency fork. The only dependency update is the published NuxtUI-Go table API in Decision 4.
 - No forced GC/scavenging, automatic global text-cache flush, paging/capping of history, asynchronous filtering/sorting, or removal of the existing loading/detail transition policy.
 - No per-cell node-reduction target in this change. That requires an upstream API described under Decision 8.
 
@@ -49,7 +49,7 @@ The uncapped benchmarks must explicitly select the policy they intend to exercis
 
 ### 2. Borrow history filter views, and keep owning buffers separate
 
-Snapshot filtering scans only after source version, search/tab, or host/process inputs change. It retains no per-entry predicate map.
+Snapshot filtering rescans the source only after a source version or search/tab change; a host/process change filters the existing base view. It retains no per-entry predicate map.
 
 | Predicate state | Base view | Final filtered view |
 | --- | --- | --- |
@@ -92,11 +92,11 @@ Nuxt's `BuildCell` callback supplies the existing styled content element as a bu
 
 #### Compatibility and adoption gate
 
-The original direct-native candidate is a historical measurement stage, not the final architecture. Re-run the same render/interaction and Decision 9 storage/allocation/viewport gates after restoring the shared Nuxt path. Preserve one cell decoration container, all columns/fill/empty states, Nuxt-derived row height/colors/borders, header overlays, context menus, HAR drop and persisted layouts. Do not retain two production renderers or a display-label cache.
+Apply the same render/interaction and Decision 9 storage/allocation/viewport gates to the shared Nuxt path. Preserve one cell decoration container, all columns/fill/empty states, Nuxt-derived row height/colors/borders, header overlays, context menus, HAR drop and persisted layouts. Do not retain two production renderers or a display-label cache.
 
 The library addition must preserve existing copied string-table behavior and typed callbacks. Add borrowed numeric/string ownership, identity, sorting, invalidation, selection-release and retained-memory regressions in NuxtUI-Go, update its component docs and bilingual showcase, and run its required headless checks. Native/browser interaction remains unverified under the user's headless-only instruction.
 
-Use an ignored local Go workspace to compile both source repositories while developing. Do not fabricate a pseudo-version, edit the module cache, or commit a personal replace/workspace path. Library commits/publication require explicit authorization under its AGENTS.md; after publication, pin the resolvable dependency and verify FlowLens with `GOWORK=off` before completing the dependency-delivery task.
+FlowLens pins the published NuxtUI-Go release and verifies it with `GOWORK=off`; it commits no `replace` directive or workspace file.
 
 ### 5. Transfer history-load slice ownership once
 
@@ -121,7 +121,7 @@ Store string/scalar key snapshots, not borrowed result slices as equality eviden
 
 Add a narrow sidebar-hidden callback to the existing shell `Surface` contract. The shell tracks the previously visible sidebar and calls its callback once when the active section changes or the secondary sidebar collapses, before subsequent builds. Wire Categories to `Workspace` cleanup through existing app assembly; call from the main thread, with no subscriptions or goroutines. Tests that mount capture directly exercise the same cleanup method.
 
-Split category derived-data release from source reset. Hide releases entry references, facets, roots, prepared items, tree nodes, handles, and menu state; it preserves search text, selected host/process keys in the store, expanded node keys, active-leaf intent, and scroll intent for the same source. User expansion keys may legitimately scale with user actions. Replace tree pointers rather than mutating an already-built tree. Reopening reconstructs once from current data, prunes no-longer-existing intent keys, restores valid selection/expansion, and clamps scroll. Source close/replacement clears source-specific intent as existing reset does. Hidden menus cannot retain or act on old source entries.
+Split category derived-data release from source reset. Hide releases entry references, facets, roots, prepared items, tree nodes, handles, and menu state; it preserves search text, selected host/process keys in the store, expanded node keys, active-leaf intent, and scroll intent for the same source. User expansion keys may legitimately scale with user actions. Replace tree pointers rather than mutating an already-built tree. Reopening reconstructs once from current data, prunes no-longer-existing intent keys, restores valid selection/expansion, and clamps scroll. While the sidebar is visible, a table filter can hide nodes only temporarily, so their intent is kept. Source close/replacement clears source-specific intent as existing reset does. Hidden menus cannot retain or act on old source entries.
 
 No work runs merely to keep a hidden sidebar cache fresh. This callback covers workbench navigation/collapse, not native hide-to-tray idle policy or a new shell-window lifecycle.
 

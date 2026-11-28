@@ -90,29 +90,21 @@ On each native test host, `CGO_ENABLED=0 go test ./internal/desktop/capture ./in
 
 No Python Worker/SDK, network/codec, or website implementation changes are planned. Their dedicated integration/build workflows are not added to this change; `task verify` retains the existing full application checks.
 
-## Prior direct-native acceptance evidence (2026-11-27)
+## Acceptance evidence
 
-The records below describe the preceding candidate. The user subsequently requested Nuxt integration; tasks 5.1–5.5 and the final headless gates are reopened for that architecture. Tasks 8.3 and 8.4 remain unverified. Task 5.6 tracks dependency publication separately.
+Measurements below ran on Windows amd64 with Go 1.27.3 during the Nuxt reintegration, before the v0.2.0 pin and the review fixes; they were not repeated afterwards. Headless results do not establish native process-memory recovery.
 
-- **8.1:** Final `task verify` passed formatting, lint, UI vet, both catalogs and repository-wide tests. The final render and focused sidebar suites passed; 32 table images match the baseline, and all 16 sidebar matrix images were inspected. Settings/update/startup windows and unrelated service owners were not altered; no new interface copy required catalog generation.
-- **8.2:** Every Decision 9 headless gate passed. Final table/sidebar workloads have three samples each; all four 100k snapshot storage budgets, live allocations, long-path and viewport limits pass. The full-sampling profile and three repeated lifecycle tests separate original records, selected IDs, derived storage and UI heap. Small after-GC residuals are reported, not described as exact zero or native recovery.
-- **8.3 — open:** Windows native acceptance was interrupted; this continuation was explicitly limited to headless work without Computer Use. Actual-HBIN interaction/failure fallback, 100%/150% scale, natural idle samples and separate forced-collection recovery remain unverified. A successful build and partial earlier interaction are insufficient.
-- **8.4 — open:** macOS and Linux native hosts were unavailable. Their native matrices and targeted on-host Go tests have not run; no headless or cross-compilation result is substituted.
-- **8.5:** Implementation, both capability deltas, documentation and workload-specific byte claims were audited. The former adapter is retained only as an explicitly labeled dependency microbenchmark. Cell-decoration and shared text-cache work remain deferred. `openspec validate reduce-history-table-retained-memory --strict --no-interactive` and `git diff --check` passed.
+- **5.1–5.3:** NuxtUI-Go's typed, copied, and borrowed table tests pass, as do FlowLens's capture/widgets/shortcuts suites and UI vet. The local native-table adapter is removed. All 32 table renders match the original baseline and 16 sidebar renders match the preceding candidate.
+- **5.4 / 8.2:** All 65 table and 4 sidebar workloads have three samples. Snapshot storage is 0.77/1.68/1.53/2.45 MiB for All/Filtered/Sorted/Filtered+Sorted, within the Decision 9 gates; stable 100k `Patch1` is 21,296 B/op and 484 allocs/op. Every Decision 9 gate passes. Lifecycle tests and a full-sampling profile separate record bytes, selected IDs, working storage, and UI heap.
+- **5.5:** NuxtUI-Go `task lint:go`, `task verify`, `task website:check`, `task website:build`, and the generated-skill check pass. Browser and native interaction were not run.
+- **5.6:** NuxtUI-Go [PR #18](https://github.com/josexy/nuxt-ui-go/pull/18) is merged and released as v0.2.0 (`d7d6a6c`), which `go.mod` pins without a `replace` directive. `go mod verify`, `go mod tidy -diff`, and `GOWORK=off CGO_ENABLED=0 task verify` pass.
+- **8.1:** `task verify` and the complete render suite pass. Settings, update, and startup windows, interface catalogs, and unrelated service owners are unchanged.
+- **8.5:** Implementation, both deltas, docs, and evidence agree. Cell-wrapper removal and shared text-cache trimming remain deferred. `openspec validate reduce-history-table-retained-memory --strict --no-interactive` and `git diff --check` pass.
+- **Review fixes:** Category expansion is pruned only when the sidebar reopens, so a temporary table filter no longer discards it, and a snapshot category change reuses the current search result instead of rescanning the source. Both have regression tests, and `task verify` passes on Linux arm64 with Go 1.27.4.
+- **8.3 — open:** Windows native acceptance with real HBIN histories, failure fallback, 100%/150% scaling, natural idle samples, and forced-collection recovery has not run.
+- **8.4 — open:** macOS and Linux native acceptance has not run. Cross-builds, headless tests, and image comparisons do not substitute for it.
 
-Native tasks 8.3 and 8.4 remain unchecked. The current Nuxt verification and dependency delivery are recorded below. Do not archive the change or report complete native acceptance from the headless evidence.
-
-## Nuxt reintegration evidence (2026-11-27)
-
-- **5.1–5.3:** Nuxt's typed/copied/borrowed ownership, selection, sorting and callback tests pass; FlowLens's capture/widgets/shortcuts suite and UI vet pass. The local native-table adapter is removed. All 32 table renders match the original baseline, and 16 sidebar renders match the preceding verified candidate. Nuxt supplies the existing styled element only as a build callback parameter.
-- **5.4 / 8.2:** All 65 table and 4 sidebar workloads have three final samples. Snapshot storage remains 0.77/1.68/1.53/2.45 MiB; stable 100k Patch1 is 21,296 B/op and 484 allocs/op. Every allocation/storage/viewport gate passes. Three repeated lifecycle tests and a full-sampling profile distinguish record bytes, selected IDs, working storage and UI heap; no native memory reduction is inferred.
-- **5.5:** Nuxt `task lint:go`, `task verify`, `task website:check`, `task website:build` and generated-skill `-check` pass. Website type/configuration/snippet/preview checks pass and 302 routes build. Static icon requests emitted timeout warnings; browser/native interaction was not performed under the headless-only instruction. Only the table generated skill reference changes.
-- **8.1:** Final FlowLens `task verify` and the complete render suite pass after the callback-lifetime fix. Settings/update/startup windows, interface catalogs and unrelated service owners remain unchanged by this follow-up.
-- **8.5:** The revised architecture, both unchanged behavior deltas, public library contract, docs, local evidence and remaining delivery/platform limits are aligned. Cell-wrapper removal and shared text-cache trimming remain deferred.
-- **5.6:** After explicit authorization, NuxtUI-Go commit `ff3b88e73c27f4abdd2cea8b521732ac5f76e54c` was pushed to `codex/table-borrowed-rows` and [PR #18](https://github.com/josexy/nuxt-ui-go/pull/18) was opened against main. FlowLens pins `v0.1.2-0.20261127051345-ff3b88e73c27`. Module checksums and downloaded implementation hashes are verified; `go mod tidy`, `go mod verify`, and `GOWORK=off CGO_ENABLED=0 task verify` pass. The temporary workspace files were backed up and removed; default resolution uses the published module without a local replace. FlowLens remains uncommitted.
-- **8.3 / 8.4 — open:** Windows recovery/native acceptance and macOS/Linux on-host acceptance remain unverified. Cross-builds, headless tests and image comparisons are not substitutes.
-
-PR #18 is now merged into main, with successful library and website CI checks.
+Do not archive this change until 8.3 and 8.4 pass.
 
 ## Workflow follow-up
 
