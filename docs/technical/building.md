@@ -1,14 +1,10 @@
 # Building and Packaging
 
-Building FlowLens requires Go 1.27.3 or newer, the MyGo CLI pinned in `go.mod` (`go tool mygo`), and preferably [Task](https://taskfile.dev). Ordinary builds and Go tests require no C/Objective-C compiler, Node.js, or npm. Python request hooks use an external Python 3 interpreter at runtime.
+Use the Go version in [go.mod](../../go.mod) or newer, the pinned MyGo CLI (`go tool mygo`), and preferably [Task](https://taskfile.dev). Ordinary builds and tests need no C compiler or Node.js. Python hooks use an external Python 3 interpreter.
 
 ## Native UI Dependency
 
-Nuxt UI Go is pinned to [v0.2.0](https://github.com/josexy/nuxt-ui-go/releases/tag/v0.2.0), which includes the borrowed-row and collection optimizations from PRs #18 and #20. No local checkout or `replace` directive is required. MyGo remains at v0.10.0.
-
-The dependency's choice controls own submitted data. Keep each control's state per window and submit options only on initialization or a data/locale change. `widgets.SelectState` prepares fixed or localized choices; category lists and font menus submit their snapshots explicitly. Multi-selection uses `nui.SelectionState`, with snapshots copied to application state in change callbacks.
-
-Shared menu controls cache submitted items. Their revision arguments must cover changes to both descriptors and captured callback targets, including asynchronous data and settings updates. Context menus prepare lazily on opening; dropdowns prepare while closed too, preserving first-open keyboard navigation. Tables use the combined `OnChange` notification for native selection, cursor, sort and column-layout changes.
+MyGo and Nuxt UI Go use the published versions pinned in `go.mod`; no sibling checkout or `replace` directive is required. UI ownership and cache lifetimes are described in [Memory Diagnostics](memory-diagnostics.md#application-owned-ui-resources).
 
 ## Cgo and Platform Tools
 
@@ -17,7 +13,21 @@ Task, CI, release verification, and packaging all run with `CGO_ENABLED=0` on Wi
 - **Cross-compilation:** Building executables requires no macOS SDK.
 - **macOS packaging:** Application signing and DMG creation still run on macOS using `codesign` and `hdiutil` (install the Xcode Command Line Tools if needed). System frameworks remain runtime dependencies, so compilation success alone does not verify native behavior.
 - **Race detector:** The optional `task test:race` task sets `CGO_ENABLED=1` on all desktop platforms and requires a supported C compiler. Pass package paths after `--` to narrow the run.
-- **Minimum macOS version:** `mygo.json` sets `macos.minimumSystemVersion` to `13.0` because Go 1.27 requires macOS 13 or later and no longer supports macOS 12 ([Go 1.27 Darwin release notes](https://go.dev/doc/go1.27#darwin)). Task and release packaging pass `MYGO_LDFLAGS=-macos=13.0` to embed Mach-O deployment metadata without C compiler flags; supply the same environment variable when invoking `go tool mygo` directly, or pass `-ldflags=-macos=13.0` for plain Darwin `go build`. Deployment metadata does not prove runtime compatibility—launching and testing both architecture slices on macOS 13.0 remains a required acceptance check.
+- **Minimum macOS version:** `mygo.json` sets `macos.minimumSystemVersion` to `13.0`. Task and release packaging also pass `MYGO_LDFLAGS=-macos=13.0` to embed Mach-O deployment metadata. Set this variable when invoking `go tool mygo` directly, or pass `-ldflags=-macos=13.0` to a plain Darwin `go build`. Test both architectures on macOS 13.0; deployment metadata alone does not verify compatibility.
+
+Without Task, start development with these environment settings:
+
+```sh
+CGO_ENABLED=0 MYGO_LDFLAGS=-macos=13.0 go tool mygo dev
+```
+
+```powershell
+$env:CGO_ENABLED = "0"
+$env:MYGO_LDFLAGS = "-macos=13.0"
+go tool mygo dev
+```
+
+The Go linker ignores the macOS flag on other platforms.
 
 ## CI Verification
 
@@ -100,15 +110,6 @@ To cut a release:
 
 ## Project Website
 
-The project homepage is a static Astro and TypeScript site in `_website/`. It is separate from the application:
+The optional Astro site in `_website/` has its own Node.js 24 workflow. Go tooling skips this directory, and application verification and packaging do not need Node.js. See the [website guide](../../_website/README.md) for development and deployment.
 
-- Go skips directories whose names start with `_`, so Go builds, tests, lint, and `go mod tidy` never read it, even with `node_modules` installed.
-- `task verify`, CI, and release packaging never need Node.js.
-
-To work on the site, install Node.js 24 and use the opt-in `website:install`, `website:dev`, `website:check`, and `website:build` tasks. See [_website/README.md](../../_website/README.md) for details.
-
-- **Download links:** `_website/src/lib/release.ts` maps release assets to download buttons using the same names that the release workflow's `check-assets` job requires. Keep the two in step when asset names change. A missing asset links to its release page.
-- **Deployment:** `.github/workflows/website.yml` deploys from `main` to GitHub Pages on a custom domain, which is set as `site` in `_website/astro.config.mjs`. Domain and DNS setup are in [_website/README.md](../../_website/README.md#custom-domain). The workflow:
-  - Runs on pushes that change the site's inputs, on manual dispatch, and when a release is published (by dispatching a rebuild on `main`).
-  - Pull requests only build and check the site.
-  - Deployment builds fail rather than publish fallback links if the GitHub API cannot supply the latest release.
+Keep `_website/src/lib/release.ts` and its tests aligned with the release workflow's `check-assets` job whenever asset names change.
