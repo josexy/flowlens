@@ -312,7 +312,8 @@ func (w *Workspace) selectItem(item string) {
 	w.lastActive = workspace.ActiveKey
 }
 
-// syncTabs keeps the sidebar selection and the active workspace tab equal.
+// syncTabs keeps the capture selection and active workspace tab equal without
+// changing the selected sidebar section or expanding a collapsed sidebar.
 func (w *Workspace) syncTabs() {
 	workspace := w.Data.Workspace
 	if workspace == nil {
@@ -327,7 +328,7 @@ func (w *Workspace) syncTabs() {
 	if workspace.ActiveKey == w.lastActive {
 		if _, open := historyKeyOf(workbench.CaptureSelection); open && workspace.FindTab(logic.HistoryTabKey) == nil {
 			w.lastSelection = store.CaptureItemLive
-			workbench.SelectCaptureItem(store.CaptureItemLive)
+			workbench.CaptureSelection = store.CaptureItemLive
 		}
 		return
 	}
@@ -342,9 +343,7 @@ func (w *Workspace) syncTabs() {
 	if _, open := historyKeyOf(selection); open && workspace.FindTab(logic.HistoryTabKey) == nil {
 		selection = store.CaptureItemLive
 	}
-	if selection != workbench.CaptureSelection {
-		workbench.SelectCaptureItem(selection)
-	}
+	workbench.CaptureSelection = selection
 	w.lastSelection = selection
 }
 

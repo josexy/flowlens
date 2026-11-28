@@ -4,6 +4,8 @@ This guide covers day-to-day workflows in FlowLens. For installation and buildin
 
 Use the sidebar to switch workbench pages. Drag its divider to resize it, or click the active navigation icon to collapse it. Settings open in a separate window; **Settings > General** controls interface and code font sizes.
 
+Switching workspace tabs or closing a history tab keeps the current sidebar section and its expanded or collapsed state. Categories follows the traffic source selected by the capture or history tab.
+
 ## Contents
 
 - [Set Up Capture](#set-up-capture)
