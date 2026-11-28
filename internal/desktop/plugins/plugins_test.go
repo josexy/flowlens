@@ -10,6 +10,7 @@ import (
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 	"github.com/josexy/flowlens/internal/desktop/pythonapi"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/shortcuts"
@@ -663,4 +664,10 @@ func TestHelpSlidesOverTheWindow(t *testing.T) {
 	if _, ok := f.tester.AccessByRole(ui.RoleDialog, messages.Title); ok {
 		t.Fatal("the help stays on show after closing")
 	}
+}
+
+func selectionAt(offset int) editor.Selection { return editor.Selection{Anchor: offset, Head: offset} }
+
+func editorRequest(offset int) editor.CompletionRequest {
+	return editor.CompletionRequest{Offset: offset}
 }

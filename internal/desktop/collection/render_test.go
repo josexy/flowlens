@@ -114,3 +114,13 @@ func TestCollectionDialogsKeepFieldsAndCancelStable(t *testing.T) {
 		}
 	}
 }
+
+func TestToolbarActionsShowTooltips(t *testing.T) {
+	f := newFixture(t)
+	folder := f.folder("", "Folder")
+	f.request(folder, "Req", "http://example.com/")
+	f.reload()
+	for _, label := range []string{locales.ApiCollectionRefresh(), locales.ApiCollectionNewFolder(), locales.ApiCollectionExpandAll(), locales.ApiCollectionMultiSelect()} {
+		rendertest.RequireTooltip(t, f.tester, label, label)
+	}
+}
