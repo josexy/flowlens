@@ -2,7 +2,7 @@
 
 ## Context
 
-See [proposal.md](proposal.md) for the motivation and [the reviewed report](../../../docs/technical/history-table-memory-review.md) for the `d932ef5` baseline. This design changes application-owned working storage, not the stored traffic model.
+See [proposal.md](proposal.md) for the motivation and `d932ef5` baseline measurements. This design changes application-owned working storage, not the stored traffic model.
 
 The pinned Nuxt table always copies rows into string-keyed records and retains validation storage. It has no borrowed-row/numeric-key path. The pinned MyGo table already owns native selection, column layout, virtualization, and accessibility, but its body-cell callback does not expose the cell element for decoration. These are separate constraints: removing the full-list adapter is possible without pretending that its per-cell decoration container can also disappear.
 

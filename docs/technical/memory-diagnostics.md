@@ -129,4 +129,4 @@ Remove-Item Env:FLOWLENS_TABLE_HEAP_DIR
 
 Compare medians from matched runs. `B/op` is cumulative allocation, not retained heap or peak memory. UI, bookkeeping, selection, and original records are separate measurements; whole-process profiles overlap them and must not be added to them.
 
-The [history-table review](history-table-memory-review.md#implementation-acceptance-evidence) records the `d932ef5` baseline, measured implementation stages, and outstanding native acceptance. Use real HBIN files and native idle/recovery runs for process-memory claims.
+Use real HBIN files and native idle/recovery runs for process-memory claims. Outstanding native acceptance is tracked in the [change tasks](../../openspec/changes/reduce-history-table-retained-memory/tasks.md).

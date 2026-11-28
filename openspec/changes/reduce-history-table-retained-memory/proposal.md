@@ -2,7 +2,7 @@
 
 ## Why
 
-The reviewed `d932ef5` implementation greatly reduces update allocations, but a 100,000-row history still retains about 11.48 MiB of unsorted bookkeeping or 22.25 MiB when numerically sorted, before records and rendered UI. The [memory review](../../../docs/technical/history-table-memory-review.md) identifies duplicated table identities, live-oriented history caches, and sidebar work that can be removed without limiting searchable history or changing stored traffic.
+At baseline `d932ef5`, a 100,000-row history retains about 11.48 MiB of unsorted bookkeeping or 22.25 MiB when numerically sorted, before records and rendered UI. Duplicated table identities, live-oriented history caches, and sidebar work can be reduced without limiting searchable history or changing stored traffic.
 
 ## What Changes
 
@@ -43,4 +43,4 @@ None; the work extends existing traffic capabilities.
 - **UI:** main-window capture/history table and sidebars only. Preserve focus and command dispatch, Ctrl/Command selection differences, DPI/text scaling, existing Nuxt colors, layouts, and both locales. Settings, update, and startup windows are unaffected.
 - **Platforms/dependencies:** use the pinned MyGo API and the revised Nuxt table API and `CGO_ENABLED=0` on Windows, macOS, and Linux. Cross-compilation does not count as native runtime acceptance. Nuxt table changes live in the separate NuxtUI-Go source repository; never modify the module cache. Local integration uses an ignored Go workspace until an authorized library publication supplies a resolvable module version.
 - **Persistence/protocols:** no settings schema, SQLite migration, HBIN codec, ordered header, timestamp, unknown metric, import/export format, or managed-file change. Export/action snapshots retain their existing ownership requirements. Network forwarding, Python Workers, process attribution/icon storage, CA trust, updates, and shutdown sequencing are unchanged.
-- **Documentation:** update `docs/technical/memory-diagnostics.md`, the reviewed report, and task-oriented history/category memory guidance in `docs/user-guide.md` with measured behavior. No interface copy is expected; any necessary new copy must update both catalogs and generated accessors.
+- **Documentation:** update `docs/technical/memory-diagnostics.md` and task-oriented history/category memory guidance in `docs/user-guide.md` with measured behavior. No interface copy is expected; any necessary new copy must update both catalogs and generated accessors.

@@ -4,9 +4,9 @@ All items below are implementation work and remain unchecked during proposal cre
 
 ## 1. Establish matched acceptance evidence
 
-- [x] 1.1 Record `d932ef5` baseline storage, stress, live-update, and long-path measurements in an isolated checkout using `go test ./internal/desktop/capture -run '^$' -bench '^BenchmarkTraffic(TableStorage|TableStress|TableLive|TableLongPathScroll)$' -benchmem -benchtime=20x -count=3`; verify logs reproduce the report's scale and distinguish storage, UI retention, and B/op.
+- [x] 1.1 Record `d932ef5` baseline storage, stress, live-update, and long-path measurements in an isolated checkout using `go test ./internal/desktop/capture -run '^$' -bench '^BenchmarkTraffic(TableStorage|TableStress|TableLive|TableLongPathScroll)$' -benchmem -benchtime=20x -count=3`; verify reproducibility and distinguish storage, UI retention, and B/op.
 - [x] 1.2 Extend `BenchmarkTrafficTableStorage` with explicit snapshot/live policy, Filtered+Sorted, and selection-clear/shrink variants; add `BenchmarkTrafficTableViewport`, `BenchmarkHistorySidebar`, and `BenchmarkCategorySidebar` fixtures for design Decision 9. Verify zero selected rows and preallocated source records in storage samples, stable source counts, viewport-bound row counts, and current-policy baseline runs without changing production behavior.
-- [x] 1.3 Document the exact fixture/baseline procedure and exclusions in `docs/technical/memory-diagnostics.md` and the memory review; verify the documented benchmark commands run and initial evidence contains no inferred native-process savings.
+- [x] 1.3 Document the exact fixture/baseline procedure and exclusions in `docs/technical/memory-diagnostics.md`; verify the documented benchmark commands run and initial evidence contains no inferred native-process savings.
 
 ## 2. Make history input ownership and source policy explicit
 
@@ -94,8 +94,6 @@ No Python Worker/SDK, network/codec, or website implementation changes are plann
 
 The records below describe the preceding candidate. The user subsequently requested Nuxt integration; tasks 5.1–5.5 and the final headless gates are reopened for that architecture. Tasks 8.3 and 8.4 remain unverified. Task 5.6 tracks dependency publication separately.
 
-The [final headless acceptance record](../../../docs/technical/history-table-memory-review.md#final-headless-acceptance-2026-11-27) contains the environment, commands, three-sample medians, timing investigation, render comparison, release-cycle data, profile attribution, local artifact paths and scope audit. It supplements the preceding stage evidence without reclassifying headless results as native acceptance.
-
 - **8.1:** Final `task verify` passed formatting, lint, UI vet, both catalogs and repository-wide tests. The final render and focused sidebar suites passed; 32 table images match the baseline, and all 16 sidebar matrix images were inspected. Settings/update/startup windows and unrelated service owners were not altered; no new interface copy required catalog generation.
 - **8.2:** Every Decision 9 headless gate passed. Final table/sidebar workloads have three samples each; all four 100k snapshot storage budgets, live allocations, long-path and viewport limits pass. The full-sampling profile and three repeated lifecycle tests separate original records, selected IDs, derived storage and UI heap. Small after-GC residuals are reported, not described as exact zero or native recovery.
 - **8.3 — open:** Windows native acceptance was interrupted; this continuation was explicitly limited to headless work without Computer Use. Actual-HBIN interaction/failure fallback, 100%/150% scale, natural idle samples and separate forced-collection recovery remain unverified. A successful build and partial earlier interaction are insufficient.
@@ -105,8 +103,6 @@ The [final headless acceptance record](../../../docs/technical/history-table-mem
 Native tasks 8.3 and 8.4 remain unchecked. The current Nuxt verification and dependency delivery are recorded below. Do not archive the change or report complete native acceptance from the headless evidence.
 
 ## Nuxt reintegration evidence (2026-11-27)
-
-The [Nuxt borrowed-row reintegration record](../../../docs/technical/history-table-memory-review.md#nuxt-borrowed-row-reintegration-2026-11-27) records the current implementation, source revisions, published dependency verification, final benchmark medians, profile, lifecycle results and artifact paths.
 
 - **5.1–5.3:** Nuxt's typed/copied/borrowed ownership, selection, sorting and callback tests pass; FlowLens's capture/widgets/shortcuts suite and UI vet pass. The local native-table adapter is removed. All 32 table renders match the original baseline, and 16 sidebar renders match the preceding verified candidate. Nuxt supplies the existing styled element only as a build callback parameter.
 - **5.4 / 8.2:** All 65 table and 4 sidebar workloads have three final samples. Snapshot storage remains 0.77/1.68/1.53/2.45 MiB; stable 100k Patch1 is 21,296 B/op and 484 allocs/op. Every allocation/storage/viewport gate passes. Three repeated lifecycle tests and a full-sampling profile distinguish record bytes, selected IDs, working storage and UI heap; no native memory reduction is inferred.
