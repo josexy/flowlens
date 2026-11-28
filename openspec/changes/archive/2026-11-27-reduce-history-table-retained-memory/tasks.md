@@ -104,10 +104,8 @@ Measurements below ran on Windows amd64 with Go 1.27.3 during the Nuxt reintegra
 - **8.3 — open:** Windows native acceptance with real HBIN histories, failure fallback, 100%/150% scaling, natural idle samples, and forced-collection recovery has not run.
 - **8.4 — open:** macOS and Linux native acceptance has not run. Cross-builds, headless tests, and image comparisons do not substitute for it.
 
-Do not archive this change until 8.3 and 8.4 pass.
+## Archive
 
-## Workflow follow-up
+The change was archived at the user's request with 8.3 and 8.4 still open; native acceptance remains outstanding, and headless results do not replace it. Both deltas were synced into `traffic-capture` and `traffic-history`, and `openspec validate --specs --strict --no-interactive` passed.
 
-- After implementation and acceptance, synchronize the intended deltas and archive using the corresponding OpenSpec workflow; do not synchronize or archive during proposal creation.
-- After synchronization, run `openspec validate --specs --strict --no-interactive` and record the archive path and any unresolved native-platform limits.
 - Track the native body-cell decoration hook and shared text-cache idle-trim design as separate dependency work when that scope is requested; they are not unchecked implementation tasks hidden from this change's completion criteria.

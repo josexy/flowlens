@@ -122,4 +122,4 @@ go tool pprof -sample_index=inuse_space -top /tmp/flowlens-profiles/BenchmarkTra
 | `HistorySidebar` | UI for 100 and 1000 sessions at 240 × 714 DIP, excluding metadata. |
 | `CategorySidebar` | Derived data and UI for 100k rows, with and without search changes, excluding records. |
 
-Compare medians of matched runs. `B/op` is cumulative allocation, not retained or peak memory. Table bookkeeping, selection, UI heap, and source records are separate measurements; do not add whole-process profiles to them. Process-memory claims need real HBIN files and native idle/recovery runs; native acceptance for this work is tracked in the `reduce-history-table-retained-memory` OpenSpec change.
+Compare medians of matched runs. `B/op` is cumulative allocation, not retained or peak memory. Table bookkeeping, selection, UI heap, and source records are separate measurements; do not add whole-process profiles to them. Process-memory claims need real HBIN files and native idle/recovery runs; native acceptance for this work is still open in the [archived change's tasks](../../openspec/changes/archive/2026-11-27-reduce-history-table-retained-memory/tasks.md).
