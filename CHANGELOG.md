@@ -2,6 +2,15 @@
 
 Each `## <version>` section becomes the release notes that the Software Update window shows for that version.
 
+## 2.0.2
+
+- Capture and history tables, detail viewers, and window icons use less memory.
+- History details show headers right away and load bodies only for Raw, Body, or WebSocket. Switching rows no longer flashes a blank panel or a brief spinner.
+- Fixed zstd decoding: a small response could hold up to 512 MiB of memory, a corrupt body could hang a request editor send, and disconnecting an encoded SSE stream could reuse a decoder still in use.
+- zstd bodies that declare a window over 8 MiB are no longer decoded: capture forwards them unchanged, and request editor sends and body rewrite rules report a decoding error.
+- API Collections show WebSocket requests as WS instead of GET.
+- Switching traffic tabs or closing history keeps the current sidebar section and its collapsed state.
+
 ## 2.0.1
 
 - Pause recording while the proxy keeps forwarding traffic. Stop Proxy is now in the proxy button's menu.
