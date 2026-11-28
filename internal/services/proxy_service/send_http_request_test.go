@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1338,5 +1339,18 @@ func assertMultipartFile(t *testing.T, r *http.Request, fieldName, expectedFilen
 	}
 	if !bytes.Equal(bodyBytes, expectedContent) {
 		t.Fatalf("multipart file %q content mismatch", fieldName)
+	}
+}
+
+func setTestConfigDir(t *testing.T) {
+	t.Helper()
+	configRoot := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("APPDATA", configRoot)
+	case "darwin":
+		t.Setenv("HOME", configRoot)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", configRoot)
 	}
 }

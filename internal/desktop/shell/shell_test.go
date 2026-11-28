@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/internal/keytest"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/pkg/database"
@@ -262,5 +263,108 @@ func TestThemeAndLanguageToggles(t *testing.T) {
 	f.app.toggleLanguage()
 	if f.data.Settings.Language() != "zh" {
 		t.Fatalf("language %q", f.data.Settings.Language())
+	}
+}
+
+func TestShutdownCardBlocksWorkbench(t *testing.T) {
+	f := newFixture(t)
+	reported := 0
+	f.app.Host.ShutdownUIReady = func() { reported++ }
+	f.tester.Frame()
+	rewrite, ok := f.tester.Find(locales.MenuRewriteRules())
+	if !ok {
+		t.Fatal("no Rewrite Rules button")
+	}
+	f.data.ShuttingDown = true
+	for range 4 {
+		f.tester.Frame()
+	}
+	for _, text := range []string{locales.AppShutdownTitle(), locales.AppShutdownDescription()} {
+		if !f.tester.HasText(text) {
+			t.Fatalf("missing %q in %q", text, f.tester.Texts())
+		}
+	}
+	if _, ok := f.tester.AccessByRole(ui.RoleProgress, ""); !ok {
+		t.Fatal("no spinner")
+	}
+	f.tester.ClickAt(rewrite.X+rewrite.W/2, rewrite.Y+rewrite.H/2)
+	f.tester.Frame()
+	f.tester.Key(0, ui.KeyEscape)
+	f.tester.Frame()
+	f.tester.Frame()
+	if f.data.Workbench.ActiveSection != store.WorkspaceCapture {
+		t.Fatalf("workbench took a click while shutting down: %v", f.data.Workbench.ActiveSection)
+	}
+	if !f.tester.HasText(locales.AppShutdownDescription()) {
+		t.Fatal("Escape dismissed the indicator")
+	}
+	if reported != 1 {
+		t.Fatalf("ShutdownUIReady called %d times", reported)
+	}
+}
+
+func TestSidebarHiddenNotifiesEachTransitionOnce(t *testing.T) {
+	f := newFixture(t)
+	calls := 0
+	f.app.Surfaces[store.WorkspaceCategory] = Surface{
+		Sidebar:       func(c *ui.Context, _ nui.Theme) { ui.Text(c, "categories") },
+		SidebarHidden: func() { calls++ },
+	}
+	for _, section := range store.WorkspaceSections {
+		if section == store.WorkspaceCategory {
+			continue
+		}
+		f.data.Workbench.ActiveSection = store.WorkspaceCategory
+		f.data.Workbench.SecondarySidebarVisible = true
+		f.settle()
+		before := calls
+		f.data.Workbench.ActiveSection = section
+		for range 3 {
+			f.settle()
+		}
+		if calls != before+1 {
+			t.Fatalf("%s: hide called %d times", section, calls-before)
+		}
+	}
+	f.data.Workbench.ActiveSection = store.WorkspaceCategory
+	f.data.Workbench.SecondarySidebarVisible = true
+	f.settle()
+	before := calls
+	f.data.Workbench.SecondarySidebarVisible = false
+	for range 3 {
+		f.settle()
+	}
+	if calls != before+1 {
+		t.Fatal("collapse did not notify exactly once")
+	}
+	f.data.Workbench.SecondarySidebarVisible = true
+	f.settle()
+	if calls != before+1 {
+		t.Fatal("reopen notified hidden")
+	}
+}
+
+func TestHiddenSidebarCannotKeepKeyboardActivation(t *testing.T) {
+	f := newFixture(t)
+	activated := 0
+	f.app.Surfaces[store.WorkspaceCapture] = Surface{Sidebar: func(c *ui.Context, _ nui.Theme) {
+		ui.ButtonBase(c).Label("sidebar-entry").Size(100, 40).OnClick(func() { activated++ })
+	}}
+	f.settle()
+	keytest.TabTo(t, f.tester, "sidebar-entry")
+	f.data.Workbench.ActivateSection(store.WorkspaceCapture)
+	f.settle()
+	f.tester.Key(0, ui.KeyEnter)
+	if activated != 0 || f.tester.Focused("sidebar-entry") {
+		t.Fatal("collapsed sidebar kept keyboard activation")
+	}
+	f.data.Workbench.ActivateSection(store.WorkspaceCapture)
+	f.settle()
+	keytest.TabTo(t, f.tester, "sidebar-entry")
+	f.data.Workbench.ActivateSection(store.WorkspaceRewriteRules)
+	f.settle()
+	f.tester.Key(0, ui.KeySpace)
+	if activated != 0 || f.tester.Focused("sidebar-entry") {
+		t.Fatal("inactive page kept keyboard activation")
 	}
 }

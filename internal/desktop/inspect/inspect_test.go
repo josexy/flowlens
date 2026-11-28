@@ -22,6 +22,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/internal/keytest"
 	"github.com/josexy/flowlens/internal/desktop/internal/menutest"
+	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	"github.com/josexy/flowlens/internal/desktop/runtime/runtimetest"
 	"github.com/josexy/flowlens/internal/desktop/store"
@@ -1182,4 +1183,24 @@ func TestWebSocketMessageWrap(t *testing.T) {
 	if view.LineTop(1) <= unwrapped {
 		t.Fatal("the long message did not wrap")
 	}
+}
+
+func TestProcessPathCopyShowsTooltip(t *testing.T) {
+	entry := httpEntry()
+	entry.Metadata = &proxyservice.Metadata{Process: &proxyservice.ProcessInfo{Status: proxyservice.ProcessStatusResolved, DisplayName: "Safari", ExecutablePath: "/usr/bin/safari"}}
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{})
+	f.click(locales.DetailProcess())
+	rendertest.RequireTooltip(t, f.tester, locales.DetailCopyProcessPath(), locales.DetailCopyProcessPath())
+}
+
+func TestWebSocketDirectionFilterShowsTooltip(t *testing.T) {
+	entry := httpEntry()
+	entry.Type = "ws"
+	f := newFixture(t, entry, &proxyservice.TrafficBodyView{WebSocketMessages: []*proxyservice.WebSocketMessage{{Direction: "send", MsgType: "text", Data: "outgoing", DataSize: 8}}})
+	rendertest.RequireTooltip(t, f.tester, locales.WorkspaceWebsocketClientFilterAll(), locales.WorkspaceWebsocketClientFilterAll())
+}
+
+func TestSSEJumpToLatestShowsTooltip(t *testing.T) {
+	f := sseFixture(t, "data: first\n\ndata: second\n\n")
+	rendertest.RequireTooltip(t, f.tester, locales.DetailSseJumpToLatest(), locales.DetailSseJumpToLatest())
 }
