@@ -293,7 +293,7 @@ func TestPayloadUpdatesReuseSortOrderFor10000Rows(t *testing.T) {
 		entries[i] = tableEntry(uint64(i+1), i%3+200)
 	}
 	sort := TrafficSort{ColumnStatusCode, SortAsc}
-	first := sorter.Sort(entries, sort)
+	first := ids(sorter.Sort(entries, sort))
 	if sorter.computed != 10000 {
 		t.Fatalf("computed %d", sorter.computed)
 	}
@@ -305,7 +305,7 @@ func TestPayloadUpdatesReuseSortOrderFor10000Rows(t *testing.T) {
 	if sorter.computed != 10001 {
 		t.Fatalf("unchanged entries must not recompute sort values: %d", sorter.computed)
 	}
-	if !slices.Equal(ids(first), ids(second)) {
+	if !slices.Equal(first, ids(second)) {
 		t.Fatal("order changed")
 	}
 	shown := slices.IndexFunc(second, func(e *TrafficEntry) bool { return e.ID == 2 })

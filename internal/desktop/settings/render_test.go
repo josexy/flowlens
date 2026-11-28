@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/josexy/flowlens/internal/desktop/internal/rendertest"
 	"github.com/josexy/flowlens/internal/desktop/store"
 	"github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/pkg/logger"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
 )
@@ -153,4 +155,110 @@ func TestRenderCertificateStates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSaveKeepsGeneralControlsStable(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		f := newFixture(t)
+		setRenderTheme(t, f.data, dark)
+		f.draft().CommonConfig.AppFontSize++
+		f.settle()
+		f.tester.Advance(time.Second)
+		before := f.tester.Image()
+		f.view.committing, f.data.Settings.Saving = true, true
+		for range 3 {
+			f.tester.Frame()
+			f.tester.Advance(100 * time.Millisecond)
+			rendertest.RequireSamePixels(t, before, f.tester.Image(), ui.Rect{X: 160, Y: 0, W: 1140, H: 1300}, "settings page")
+			for _, control := range []struct {
+				label string
+				role  ui.Role
+			}{
+				{locales.SettingsThemeColorsPrimary(), ui.RolePopUpButton},
+				{locales.SettingsThemeColorsNeutral(), ui.RolePopUpButton},
+				{locales.SettingsAnimationsLabel(), ui.RoleSwitch},
+				{locales.SettingsAppFontSizeLabel(), ui.RoleTextField},
+				{locales.SettingsReset(), ui.RoleButton},
+			} {
+				info, ok := f.tester.AccessByRole(control.role, control.label)
+				if !ok || !info.Disabled {
+					t.Errorf("%q lost its pending-write guard: found=%v disabled=%v", control.label, ok, info.Disabled)
+				}
+			}
+		}
+		name := "settings-saving-light"
+		if dark {
+			name = "settings-saving-dark"
+		}
+		rendertest.Shoot(t, f.tester, name)
+		f.view.committing, f.data.Settings.Saving = false, false
+	}
+}
+
+func TestLogSwitchKeepsRequestedValueUntilSaveCompletes(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		f := newFixture(t)
+		f.open(locales.SettingsTabLogs())
+		release := make(chan struct{})
+		finish := sync.OnceFunc(func() { close(release) })
+		t.Cleanup(finish)
+		f.view.Host.SetLog = func(enabled bool) (*logger.LogStatus, error) {
+			<-release
+			if fail {
+				return nil, errors.New("write failed")
+			}
+			return &logger.LogStatus{Enabled: enabled, Level: logger.LogLevelInfo}, nil
+		}
+		label := locales.SettingsLogEnabledLabel()
+		info, ok := f.tester.AccessByRole(ui.RoleSwitch, label)
+		if !ok || !info.Checked {
+			t.Fatalf("initial log switch: %+v", info)
+		}
+		f.tester.ClickAt(info.Bounds.X+10, info.Bounds.Y+info.Bounds.H/2)
+		for range 3 {
+			f.tester.Frame()
+			f.tester.Advance(100 * time.Millisecond)
+			info, ok = f.tester.AccessByRole(ui.RoleSwitch, label)
+			if !ok || info.Checked || !info.Disabled || !f.view.logs.status.Enabled {
+				t.Fatalf("pending switch reverted or changed the saved snapshot: %+v", info)
+			}
+		}
+		finish()
+		f.settle()
+		info, _ = f.tester.AccessByRole(ui.RoleSwitch, label)
+		if info.Disabled || info.Checked != fail {
+			t.Fatalf("switch did not settle to the persisted value: %+v", info)
+		}
+		if fail && !f.has(locales.SettingsLogErrorToggle("write failed")) {
+			t.Fatal("save error was hidden")
+		}
+	}
+}
+
+func TestSettingsToastIsTopCenterWithoutProgress(t *testing.T) {
+	f := newFixture(t)
+	f.notifier.Success("Settings saved here")
+	f.tester.Frame()
+	f.tester.Frame()
+	rect, ok := f.tester.Find("Settings saved here")
+	if !ok {
+		t.Fatalf("%v", f.tester.Texts())
+	}
+	if center := rect.X + rect.W/2; center < 650-60 || center > 650+60 || rect.Y > 120 {
+		t.Fatalf("toast at %+v, want top-center of 1300 wide", rect)
+	}
+	if _, ok := f.tester.AccessByRole(ui.RoleProgress, ""); ok {
+		t.Fatal("toast shows a progress bar")
+	}
+}
+
+func TestShortcutRowActionsShowTooltips(t *testing.T) {
+	f := newFixture(t)
+	f.open(locales.SettingsTabShortcuts())
+	label := locales.ShortcutsCommandsAppSave()
+	f.view.shortcuts.search = "save"
+	f.settle()
+	rendertest.RequireTooltip(t, f.tester, locales.ShortcutsClearFor(label), locales.ShortcutsClearFor(label))
+	f.click(locales.ShortcutsClearFor(label))
+	rendertest.RequireTooltip(t, f.tester, locales.ShortcutsResetFor(label), locales.ShortcutsResetFor(label))
 }

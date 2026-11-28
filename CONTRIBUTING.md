@@ -1,6 +1,6 @@
 # Contributing to FlowLens
 
-Thank you for helping improve FlowLens. This guide covers the contribution workflow. For architectural boundaries, high-risk contracts, and package-level verification rules, read [AGENTS.md](AGENTS.md) before making code changes.
+Read [AGENTS.md](AGENTS.md) for package ownership, engineering contracts, and required checks before changing code.
 
 ## Before You Start
 
@@ -11,13 +11,13 @@ Thank you for helping improve FlowLens. This guide covers the contribution workf
 
 ## Development Setup
 
-You need Go 1.27.3 or newer and, preferably, [Task](https://taskfile.dev). Ordinary builds and tests run with `CGO_ENABLED=0` and require no C/Objective-C compiler or JavaScript toolchain. macOS requires version 13.0 or later, and macOS signing and DMG packaging require macOS platform tools. Python 3 is required only for testing Python plugins.
+Use the Go version in [go.mod](go.mod) or newer and install [Task](https://taskfile.dev) and `golangci-lint` to run the full checks. Python integration tests need an external Python 3 interpreter. See [Building and Packaging](docs/technical/building.md) for platform requirements.
 
 ```shell
 task dev
 ```
 
-Without Task, run `go tool mygo dev` with `CGO_ENABLED=0`. The Taskfile sets `CGO_ENABLED=0` automatically on Windows, Linux, and macOS. See [Building and Packaging](docs/technical/building.md) for macOS linker flags, packaging, and release details.
+The Taskfile sets `CGO_ENABLED=0` for ordinary builds and tests. Direct MyGo commands and macOS linker flags are documented in [Building and Packaging](docs/technical/building.md).
 
 ### Common Commands
 
@@ -38,10 +38,12 @@ Without Task, run `go tool mygo dev` with `CGO_ENABLED=0`. The Taskfile sets `CG
 
 - Keep changes within their owning package, as defined in [AGENTS.md](AGENTS.md#module-ownership).
 - Add new user-visible text to both `locales/en.json` and `locales/zh-Hans.json` with matching keys and placeholders, then run `task i18n:generate`.
-- Update the [User Guide](docs/user-guide.md), relevant [technical docs](docs/technical/), and `openspec/specs/` whenever you change documented behavior.
+- Keep the [User Guide](docs/user-guide.md) task-oriented and put protocol, format, and limit details in [technical docs](docs/technical/). Change specified behavior through an OpenSpec change and archive it after implementation and acceptance.
 - Write commit messages as English [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <summary>`, with one class of change per commit and concrete details describing the change or fix.
 
 ## Validation
+
+Add tests to the existing file for the same feature, preferably as a table case. Create a test file only for a distinct feature, a shared fixture or benchmark set, an integration boundary, or a platform build constraint. Delete a test only when another one covers the same setup, assertions, and failure path.
 
 Run the smallest relevant package tests while developing; [AGENTS.md](AGENTS.md#verification) maps each area to its test packages. Before requesting review, run the full check:
 

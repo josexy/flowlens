@@ -3,6 +3,7 @@ package editor
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -97,10 +98,12 @@ func (e *Editor) newButton(c *ui.Context, theme nui.Theme) {
 	// DropdownMenu opens and closes the menu on the button's click itself;
 	// toggling it here as well would undo each click.
 	anchor := tabStripButton(c, theme, "tabs-new", locales.WorkspaceTabBarNew(), lucide.Plus(), 30)
-	nui.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, []nui.MenuItem{
-		{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewHTTPRequest), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
-		{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewWebSocket), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
-	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)})
+	widgets.DropdownMenu(c.Key("tabs-new-menu"), theme, anchor, &e.newMenu, func() []nui.MenuItem {
+		return []nui.MenuItem{
+			{ID: "http", Label: locales.WorkspaceTabBarNewHttp(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewHTTPRequest), OnSelect: func() { workspace.CreateHTTPRequestTab(logic.DraftNew, nil) }},
+			{ID: "ws", Label: locales.WorkspaceTabBarNewWs(), Shortcut: e.menuShortcut(shortcuts.WorkspaceNewWebSocket), OnSelect: func() { workspace.CreateWebSocketClientTab(logic.DraftNew, nil) }},
+		}
+	}, nui.MenuOptions{Label: locales.WorkspaceTabBarNew(), Placement: nui.Set(nui.BottomEnd)}, e.menuShortcut(shortcuts.WorkspaceNewHTTPRequest), e.menuShortcut(shortcuts.WorkspaceNewWebSocket))
 }
 
 func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.WorkspaceTab) {
@@ -149,7 +152,15 @@ func (e *Editor) tab(c *ui.Context, theme nui.Theme, index int, tab *logic.Works
 			e.closeButton(c, theme, tab, title, active || hovered)
 		}
 	})
-	widgets.ContextMenu(c.Key("menu:"+tab.Key), theme, box, e.tabMenus.For(tab.Key), func() []nui.MenuItem { return e.tabMenuItems(index, tab) }, nui.MenuOptions{Label: title})
+	menu := e.tabMenus.For(tab.Key)
+	var menuTabs strings.Builder
+	if menu.Open {
+		for _, entry := range workspace.Tabs {
+			menuTabs.WriteString(entry.Key)
+			menuTabs.WriteByte(0)
+		}
+	}
+	widgets.ContextMenu(c.Key("menu:"+tab.Key), theme, box, menu, func() []nui.MenuItem { return e.tabMenuItems(index, tab) }, nui.MenuOptions{Label: title}, menuTabs.String(), tab, index, e.menuShortcut(shortcuts.AppSave), e.menuShortcut(shortcuts.WorkspaceCloseTab))
 }
 
 // revealTime bounds how long a newly active tab is brought into view.

@@ -1,10 +1,9 @@
 package settings
 
 import (
-	"slices"
-
 	"github.com/egoist/mygo/ui"
 	apptheme "github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/desktop/widgets"
 	settingservice "github.com/josexy/flowlens/internal/services/setting_service"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
@@ -14,11 +13,15 @@ import (
 const defaultFontID = "__default_font__"
 
 type generalState struct {
-	fonts                  []settingservice.FontOption
-	fontsLoaded, fontsBusy bool
-	appFont, codeFont      nui.SelectMenuState
-	appValue, codeValue    []string
-	appSize, codeSize      integerField
+	fonts                                                  []settingservice.FontOption
+	fontsLoaded, fontsBusy                                 bool
+	appFont, codeFont                                      nui.SelectMenuState
+	appValue, codeValue                                    nui.SelectionState[string]
+	primaryChoice, neutralChoice, frameChoice, closeChoice widgets.SelectState[string]
+	fontLocale, appFamily, codeFamily                      string
+	fontRevision, seenFontRevision                         uint64
+	fontReady                                              bool
+	appSize, codeSize                                      integerField
 }
 
 // integerField edits an integer with bounds.
@@ -50,13 +53,16 @@ func (v *View) loadFonts() {
 	state.fontsBusy = true
 	run(v, "fonts", func() ([]settingservice.FontOption, error) { return v.Host.ListFonts(), nil }, func(fonts []settingservice.FontOption, _ error) {
 		state.fontsBusy, state.fontsLoaded, state.fonts = false, true, fonts
+		state.fontRevision++
 	})
 }
 
 func (v *View) fontItems(common *settingservice.CommonConfig) []nui.ListboxItem {
 	items := []nui.ListboxItem{{ID: defaultFontID, Label: locales.SettingsFontDefault()}}
+	seen := map[string]bool{defaultFontID: true}
 	add := func(id, label string) {
-		if id != "" && !slices.ContainsFunc(items, func(item nui.ListboxItem) bool { return item.ID == id }) {
+		if id != "" && !seen[id] {
+			seen[id] = true
 			if label == "" {
 				label = id
 			}
@@ -71,18 +77,33 @@ func (v *View) fontItems(common *settingservice.CommonConfig) []nui.ListboxItem 
 	return items
 }
 
-func (v *View) fontRow(c *ui.Context, palette nui.Theme, key, label string, family *string, size int, preview string, state *nui.SelectMenuState, selected *[]string, items []nui.ListboxItem, fallback string) {
+// prepareFonts rebuilds submitted data only after discovery, locale or a saved
+// font changes, including a configured family missing from the system list.
+func (v *View) prepareFonts(locale string, common *settingservice.CommonConfig) {
+	state := &v.general
+	if state.fontReady && state.fontLocale == locale && state.seenFontRevision == state.fontRevision && state.appFamily == common.AppFontFamily && state.codeFamily == common.CodeFontFamily {
+		return
+	}
+	items := v.fontItems(common)
+	state.appFont.SetItems(items)
+	state.codeFont.SetItems(items)
+	state.fontReady, state.fontLocale, state.seenFontRevision = true, locale, state.fontRevision
+	state.appFamily, state.codeFamily = common.AppFontFamily, common.CodeFontFamily
+}
+
+func (v *View) fontRow(c *ui.Context, palette nui.Theme, key, label string, family *string, size int, preview string, state *nui.SelectMenuState, selected *nui.SelectionState[string], fallback string) {
 	row(c, palette, key, label, "", func() {
 		current := defaultFontID
 		if *family != "" {
 			current = *family
 		}
-		if len(*selected) != 1 || (*selected)[0] != current {
-			*selected = []string{current}
+		if selected.Len() != 1 || !selected.Has(current) {
+			selected.Set([]string{current})
 		}
 		ui.Box(c.Key("menu")).Width(320).Children(func() {
-			nui.SelectMenu(c.Key("select"), palette, selected, state, items, nui.SelectMenuOptions{
-				ListboxOptions: nui.ListboxOptions{Label: label, Loading: v.general.fontsBusy, OnChange: func(values []string) {
+			nui.SelectMenu(c.Key("select"), palette, selected, state, nui.SelectMenuOptions{
+				ListboxOptions: nui.ListboxOptions{Label: label, Loading: v.general.fontsBusy, OnChange: func() {
+					values := selected.Values()
 					if len(values) == 1 {
 						*family = values[0]
 						if *family == defaultFontID {
@@ -131,20 +152,23 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 	common, window := draft.CommonConfig, draft.WindowConfig
 	state := &v.general
 	v.section(c, palette, "appearance", locales.SettingsSectionAppearance(), false, nil, func() {
-		colorRow := func(key, label string, names []string, target *string) {
+		colorRow := func(key, label string, names []string, target *string, choice *widgets.SelectState[string]) {
 			const swatchSize, swatchGap = 12, 8
 			row(c, palette, key, label, "", func() {
 				ui.Box(c.Key("menu")).Width(320).Children(func() {
-					options := make([]nui.Option[string], len(names))
-					for index, item := range paletteOptions(names) {
-						options[index] = option(item.ID, item.Label)
-						colors, _ := nui.PaletteByName(item.ID)
-						options[index].Build = func(c *ui.Context, _ nui.Theme) {
-							ui.Box(c).Size(swatchSize, swatchSize).Radius(swatchSize / 2).Background(colors.Shade(500)).Shrink(0).AccessHidden(true)
-							ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
+					choices := choice.Prepare(c.Locale(), func() []nui.Option[string] {
+						options := make([]nui.Option[string], len(names))
+						for index, item := range paletteOptions(names) {
+							options[index] = option(item.ID, item.Label)
+							colors, _ := nui.PaletteByName(item.ID)
+							options[index].Build = func(c *ui.Context, _ nui.Theme) {
+								ui.Box(c).Size(swatchSize, swatchSize).Radius(swatchSize / 2).Background(colors.Shade(500)).Shrink(0).AccessHidden(true)
+								ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
+							}
 						}
-					}
-					select_ := nui.Select(c.Key("select"), palette, target, options, nui.SelectOptions{
+						return options
+					})
+					select_ := nui.Select(c.Key("select"), palette, target, choices, nui.SelectOptions{
 						Label: label, Disabled: v.committing,
 						Style: func(slot nui.Slot, element ui.Element) {
 							switch slot {
@@ -164,37 +188,41 @@ func (v *View) generalPage(c *ui.Context, palette nui.Theme, draft *settingservi
 				})
 			})
 		}
-		colorRow("primary", locales.SettingsThemeColorsPrimary(), nui.PrimaryPaletteNames(), &common.ThemePrimaryColor)
-		colorRow("neutral", locales.SettingsThemeColorsNeutral(), nui.NeutralPaletteNames(), &common.ThemeNeutralColor)
+		colorRow("primary", locales.SettingsThemeColorsPrimary(), nui.PrimaryPaletteNames(), &common.ThemePrimaryColor, &state.primaryChoice)
+		colorRow("neutral", locales.SettingsThemeColorsNeutral(), nui.NeutralPaletteNames(), &common.ThemeNeutralColor, &state.neutralChoice)
 		row(c, palette, "animations", locales.SettingsAnimationsLabel(), locales.SettingsAnimationsHint(), func() {
 			enabled := !common.DisableAnimations
 			nui.Switch(c.Key("switch"), palette, &enabled, nui.SwitchOptions{Disabled: v.committing}).DimDisabled(false).
 				Label(locales.SettingsAnimationsLabel()).OnClick(func() { common.DisableAnimations = !enabled })
 		})
-		items := v.fontItems(common)
-		v.fontRow(c, palette, "app-font", locales.SettingsAppFontLabel(), &common.AppFontFamily, common.AppFontSize, locales.SettingsFontPreviewText(), &state.appFont, &state.appValue, items, palette.Font)
+		v.prepareFonts(c.Locale(), common)
+		v.fontRow(c, palette, "app-font", locales.SettingsAppFontLabel(), &common.AppFontFamily, common.AppFontSize, locales.SettingsFontPreviewText(), &state.appFont, &state.appValue, palette.Font)
 		v.sizeRow(c, palette, "app-size", locales.SettingsAppFontSizeLabel(), &state.appSize, &common.AppFontSize, apptheme.MinAppFontSize, apptheme.MaxAppFontSize, apptheme.DefaultAppFontSize)
-		v.fontRow(c, palette, "code-font", locales.SettingsCodeFontLabel(), &common.CodeFontFamily, common.CodeFontSize, locales.SettingsCodeFontPreviewText(), &state.codeFont, &state.codeValue, items, palette.MonoFont)
+		v.fontRow(c, palette, "code-font", locales.SettingsCodeFontLabel(), &common.CodeFontFamily, common.CodeFontSize, locales.SettingsCodeFontPreviewText(), &state.codeFont, &state.codeValue, palette.MonoFont)
 		v.sizeRow(c, palette, "code-size", locales.SettingsCodeFontSizeLabel(), &state.codeSize, &common.CodeFontSize, apptheme.MinCodeFontSize, apptheme.MaxCodeFontSize, apptheme.DefaultCodeFontSize)
 	})
 	v.section(c, palette, "behavior", locales.SettingsSectionBehavior(), false, nil, func() {
 		row(c, palette, "frame", locales.SettingsWindowFrameModeLabel(), "", func() {
 			value := string(window.FrameMode)
 			ui.Box(c.Key("menu")).Width(320).Children(func() {
-				nui.Select(c.Key("select"), palette, &value, []nui.Option[string]{
-					option(string(settingservice.WindowFrameModeCustom), locales.SettingsWindowFrameModeCustom()),
-					option(string(settingservice.WindowFrameModeSystem), locales.SettingsWindowFrameModeSystem()),
-				}, nui.SelectOptions{Label: locales.SettingsWindowFrameModeLabel()})
+				nui.Select(c.Key("select"), palette, &value, state.frameChoice.Prepare(c.Locale(), func() []nui.Option[string] {
+					return []nui.Option[string]{
+						option(string(settingservice.WindowFrameModeCustom), locales.SettingsWindowFrameModeCustom()),
+						option(string(settingservice.WindowFrameModeSystem), locales.SettingsWindowFrameModeSystem()),
+					}
+				}), nui.SelectOptions{Label: locales.SettingsWindowFrameModeLabel()})
 			})
 			window.FrameMode = settingservice.WindowFrameMode(value)
 		})
 		row(c, palette, "close", locales.SettingsMainWindowCloseBehaviorLabel(), "", func() {
 			value := string(window.MainWindowCloseBehavior)
 			ui.Box(c.Key("menu")).Width(320).Children(func() {
-				nui.Select(c.Key("select"), palette, &value, []nui.Option[string]{
-					option(string(settingservice.MainWindowCloseBehaviorHideToTray), locales.SettingsMainWindowCloseBehaviorHideToTray()),
-					option(string(settingservice.MainWindowCloseBehaviorQuit), locales.SettingsMainWindowCloseBehaviorQuit()),
-				}, nui.SelectOptions{Label: locales.SettingsMainWindowCloseBehaviorLabel()})
+				nui.Select(c.Key("select"), palette, &value, state.closeChoice.Prepare(c.Locale(), func() []nui.Option[string] {
+					return []nui.Option[string]{
+						option(string(settingservice.MainWindowCloseBehaviorHideToTray), locales.SettingsMainWindowCloseBehaviorHideToTray()),
+						option(string(settingservice.MainWindowCloseBehaviorQuit), locales.SettingsMainWindowCloseBehaviorQuit()),
+					}
+				}), nui.SelectOptions{Label: locales.SettingsMainWindowCloseBehaviorLabel()})
 			})
 			window.MainWindowCloseBehavior = settingservice.MainWindowCloseBehavior(value)
 		})

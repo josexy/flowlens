@@ -12,8 +12,9 @@ import (
 
 func TestCaptureAndHistoryKeyboardNavigation(t *testing.T) {
 	f := newHistoryFixture(t)
-	keytest.TabTo(t, f.tester, "session one")
-	f.tester.Key(0, ui.KeySpace)
+	f.tabToCategory(ui.RoleList, locales.HistoryTitle())
+	f.tester.Key(0, ui.KeyHome)
+	f.tester.Key(0, ui.KeyEnter)
 	f.settle()
 	if f.data.History.Traffic.Key != "k1" {
 		t.Fatal("keyboard did not open history")
@@ -77,4 +78,36 @@ func (f *fixture) tabToCategory(role ui.Role, label string) {
 		f.tester.Key(0, ui.KeyTab)
 	}
 	f.t.Fatalf("keyboard focus cannot reach %q", label)
+}
+
+func TestAliasDialogTakesTypingWithoutClick(t *testing.T) {
+	f := newFixture(t)
+	f.workspace.ShowAliasDialog()
+	f.settle()
+	f.tester.Key(ui.Cmd, ui.KeyA)
+	f.tester.Type("session")
+	f.settle()
+	if f.workspace.alias.draft != "session" {
+		t.Fatalf("draft = %q", f.workspace.alias.draft)
+	}
+}
+
+func TestDomainFilterAddedRowTakesTyping(t *testing.T) {
+	f := newFixture(t)
+	f.click("Domain filters: 0")
+	dialog := &f.workspace.toolbar.hosts
+	dialog.add(&dialog.include)
+	f.settle()
+	f.tester.Type("a.test")
+	f.settle()
+	if len(dialog.include) != 1 || dialog.include[0].value != "a.test" {
+		t.Fatalf("%+v", dialog.include)
+	}
+	dialog.add(&dialog.exclude)
+	f.settle()
+	f.tester.Type("b.test")
+	f.settle()
+	if dialog.include[0].value != "a.test" || dialog.exclude[0].value != "b.test" {
+		t.Fatalf("%+v %+v", dialog.include, dialog.exclude)
+	}
 }

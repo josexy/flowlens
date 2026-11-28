@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// TrafficProcessingPolicy distinguishes mutable capture updates from published
+// immutable history snapshots. Source kind, not the presence of live controls,
+// chooses the policy.
+type TrafficProcessingPolicy uint8
+
+const (
+	TrafficLive TrafficProcessingPolicy = iota
+	TrafficSnapshot
+)
+
 // SortOrder is a column's sort direction.
 type SortOrder string
 
@@ -67,12 +77,13 @@ func IsAtLatestEdge(sort TrafficSort, first, last, count int) bool {
 
 type sortValue struct {
 	text    string
+	folded  string
 	number  int64
 	missing bool
 	numeric bool
 }
 
-func textValue(text string) sortValue { return sortValue{text: text} }
+func textValue(text string) sortValue { return sortValue{text: text, folded: strings.ToLower(text)} }
 
 func numberValue(number int64, known bool) sortValue {
 	return sortValue{number: number, numeric: true, missing: !known}
@@ -119,7 +130,7 @@ func compareSortValues(left, right sortValue) int {
 	if left.numeric && right.numeric {
 		return cmp.Compare(left.number, right.number)
 	}
-	if compared := strings.Compare(strings.ToLower(left.text), strings.ToLower(right.text)); compared != 0 {
+	if compared := strings.Compare(left.folded, right.folded); compared != 0 {
 		return compared
 	}
 	return strings.Compare(left.text, right.text)
@@ -128,55 +139,88 @@ func compareSortValues(left, right sortValue) int {
 // TrafficTableSorter sorts entries, computing each value once per entry
 // version and sorting again only when membership or a value changes.
 type TrafficTableSorter struct {
-	lastKey        TrafficColumnKey
-	lastOrder      SortOrder
-	cached         map[*TrafficEntry]sortValue
-	previousValues map[uint64]sortValue
-	previousSorted []*TrafficEntry
-	computed       int
+	policy          TrafficProcessingPolicy
+	lastKey         TrafficColumnKey
+	lastOrder       SortOrder
+	cached          map[uint64]trafficSortRecord
+	capacity        int
+	generation      uint64
+	previousSorted  []*TrafficEntry
+	computed        int
+	snapshotVersion uint64
+	snapshotReady   bool
+}
+
+type trafficSortRecord struct {
+	entry *TrafficEntry
+	value sortValue
+	seen  uint64
 }
 
 // NewTrafficTableSorter returns an empty sorter.
-func NewTrafficTableSorter() *TrafficTableSorter {
-	return &TrafficTableSorter{cached: map[*TrafficEntry]sortValue{}, previousValues: map[uint64]sortValue{}}
+func NewTrafficTableSorter(policy ...TrafficProcessingPolicy) *TrafficTableSorter {
+	s := &TrafficTableSorter{}
+	if len(policy) != 0 {
+		s.policy = policy[0]
+	}
+	return s
 }
 
-// Sort returns entries in table order. Unsorted returns entries itself.
-func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*TrafficEntry {
-	if !sort.active() {
+// Sort returns a borrowed main-thread view until the next Sort. Unsorted
+// returns entries itself. Callers needing a persistent snapshot must clone it.
+func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort, revision ...uint64) []*TrafficEntry {
+	if !sort.active() || len(entries) == 0 {
+		s.snapshotReady = false
 		s.lastKey, s.lastOrder = "", SortNone
-		s.cached = map[*TrafficEntry]sortValue{}
-		s.previousValues = map[uint64]sortValue{}
+		s.cached, s.capacity = nil, 0
+		clear(s.previousSorted)
 		s.previousSorted = nil
 		return entries
 	}
-	if sort.Key != s.lastKey {
-		s.cached = map[*TrafficEntry]sortValue{}
+	if s.policy == TrafficSnapshot {
+		return s.sortSnapshot(entries, sort, revision)
 	}
-	needsSort := sort.Key != s.lastKey || sort.Order != s.lastOrder || len(entries) != len(s.previousValues)
-	values := make(map[uint64]sortValue, len(entries))
-	byID := make(map[uint64]*TrafficEntry, len(entries))
-	current := make(map[*TrafficEntry]sortValue, len(entries))
+	n := len(entries)
+	limit := max(64, 4*n)
+	if s.cached == nil || s.capacity < n || s.capacity > limit {
+		capacity := n
+		if s.capacity < n {
+			capacity = max(n, 2*s.capacity)
+		}
+		s.capacity = capacity
+		s.cached = make(map[uint64]trafficSortRecord, capacity)
+	}
+	keyChanged := sort.Key != s.lastKey
+	needsSort := keyChanged || sort.Order != s.lastOrder || n != len(s.cached)
+	s.generation++
 	for _, entry := range entries {
-		value, ok := s.cached[entry]
-		if !ok {
+		record, ok := s.cached[entry.ID]
+		value := record.value
+		if !ok || keyChanged || record.entry != entry {
 			value = trafficSortValue(entry, sort.Key)
 			s.computed++
 		}
-		current[entry] = value
-		values[entry.ID] = value
-		byID[entry.ID] = entry
-		if previous, seen := s.previousValues[entry.ID]; !seen || previous != value {
+		if !ok || record.value != value {
 			needsSort = true
 		}
+		s.cached[entry.ID] = trafficSortRecord{entry: entry, value: value, seen: s.generation}
 	}
-	s.cached = current
+	for id, record := range s.cached {
+		if record.seen != s.generation {
+			delete(s.cached, id)
+		}
+	}
 
-	var sorted []*TrafficEntry
+	sorted := s.previousSorted
+	if cap(sorted) > limit {
+		sorted = nil
+	}
+	clear(sorted[min(n, len(sorted)):])
+	sorted = slices.Grow(sorted[:0], n)[:n]
 	if needsSort {
-		sorted = slices.Clone(entries)
+		copy(sorted, entries)
 		slices.SortStableFunc(sorted, func(left, right *TrafficEntry) int {
-			a, b := values[left.ID], values[right.ID]
+			a, b := s.cached[left.ID].value, s.cached[right.ID].value
 			switch {
 			case a.missing && b.missing:
 				return cmp.Compare(left.ID, right.ID)
@@ -195,13 +239,65 @@ func (s *TrafficTableSorter) Sort(entries []*TrafficEntry, sort TrafficSort) []*
 			return compared
 		})
 	} else {
-		sorted = make([]*TrafficEntry, len(s.previousSorted))
-		for index, entry := range s.previousSorted {
-			sorted[index] = byID[entry.ID]
+		for index, entry := range sorted {
+			sorted[index] = s.cached[entry.ID].entry
 		}
 	}
 	s.lastKey, s.lastOrder = sort.Key, sort.Order
-	s.previousValues = values
 	s.previousSorted = sorted
 	return sorted
+}
+
+type snapshotSortRecord struct {
+	entry *TrafficEntry
+	value sortValue
+}
+
+func (s *TrafficTableSorter) sortSnapshot(entries []*TrafficEntry, sort TrafficSort, revision []uint64) []*TrafficEntry {
+	if len(revision) > 0 && s.snapshotReady && s.snapshotVersion == revision[0] &&
+		s.lastKey == sort.Key && s.lastOrder == sort.Order {
+		return s.previousSorted
+	}
+	// Scratch and full folded strings die with this call. Only the ordered
+	// pointers survive; never pool or cache the comparison records.
+	scratch := make([]snapshotSortRecord, len(entries))
+	for i, entry := range entries {
+		scratch[i] = snapshotSortRecord{entry, trafficSortValue(entry, sort.Key)}
+		s.computed++
+	}
+	slices.SortFunc(scratch, func(left, right snapshotSortRecord) int {
+		a, b := left.value, right.value
+		switch {
+		case a.missing && b.missing:
+			return cmp.Compare(left.entry.ID, right.entry.ID)
+		case a.missing:
+			return 1
+		case b.missing:
+			return -1
+		}
+		compared := compareSortValues(a, b)
+		if compared == 0 {
+			return cmp.Compare(left.entry.ID, right.entry.ID)
+		}
+		if sort.Order == SortDesc {
+			return -compared
+		}
+		return compared
+	})
+	n := len(entries)
+	result := s.previousSorted
+	clear(result[min(n, len(result)):])
+	if cap(result) > max(64, 4*n) {
+		result = nil
+	}
+	result = slices.Grow(result[:0], n)[:n]
+	for i := range scratch {
+		result[i] = scratch[i].entry
+	}
+	s.previousSorted, s.lastKey, s.lastOrder = result, sort.Key, sort.Order
+	s.snapshotReady = len(revision) > 0
+	if s.snapshotReady {
+		s.snapshotVersion = revision[0]
+	}
+	return result
 }

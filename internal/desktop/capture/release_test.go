@@ -20,7 +20,7 @@ func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	f := newFixture(t, entry(1, "old.test"), entry(2, "other.test"))
 	f.showCategories = true
 	f.settle()
-	if len(f.workspace.category.entries) == 0 || len(f.workspace.Table.rows) == 0 {
+	if f.workspace.category.entryCount == 0 || len(f.workspace.Table.rows) == 0 {
 		t.Fatal("views were not populated")
 	}
 	f.showCategories = false
@@ -36,7 +36,7 @@ func TestCaptureResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 		t.Fatal("reset retained a table or failed to release its hidden detail")
 	}
 	view := &f.workspace.category
-	if view.entries != nil || view.roots != nil || view.treeItems != nil || view.visible != nil || len(view.expanded) != 0 {
+	if view.entryCount != 0 || view.roots != nil || view.treeItems != nil || view.visible != nil || len(view.expanded) != 0 {
 		t.Fatal("hidden categories kept the discarded capture")
 	}
 	if len(f.data.Filter.Filtered()) != 0 {
@@ -76,13 +76,13 @@ func TestHistoryResetReleasesHiddenViewsBeforeAnotherFrame(t *testing.T) {
 	f.click("session one")
 	f.showCategories = true
 	f.settle()
-	if len(f.workspace.category.entries) == 0 || len(f.workspace.HistoryTable.rows) == 0 {
+	if f.workspace.category.entryCount == 0 || len(f.workspace.HistoryTable.rows) == 0 {
 		t.Fatal("history views were not populated")
 	}
 	var released int
 	f.workspace.ReleaseHistoryDetail = func() { released++ }
 	f.data.History.CloseOpened()
-	if released != 1 || len(f.workspace.HistoryTable.rows) != 0 || f.workspace.category.entries != nil {
+	if released != 1 || len(f.workspace.HistoryTable.rows) != 0 || f.workspace.category.entryCount != 0 {
 		t.Fatal("closing history retained hidden view state")
 	}
 	if len(f.data.Traffic.Entries) != 1 {

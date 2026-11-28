@@ -66,16 +66,16 @@ func (t *Table) syncChoice(changed bool) {
 		return
 	}
 	if t.selectedRow >= 0 && t.selectedRow < len(t.rows) {
-		if entry := t.rows[t.selectedRow]; t.state.Selection.Has(trafficRowID(entry.ID)) {
+		if entry := t.rows[t.selectedRow]; t.state.Selection.Has(entry.ID) {
 			t.focusEntry(entry)
 			return
 		}
 	}
-	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(trafficRowID(focused.ID)) {
+	if focused := t.source.SelectedEntry(); focused != nil && t.state.Selection.Has(focused.ID) {
 		return
 	}
 	for _, entry := range t.rows {
-		if t.state.Selection.Has(trafficRowID(entry.ID)) {
+		if t.state.Selection.Has(entry.ID) {
 			t.focusEntry(entry)
 			return
 		}
@@ -83,7 +83,7 @@ func (t *Table) syncChoice(changed bool) {
 }
 
 func (t *Table) showDetails(entry *logic.TrafficEntry) {
-	if entry == nil || t.rowIndex(entry.ID) < 0 || !t.state.Selection.Has(trafficRowID(entry.ID)) {
+	if entry == nil || t.rowIndex(entry.ID) < 0 || !t.state.Selection.Has(entry.ID) {
 		return
 	}
 	t.focusEntry(entry)

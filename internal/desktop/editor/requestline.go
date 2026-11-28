@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/josexy/flowlens/internal/desktop/logic"
 	desktoptheme "github.com/josexy/flowlens/internal/desktop/theme"
+	"github.com/josexy/flowlens/internal/desktop/widgets"
 	"github.com/josexy/flowlens/locales"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
@@ -94,19 +95,26 @@ func (f urlField) build(c *ui.Context, theme nui.Theme) {
 
 // methodSelect is the method chooser at the start of the URL group, tinted
 // with the method's color.
-func methodSelect(c *ui.Context, theme nui.Theme, method *string) {
+func methodSelect(c *ui.Context, theme nui.Theme, method *string, state *widgets.SelectState[string]) {
 	color := desktoptheme.MethodColor(*method)
 	box := ui.Row(c.Key("method")).Width(112).Shrink(0).AlignItems(ui.Center).Background(color.Alpha(0.05).Over(theme.Background))
 	box.BorderWidth(0, 1, 0, 0).BorderColor(color.Alpha(0.22).Over(theme.Border))
 	box.Children(func() {
-		options := make([]nui.Option[string], 0, len(requestMethods)+1)
-		for _, value := range requestMethods {
-			options = append(options, nui.Option[string]{Value: value, Label: value})
-		}
+		key := ""
 		if !containsString(requestMethods, *method) {
-			options = append(options, nui.Option[string]{Value: *method, Label: *method})
+			key = *method
 		}
-		nui.Select(c, theme, method, options, nui.SelectOptions{
+		choices := state.Prepare(key, func() []nui.Option[string] {
+			options := make([]nui.Option[string], 0, len(requestMethods)+1)
+			for _, value := range requestMethods {
+				options = append(options, nui.Option[string]{Value: value, Label: value})
+			}
+			if !containsString(requestMethods, *method) {
+				options = append(options, nui.Option[string]{Value: *method, Label: *method})
+			}
+			return options
+		})
+		nui.Select(c, theme, method, choices, nui.SelectOptions{
 			Label: "Method", Size: nui.MD, Variant: nui.None,
 			UI: nui.Styles{
 				nui.Root:     {Foreground: nui.Set(color), Weight: nui.Set(700), PaddingX: nui.Set[float32](12)},

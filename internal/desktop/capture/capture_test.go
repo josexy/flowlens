@@ -1215,8 +1215,8 @@ func TestDeleteSingleAndMultiple(t *testing.T) {
 		t.Fatal(f.backend.deleted)
 	}
 	table := f.workspace.Table
-	table.state.Selection.Add(trafficRowID(2))
-	table.state.Selection.Add(trafficRowID(3))
+	table.state.Selection.Add(2)
+	table.state.Selection.Add(3)
 	f.settle()
 	openRowMenu(t, f, "b.test")
 	f.choose("Delete")
@@ -1340,7 +1340,7 @@ func TestEditLimit(t *testing.T) {
 	f := newFixtureSized(t, entries, 1400, 800)
 	table := f.workspace.Table
 	for _, item := range entries {
-		table.state.Selection.Add(trafficRowID(item.ID))
+		table.state.Selection.Add(item.ID)
 	}
 	f.settle()
 	openRowMenu(t, f, "/p51")
@@ -1349,7 +1349,7 @@ func TestEditLimit(t *testing.T) {
 		t.Fatalf("%v", f.opened)
 	}
 	f.requireText("50")
-	table.state.Selection.Remove(trafficRowID(1))
+	table.state.Selection.Remove(1)
 	f.settle()
 	openRowMenu(t, f, "/p51")
 	f.choose("Edit")
@@ -1657,7 +1657,7 @@ func (b *fakeHistoryBackend) ListHistoryKeys() ([]*proxyservice.HistoryMetadata,
 	return b.list, nil
 }
 func (b *fakeHistoryBackend) ListHistoryEntries(_ context.Context, key string) ([]*logic.TrafficEntry, error) {
-	return b.entries[key], nil
+	return slices.Clone(b.entries[key]), nil
 }
 func (b *fakeHistoryBackend) GetHistoryDetail(_ context.Context, key string, id uint64) (historyservice.HistoryDetail, error) {
 	if detail, ok := b.details[id]; ok {
@@ -2028,8 +2028,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	f.showCategories = true
 	f.settle()
 	view := &f.workspace.category
-	if len(f.workspace.HistoryTable.rows) != 2 || view.context != "history:k1" || len(view.entries) != 2 || len(view.roots) == 0 {
-		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.rows), view.context, len(view.entries))
+	if len(f.workspace.HistoryTable.rows) != 2 || view.context != "history:k1" || view.entryCount != 2 || len(view.roots) == 0 {
+		t.Fatalf("history not shown: rows %d context %q entries %d", len(f.workspace.HistoryTable.rows), view.context, view.entryCount)
 	}
 
 	f.data.Workspace.CloseTab(logic.HistoryTabKey)
@@ -2044,8 +2044,8 @@ func TestClosingHistoryTabReleasesTheHistory(t *testing.T) {
 	if rows := f.workspace.HistoryTable.rows; len(rows) != 0 || f.workspace.HistoryTable.state.Len() != 0 {
 		t.Fatalf("history table kept %d rows", len(rows))
 	}
-	for _, row := range view.entries {
-		if row.Host == "saved.test" || row.Host == "other.test" {
+	for _, root := range view.roots {
+		if root.Label == "saved.test" || root.Label == "other.test" {
 			t.Fatal("category view kept the closed history's entries")
 		}
 	}

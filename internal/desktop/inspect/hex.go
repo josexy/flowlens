@@ -126,7 +126,7 @@ func (h *HexView) Build(c *ui.Context, theme nui.Theme, identity uint64, body st
 	element := ui.List(c.Key("hex-list"), &h.list, int(rows), func(row int) {
 		h.buildRow(c, theme, layout, int64(row), char, length)
 	}).Fill().MinHeight(0)
-	widgets.ContextMenu(c.Key("hex-menu"), theme, element, &h.menu, h.menuItems, nui.MenuOptions{Label: locales.DetailHex()})
+	widgets.ContextMenu(c.Key("hex-menu"), theme, element, &h.menu, h.menuItems, nui.MenuOptions{Label: locales.DetailHex()}, h.hasChoice, h.anchor, h.focus, *h.exportBusy())
 	if bounds := element.Bounds(); bounds.W > 0 && bounds.W != h.width {
 		h.width = bounds.W
 		// This pass used the old width. Reflow the byte columns before going

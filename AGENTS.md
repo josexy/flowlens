@@ -109,6 +109,7 @@ Run the smallest checks that match the risk; `task verify` is the full check and
 | Request editor | `./internal/desktop/editor ./internal/desktop/store` |
 | Rewrite rules | `./internal/services/rewrite_service ./internal/desktop/rewrite ./internal/desktop/store` |
 
+- Add tests to the existing file for the same feature; create a test file only for a distinct feature, shared fixture or benchmark set, or platform build constraint.
 - Worker/SDK/interpreter changes run the Python 3 integration tests without skips.
 - View changes run `task vet:ui`. To inspect renders, run `FLOWLENS_RENDER_DIR=/tmp/flowlens-renders go test ./internal/desktop/... -run TestRender -count=1`.
 - Website changes run `task website:check website:build` (Node.js 24). The application's checks never need Node.js.

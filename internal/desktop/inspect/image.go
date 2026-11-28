@@ -211,7 +211,7 @@ func (i *imagePreview) build(c *ui.Context, theme nui.Theme, b *BodyViewer) {
 		}
 		area.Children(func() {
 			i.picture(c, theme)
-			b.imageMenu.Build(c, theme, func() []nui.MenuItem { return i.menuItems(b) }, nui.MenuOptions{})
+			b.imageMenu.Build(c, theme, func() []nui.MenuItem { return i.menuItems(b) }, nui.MenuOptions{}, i.scale, i.offsetX, i.offsetY)
 		})
 	})
 }

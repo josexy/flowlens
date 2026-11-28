@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/josexy/flowlens/internal/desktop/logic"
 	desktoptheme "github.com/josexy/flowlens/internal/desktop/theme"
 	"github.com/josexy/nuxt-ui-go/icons/lucide"
 	nui "github.com/josexy/nuxt-ui-go/ui"
@@ -151,7 +152,7 @@ func badge(c *ui.Context, theme nui.Theme, text string, tone badgeTone) ui.Eleme
 	pill := ui.Box(c).Shrink(0).PaddingX(8).MinWidth(36).MinHeight(20).Radius(10).Center().
 		Background(background).Border(1, color.Alpha(0.1).Over(background))
 	pill.Children(func() {
-		ui.Text(c, text).SingleLine().FontSize(desktoptheme.TextSize(c, 12)).Bold().TextColor(color)
+		ui.Text(c, logic.TrafficCellPreview(text)).SingleLine().FontSize(desktoptheme.TextSize(c, 12)).Bold().TextColor(color)
 	})
 	return pill
 }

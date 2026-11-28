@@ -242,6 +242,9 @@ func (v *View) CloseRequested() bool {
 }
 
 func (v *View) finish() {
+	v.general.appFont.Close()
+	v.general.codeFont.Close()
+	v.proxy.rootMenu.Close()
 	v.Data.Settings.EndEdit()
 	v.started = false
 }

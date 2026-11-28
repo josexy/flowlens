@@ -99,9 +99,9 @@ func serializeRows(rows []logic.EditableRow) string {
 	return text.String()
 }
 
-func paneSelect(c *ui.Context, theme nui.Theme, label string, value *string, options []nui.Option[string]) {
+func paneSelect(c *ui.Context, theme nui.Theme, label string, value *string, state *widgets.SelectState[string], options func() []nui.Option[string]) {
 	ui.Text(c, label).Shrink(1).MinWidth(0).SingleLine().FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
-	nui.Select(c, theme, value, options, nui.SelectOptions{Label: label, Size: nui.XS}).Width(150).Shrink(1).MinWidth(0)
+	nui.Select(c, theme, value, state.Prepare(c.Locale(), options), nui.SelectOptions{Label: label, Size: nui.XS}).Width(150).Shrink(1).MinWidth(0)
 }
 
 func iconAction(c *ui.Context, theme nui.Theme, key string, icon *ui.SVG, label string, disabled bool, run func()) ui.Element {

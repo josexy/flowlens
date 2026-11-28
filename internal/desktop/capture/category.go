@@ -35,26 +35,41 @@ type categoryView struct {
 	sections   []string
 	expanded   map[string]bool
 	activeLeaf string
+	activeNode string
 
-	context             string
-	version             uint64
-	computed            time.Time
-	selectedHosts       []string
-	selectedProcessKeys []string
-	entries             []*logic.TrafficEntry
-	roots               []*logic.StructureNode
+	context                        string
+	version                        uint64
+	computed                       time.Time
+	selectedHosts                  []string
+	selectedProcessKeys            []string
+	entryCount                     int
+	roots                          []*logic.StructureNode
+	baseVersion                    uint64
+	ready                          bool
+	locale, fallback               string
+	query, sourceSearch, sourceTab string
+	hosts                          []logic.HostSummaryItem
+	processes                      []logic.ProcessSummaryItem
+	filteredHosts                  []logic.HostSummaryItem
+	filteredProcesses              []logic.ProcessSummaryItem
+	filteredRoots                  []*logic.StructureNode
+	processByID                    map[string]logic.ProcessSummaryItem
 
-	scroll        ui.ScrollState
-	hostList      nui.ListboxState
-	processList   nui.ListboxState
-	hostView      categoryViewport
-	processView   categoryViewport
-	structureView categoryViewport
-	tree          *nui.TreeState
-	treeDirty     bool
-	treeSearch    string
-	treeItems     map[string]*categoryTreeItem
-	visible       []*categoryTreeItem
+	scroll                          ui.ScrollState
+	hostSelection, processSelection nui.SelectionState[string]
+	hostList                        *nui.ListboxState
+	processList                     *nui.ListboxState
+	hostView                        categoryViewport
+	processView                     categoryViewport
+	structureView                   categoryViewport
+	tree                            *nui.TreeState
+	treeDirty                       bool
+	treeSearch                      string
+	treeItems                       map[string]*categoryTreeItem
+	visible                         []*categoryTreeItem
+	facetBuilds                     int
+	rootBuilds                      int
+	itemBuilds                      int
 }
 
 // CategorySource is the traffic a category view summarizes.
@@ -86,43 +101,154 @@ func (w *Workspace) categoryDataset() *categorySource {
 
 func (v *categoryView) refresh(c *ui.Context, source *categorySource) {
 	filter := source.filter
-	v.entries = filter.Base()
-	version := filter.Version()
+	version, baseVersion := filter.Version(), filter.BaseVersion()
+	query := strings.ToLower(strings.TrimSpace(v.search))
+	locale, fallback := c.Locale(), locales.CategoryProcessUnidentified()
 	changedContext := source.key != v.context
 	changedSelection := !slices.Equal(v.selectedHosts, filter.SelectedHosts) ||
 		!slices.Equal(v.selectedProcessKeys, filter.SelectedProcessKeys)
-	if changedSelection {
-		v.selectedHosts = slices.Clone(filter.SelectedHosts)
-		v.selectedProcessKeys = slices.Clone(filter.SelectedProcessKeys)
-	}
-	if !changedContext && version == v.version {
+	changedLocale := locale != v.locale || fallback != v.fallback
+	changedQuery := query != v.query
+	changedFilter := filter.SearchText != v.sourceSearch || filter.ActiveTab != v.sourceTab
+	if v.ready && !changedContext && !changedSelection && !changedLocale && !changedQuery && version == v.version && baseVersion == v.baseVersion {
 		return
 	}
 	now := c.Now()
-	if !changedContext && !changedSelection && source.key == "capture" {
+	if v.ready && !changedContext && !changedSelection && !changedLocale && !changedQuery && !changedFilter && source.key == "capture" {
 		if remaining := categoryRefreshInterval - now.Sub(v.computed); remaining > 0 {
 			c.After(remaining)
 			return
 		}
 	}
 	if changedContext {
-		v.activeLeaf = ""
+		v.reset()
 	}
-	v.context, v.version, v.computed = source.key, version, now
-	v.roots = logic.BuildStructureTree(filter.Filtered())
-	v.treeDirty = true
+	reopened := !v.ready
+	facetsChanged := reopened || changedContext || changedSelection || changedLocale || baseVersion != v.baseVersion
+	rootsChanged := reopened || changedContext || version != v.version
+	if v.tree != nil && v.treeItems != nil {
+		v.activeNode = v.tree.Active
+	}
+	// Base is borrowed until the filter's next refresh; keep only its size.
+	base := filter.Base()
+	v.entryCount = len(base)
+	if facetsChanged {
+		v.hosts, v.processes = logic.BuildCategoryFacets(base, toSet(filter.SelectedHosts), toSet(filter.SelectedProcessKeys), fallback)
+		v.facetBuilds++
+		v.selectedHosts, v.selectedProcessKeys = slices.Clone(filter.SelectedHosts), slices.Clone(filter.SelectedProcessKeys)
+		v.hostSelection.Set(filter.SelectedHosts)
+		v.processSelection.Set(filter.SelectedProcessKeys)
+	}
+	if rootsChanged {
+		v.roots = logic.BuildStructureTree(filter.Filtered())
+		v.rootBuilds++
+		if reopened {
+			// Data may have changed while hidden. While visible, a table filter
+			// can hide nodes only temporarily, so their intent must survive.
+			v.pruneIntent()
+		}
+	}
+	if facetsChanged || changedQuery {
+		v.filteredHosts = logic.FilterHostSummary(v.hosts, query)
+		v.filteredProcesses = logic.FilterProcessSummary(v.processes, query)
+		hostItems := make([]nui.ListboxItem, len(v.filteredHosts))
+		for i, host := range v.filteredHosts {
+			hostItems[i] = nui.ListboxItem{ID: host.Host, Label: host.Host, Icon: lucide.Globe()}
+		}
+		processItems := make([]nui.ListboxItem, len(v.filteredProcesses))
+		v.processByID = make(map[string]logic.ProcessSummaryItem, len(v.filteredProcesses))
+		for i, process := range v.filteredProcesses {
+			processItems[i] = nui.ListboxItem{ID: process.ProcessKey, Label: process.Label}
+			v.processByID[process.ProcessKey] = process
+		}
+		v.hostList.SetItems(hostItems)
+		v.processList.SetItems(processItems)
+		v.itemBuilds += 2
+	}
+	if rootsChanged || changedQuery {
+		v.filteredRoots = logic.FilterStructureByHost(v.roots, query)
+		v.treeDirty = true
+		// Empty/no-match states skip the tree control entirely. Drop its old
+		// nodes now, and replace rather than mutate an already-built state.
+		v.tree = &nui.TreeState{}
+		v.treeItems, v.visible = nil, nil
+	}
+	v.context, v.version, v.baseVersion, v.computed = source.key, version, baseVersion, now
+	v.locale, v.fallback, v.query = locale, fallback, query
+	v.sourceSearch, v.sourceTab, v.ready = filter.SearchText, filter.ActiveTab, true
 }
 
-// reset drops what the view derived from its source's entries.
-func (v *categoryView) reset() {
-	v.context, v.version, v.computed, v.activeLeaf = "", 0, time.Time{}, ""
+// releaseDerived preserves same-source navigation, but retains no derived
+// records, tree nodes, prepared item data, list callbacks or anchor handles.
+func (v *categoryView) releaseDerived() {
+	v.ready = false
+	v.entryCount, v.roots, v.filteredRoots = 0, nil, nil
+	v.hosts, v.filteredHosts, v.processes, v.filteredProcesses = nil, nil, nil, nil
+	v.processByID = nil
 	v.selectedHosts, v.selectedProcessKeys = nil, nil
-	v.expanded = map[string]bool{}
-	v.entries, v.roots = nil, nil
-	// Replace the pointer: an already-built list may still use the old state
-	// during this frame's layout. Hidden sidebars release it after that frame.
+	v.hostSelection.Clear()
+	v.processSelection.Clear()
+	hostActive, processActive := "", ""
+	if v.hostList != nil {
+		hostActive = v.hostList.Active
+		v.hostList.Close()
+	}
+	if v.processList != nil {
+		processActive = v.processList.Active
+		v.processList.Close()
+	}
+	v.hostList = &nui.ListboxState{Active: hostActive}
+	v.processList = &nui.ListboxState{Active: processActive}
+	v.scroll = ui.ScrollState{Y: v.scroll.Y}
+	v.hostView, v.processView, v.structureView = categoryViewport{}, categoryViewport{}, categoryViewport{}
+	if v.tree != nil {
+		v.activeNode = v.tree.Active
+	}
+	// An already-built tree may still be used during this frame's layout.
 	v.tree = &nui.TreeState{}
 	v.treeItems, v.visible, v.treeDirty = nil, nil, true
+}
+
+// reset also discards the previous source's navigation intent.
+func (v *categoryView) reset() {
+	v.releaseDerived()
+	v.context, v.version, v.computed, v.activeLeaf = "", 0, time.Time{}, ""
+	v.activeNode = ""
+	v.scroll = ui.ScrollState{}
+	v.hostList, v.processList = &nui.ListboxState{}, &nui.ListboxState{}
+	v.expanded = map[string]bool{}
+}
+
+func (v *categoryView) pruneIntent() {
+	missing := make(map[string]bool, len(v.expanded)+2)
+	for key := range v.expanded {
+		missing[key] = true
+	}
+	missing[v.activeLeaf], missing[v.activeNode] = true, true
+	var visit func([]*logic.StructureNode)
+	visit = func(nodes []*logic.StructureNode) {
+		for _, node := range nodes {
+			delete(missing, node.Key)
+			visit(node.Children)
+		}
+	}
+	visit(v.roots)
+	for key := range missing {
+		delete(v.expanded, key)
+	}
+	if missing[v.activeLeaf] {
+		v.activeLeaf = ""
+	}
+	if missing[v.activeNode] {
+		v.activeNode = ""
+	}
+}
+
+// CategorySidebarHidden is called on the main thread when the sidebar leaves
+// view. Applied filters and same-source navigation remain available on return.
+func (w *Workspace) CategorySidebarHidden() {
+	w.category.releaseDerived()
+	w.categoryMenus.Reset()
 }
 
 func toSet(values []string) map[string]bool {
@@ -133,14 +259,19 @@ func toSet(values []string) map[string]bool {
 	return set
 }
 
-func (v *categoryView) facets(filter *store.FilterStore) ([]logic.HostSummaryItem, []logic.ProcessSummaryItem) {
-	hosts, processes := logic.BuildCategoryFacets(v.entries, toSet(filter.SelectedHosts), toSet(filter.SelectedProcessKeys), locales.CategoryProcessUnidentified())
-	return logic.FilterHostSummary(hosts, v.search), logic.FilterProcessSummary(processes, v.search)
+func (v *categoryView) facets(_ *store.FilterStore) ([]logic.HostSummaryItem, []logic.ProcessSummaryItem) {
+	return v.filteredHosts, v.filteredProcesses
 }
 
 // CategorySidebar builds the Categories section's sidebar.
 func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 	view := &w.category
+	if view.hostList == nil {
+		view.hostList = &nui.ListboxState{}
+	}
+	if view.processList == nil {
+		view.processList = &nui.ListboxState{}
+	}
 	if view.tree == nil {
 		view.tree = &nui.TreeState{}
 	}
@@ -171,22 +302,26 @@ func (w *Workspace) CategorySidebar(c *ui.Context, theme nui.Theme) {
 
 // categoryBody is the tree of the sidebar, or why there is none.
 func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryView, source *categorySource) {
+	defer w.categoryMenus.SweepHidden()
 	status := func(text string) {
 		ui.Column(c).Fill().Center().Padding(16).Children(func() {
 			ui.Text(c, text).FontSize(apptheme.TextSize(c, 14)).TextAlign(ui.Center).TextColor(theme.Muted)
 		})
 	}
 	if source == nil {
+		if view.ready {
+			w.CategorySidebarHidden()
+		}
 		status(locales.CategoryUnsupported())
 		return
 	}
 	view.refresh(c, source)
-	if len(view.entries) == 0 {
+	if view.entryCount == 0 {
 		status(locales.CategoryEmpty())
 		return
 	}
 	hosts, processes := view.facets(source.filter)
-	roots := logic.FilterStructureByHost(view.roots, view.search)
+	roots := view.filteredRoots
 	if strings.TrimSpace(view.search) != "" && len(hosts)+len(processes)+len(roots) == 0 {
 		status(locales.CategoryEmptyFiltered())
 		return
@@ -194,13 +329,10 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 	ui.Scroll(c.Key("category-sections")).TrackScroll(&view.scroll).Fill().Label(locales.CategoryTitle()).Children(func() {
 		nui.Accordion(c.Key("groups"), theme, &view.sections, []nui.AccordionItem{
 			{ID: sectionHost, Label: locales.CategoryHost(), Content: func(c *ui.Context, theme nui.Theme) {
-				items := make([]nui.ListboxItem, len(hosts))
-				for i, host := range hosts {
-					items[i] = nui.ListboxItem{ID: host.Host, Label: host.Host, Icon: lucide.Globe()}
-				}
-				view.hostView.build(c.Key("hosts"), &view.scroll, categoryContentHeight(theme, len(items), 8), func(height float32) {
+				view.hostView.build(c.Key("hosts"), &view.scroll, categoryContentHeight(theme, len(hosts), 8), func(height float32) {
 					options := categoryListOptions(theme, locales.CategoryHost(), height, &view.hostView)
-					nui.Listbox(c, theme, &source.filter.SelectedHosts, &view.hostList, items, options).FillWidth()
+					options.OnChange = func() { source.filter.SelectedHosts = view.hostSelection.Values() }
+					nui.Listbox(c, theme, &view.hostSelection, view.hostList, options).FillWidth()
 				})
 			}},
 			{ID: sectionProcess, Label: locales.CategoryProcess(), Content: func(c *ui.Context, theme nui.Theme) {
@@ -217,7 +349,6 @@ func (w *Workspace) categoryBody(c *ui.Context, theme nui.Theme, view *categoryV
 			},
 		}).FillWidth()
 	})
-	w.categoryMenus.Sweep()
 }
 
 func categoryListOptions(theme nui.Theme, label string, height float32, viewport *categoryViewport) nui.ListboxOptions {
@@ -232,14 +363,9 @@ func categoryListOptions(theme nui.Theme, label string, height float32, viewport
 }
 
 func (w *Workspace) categoryProcesses(c *ui.Context, theme nui.Theme, source *categorySource, processes []logic.ProcessSummaryItem) {
-	items := make([]nui.ListboxItem, len(processes))
-	byID := make(map[string]logic.ProcessSummaryItem, len(processes))
-	for i, process := range processes {
-		items[i] = nui.ListboxItem{ID: process.ProcessKey, Label: process.Label}
-		byID[process.ProcessKey] = process
-	}
 	view := &w.category
-	view.processView.build(c.Key("processes"), &view.scroll, categoryContentHeight(theme, len(items), 8), func(height float32) {
+	byID := view.processByID
+	view.processView.build(c.Key("processes"), &view.scroll, categoryContentHeight(theme, len(processes), 8), func(height float32) {
 		options := categoryListOptions(theme, locales.CategoryProcess(), height, &view.processView)
 		options.Build = func(c *ui.Context, theme nui.Theme, item nui.ListboxItem) {
 			process := byID[item.ID]
@@ -253,7 +379,8 @@ func (w *Workspace) categoryProcesses(c *ui.Context, theme nui.Theme, source *ca
 				ui.Text(c, item.Label).SingleLine().Grow(1).MinWidth(0)
 			})
 		}
-		nui.Listbox(c, theme, &source.filter.SelectedProcessKeys, &view.processList, items, options).FillWidth()
+		options.OnChange = func() { source.filter.SelectedProcessKeys = view.processSelection.Values() }
+		nui.Listbox(c, theme, &view.processSelection, view.processList, options).FillWidth()
 	})
 }
 
@@ -292,10 +419,10 @@ func structureIcon(node *logic.StructureNode, expanded bool) *ui.SVG {
 }
 
 func (v *categoryView) updateTree(roots []*logic.StructureNode) {
-	if !v.treeDirty && v.treeSearch == v.search && v.treeItems != nil {
+	if !v.treeDirty && v.treeSearch == v.query && v.treeItems != nil {
 		return
 	}
-	v.treeDirty, v.treeSearch = false, v.search
+	v.treeDirty, v.treeSearch = false, v.query
 	v.treeItems = map[string]*categoryTreeItem{}
 	var build func([]*logic.StructureNode) []nui.TreeNode
 	build = func(nodes []*logic.StructureNode) []nui.TreeNode {
@@ -317,6 +444,9 @@ func (v *categoryView) updateTree(roots []*logic.StructureNode) {
 		return result
 	}
 	v.tree.SetNodes(build(roots))
+	if v.treeItems[v.activeNode] != nil {
+		v.tree.Active = v.activeNode
+	}
 }
 
 func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *categorySource, roots []*logic.StructureNode) {
@@ -369,7 +499,7 @@ func (w *Workspace) categoryStructure(c *ui.Context, theme nui.Theme, source *ca
 		menu := w.categoryMenus.For(node.Key)
 		widgets.ContextMenu(c.Key("leaf-menu:"+node.Key), theme, anchor, menu, func() []nui.MenuItem {
 			return w.categoryLeafMenuItems(node)
-		}, nui.MenuOptions{Label: node.Label})
+		}, nui.MenuOptions{Label: node.Label}, node, view.version, w.exporter != nil && w.exporter.Exporting)
 		if !menu.Open && item.anchor.Focused(c) {
 			// Menus restore their trigger; Tree keeps focus on its list.
 			view.tree.Outline.List.Focus(c)

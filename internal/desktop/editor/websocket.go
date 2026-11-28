@@ -41,18 +41,19 @@ type socketPane struct {
 	tab    *logic.WorkspaceTab
 	state  *logic.WebSocketClientState
 	requestRows
-	draft        *widgets.CodeView
-	draftText    string
-	fileGuard    int
-	split        float32
-	restoreProxy string
-	seenURL      string
-	timeout      numberField
-	stream       *inspect.MessageStream
-	cookiesView  *inspect.CookieList
-	seenCount    int
-	seenFirst    string
-	rightTab     string
+	draft                               *widgets.CodeView
+	draftText                           string
+	fileGuard                           int
+	split                               float32
+	restoreProxy                        string
+	seenURL                             string
+	draftChoice, proxyChoice, tlsChoice widgets.SelectState[string]
+	timeout                             numberField
+	stream                              *inspect.MessageStream
+	cookiesView                         *inspect.CookieList
+	seenCount                           int
+	seenFirst                           string
+	rightTab                            string
 }
 
 func draftLanguage(kind string) string {
@@ -235,15 +236,17 @@ func (p *socketPane) leftPanel(c *ui.Context, theme nui.Theme) {
 
 func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 	state := p.state
-	options := []nui.Option[string]{
-		{Value: "text", Label: locales.WorkspaceWebsocketClientDraftTypeText()},
-		{Value: "json", Label: locales.WorkspaceWebsocketClientDraftTypeJson()},
-		{Value: "xml", Label: locales.WorkspaceWebsocketClientDraftTypeXml()},
-		{Value: draftTypeBinaryFile, Label: locales.WorkspaceWebsocketClientDraftTypeBinaryFile()},
+	options := func() []nui.Option[string] {
+		return []nui.Option[string]{
+			{Value: "text", Label: locales.WorkspaceWebsocketClientDraftTypeText()},
+			{Value: "json", Label: locales.WorkspaceWebsocketClientDraftTypeJson()},
+			{Value: "xml", Label: locales.WorkspaceWebsocketClientDraftTypeXml()},
+			{Value: draftTypeBinaryFile, Label: locales.WorkspaceWebsocketClientDraftTypeBinaryFile()},
+		}
 	}
 	binary := state.DraftType == draftTypeBinaryFile
 	widgets.PaneToolbar(c.Key("draft-type"), func() {
-		paneSelect(c, theme, locales.WorkspaceWebsocketClientDraftType(), &state.DraftType, options)
+		paneSelect(c, theme, locales.WorkspaceWebsocketClientDraftType(), &state.DraftType, &p.draftChoice, options)
 	}, func() {
 		if !binary {
 			wordWrapButton(c, theme, p.draft)
@@ -270,11 +273,11 @@ func (p *socketPane) messagePane(c *ui.Context, theme nui.Theme) {
 func (p *socketPane) settingsPane(c *ui.Context, theme nui.Theme) {
 	settings := &p.state.Settings
 	settingsContent(c, theme, locales.WorkspaceWebsocketClientSettings(), func() {
-		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy)
+		proxySettings(c, theme, &settings.ProxyMode, &settings.CustomProxy, &p.proxyChoice)
 		settingRow(c, theme, "skip-tls", locales.WorkspaceHttpRequestSkipVerifyTls(), func() {
 			nui.Switch(c.Key("switch"), theme, &settings.SkipVerifyTLS, nui.SwitchOptions{Size: nui.SM}).Label(locales.WorkspaceHttpRequestSkipVerifyTls())
 		})
-		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, tlsProfileOptions(), nil)
+		selectRow(c, theme, "tls", locales.WorkspaceHttpRequestTlsFingerprint(), &settings.TLSClientHelloID, &p.tlsChoice, tlsProfileOptions, nil)
 		p.timeout.build(c, theme, "timeout", locales.WorkspaceHttpRequestRequestTimeout(), locales.WorkspaceHttpRequestRequestTimeoutPlaceholder(), &settings.TimeoutMs, 0, 100)
 	})
 }

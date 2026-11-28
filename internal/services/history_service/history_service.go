@@ -282,7 +282,9 @@ func (s *HistoryService) GetHistory(key string) ([]*proxyservice.TrafficEntry, e
 	return s.readHistory(context.Background(), key, false)
 }
 
-// ListHistoryEntries keeps the complete searchable table but not every
+// ListHistoryEntries returns a fresh result array exclusively owned by the
+// caller. Summary records are immutable after publication. It keeps the complete
+// searchable table but not every
 // record's large headers and certificates. Details/actions use GetHistoryDetail.
 func (s *HistoryService) ListHistoryEntries(ctx context.Context, key string) ([]*proxyservice.TrafficEntry, error) {
 	return s.readHistory(ctx, key, true)

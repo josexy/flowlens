@@ -3,6 +3,7 @@ package capture
 import (
 	"context"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -121,16 +122,28 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 	if history == nil {
 		return
 	}
+	metadata := history.Metadata
+	w.historyRowSpans = w.historyRowSpans[:0]
+	w.historyList.Selected = &w.historyCursor
+	w.historyList.Key = func(index int) any { return metadata[index].Key }
+	w.historyList.Label = func(index int) string { return historyLabel(metadata[index]) }
+	if history.ListVersion != w.historyListVersion || len(metadata) != w.historyListCount {
+		// External changes reconcile by identity without triggering activation.
+		if w.historyCursorKey != "" {
+			w.historyList.Choose(slices.IndexFunc(metadata, func(item *proxyservice.HistoryMetadata) bool { return item.Key == w.historyCursorKey }))
+		}
+		w.historyListVersion, w.historyListCount = history.ListVersion, len(metadata)
+	}
 	header := ui.Row(c).FillWidth().MinHeight(32).Shrink(0).Margin(4, 0, 0, 0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Padding(0, 6, 0, 8).Background(theme.Elevated)
 	header.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	header.Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-			ui.Text(c, locales.HistoryTitle()).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+			ui.Text(c, locales.HistoryTitle()).SingleLine().Shrink(1).MinWidth(0).FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Muted)
 			ui.Box(c).PaddingX(6).PaddingY(1).Radius(8).Background(theme.Elevated.Mix(theme.Background, 0.18)).Children(func() {
 				ui.Text(c, strconv.Itoa(len(history.Metadata))).SingleLine().FontSize(apptheme.TextSize(c, 14)).LineHeight(1.6).TextColor(theme.Muted)
 			})
 		})
-		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Shrink(0).Gap(2).AlignItems(ui.Center).Children(func() {
 			toolbarButton(c, theme, toolButton{key: "import", icon: lucide.FileInput(), tooltip: w.importLabel(), disabled: history.Importing || w.clearingHistory, run: func() { w.ImportHAR(nil) }})
 			toolbarButton(c, theme, toolButton{key: "refresh", icon: lucide.RefreshCw(), tooltip: locales.HistoryRefresh(), disabled: history.Loading, run: history.LoadList})
 			toolbarButton(c, theme, toolButton{key: "clear-all", icon: lucide.Trash(), tooltip: locales.HistoryClearAll(), disabled: len(history.Metadata) == 0 || w.clearingHistory || history.Importing, run: w.askClearHistories})
@@ -145,31 +158,59 @@ func (w *Workspace) historySidebar(c *ui.Context, theme nui.Theme) {
 				ui.Text(c, locales.HistoryEmpty()).FontSize(apptheme.TextSize(c, 14)).TextColor(theme.Muted)
 			})
 		default:
-			ui.Scroll(c).Fill().Children(func() {
-				ui.Column(c).FillWidth().Children(func() {
-					for _, metadata := range history.Metadata {
-						w.historyRow(c, theme, metadata)
-					}
+			list := ui.List(c.Key("saved-histories"), &w.historyList, len(metadata)).Fill().PaddingX(6).Label(locales.HistoryTitle()).Rows(func(item ui.ListRow) {
+				ui.Box(item.Context).FillWidth().Background(theme.Background).Children(func() {
+					w.historyRow(item.Context, theme, metadata[item.Index], item.Hovered())
 				})
 			})
+			activate := func() {
+				if index := w.historyCursor; index >= 0 && index < len(metadata) {
+					w.historyCursorKey = metadata[index].Key
+					w.openHistory(w.historyCursorKey)
+				}
+			}
+			list.ObserveInput(w.observeHistoryPointer).OnSubmit(activate)
+			w.resolveHistoryMenu(list)
+			widgets.ContextMenu(c.Key("history-menu"), theme, list, &w.historyMenu, func() []nui.MenuItem {
+				if w.historyMenuTarget == nil {
+					return nil
+				}
+				return w.historyMenuItems(w.historyMenuTarget)
+			}, nui.MenuOptions{Label: locales.HistoryTitle()}, w.historyMenuTarget, history.ListVersion, w.exporter != nil && w.exporter.Exporting)
+			if w.historyCursor >= 0 && w.historyCursor < len(metadata) {
+				w.historyCursorKey = metadata[w.historyCursor].Key
+			} else {
+				w.historyCursorKey = ""
+			}
 		}
 	})
-	w.historyMenus.Sweep()
+	if len(metadata) == 0 {
+		w.closeHistoryMenu()
+	}
 }
 
-func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyservice.HistoryMetadata) {
+// HistorySidebarHidden drops menu anchors while preserving native cursor and
+// scroll intent. Metadata remains owned by the history store.
+func (w *Workspace) HistorySidebarHidden() {
+	w.closeHistoryMenu()
+	w.historyRowSpans = nil
+	w.historyList.Key, w.historyList.Label = nil, nil
+}
+
+func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyservice.HistoryMetadata, hovered bool) {
+	w.historyRowBuilds++
 	key := metadata.Key
 	active := w.Data.Workbench.CaptureSelection == historyItemPrefix+key
-	row := ui.ButtonBase(c.Key(key)).MinHeight(38).Justify(ui.Start).Gap(6).PaddingX(8).Margin(2, 6, 0, 6).Radius(6).FocusRing(true).AccessSelected(active).Label(historyLabel(metadata))
+	height := max(float32(38), apptheme.TextSize(c, 14)*1.5+apptheme.TextSize(c, 12)*4/3+2)
+	row := ui.Row(c.Key(key)).FillWidth().MinHeight(height).AlignItems(ui.Center).Justify(ui.Start).Gap(6).PaddingX(8).Margin(2, 0, 0, 0).Radius(6)
 	switch {
 	case active:
 		row.Background(selectionBackground(theme)).Border(1, ui.Transparent)
-	case row.Hovered():
+	case hovered:
 		row.Background(theme.Elevated).Border(1, ui.Transparent)
 	default:
 		row.Border(1, ui.Transparent)
 	}
-	row.OnClick(func() { w.openHistory(key) })
 	row.Children(func() {
 		color := theme.Muted.Alpha(0.7)
 		if active {
@@ -178,11 +219,65 @@ func (w *Workspace) historyRow(c *ui.Context, theme nui.Theme, metadata *proxyse
 		ui.Icon(c, lucide.Archive()).Size(15, 15).Shrink(0).TextColor(color)
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, historyLabel(metadata)).SingleLine().FontSize(apptheme.TextSize(c, 14)).FontWeight(600).TextColor(theme.Text)
-			ui.Text(c, historyTime(metadata)).FontSize(apptheme.TextSize(c, 12)).LineHeight(16.0 / 12.0).TextColor(theme.Muted)
+			ui.Text(c, historyTime(metadata)).SingleLine().FontSize(apptheme.TextSize(c, 12)).LineHeight(16.0 / 12.0).TextColor(theme.Muted)
 		})
 		CountPill(c, theme, strconv.Itoa(metadata.Total), active)
 	})
-	widgets.ContextMenu(c.Key("menu:"+key), theme, row, w.historyMenus.For(key), func() []nui.MenuItem { return w.historyMenuItems(metadata) }, nui.MenuOptions{Label: historyLabel(metadata)})
+	w.historyRowSpans = append(w.historyRowSpans, historyRowSpan{key, row.Bounds()})
+	// Observe the native row's activation notice without adding a child
+	// button or competing selection handler.
+	if row.RowClicked() {
+		w.openHistory(key)
+	}
+}
+
+type historyRowSpan struct {
+	key    string
+	bounds ui.Rect
+}
+
+func (w *Workspace) observeHistoryPointer(event ui.InputEvent) {
+	if event.Kind == ui.InputPointerDown && event.Button == 1 {
+		y := event.Y
+		w.historyMenuPress = &y
+	}
+}
+
+func (w *Workspace) closeHistoryMenu() {
+	w.historyMenu = nui.MenuState{}
+	w.historyMenuTarget, w.historyMenuPress, w.historyMenuShown = nil, nil, false
+}
+
+func (w *Workspace) resolveHistoryMenu(list ui.Element) {
+	opened := w.historyMenu.Open && !w.historyMenuShown
+	w.historyMenuShown = w.historyMenu.Open
+	bounds := list.Bounds()
+	if press := w.historyMenuPress; press != nil {
+		w.historyMenuPress = nil
+		w.historyMenuTarget = nil
+		y := bounds.Y + *press
+		for _, row := range w.historyRowSpans {
+			if row.bounds.H > 0 && y >= row.bounds.Y && y < row.bounds.Y+row.bounds.H {
+				w.historyMenuTarget = w.Data.History.MetadataFor(row.key)
+				break
+			}
+		}
+	} else if opened {
+		w.historyMenuTarget = w.Data.History.MetadataFor(w.historyCursorKey)
+	}
+	if w.historyMenuTarget == nil {
+		return
+	}
+	anchored := false
+	for _, row := range w.historyRowSpans {
+		if row.key == w.historyMenuTarget.Key && row.bounds.H > 0 && row.bounds.Y+row.bounds.H > bounds.Y && row.bounds.Y < bounds.Y+bounds.H {
+			anchored = true
+			break
+		}
+	}
+	if !anchored {
+		w.closeHistoryMenu()
+	}
 }
 
 // historyMenuItems are the actions on a saved session.
